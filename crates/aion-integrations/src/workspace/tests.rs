@@ -154,7 +154,7 @@ fn each_form_answers_only_for_itself() {
 #[test]
 fn a_one_field_object_asks_the_agent_the_field_and_not_the_json() -> TestResult {
     let workspace = HarnessWorkspace::Fixed(std::path::PathBuf::from("/srv/one-tree"));
-    let prompt = workspace.prompt_for_attempt(&input(&json!({ "prompt": "say hi" }))?)?;
+    let prompt = workspace.prompt_for_attempt(&input(&json!({ "prompt": "say hi" }))?, &[])?;
     assert_eq!(prompt, "say hi");
     Ok(())
 }
@@ -170,7 +170,10 @@ fn a_bound_directory_is_subtracted_and_what_remains_is_the_prompt() -> TestResul
         workspace.for_attempt(&carried)?,
         std::path::PathBuf::from("/srv/lane-3")
     );
-    assert_eq!(workspace.prompt_for_attempt(&carried)?, "review the diff");
+    assert_eq!(
+        workspace.prompt_for_attempt(&carried, &[])?,
+        "review the diff"
+    );
     Ok(())
 }
 
@@ -181,7 +184,7 @@ fn a_bound_directory_is_subtracted_and_what_remains_is_the_prompt() -> TestResul
 fn the_prompt_is_found_wherever_the_directory_sits_in_the_object() -> TestResult {
     let workspace = HarnessWorkspace::PerRun("repo".to_owned());
     let prompt =
-        workspace.prompt_for_attempt(&input(&json!({ "prompt": "go", "repo": "/srv/x" }))?)?;
+        workspace.prompt_for_attempt(&input(&json!({ "prompt": "go", "repo": "/srv/x" }))?, &[])?;
     assert_eq!(prompt, "go");
     Ok(())
 }
@@ -194,7 +197,7 @@ fn a_json_string_input_is_the_prompt_verbatim() -> TestResult {
     let encoded = serde_json::to_vec(&json!("line one\nsay \"hi\"\nline three"))?;
     let payload = Payload::new(ContentType::Json, encoded);
     assert_eq!(
-        workspace.prompt_for_attempt(&payload)?,
+        workspace.prompt_for_attempt(&payload, &[])?,
         "line one\nsay \"hi\"\nline three"
     );
     Ok(())
@@ -207,8 +210,40 @@ fn json_tagged_text_that_is_not_json_passes_through_as_the_prompt() -> TestResul
     let workspace = HarnessWorkspace::Fixed(std::path::PathBuf::from("/srv/one-tree"));
     let payload = Payload::new(ContentType::Json, b"plain prompt, not json".to_vec());
     assert_eq!(
-        workspace.prompt_for_attempt(&payload)?,
+        workspace.prompt_for_attempt(&payload, &[])?,
         "plain prompt, not json"
+    );
+    Ok(())
+}
+
+/// A reserved adapter parameter is subtracted exactly as the directory is: an input
+/// carrying the directory, a session id, and the prompt still asks the agent the prompt.
+/// Without the reserved subtraction this input would be refused as "two candidate
+/// prompts", which is exactly the wall a job naming its session must not hit.
+#[test]
+fn a_reserved_parameter_is_subtracted_and_what_remains_is_the_prompt() -> TestResult {
+    let workspace = HarnessWorkspace::PerRun("repo".to_owned());
+    let carried = input(&json!({
+        "repo": "/srv/lane-3",
+        "session": "sess-42",
+        "prompt": "carry on",
+    }))?;
+    assert_eq!(
+        workspace.prompt_for_attempt(&carried, &["session"])?,
+        "carry on"
+    );
+    Ok(())
+}
+
+/// A reserved name subtracts ONLY itself: an input whose reserved parameter is absent is
+/// read exactly as before, so reserving a name never makes a fresh-session job refusable.
+#[test]
+fn an_absent_reserved_parameter_changes_nothing() -> TestResult {
+    let workspace = HarnessWorkspace::PerRun("repo".to_owned());
+    let carried = input(&json!({ "repo": "/srv/lane-3", "prompt": "fresh start" }))?;
+    assert_eq!(
+        workspace.prompt_for_attempt(&carried, &["session"])?,
+        "fresh start"
     );
     Ok(())
 }
@@ -220,7 +255,7 @@ fn an_object_carrying_two_possible_prompts_is_refused_by_name() -> TestResult {
     let workspace = HarnessWorkspace::PerRun("repo".to_owned());
     let carried = input(&json!({ "repo": "/srv/x", "prompt": "go", "note": "also go" }))?;
     let error = workspace
-        .prompt_for_attempt(&carried)
+        .prompt_for_attempt(&carried, &[])
         .err()
         .ok_or("two candidate prompts is a choice no adapter may make")?;
     assert!(
@@ -240,7 +275,7 @@ fn an_object_carrying_two_possible_prompts_is_refused_by_name() -> TestResult {
 fn an_object_carrying_only_the_directory_is_refused() -> TestResult {
     let workspace = HarnessWorkspace::PerRun("repo".to_owned());
     let error = workspace
-        .prompt_for_attempt(&input(&json!({ "repo": "/srv/x" }))?)
+        .prompt_for_attempt(&input(&json!({ "repo": "/srv/x" }))?, &[])
         .err()
         .ok_or("a job with no prompt asks the agent nothing")?;
     assert!(
@@ -256,7 +291,7 @@ fn an_object_carrying_only_the_directory_is_refused() -> TestResult {
 fn a_prompt_field_that_is_not_text_is_refused_naming_what_arrived() -> TestResult {
     let workspace = HarnessWorkspace::Fixed(std::path::PathBuf::from("/srv/one-tree"));
     let error = workspace
-        .prompt_for_attempt(&input(&json!({ "prompt": { "task": "build" } }))?)
+        .prompt_for_attempt(&input(&json!({ "prompt": { "task": "build" } }))?, &[])
         .err()
         .ok_or("a structured prompt is not words")?;
     assert!(
@@ -273,7 +308,7 @@ fn non_utf8_input_is_refused_as_a_protocol_fault() -> TestResult {
     let workspace = HarnessWorkspace::Fixed(std::path::PathBuf::from("/srv/one-tree"));
     let payload = Payload::new(ContentType::Json, vec![0xff, 0xfe, 0xfd]);
     let error = workspace
-        .prompt_for_attempt(&payload)
+        .prompt_for_attempt(&payload, &[])
         .err()
         .ok_or("non-UTF-8 input carries no prompt")?;
     assert!(

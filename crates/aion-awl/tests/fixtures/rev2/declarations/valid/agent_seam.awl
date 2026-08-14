@@ -1,7 +1,7 @@
 //! An agent seam declared in the language. `agent` says the action's one
 //! `String` carries a prompt and its result is the canonical agent-outcome
-//! record — a declared record of exactly `text: String` and
-//! `stop_reason: String` — which is the whole of what an adapter needs to
+//! record — a declared record of exactly `text`, `stop_reason`, and
+//! `session_id` (all `String`) — which is the whole of what an adapter needs to
 //! hand the call to a harness instead of running it as an ordinary activity.
 //!
 //! `agent_seam_unmarked_control.awl` is this document with the marker removed.
@@ -15,7 +15,7 @@ type Answer { reply: String }
 
 /// The canonical agent-outcome record, declared by the author under a name of
 /// their own choosing: the checker demands the STRUCTURE, not a blessed name.
-type Reply { text: String, stop_reason: String }
+type Reply { text: String, stop_reason: String, session_id: String }
 
 worker assistants
   /// Handed to an agent harness. The marker is the contract; before it, a

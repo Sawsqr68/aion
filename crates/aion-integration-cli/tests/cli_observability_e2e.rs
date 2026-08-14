@@ -58,13 +58,21 @@ fn spec() -> AgentRunSpec {
     )
 }
 
+/// The identity-derived session handle the record must carry for `spec` — computed from the SAME
+/// spec instance the session was started with (the ids are minted fresh per test).
+fn expected_session_id(spec: &AgentRunSpec) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        spec.workflow_id, spec.run_id, spec.activity_id, spec.attempt
+    )
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cli_harness_streams_a_live_transcript_with_no_controls() {
     let harness = fake_cli_harness();
-    let mut session = harness
-        .start(spec())
-        .await
-        .expect("spawn the fake cli agent");
+    let spec = spec();
+    let expected_sid = expected_session_id(&spec);
+    let mut session = harness.start(spec).await.expect("spawn the fake cli agent");
 
     // (gate 1) NO controls offered — the observability-only session advertises an empty set.
     assert!(
@@ -160,8 +168,13 @@ async fn cli_harness_streams_a_live_transcript_with_no_controls() {
     let decoded = payload.to_json().expect("the result is JSON");
     assert_eq!(
         decoded,
-        serde_json::json!({ "text": "the final answer is 42", "stop_reason": "tool_use" }),
-        "the record carries the demuxed stop reason, not an invented end_turn"
+        serde_json::json!({
+            "text": "the final answer is 42",
+            "stop_reason": "tool_use",
+            "session_id": expected_sid,
+        }),
+        "the record carries the demuxed stop reason, not an invented end_turn, \
+         and the identity-derived session handle"
     );
 }
 
@@ -174,10 +187,9 @@ async fn a_signal_killed_agent_is_not_reported_as_choosing_to_stop() {
     let harness = CliHarness::new("sh")
         .with_arg("-c")
         .with_arg("printf '%s\\n' 'started'; kill -TERM $$; sleep 10");
-    let mut session = harness
-        .start(spec())
-        .await
-        .expect("spawn the fake cli agent");
+    let spec = spec();
+    let expected_sid = expected_session_id(&spec);
+    let mut session = harness.start(spec).await.expect("spawn the fake cli agent");
     let events: Vec<_> = session.events().collect().await;
     // The detail lives on the TRANSCRIPT: the pump synthesizes a terminal Stop
     // event whose `Other` reason carries "terminated by signal" verbatim —
@@ -202,7 +214,11 @@ async fn a_signal_killed_agent_is_not_reported_as_choosing_to_stop() {
     let decoded = payload.to_json().expect("the result is JSON");
     assert_eq!(
         decoded,
-        serde_json::json!({ "text": "started", "stop_reason": "other" }),
+        serde_json::json!({
+            "text": "started",
+            "stop_reason": "other",
+            "session_id": expected_sid,
+        }),
         "a signal termination is `other`, and the last line still travels as text"
     );
 }

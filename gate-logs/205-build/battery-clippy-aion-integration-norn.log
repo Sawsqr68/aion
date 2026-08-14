@@ -1,0 +1,8 @@
+    Checking uuid v1.23.4
+    Checking tokio v1.52.3
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-integration-norn v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-norn)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.79s
+EXIT=0

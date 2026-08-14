@@ -50,7 +50,7 @@ pub mod search;
 pub mod status;
 
 pub use activity_event::{ActivityEvent, ActivityEventKind, MessageRole, ProgressDetail, StopKind};
-pub use agent_outcome::AgentOutcome;
+pub use agent_outcome::{AgentOutcome, AgentOutcomeError};
 pub use cluster_event::{
     ClusterCommand, ClusterDeployment, ClusterEvent, ClusterEventMeta, ClusterPeer, ClusterShard,
     ClusterSnapshot, ClusterStreamError, ClusterWorker, DeploymentAssociation, DesiredState,

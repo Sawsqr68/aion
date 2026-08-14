@@ -168,12 +168,13 @@ step ship
 /// `agent`: the declaration marker, its one form.
 pub(crate) const AGENT: &[&str] = &[
     r"//! An agent action hands its prompt to a harness and binds the outcome
-//! record: the agent's `text` and the canonical `stop_reason`.
+//! record: the agent's `text`, the canonical `stop_reason`, and the
+//! `session_id` handle of the conversation that produced it.
 workflow ask_reviewer
   input question: String
   outcome done: type String, route success
 
-type Reply { text: String, stop_reason: String }
+type Reply { text: String, stop_reason: String, session_id: String }
 
 worker assistants
   action ask(prompt: String) -> Reply

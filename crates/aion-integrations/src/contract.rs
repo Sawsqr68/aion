@@ -94,7 +94,8 @@ pub trait AgentSession: Send {
     ///
     /// **The completed result is the canonical agent-outcome record.** A completed run's payload
     /// is the JSON serialization of [`aion_core::AgentOutcome`] —
-    /// `{"text": <the agent's terminal text>, "stop_reason": <canonical snake_case reason>}` —
+    /// `{"text": <the agent's terminal text>, "stop_reason": <canonical snake_case reason>,
+    /// "session_id": <the handle of the conversation that produced the outcome>}` —
     /// from EVERY harness. The adapter maps its native terminal outcome onto the record at this
     /// boundary (`stop_reason` spelled through the one
     /// [`StopKind::canonical_stop_reason`](aion_core::StopKind::canonical_stop_reason) mapping);

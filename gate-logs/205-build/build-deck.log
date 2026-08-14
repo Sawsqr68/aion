@@ -1,0 +1,15 @@
+checking 12 documents with aion 0.15.0 (/Users/tom/Developer/ablative/stack/aion/target/debug/aion)
+      ok  01-basics.awl
+      ok  02-workers.awl
+      ok  03-agent-seam.awl
+      ok  04-declared-command.awl
+      ok  05-children-subflows.awl
+      ok  06-steps-outcomes.awl
+      ok  07-fork-join.awl
+      ok  08-regions.awl
+      ok  09-loops.awl
+      ok  10-waits-failure.awl
+      ok  11-signals-queries.awl
+      ok  12-schema-doors.awl
+wrote docs/authoring/awl-deck.html — 27 slides, 24 excerpts from 12 of 12 documents
+EXIT=0

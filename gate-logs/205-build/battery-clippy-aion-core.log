@@ -1,0 +1,14 @@
+    Checking serde_core v1.0.228
+    Checking libc v0.2.186
+    Checking memchr v2.8.1
+    Checking num-traits v0.2.19
+    Checking thiserror v2.0.18
+    Checking getrandom v0.4.2
+    Checking serde v1.0.228
+    Checking uuid v1.23.4
+    Checking serde_json v1.0.150
+    Checking chrono v0.4.45
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.23s
+EXIT=0

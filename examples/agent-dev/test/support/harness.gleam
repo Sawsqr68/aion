@@ -144,13 +144,19 @@ pub fn register(handlers: Handlers) -> Nil {
 /// Wraps a scenario's TEXT handler in the same mapping the production
 /// worker's harness boundary performs: the agent's terminal text becomes the
 /// canonical agent-outcome record's `text`, with `end_turn` as the completed
-/// round's canonical stop reason. Errors pass through untouched.
+/// round's canonical stop reason and a fake session handle standing in for
+/// the one the real harness mints. Errors pass through untouched.
 fn as_outcome(
   handler: fn(String) -> Result(String, error.ActivityError),
 ) -> fn(String) -> Result(AgentOutcome, error.ActivityError) {
   fn(prompt) {
     case handler(prompt) {
-      Ok(text) -> Ok(AgentOutcome(text: text, stop_reason: "end_turn"))
+      Ok(text) ->
+        Ok(AgentOutcome(
+          text: text,
+          stop_reason: "end_turn",
+          session_id: "sess-test-agent-dev",
+        ))
       Error(failure) -> Error(failure)
     }
   }

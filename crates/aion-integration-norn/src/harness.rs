@@ -464,7 +464,7 @@ impl AgentHarness for NornHarness {
         // agent is asked with and the field it stands in are decided from one input by one
         // rule. An adapter that read the prompt on its own would be the second place that
         // rule lives, and the first place it drifts.
-        let prompt = self.workspace.prompt_for_attempt(&spec.input)?;
+        let prompt = self.workspace.prompt_for_attempt(&spec.input, &[])?;
         // Named BEFORE the spawn: `norn` is resolved on `PATH` by default, and a declaration
         // that omits `PATH` would otherwise die as a bare `No such file or directory`.
         if let Some(declared) = &self.declared_environment {
@@ -663,7 +663,7 @@ mod tests {
             std::path::PathBuf::from(WORKSPACE)
         );
         assert_eq!(
-            harness.workspace.prompt_for_attempt(&spec.input)?,
+            harness.workspace.prompt_for_attempt(&spec.input, &[])?,
             "review the diff"
         );
         Ok(())

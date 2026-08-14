@@ -109,8 +109,15 @@ pub fn parse_capabilities(
 /// [`AgentOutcome`] record, or the honest error a non-completion (or an off-contract output) is.
 ///
 /// - `stop.reason == "completed"` with a **String** `output` → `Ok(AgentOutcome)`: the string is
-///   the record's `text`, and `stop_reason` is the canonical spelling of the completed run
-///   (see [`completed_stop_kind`] — norn's real `stop.reason`, mapped, never invented).
+///   the record's `text`, `stop_reason` is the canonical spelling of the completed run
+///   (see [`completed_stop_kind`] — norn's real `stop.reason`, mapped, never invented), and
+///   `session_id` is the envelope's own `session_id` — the session norn actually persisted,
+///   read as a fact, never derived by this adapter. A completed envelope whose `session_id` is
+///   `null` (a `--no-session` invocation — the one case the stop-envelope contract names) is a
+///   deterministic [`HarnessError::Contract`] refusal: the agent-outcome record's `session_id`
+///   is mandatory, and a worker configured to discard its session cannot fill it honestly. An
+///   empty-string or non-string `session_id` is [`HarnessError::Protocol`] — off the
+///   stop-envelope contract entirely.
 /// - `stop.reason == "completed"` with a **non-String** `output` (an object, array, number, bool,
 ///   or null — a run configured with an output schema, or a null final output) →
 ///   [`HarnessError::Contract`] NAMING the canonical agent-outcome contract and what was found.
@@ -191,14 +198,52 @@ pub fn run_result_to_outcome(result: &Value) -> Result<AgentOutcome, HarnessErro
     let Value::String(text) = output else {
         return Err(HarnessError::contract(format!(
             "the run completed but its output cannot satisfy the canonical agent-outcome \
-             contract (a record of `text: String` and `stop_reason: String`): the envelope's \
-             `output` is {}, not the String that becomes `text` — a norn run serving an `agent` \
-             action must end with terminal text (a structured output schema has no place in \
-             the agent seam)",
+             contract (a record of `text: String`, `stop_reason: String`, and \
+             `session_id: String`): the envelope's `output` is {}, not the String that becomes \
+             `text` — a norn run serving an `agent` action must end with terminal text (a \
+             structured output schema has no place in the agent seam)",
             json_kind(output)
         )));
     };
-    Ok(AgentOutcome::new(text.clone(), &completed_stop_kind()))
+    // The envelope's own `session_id` is the record's conversation handle — the session norn
+    // actually persisted, never a value this adapter derives. The contract allows `null` there
+    // ("no session was opened" — a `--no-session` invocation), but the agent-outcome record's
+    // `session_id` is mandatory, so a completed run without a handle is a deterministic
+    // configuration-class refusal: the same worker configuration discards its session every
+    // time, and retrying would burn live agent runs against a permanent misconfiguration.
+    let session_id = match result.get(protocol::SESSION_ID_KEY) {
+        Some(Value::String(id)) if !id.is_empty() => id.clone(),
+        Some(Value::String(_)) => {
+            return Err(HarnessError::protocol(format!(
+                "the run completed but the envelope's `{}` is the empty string — an id that \
+                 names no session is off the stop-envelope contract (id or null, never \"\")",
+                protocol::SESSION_ID_KEY
+            )));
+        }
+        Some(Value::Null) | None => {
+            return Err(HarnessError::contract(format!(
+                "the run completed but its envelope carries no `{}` — the canonical \
+                 agent-outcome record's `session_id` is mandatory (the handle of the \
+                 conversation that produced the outcome), and norn reports null only when no \
+                 session was opened; a norn worker serving an `agent` action must persist its \
+                 session (do not pass `--no-session`)",
+                protocol::SESSION_ID_KEY
+            )));
+        }
+        Some(other) => {
+            return Err(HarnessError::protocol(format!(
+                "the run completed but the envelope's `{}` is {}, not the non-empty string the \
+                 stop-envelope contract promises",
+                protocol::SESSION_ID_KEY,
+                json_kind(other)
+            )));
+        }
+    };
+    Ok(AgentOutcome::new(
+        text.clone(),
+        &completed_stop_kind(),
+        session_id,
+    ))
 }
 
 /// The neutral stop kind a `completed` envelope maps to: [`StopKind::EndTurn`].
@@ -998,11 +1043,16 @@ mod tests {
             "envelope_version": 1,
             "stop": { "reason": "completed" },
             "output": "the final answer",
+            "session_id": "norn-sess-7",
         });
         let outcome = run_result_to_outcome(&envelope)
             .map_err(|error| format!("a completed string output must yield the record: {error}"))?;
         assert_eq!(outcome.text, "the final answer");
         assert_eq!(outcome.stop_reason, "end_turn");
+        assert_eq!(
+            outcome.session_id, "norn-sess-7",
+            "the record carries the envelope's own session id — the fact, never a derivation"
+        );
         Ok(())
     }
 
@@ -1019,6 +1069,7 @@ mod tests {
             "envelope_version": 1,
             "stop": { "reason": "completed" },
             "output": "done",
+            "session_id": "norn-sess-7",
         });
         let outcome = run_result_to_outcome(&envelope)
             .map_err(|error| format!("a completed envelope must yield the record: {error}"))?;
@@ -1026,6 +1077,92 @@ mod tests {
             outcome.stop_reason,
             StopKind::EndTurn.canonical_stop_reason(),
             "norn `completed` resolves to the canonical `end_turn`, through the one mapping"
+        );
+        Ok(())
+    }
+
+    /// The `--no-session` refusal (ruling #205 condition 1): the stop envelope contractually
+    /// reports `session_id: null` ONLY when no session was opened, and a completed run without a
+    /// session handle cannot fill the record's mandatory `session_id` honestly. Both spellings of
+    /// "no handle" — an explicit `null` and an absent key — are the same deterministic Contract
+    /// refusal naming `--no-session`, so a misconfigured worker fails the same way every attempt.
+    #[test]
+    fn a_completed_envelope_without_a_session_id_is_a_contract_refusal_naming_no_session()
+    -> TestResult {
+        let without_key = json!({
+            "envelope_version": 1,
+            "stop": { "reason": "completed" },
+            "output": "done",
+        });
+        let with_null = json!({
+            "envelope_version": 1,
+            "stop": { "reason": "completed" },
+            "output": "done",
+            "session_id": null,
+        });
+        for envelope in [without_key, with_null] {
+            let Err(error) = run_result_to_outcome(&envelope) else {
+                return Err("a completed run with no session handle must be refused".into());
+            };
+            assert!(
+                matches!(error, HarnessError::Contract { .. }),
+                "no-handle is a deterministic Contract refusal, got {error:?}"
+            );
+            let message = error.to_string();
+            assert!(
+                message.contains("--no-session"),
+                "the refusal names the configuration that causes it: {message}"
+            );
+            assert!(
+                message.contains("session_id"),
+                "the refusal names the missing field: {message}"
+            );
+        }
+        Ok(())
+    }
+
+    /// An empty-string `session_id` is off the stop-envelope contract (`<id | null>`, never `""`)
+    /// — a Protocol refusal, distinct from the `--no-session` Contract arm, so a norn that emits
+    /// a blank handle is reported as speaking the protocol wrongly rather than as misconfigured.
+    #[test]
+    fn an_empty_string_session_id_is_a_protocol_refusal() -> TestResult {
+        let envelope = json!({
+            "envelope_version": 1,
+            "stop": { "reason": "completed" },
+            "output": "done",
+            "session_id": "",
+        });
+        let Err(error) = run_result_to_outcome(&envelope) else {
+            return Err("an empty-string session_id must be refused".into());
+        };
+        assert!(
+            matches!(error, HarnessError::Protocol { .. }),
+            "an off-contract spelling is a Protocol refusal, got {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("never \"\""),
+            "the refusal states the contract's two legal spellings: {message}"
+        );
+        Ok(())
+    }
+
+    /// A non-string, non-null `session_id` is a malformed envelope — a Protocol refusal that
+    /// names what was found instead of decoding garbage into the record.
+    #[test]
+    fn a_non_string_session_id_is_a_protocol_refusal() -> TestResult {
+        let envelope = json!({
+            "envelope_version": 1,
+            "stop": { "reason": "completed" },
+            "output": "done",
+            "session_id": 42,
+        });
+        let Err(error) = run_result_to_outcome(&envelope) else {
+            return Err("a non-string session_id must be refused".into());
+        };
+        assert!(
+            matches!(error, HarnessError::Protocol { .. }),
+            "a malformed field is a Protocol refusal, got {error:?}"
         );
         Ok(())
     }

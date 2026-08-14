@@ -1,0 +1,76 @@
+   Compiling tokio v1.52.3
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.56s
+     Running unittests src/lib.rs (target/debug/deps/aion_integrations-d9ee792dbd6b56d6)
+
+running 49 tests
+test environment::tests::a_blank_entry_is_refused_because_no_environment_can_carry_one ... ok
+test environment::tests::a_bare_program_with_path_declared_is_permitted ... ok
+test environment::tests::an_absolute_program_needs_no_path_so_a_hermetic_declaration_stays_legitimate ... ok
+test environment::tests::a_relative_multi_component_program_is_not_gated_on_path ... ok
+test environment::tests::a_declared_name_the_context_does_not_carry_is_reported_absent_not_invented ... ok
+test environment::tests::a_key_value_pair_is_refused_rather_than_split ... ok
+test environment::tests::an_empty_declaration_renders_as_words_in_a_refusal ... ok
+test environment::tests::a_bare_program_without_path_in_the_declaration_is_refused_naming_path ... ok
+test environment::tests::a_variable_the_declaration_does_not_name_is_absent_in_the_child ... ok
+test environment::tests::declaration_order_is_the_operators_and_duplicates_collapse_once ... ok
+test environment::tests::every_environment_fault_reaches_the_seam_as_a_deterministic_refusal ... ok
+test environment::tests::the_resolved_pairs_are_the_childs_entire_environment_not_an_overlay ... ok
+test environment::tests::the_process_snapshot_really_reads_this_process ... ok
+test error::tests::capability_not_supported_names_the_primitive ... ok
+test error::tests::each_constructor_renders_its_class ... ok
+test error::tests::harness_error_is_send_sync_static ... ok
+test error::tests::only_the_contract_refusal_is_deterministic ... ok
+test jsonrpc::envelope::tests::a_null_id_is_treated_as_a_notification_not_a_request ... ok
+test jsonrpc::envelope::tests::a_present_null_result_decodes_as_some_null ... ok
+test jsonrpc::envelope::tests::an_absent_result_decodes_as_none ... ok
+test jsonrpc::envelope::tests::classifies_request_notification_and_response ... ok
+test jsonrpc::envelope::tests::error_response_carries_result_none ... ok
+test jsonrpc::envelope::tests::notification_never_carries_an_id ... ok
+test jsonrpc::envelope::tests::request_serialises_with_id_and_omits_absent_params ... ok
+test jsonrpc::envelope::tests::string_ids_round_trip ... ok
+test spec::tests::spec_carries_run_identity_and_input ... ok
+test spec::tests::two_generations_of_one_chain_are_distinct_specs ... ok
+test jsonrpc::transport::tests::ids_are_monotonic ... ok
+test jsonrpc::transport::tests::request_and_notification_round_trip_over_a_duplex ... ok
+test jsonrpc::transport::tests::recv_returns_none_at_end_of_stream ... ok
+test workspace::tests::a_blank_directory_is_refused_rather_than_read_as_here ... ok
+test workspace::tests::a_bound_directory_is_subtracted_and_what_remains_is_the_prompt ... ok
+test workspace::tests::a_fixed_tree_ignores_what_the_job_carries ... ok
+test workspace::tests::a_job_missing_the_parameter_is_refused_and_never_defaulted ... ok
+test workspace::tests::a_job_that_names_its_tree_resolves_to_that_tree ... ok
+test workspace::tests::a_json_string_input_is_the_prompt_verbatim ... ok
+test workspace::tests::a_one_field_object_asks_the_agent_the_field_and_not_the_json ... ok
+test workspace::tests::a_parameter_that_is_not_a_string_says_what_it_was ... ok
+test workspace::tests::a_prompt_field_that_is_not_text_is_refused_naming_what_arrived ... ok
+test workspace::tests::a_reserved_parameter_is_subtracted_and_what_remains_is_the_prompt ... ok
+test workspace::tests::an_absent_reserved_parameter_changes_nothing ... ok
+test workspace::tests::an_input_that_is_not_an_object_says_it_carries_no_parameters ... ok
+test workspace::tests::an_object_carrying_only_the_directory_is_refused ... ok
+test workspace::tests::each_form_answers_only_for_itself ... ok
+test workspace::tests::an_object_carrying_two_possible_prompts_is_refused_by_name ... ok
+test workspace::tests::input_that_is_not_json_is_refused_terminally ... ok
+test workspace::tests::json_tagged_text_that_is_not_json_passes_through_as_the_prompt ... ok
+test workspace::tests::non_utf8_input_is_refused_as_a_protocol_fault ... ok
+test workspace::tests::the_prompt_is_found_wherever_the_directory_sits_in_the_object ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/mock_harness.rs (target/debug/deps/mock_harness-ef8d7dee3667d787)
+
+running 3 tests
+test observability_only_harness_is_first_class ... ok
+test unadvertised_command_is_rejected_even_when_some_are_supported ... ok
+test rich_harness_streams_events_accepts_supported_command_and_returns_result ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests aion_integrations
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

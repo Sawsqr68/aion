@@ -282,3 +282,27 @@ the proof. The proof is a live agent round on the swapped binary whose agent
 receives the prompt TEXT — read from the recorded dispatch input and from the
 agent's own transcript, not from a passing suite. That acceptance is owed, is
 recorded here as owed, and rides the #228 release swap.
+
+---
+
+## Amendment — 2026-08-14, task #205: the record gains a third field
+
+This document's statements of the canonical agent-outcome record as **two**
+fields (`AgentOutcome { text: String, stop_reason: String }`, and the
+"two-field agent action" objection answered above) describe the record as it
+stood when this ruling was made. They are left as written — this document is
+the record of a decision, not a living reference.
+
+Task #205 (the ACP `session/load` lane, Waffles' approval) widened the record
+to **three mandatory fields**: `text: String`, `stop_reason: String`, and
+`session_id: String`. The third field is the handle of the conversation that
+produced the outcome — a FACT the harness fills from its own session, never a
+promise the session can be resumed (resumability is the harness's own
+handshake question), and meaningful only to the harness that minted it;
+resume routing pairs the id with the harness identity. The widening REPLACED
+the two-field shape (house rule: no backwards compatibility) — a two-field
+payload no longer decodes, the checker demands the three-field record
+structurally, and an empty-string `session_id` is refused by name at
+`AgentOutcome::into_payload`. Everything else this ruling establishes — the
+seam belongs in the language, the marker classifies the declaration, the
+prompt is the parameter's TEXT — stands unchanged.

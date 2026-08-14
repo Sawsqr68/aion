@@ -2,7 +2,7 @@ module review_a_tree source=review_a_tree.awl
 exports: run/1, definition/0, execute/1
 == effect schedule ==
   step_review:
-    aion@activity:task_queue/2 [activities] (v2, lit#13)
+    aion@activity:task_queue/2 [activities] (v2, lit#14)
     aion@workflow:run/1 [activities] (v3)
 == durable families == activities
 == atoms ==
@@ -16,23 +16,25 @@ exports: run/1, definition/0, execute/1
   [0] "reply"
   [1] "text"
   [2] "stop_reason"
-  [3] "repo"
-  [4] "prompt"
-  [5] "tree"
-  [6] "question"
-  [7] "answered"
-  [8] "outcome"
-  [9] ""
-  [10] "ReviewATreeOutcome"
-  [11] "answered"
-  [12] "payload"
-  [13] "reviewers"
+  [3] "session_id"
+  [4] "repo"
+  [5] "prompt"
+  [6] "tree"
+  [7] "question"
+  [8] "answered"
+  [9] "outcome"
+  [10] ""
+  [11] "ReviewATreeOutcome"
+  [12] "answered"
+  [13] "payload"
+  [14] "reviewers"
 == types ==
   record Answer tag=answer
     reply: string
   record Reply tag=reply
     text: string
     stop_reason: string
+    session_id: string
   record ReviewInput tag=review_input
     repo: string
     prompt: string
@@ -78,8 +80,9 @@ exports: run/1, definition/0, execute/1
   sig: (review_a_tree.Reply) -> Json
   v1 = field(v0, 1)
   v2 = field(v0, 2)
-  v3 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json}
-  return v3
+  v3 = field(v0, 3)
+  v4 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json, "session_id": v3|>awlc.string_to_json}
+  return v4
 == fn reply_decoder/0 origin=codec_template(RecordTrio, Reply, record#1) ==
   sig: () -> Decoder(review_a_tree.Reply)
   v0 = call_rt aion@awl@codec:string_decoder/0()
@@ -92,8 +95,13 @@ exports: run/1, definition/0, execute/1
   tail_rt gleam@dynamic@decode:field/3(lit#2, v1, v2)
 == fn reply_decoder$1/2 origin=lifted(reply_decoder, #1) ==
   sig: (String, String) -> Decoder(review_a_tree.Reply)
-  v2 = record(reply, [v1, v0])
-  tail_rt gleam@dynamic@decode:success/1(v2)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure reply_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v2, v3)
+== fn reply_decoder$2/3 origin=lifted(reply_decoder, #2) ==
+  sig: (String, String, String) -> Decoder(review_a_tree.Reply)
+  v3 = record(reply, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
 == fn review_input_codec/0 origin=codec_template(RecordTrio, ReviewInput, record#2) ==
   sig: () -> Codec(review_a_tree.ReviewInput)
   v0 = make_closure review_input_to_json captures=[]
@@ -109,12 +117,12 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(review_a_tree.ReviewInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure review_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
 == fn review_input_decoder$0/1 origin=lifted(review_input_decoder, #0) ==
   sig: (String) -> Decoder(review_a_tree.ReviewInput)
   v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
   v2 = make_closure review_input_decoder$1 captures=[v0]
-  tail_rt gleam@dynamic@decode:field/3(lit#4, v1, v2)
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v1, v2)
 == fn review_input_decoder$1/2 origin=lifted(review_input_decoder, #1) ==
   sig: (String, String) -> Decoder(review_a_tree.ReviewInput)
   v2 = record(review_input, [v1, v0])
@@ -134,12 +142,12 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(review_a_tree.ReviewATreeInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure review_a_tree_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
 == fn review_a_tree_input_decoder$0/1 origin=lifted(review_a_tree_input_decoder, #0) ==
   sig: (String) -> Decoder(review_a_tree.ReviewATreeInput)
   v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
   v2 = make_closure review_a_tree_input_decoder$1 captures=[v0]
-  tail_rt gleam@dynamic@decode:field/3(lit#6, v1, v2)
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v1, v2)
 == fn review_a_tree_input_decoder$1/2 origin=lifted(review_a_tree_input_decoder, #1) ==
   sig: (String, String) -> Decoder(review_a_tree.ReviewATreeInput)
   v2 = record(review_a_tree_input, [v1, v0])
@@ -152,23 +160,23 @@ exports: run/1, definition/0, execute/1
 == fn review_a_tree_outcome_to_json/1 origin=codec_template(UnionTrio, ReviewATreeOutcome, union#4) ==
   sig: (review_a_tree.ReviewATreeOutcome) -> Json
   v1 = field(v0, 1)
-  v2 = json_obj {"outcome": lit#7|>awlc.string_to_json, "payload": v1|>answer_to_json}
+  v2 = json_obj {"outcome": lit#8|>awlc.string_to_json, "payload": v1|>answer_to_json}
   return v2
 == fn review_a_tree_outcome_decoder/0 origin=codec_template(UnionTrio, ReviewATreeOutcome, union#4) ==
   sig: () -> Decoder(review_a_tree.ReviewATreeOutcome)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure review_a_tree_outcome_decoder$outcome captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
 == fn review_a_tree_outcome_decoder$outcome/1 origin=lifted(review_a_tree_outcome_decoder, #0) ==
   sig: (String) -> Decoder(review_a_tree.ReviewATreeOutcome)
-  if cmp Eq v0 lit#11:
+  if cmp Eq v0 lit#12:
     v3 = call_local answer_decoder()
     v4 = make_closure review_a_tree_outcome_decoder$arm0 captures=[]
-    tail_rt gleam@dynamic@decode:field/3(lit#12, v3, v4)
+    tail_rt gleam@dynamic@decode:field/3(lit#13, v3, v4)
   else:
-    v1 = record(answer, [lit#9])
+    v1 = record(answer, [lit#10])
     v2 = record(answered_outcome, [v1])
-    tail_rt gleam@dynamic@decode:failure/2(v2, lit#10)
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#11)
 == fn review_a_tree_outcome_decoder$arm0/1 origin=lifted(review_a_tree_outcome_decoder, #1) ==
   sig: (review_a_tree.Answer) -> Decoder(review_a_tree.ReviewATreeOutcome)
   v1 = record(answered_outcome, [v0])
@@ -179,7 +187,7 @@ exports: run/1, definition/0, execute/1
 == fn step_review/2 origin=region(review) ==
   sig: (String, String) -> Result(review_a_tree.ReviewATreeOutcome, AwlError)
   v2 = call_local review_activity(v1, v0)
-  v3 = call_rt aion@activity:task_queue/2(v2, lit#13)
+  v3 = call_rt aion@activity:task_queue/2(v2, lit#14)
   v4 = call_rt aion@workflow:run/1(v3)
   v5 = call_rt aion@awl@error:map_activity_error/1(v4)
   v6 = try_bind v5

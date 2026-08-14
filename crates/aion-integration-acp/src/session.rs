@@ -181,7 +181,7 @@ where
                  answer was ever interpreted",
             )
         })?;
-        end.into_payload()
+        end.into_payload(&self.session_id)
     }
 
     /// Stops the pump, closes the agent's stdin, and gives it the configured grace to exit before

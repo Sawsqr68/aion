@@ -61,7 +61,11 @@ pub fn passing() -> Handlers {
   Handlers(
     provision: fn(input) { Ok(io.Workspace(path: "/work/" <> input.run_id)) },
     assistant: fn(prompt) {
-      Ok(AgentOutcome(text: "REPLY\n" <> prompt, stop_reason: "end_turn"))
+      Ok(AgentOutcome(
+        text: "REPLY\n" <> prompt,
+        stop_reason: "end_turn",
+        session_id: "sess-test-assistant",
+      ))
     },
   )
 }

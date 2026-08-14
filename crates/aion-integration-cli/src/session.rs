@@ -72,6 +72,11 @@ pub struct CliSession {
     events: Option<mpsc::UnboundedReceiver<ActivityEvent>>,
     result: Option<oneshot::Receiver<TerminalOutcome>>,
     pump: Option<tokio::task::JoinHandle<()>>,
+    /// The attempt's `(workflow, run, activity, attempt)` identity — stamped onto every demuxed
+    /// event by the pump, and the material for the outcome record's derived `session_id` (a
+    /// one-shot process has no persisted session, so the identity quadruple IS the conversation's
+    /// honest handle).
+    identity: EventIdentity,
     /// The spawned child, reaped when the session is dropped. `None` for the in-memory test path.
     child: Arc<Mutex<Option<tokio::process::Child>>>,
 }
@@ -96,7 +101,7 @@ impl CliSession {
 
         let pump = tokio::spawn(pump_loop(
             BufReader::new(stdout).lines(),
-            identity,
+            identity.clone(),
             event_tx,
             result_tx,
             Arc::clone(&child),
@@ -107,6 +112,7 @@ impl CliSession {
             events: Some(event_rx),
             result: Some(result_rx),
             pump: Some(pump),
+            identity,
             child,
         }
     }
@@ -233,7 +239,7 @@ impl AgentSession for CliSession {
         let outcome = receiver.await.map_err(|_recv| {
             HarnessError::transport("cli agent result channel closed before the run finished")
         })?;
-        terminal_outcome_into_payload(outcome)
+        terminal_outcome_into_payload(outcome, &self.identity)
     }
 }
 
@@ -254,7 +260,17 @@ impl AgentSession for CliSession {
 ///   is unchanged — such a run completed before this and still does — but the record stops
 ///   claiming the agent chose to end its turn, and it overrides any earlier announced stop
 ///   because a stop line followed by a signal death was a mid-run announcement, not the ending.
-fn terminal_outcome_into_payload(outcome: TerminalOutcome) -> Result<Payload, HarnessError> {
+///
+/// `session_id` is derived from the attempt's identity
+/// (`{workflow_id}:{run_id}:{activity_id}:{attempt}`): a cli agent is a one-shot process with no
+/// persisted session, so the conversation the record names IS that one invocation, and the
+/// identity quadruple is its honest handle. Per the record's contract the id is meaningful only
+/// to the harness that minted it — this harness has no load path, so the handle identifies the
+/// conversation and promises nothing.
+fn terminal_outcome_into_payload(
+    outcome: TerminalOutcome,
+    identity: &EventIdentity,
+) -> Result<Payload, HarnessError> {
     let TerminalOutcome {
         final_line,
         end,
@@ -277,7 +293,11 @@ fn terminal_outcome_into_payload(outcome: TerminalOutcome) -> Result<Payload, Ha
         },
         ChildEnd::Exited(_) | ChildEnd::NoChild => announced_stop.unwrap_or(StopKind::EndTurn),
     };
-    AgentOutcome::new(final_line.unwrap_or_default(), &stop)
+    let session_id = format!(
+        "{}:{}:{}:{}",
+        identity.workflow_id, identity.run_id, identity.activity_id, identity.attempt
+    );
+    AgentOutcome::new(final_line.unwrap_or_default(), &stop, session_id)
         .into_payload()
         .map_err(|source| {
             HarnessError::protocol(format!("cli agent result is not encodable: {source}"))
@@ -323,6 +343,16 @@ mod tests {
             activity_id: ActivityId::from_sequence_position(2),
             attempt: 1,
         }
+    }
+
+    /// The derived session handle the record must carry: the identity quadruple, colon-joined —
+    /// computed from the SAME identity the session was started with, never hand-transcribed.
+    fn expected_session_id() -> String {
+        let id = identity();
+        format!(
+            "{}:{}:{}:{}",
+            id.workflow_id, id.run_id, id.activity_id, id.attempt
+        )
     }
 
     /// Build a session over an in-memory stdout containing `text` (no child to await, so the exit
@@ -410,8 +440,13 @@ the final answer is 42\n";
         let decoded = payload.to_json().unwrap();
         assert_eq!(
             decoded,
-            json!({ "text": "the final answer is 42", "stop_reason": "end_turn" }),
-            "with no announced stop, a cleanly-ended run reports the end_turn fallback"
+            json!({
+                "text": "the final answer is 42",
+                "stop_reason": "end_turn",
+                "session_id": expected_session_id(),
+            }),
+            "with no announced stop, a cleanly-ended run reports the end_turn fallback \
+             and the identity-derived session handle"
         );
     }
 

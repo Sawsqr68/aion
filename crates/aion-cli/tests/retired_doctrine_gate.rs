@@ -192,7 +192,7 @@ fn the_matcher_finds_each_banned_phrase_through_markdown_disguises() {
         );
     }
     let clean = normalize(
-        "an agent action returns the canonical agent-outcome record: text and stop_reason",
+        "an agent action returns the canonical agent-outcome record: text, stop_reason, and session_id",
     );
     assert!(
         BANNED_PHRASES.iter().all(|phrase| !clean.contains(phrase)),

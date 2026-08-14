@@ -1,0 +1,266 @@
+   Compiling mio v1.2.1
+   Compiling parking_lot v0.12.5
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling rustix v1.1.4
+   Compiling regalloc2 v0.15.1
+   Compiling uuid v1.23.4
+   Compiling anyhow v1.0.102
+   Compiling zopfli v0.8.3
+   Compiling hashbrown v0.14.5
+   Compiling zstd-safe v7.2.4
+   Compiling tokio v1.52.3
+   Compiling zstd v0.13.3
+   Compiling ts-rs v12.0.1
+   Compiling referencing v0.46.6
+   Compiling dashmap v6.2.1
+   Compiling zip v8.6.0
+   Compiling tempfile v3.27.0
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling beamr v0.18.2
+   Compiling prost-build v0.14.3
+   Compiling cranelift-codegen v0.131.2
+   Compiling jsonschema v0.46.6
+   Compiling tonic-prost-build v0.14.5
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+   Compiling axum v0.8.9
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling cranelift-module v0.131.2
+   Compiling cranelift-native v0.131.2
+   Compiling cranelift-frontend v0.131.2
+   Compiling cranelift-jit v0.131.2
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 31.19s
+     Running unittests src/lib.rs (target/debug/deps/aion_awl-0144877a6bad219b)
+
+running 169 tests
+test ast::command_tests::a_dollar_before_a_space_is_refused ... ok
+test ast::command_tests::a_brace_reference_holding_spaces_is_refused ... ok
+test ast::command_tests::a_command_without_a_dollar_has_no_references ... ok
+test ast::command_tests::a_doubled_dollar_before_a_brace_stays_literal ... ok
+test ast::command_tests::a_dollar_inside_single_quotes_is_literal ... ok
+test ast::command_tests::a_dangling_dollar_at_the_end_is_refused ... ok
+test ast::command_tests::a_brace_reference_holding_a_non_name_is_refused ... ok
+test ast::command_tests::a_dollar_before_a_hyphen_is_refused ... ok
+test ast::command_tests::a_bare_reference_reports_its_name_offset_and_length ... ok
+test ast::command_tests::a_dollar_inside_double_quotes_is_a_reference ... ok
+test ast::command_tests::a_doubled_dollar_is_a_literal_dollar_and_never_a_reference ... ok
+test ast::command_tests::a_name_may_carry_digits_and_underscores ... ok
+test ast::command_tests::a_reference_ending_the_command_is_measured_to_the_end ... ok
+test ast::command_tests::a_reference_in_program_position_is_reported_inside_the_program_word ... ok
+test ast::command_tests::adjacent_references_are_both_found ... ok
+test ast::command_tests::an_empty_brace_reference_is_refused ... ok
+test ast::command_tests::a_unicode_name_is_refused_rather_than_split ... ok
+test ast::command_tests::an_unterminated_brace_reference_is_refused ... ok
+test ast::command_tests::an_unterminated_double_quote_is_refused ... ok
+test ast::command_tests::an_unterminated_single_quote_is_refused ... ok
+test ast::command_tests::an_uppercase_shell_variable_is_refused_with_the_escape_hint ... ok
+test ast::command_tests::braces_delimit_a_reference_that_abuts_more_name_characters ... ok
+test ast::command_tests::multibyte_text_before_a_reference_keeps_byte_offsets_honest ... ok
+test ast::command_tests::the_empty_command_scans_to_nothing ... ok
+test ast::command_tests::the_program_word_ends_at_the_first_unquoted_whitespace ... ok
+test ast::command_tests::parameters_are_sorted_and_deduplicated ... ok
+test checker::harness::tests::a_duplicate_setting_is_refused_at_the_parse_because_neither_reading_is_honest ... ok
+test checker::harness::tests::an_unknown_setting_is_refused_naming_what_the_section_carries ... ok
+test guide::grammar::grammar_tests::every_derived_form_is_honest_against_the_table ... ok
+test guide::grammar::grammar_tests::every_form_files_at_least_one_word ... ok
+test guide::grammar::grammar_tests::offered_words_compose_keywords_then_positional_words ... ok
+test guide::grammar::grammar_tests::positions_are_read_from_both_halves_of_the_table_in_order ... ok
+test guide::grammar::grammar_tests::every_word_of_the_vocabulary_stands_somewhere ... ok
+test guide::grammar::grammar_tests::the_all_inventories_carry_every_variant ... ok
+test guide::grammar::grammar_tests::the_canonical_words_land_in_their_forms ... ok
+test guide::grammar::grammar_tests::the_table_offers_no_word_the_lexer_does_not_name ... ok
+test guide::grammar::grammar_tests::wire_identifiers_are_distinct_and_prose_is_one_finished_line ... ok
+test guide::lookup::guide_tests::a_citation_names_the_reference_and_the_section ... ok
+test checker::harness::tests::an_unknown_kind_suppresses_the_per_kind_demands_rather_than_guessing_one ... ok
+test checker::harness::tests::an_env_pass_entry_carrying_a_value_is_refused_rather_than_split ... ok
+test checker::harness::tests::a_norn_section_is_never_asked_for_an_acp_setting ... ok
+test guide::lookup::guide_tests::every_keyword_entry_names_the_word_the_lexer_produces ... ok
+test checker::harness::tests::a_setting_for_the_other_kind_is_refused_by_name_in_both_directions ... ok
+test guide::lookup::guide_tests::every_positional_word_has_an_entry_recorded_as_positional ... ok
+test checker::harness::tests::an_acp_section_is_complete_without_any_norn_setting ... FAILED
+test checker::harness::tests::a_norn_section_is_complete_without_command_permission_or_exit_grace ... FAILED
+test guide::lookup::guide_tests::every_summary_is_one_rendered_line ... ok
+test guide::lookup::guide_tests::every_word_of_the_language_is_reachable_by_name ... ok
+test guide::lookup::guide_tests::the_example_word_matcher_reads_tokens_not_text ... ok
+test guide::lookup::guide_tests::the_inventory_is_complete_and_carries_no_duplicate ... ok
+test harness_config::tests::a_misplaced_workspace_root_in_cwd_is_refused_at_the_seam ... ok
+test guide::lookup::guide_tests::the_two_inventories_do_not_overlap ... ok
+test harness_config::tests::a_missing_norn_cwd_is_named_at_the_launch_seam ... ok
+test harness_config::tests::a_relative_norn_binary_is_named_at_the_launch_seam_not_carried_through ... ok
+test harness_config::tests::a_relative_acp_command_is_named_by_its_own_field ... ok
+test harness_config::tests::an_absolute_norn_binary_passes_the_same_net ... ok
+test harness_config::tests::a_workspace_rooted_cwd_reaches_the_launch_seam_unexpanded ... ok
+test lexer::grammar_vocabulary_tests::the_bindable_positional_words_are_deliberately_left_plain ... ok
+test lexer::grammar_vocabulary_tests::every_reserved_word_is_known_to_the_editor_grammar ... ok
+test lexer::grammar_vocabulary_tests::the_coloured_exception_is_a_genuine_positional_word ... ok
+test harness_config::tests::an_omitted_norn_binary_is_absence_and_not_a_refusal ... ok
+test lexer::grammar_vocabulary_tests::the_specifically_typed_words_are_still_covered ... ok
+test lexer::grammar_vocabulary_tests::the_grammar_colours_nothing_the_lexer_cannot_account_for ... ok
+test lexer::tokens_tests::keyword_inventory_covers_every_variant ... ok
+test lexer::tokens_tests::every_keyword_in_the_inventory_round_trips_and_is_distinct ... ok
+test checker::harness::tests::every_required_norn_field_is_named_when_it_is_the_one_removed ... ok
+test lexer::tokens_tests::the_positional_words_are_named_without_being_reserved ... ok
+test mir::agent_control_tests::agent_marked_and_unmarked_lower_identically ... ok
+test guide::lookup::guide_tests::the_embedded_reference_carries_the_cited_sections ... ok
+test mir::agent_control_tests::the_control_pair_differs_only_by_the_marker ... ok
+test checker::harness::tests::every_required_acp_field_is_named_when_it_is_the_one_removed ... ok
+test guide::lookup::guide_tests::every_entry_example_is_a_complete_document_using_its_word ... ok
+test mir::deferred_tests::a_subflow_outcome_payload_is_wrapped_for_an_optional_outcome ... ok
+test mir::deferred_tests::a_substep_chain_hands_off_and_closes_on_the_parents_arms ... ok
+test mir::codec_tests::required_recursive_default_is_refused_on_both_sides ... ok
+test mir::child_fork_tests::sequential_child_fork_matches_reference_fold_order ... ok
+test mir::codec_tests::colliding_codec_stems_are_refused_not_cross_wired ... ok
+test mir::deferred_tests::a_parallel_layer_dispatches_through_one_workflow_all ... ok
+test mir::deferred_tests::a_substep_visit_bound_refuses_rather_than_going_unenforced ... ok
+test mir::child_fork_tests::parallel_child_fork_is_spawn_all_then_ordered_await_with_emitter_parity ... ok
+test mir::deferred_tests::a_value_payload_is_wrapped_for_an_optional_outcome ... ok
+test mir::deferred_tests::bc4_zero_step_workflow_refuses_no_start_region ... ok
+test mir::deferred_tests::each_subflow_keeps_its_own_binding_environment ... ok
+test mir::child_fork_tests::child_spawn_keeps_identity_and_outcome_envelope_codec ... ok
+test mir::deferred_tests::guard_optional_wait_now_lowers ... ok
+test mir::deferred_tests::a_substeps_failure_edge_keeps_its_routed_outcome_out_of_the_guard ... ok
+test mir::deferred_tests::nested_handlers_on_failure_now_lowers ... ok
+test mir::deferred_tests::ordinary_call_index_lowers_with_the_anchored_runtime_message ... ok
+test mir::deferred_tests::post_join_combinator_now_lowers ... ok
+test mir::deferred_tests::sort_non_comparable_key_refuses_with_the_reference_class ... ok
+test mir::deferred_tests::an_advisory_call_keeps_its_layer_in_written_order ... ok
+test mir::fork_tests::collection_child_fork_config_refuses_with_the_child_class ... ok
+test mir::deferred_tests::a_degraded_parallel_layer_is_marked_on_its_first_member_only ... ok
+test mir::deferred_tests::substep_fixtures_now_lower ... ok
+test mir::fork_tests::homogeneous_named_fork_pins_one_typed_all ... ok
+test mir::deferred_tests::value_route_payloads_now_lower ... ok
+test mir::deferred_tests::statement_level_child_forms_plan_the_witness ... ok
+test mir::fork_tests::fork_branch_call_site_config_lowers_with_per_key_merge ... ok
+test mir::fork_tests::heterogeneous_named_fork_pins_raw_twins_and_positional_decode ... ok
+test mir::harness_control_tests::a_harness_section_does_not_change_the_lowering ... ok
+test mir::fork_tests::named_child_branch_refuses_cleanly ... ok
+test mir::harness_control_tests::the_control_pair_differs_only_by_the_section ... ok
+test mir::fork_tests::parallel_action_fork_pins_map_fanout_semantics ... ok
+test mir::fork_tests::sequential_fork_pins_fold_initial_state_and_result_order ... ok
+test mir::deferred_tests::subflow_declarations_now_lower ... ok
+test mir::runtime::tests::enumeration_covers_every_variant_exactly_once ... ok
+test mir::runtime::tests::import_surface_projects_the_full_enumeration ... ok
+test mir::fork_tests::action_and_child_collection_forks_route_distinctly ... ok
+test mir::runtime::tests::query_handler_is_not_a_durable_effect ... ok
+test mir::pipe_tests::pipe_child_stage_lowers_to_spawn_and_wait ... ok
+test mir::pipe_tests::sort_string_key_selects_string_compare ... ok
+test mir::select::control_tests::assert_list_badmatch_traps_the_subject_list ... ok
+test mir::fork_tests::stopgap_refusals_match_the_reference_classes ... ok
+test mir::pipe_tests::post_stage_any_all_lower_through_predicate_closures ... ok
+test mir::pipe_tests::combinator_stages_lower_to_list_runtime_calls ... ok
+test mir::select::inspect_tests::framed_return_reloads_the_return_value_into_x0 ... ok
+test mir::select::inspect_tests::marshaling_rejects_swapped_args_dropped_store_and_wrong_arity ... ok
+test mir::select::inspect_tests::return_keeps_x0_live_across_a_preceding_heap_op ... ok
+test mir::select::inspect_tests::targeted_framed_function_brackets_and_single_exits ... ok
+test mir::select::control_tests::short_circuit_optional_selects_checked_assert_some ... ok
+test mir::select::inspect_tests::targeted_frameless_body_uses_no_frame_or_y ... ok
+test mir::select::control_tests::enum_total_tail_selects_with_explicit_case_end_trap ... ok
+test mir::select::control_tests::loop_counter_selects_a_gc_bif2_against_erlang_plus ... ok
+test mir::select::inspect_tests::targeted_heap_ops_declare_accurate_live ... ok
+test mir::select::inspect_tests::awl_hello_outcome_route_returns_not_tail_calls ... ok
+test mir::select::control_tests::outcome_guard_decision_tree_uses_real_failure_labels ... ok
+test mir::select::tests::dead_body_is_a_real_sidecar_visible_function ... ok
+test mir::select::inspect_tests::targeted_loop_recursion_is_a_self_tail_call ... ok
+test mir::deferred_tests::parallel_layer_fixtures_now_lower ... ok
+test mir::select::tests::minimal_module_has_the_expected_abi_structure ... ok
+test mir::select::tests::shape_call_import ... ok
+test mir::select::tests::shape_call_local ... ok
+test mir::select::inspect_tests::targeted_route_to_step_is_a_local_tail_call ... ok
+test mir::select::tests::shape_field_get ... ok
+test mir::select::tests::shape_frameless_tail_import ... ok
+test mir::select::tests::shape_json_obj_two_pairs ... ok
+test mir::select::tests::shape_make_closure ... ok
+test mir::select::tests::shape_record_tuple ... ok
+test mir::select::tests::run_shell_passes_raw_payload_not_the_closure ... ok
+test mir::select::tests::shape_record_with_literal_int ... ok
+test mir::select::tests::shape_record_zero_field ... ok
+test mir::select::tests::shape_try_bind ... ok
+test mir::select::tests::selection_is_deterministic ... ok
+test mir::tests::backward_route_reentry_now_lowers ... ok
+test mir::tests::loop_lowering_pins_the_reference_semantics ... ok
+test mir::tests::counterless_loop_pins_the_scalar_result_path ... ok
+test mir::tests::minimal_exercises_core_op_shapes ... ok
+test mir::tests::compound_until_clones_control_only_into_unresolved_leaves ... ok
+test positions::tests::a_multibyte_span_covers_its_full_extent_in_utf16_units ... ok
+test positions::tests::an_inverted_span_collapses_to_its_start ... ok
+test positions::tests::offsets_past_the_document_clamp_to_its_end ... ok
+test mir::tests::optional_rhs_is_nested_below_short_circuit_branch ... ok
+test positions::tests::point_spans_stay_points ... ok
+test positions::tests::positions_are_utf16_not_bytes_or_scalar_columns ... ok
+test printer::harness::tests::the_scrambled_fixture_really_is_scrambled ... ok
+test workspace_root::tests::a_leading_placeholder_is_the_second_accepted_form ... ok
+test workspace_root::tests::a_relative_path_is_refused_as_it_always_was ... ok
+test printer::harness::tests::the_printer_emits_every_field_in_exactly_the_canonical_order ... ok
+test workspace_root::tests::an_absolute_path_is_the_first_accepted_form ... ok
+test workspace_root::tests::an_empty_value_is_refused_before_either_form_is_considered ... ok
+test workspace_root::tests::the_new_form_did_not_widen_the_old_refusal ... ok
+test mir::tests::typed_codec_bodies_pin_the_wire_shapes ... ok
+test mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 ... FAILED
+test mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught ... FAILED
+test guide::lookup::guide_tests::every_entry_example_passes_the_real_checker ... FAILED
+test mir::tests::a_worker_document_is_refused_by_the_lowering ... ok
+test mir::select::tests::every_lowered_fixture_emits_and_validates ... FAILED
+test mir::tests::lowers_cover_and_golden ... FAILED
+test mir::select::inspect_tests::wrong_live_expectation_goes_red ... ok
+
+failures:
+
+---- checker::harness::tests::an_acp_section_is_complete_without_any_norn_setting stdout ----
+
+thread 'checker::harness::tests::an_acp_section_is_complete_without_any_norn_setting' (9550288) panicked at crates/aion-awl/src/checker/harness/tests.rs:51:5:
+assertion `left == right` failed: the required set is scoped to the DECLARED kind
+  left: ["`agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply"]
+ right: []
+
+---- checker::harness::tests::a_norn_section_is_complete_without_command_permission_or_exit_grace stdout ----
+
+thread 'checker::harness::tests::a_norn_section_is_complete_without_command_permission_or_exit_grace' (9550285) panicked at crates/aion-awl/src/checker/harness/tests.rs:60:5:
+assertion `left == right` failed: an ACP setting is not a Norn requirement
+  left: ["`agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply"]
+ right: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 stdout ----
+Error: Message { message: "document does not check cleanly: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply", span: Span { start: 1142, end: 1147, line: 24, column: 5 } }
+
+---- mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught stdout ----
+Error: Message { message: "document does not check cleanly: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply", span: Span { start: 1142, end: 1147, line: 24, column: 5 } }
+
+---- guide::lookup::guide_tests::every_entry_example_passes_the_real_checker stdout ----
+
+thread 'guide::lookup::guide_tests::every_entry_example_passes_the_real_checker' (9550305) panicked at crates/aion-awl/src/guide/guide_tests.rs:354:5:
+`agent` example 1 fails the checker — 11:5: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply
+`const` example 2 fails the checker — 15:5: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply
+
+---- mir::select::tests::every_lowered_fixture_emits_and_validates stdout ----
+Error: Message { message: "document does not check cleanly: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply", span: Span { start: 1142, end: 1147, line: 24, column: 5 } }
+
+---- mir::tests::lowers_cover_and_golden stdout ----
+Error: Message { message: "document does not check cleanly: `agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply", span: Span { start: 1142, end: 1147, line: 24, column: 5 } }
+
+
+failures:
+    checker::harness::tests::a_norn_section_is_complete_without_command_permission_or_exit_grace
+    checker::harness::tests::an_acp_section_is_complete_without_any_norn_setting
+    guide::lookup::guide_tests::every_entry_example_passes_the_real_checker
+    mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11
+    mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught
+    mir::select::tests::every_lowered_fixture_emits_and_validates
+    mir::tests::lowers_cover_and_golden
+
+test result: FAILED. 162 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+error: test failed, to rerun pass `-p aion-awl --lib`
+EXIT=101

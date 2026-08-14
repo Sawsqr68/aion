@@ -195,7 +195,11 @@ fn register_counting_passing(key: String) -> Nil {
   harness.register(
     Handlers(..handlers, assistant: fn(prompt) {
       let _ = harness.counter_next(key)
-      Ok(agent.AgentOutcome(text: "REPLY\n" <> prompt, stop_reason: "end_turn"))
+      Ok(agent.AgentOutcome(
+        text: "REPLY\n" <> prompt,
+        stop_reason: "end_turn",
+        session_id: "sess-test-assistant",
+      ))
     }),
   )
 }

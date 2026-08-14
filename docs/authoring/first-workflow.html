@@ -355,7 +355,7 @@
     <pre class="cmd"><code>cargo install aion-cli
 
 aion --version</code></pre>
-    <pre class="out"><code>aion 0.13.8</code></pre>
+    <pre class="out"><code>aion 0.15.0</code></pre>
     <ul class="points">
       <li>That one binary is the server, the client, and the authoring tools.</li>
       <li>The final agent-worker chapter also uses the norn CLI; that dependency is called out again where the worker starts.</li>
@@ -821,7 +821,7 @@ $ echo $?
     <p class="eyebrow">Where next — perform it</p>
     <h2>Declare the judge on the same queue</h2>
     <p class="lede">Keep the four command bodies. Declare the outcome record the seam returns, then add one plain agent action inside the same <code>worker gate</code> block.</p>
-    <pre><code>type Reply   { text: String, stop_reason: String }
+    <pre><code>type Reply   { text: String, stop_reason: String, session_id: String }
 type Gate    { cloned: String, commit: String, checks: String, tests: String, judgement: String }
 type Refused { reason: String, judge_reply: String }
 

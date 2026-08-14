@@ -506,7 +506,7 @@ action normalize(repo: String) -&gt; Repo
     <p class="eyebrow">agent</p>
     <h2>An agent is ordinary work</h2>
     <p class="form">    agent<span class="opt">   — this parameter is a prompt, this result is the outcome record</span></p>
-    <pre><code>type Reply { text: String, stop_reason: String }
+    <pre><code>type Reply { text: String, stop_reason: String, session_id: String }
 
 worker assistants
   /// `agent` says: this parameter is a PROMPT and this result is the agent&#x27;s

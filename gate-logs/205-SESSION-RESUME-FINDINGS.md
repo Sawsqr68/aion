@@ -164,3 +164,49 @@ on item 3's seam, not item 1's.
 Both were stated confidently before the routing was checked. The measurement that
 caught them was reading the *catalogue*, which is the file that decides what an
 operator can actually write.
+
+## 9. Build design for item 1 (written 2026-08-14, pre-build)
+
+Measured seams, in dependency order:
+
+**(a) Input side — the session id arrives like the directory does.**
+`HarnessWorkspace::prompt_for_attempt`'s object arm demands the input carry
+EXACTLY ONE field besides the workspace's directory parameter
+(workspace.rs `prompt_field`). A `session_id` field in the job input would
+make prompt extraction refuse with "carries 2 fields". So the session
+parameter must be DECLARED (worker document `harness` section, like
+`cwd from <parameter>` — #204/#228 precedent) and subtracted in
+`prompt_field` exactly as the directory is. Plumbing: a session source
+beside the workspace on the adapter config; absent = a worker whose jobs
+never resume (real absence, not a default). Absent parameter in a job that
+declared the source = fresh session (session/new) — the id is OPTIONAL per
+job; a job that carries it is asking to resume.
+
+**(b) Adapter — capability read + load call + honest refusal.**
+- `protocol.rs`: add `METHOD_SESSION_LOAD = "session/load"` (schema:
+  `SESSION_LOAD_METHOD_NAME`, types `LoadSessionRequest::new(session_id,
+  cwd)` + `.additional_directories(...)`, `LoadSessionResponse` — all in
+  agent-client-protocol-schema 1.5.0, verified).
+- `connect` currently DROPS the InitializeResponse after logging;
+  it must thread `agent_capabilities.load_session` into `open_turn`.
+- `open_turn`: prior id supplied AND `load_session` advertised →
+  `session/load` (replayed `session/update`s during the handshake land in
+  `deferred`, which the pump already replays — machinery exists); no prior
+  id → `session/new` exactly as today.
+- Refusal: prior id supplied, capability NOT advertised →
+  `HarnessError::configuration` (deterministic: same document → same agent
+  → same answer; the require_absolute precedent). "Asked to resume and
+  silently started fresh" must be impossible.
+
+**(c) Out seam — BLOCKED ON A RULING.** The workflow can only keep the id
+if the result carries it, and the result is the #181-ratified
+`AgentOutcome { text, stop_reason }` — checker-enforced exact shape,
+serialization pinned as exactly two keys. Carrying `session_id` means
+widening THAT record across checker + both harnesses + docs (norn fills it
+with its own derived id — uniform, no optionality; house rule = replace,
+no compat shim, existing two-field declarations get checker errors and are
+updated). This is Waffles' ruling to make: #181 was his chain. Question
+sent 2026-08-14. Until it lands, (a)+(b) are still correct and complete
+for "the dispatcher already knows the id" cases (e.g. an operator or
+workflow that recorded it out-of-band), but the self-contained
+resume-across-attempts story waits on (c).

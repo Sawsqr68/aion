@@ -1,0 +1,15 @@
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Checking aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Checking aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Checking aion-toolchain v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+    Checking aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Checking aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Checking aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Checking aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 42.80s
+EXIT=0

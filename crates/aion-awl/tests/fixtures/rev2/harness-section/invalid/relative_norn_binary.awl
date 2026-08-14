@@ -11,7 +11,7 @@ type Answer { reply: String }
 
 /// The canonical agent-outcome record: the checker demands the STRUCTURE, not
 /// a blessed name.
-type Reply { text: String, stop_reason: String }
+type Reply { text: String, stop_reason: String, session_id: String }
 
 worker assistants
   harness

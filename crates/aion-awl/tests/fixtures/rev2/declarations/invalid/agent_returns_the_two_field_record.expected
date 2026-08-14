@@ -1,0 +1,3 @@
+CHECK
+returns `Reply` — an agent action returns the canonical agent-outcome record
+13

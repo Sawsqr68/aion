@@ -1,0 +1,17 @@
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.55s
+     Running tests/checker.rs (target/debug/deps/checker-9f77d92ad6b0b3af)
+
+running 8 tests
+test diagnostics_arrive_sorted_by_source_position ... ok
+test check_without_a_root_reports_unresolvable_imports ... ok
+test duplicate_step_names_are_refused ... ok
+test unknown_binding_error_is_span_exact ... ok
+test imported_optional_field_is_optional_in_the_projection_direction ... ok
+test route_targeted_earlier_step_reads_a_later_steps_binding ... ok
+test every_check_staged_invalid_fixture_is_rejected_as_expected ... ok
+test every_valid_fixture_checks_clean ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+EXIT=0

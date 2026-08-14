@@ -71,6 +71,9 @@ pub const STOP_KEY: &str = "stop";
 pub const STOP_REASON_KEY: &str = "reason";
 /// The `output` value of the result envelope — the run's final output.
 pub const OUTPUT_KEY: &str = "output";
+/// The `session_id` value of the result envelope — the persisted session's id, or `null` when no
+/// session was opened (DRIVEN-PROTOCOL.md, "Stop envelope").
+pub const SESSION_ID_KEY: &str = "session_id";
 /// The one `stop.reason` whose envelope carries a usable `output` (every other reason is a
 /// non-completion the adapter surfaces as a harness failure).
 pub const STOP_REASON_COMPLETED: &str = "completed";

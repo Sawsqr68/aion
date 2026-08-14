@@ -148,8 +148,8 @@ Valid:
   a side channel, then do the work the run exists for (an advisory failure never faults the
   step).
 - `declarations/valid/agent_seam.awl` — the `agent` marker: one `String` prompt in, the
-  canonical agent-outcome record out (a declared record of `text: String` and
-  `stop_reason: String`) — the whole of what an adapter needs to hand the call to a harness
+  canonical agent-outcome record out (a declared record of `text: String`,
+  `stop_reason: String`, and `session_id: String`) — the whole of what an adapter needs to hand the call to a harness
   instead of running it as an ordinary activity.
 - `declarations/valid/agent_seam_unmarked_control.awl` — the control arm: the same workflow,
   action shape, and call with the marker absent. `agent` is a declaration classification that
@@ -222,12 +222,16 @@ Invalid:
 - `agent_returns_the_wrong_record.awl` — a record of the wrong fields is not the contract;
   the wire will never carry it →
   CHECK "returns `Answer` — an agent action returns the canonical agent-outcome record" @12.
+- `agent_returns_the_two_field_record.awl` — the pre-#205 two-field record (`text` +
+  `stop_reason`, no `session_id`) is a stale producer's shape; REPLACE semantics mean it
+  no longer checks →
+  CHECK "returns `Reply` — an agent action returns the canonical agent-outcome record" @13.
 - `agent_returns_wrong_field_types.awl` — right field names, wrong field types
   (`stop_reason: Int`); the structure is checked type by type →
   CHECK "returns `Reply` — an agent action returns the canonical agent-outcome record" @13.
 - `agent_action_declares_a_body.awl` — agent + declared body is two implementations of one
   action → CHECK "also declares a body" @14. NOT an isolated refusal, and cannot be: no
-  return type satisfies both the agent-record rule (`text` + `stop_reason`) and the bodied
+  return type satisfies both the agent-record rule (`text` + `stop_reason` + `session_id`) and the bodied
   action's rule (a record over `exit_code`/`stdout`/`stderr`) at once, so this fixture
   necessarily emits the two run-body member diagnostics alongside the body refusal it pins
   (3 diagnostics total); the sidecar pins the body refusal specifically.

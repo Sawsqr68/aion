@@ -79,7 +79,7 @@ pub enum HarnessError {
         detail: String,
     },
     /// The run completed, but its native outcome cannot satisfy the canonical
-    /// agent-outcome contract (`AgentOutcome { text, stop_reason }`).
+    /// agent-outcome contract (`AgentOutcome { text, stop_reason, session_id }`).
     ///
     /// A DETERMINISTIC refusal, and that is the whole reason it is its own variant: the channel
     /// was sound ([`Self::Transport`] is wrong), the frames were well-formed ([`Self::Protocol`]

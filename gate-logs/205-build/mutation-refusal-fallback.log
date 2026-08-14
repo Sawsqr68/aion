@@ -1,0 +1,64 @@
+   Compiling aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+warning: unreachable pattern
+   --> crates/aion-integration-acp/src/harness.rs:691:13
+    |
+677 |             Some(prior_id) => {
+    |             -------------- matches all the relevant values
+...
+691 |             Some(prior_id) if false => {
+    |             ^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-integration-acp` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.73s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_acp-ac7b14089df38d3c)
+
+running 33 tests
+test wire_tests::a_failed_terminal_frame_still_emits_a_terminal_boundary ... ok
+test wire_tests::a_prior_session_and_a_load_capable_agent_resume_via_session_load ... ok
+test wire_tests::a_cancelled_stop_reason_is_distinguishable_from_a_failure ... ok
+test wire_tests::a_notification_read_during_the_handshake_reaches_the_transcript ... ok
+test wire_tests::a_failed_tool_call_update_is_an_error_result ... ok
+test wire_tests::a_plan_reaches_the_transcript_with_every_entry ... ok
+test wire_tests::a_multi_chunk_user_turn_is_still_one_durable_message ... ok
+test wire_tests::a_line_that_is_not_a_jsonrpc_frame_does_not_destroy_the_turn ... ok
+test wire_tests::a_permission_request_arriving_after_a_cancel_is_answered_cancelled ... ok
+test wire_tests::a_version_the_adapter_cannot_speak_is_refused_before_a_session_exists ... ok
+test wire_tests::a_user_message_chunk_becomes_one_durable_user_message ... ok
+test wire_tests::an_agent_message_chunk_streams_a_delta_and_closes_a_durable_message ... ok
+test wire_tests::a_tool_call_and_its_completion_become_a_call_and_a_result ... ok
+test wire_tests::an_undecodable_terminal_result_still_emits_a_terminal_boundary ... ok
+test wire_tests::an_agent_thought_chunk_streams_live_and_survives_durably ... ok
+test wire_tests::an_unadvertised_primitive_is_gated_before_anything_is_written ... ok
+test wire_tests::an_inbound_fs_read_gets_an_error_response_rather_than_silence ... ok
+test wire_tests::an_unrecognised_update_variant_still_reaches_the_transcript ... ok
+test wire_tests::an_inbound_terminal_create_is_refused_the_same_way ... ok
+test wire_tests::cancelling_sends_session_cancel_and_ends_the_turn_as_cancelled ... ok
+test wire_tests::the_agent_closing_the_channel_is_a_transport_error_not_a_hang ... ok
+test wire_tests::end_turn_is_the_completed_run_and_carries_the_agents_text ... ok
+test wire_tests::reasoning_never_becomes_the_activitys_result ... ok
+test wire_tests::the_driver_contract_completes_against_an_agent_that_stays_alive ... ok
+test wire_tests::the_initialize_request_sends_the_integer_version_and_all_false_capabilities ... ok
+test wire_tests::the_allow_once_policy_selects_allow_once_and_records_the_decision ... ok
+test wire_tests::the_deny_policy_selects_a_reject_option_and_records_the_decision ... ok
+test wire_tests::the_handshake_negotiates_version_one_and_opens_a_session ... ok
+test wire_tests::the_terminal_response_is_recorded_verbatim_on_the_transcript ... ok
+test wire_tests::refusal_and_the_two_limits_are_failures_naming_themselves ... ok
+test wire_tests::the_six_remaining_update_variants_each_reach_the_transcript ... ok
+test wire_tests::answering_a_flood_of_peer_requests_does_not_stall_the_read_loop ... ok
+test wire_tests::asking_to_resume_an_agent_that_cannot_load_refuses_and_mints_nothing ... FAILED
+
+failures:
+
+---- wire_tests::asking_to_resume_an_agent_that_cannot_load_refuses_and_mints_nothing stdout ----
+Error: "the refused resume handshake did not finish within 10s — it hung"
+
+
+failures:
+    wire_tests::asking_to_resume_an_agent_that_cannot_load_refuses_and_mints_nothing
+
+test result: FAILED. 32 passed; 1 failed; 0 ignored; 0 measured; 67 filtered out; finished in 10.01s
+
+error: test failed, to rerun pass `-p aion-integration-acp --lib`
+EXIT=101

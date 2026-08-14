@@ -203,8 +203,9 @@ fn run_provision(input: io.Input) -> Result(io.Workspace, io.AssistantError) {
 
 /// Dispatch one assistant round: prompt in, the canonical agent-outcome
 /// record out; the session threads the reply TEXT (the record's `stop_reason`
-/// is decoded and available, and this workflow deliberately routes nothing on
-/// it — its behaviour predates the field and stands unchanged).
+/// and `session_id` are decoded and available, and this workflow deliberately
+/// routes nothing on them — its behaviour predates the fields and stands
+/// unchanged).
 fn run_assistant(prompt: String) -> Result(String, io.AssistantError) {
   case workflow.run(activities.assistant(prompt)) {
     Ok(outcome) -> Ok(outcome.text)

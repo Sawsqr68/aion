@@ -61,6 +61,12 @@ pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V1;
 pub const METHOD_INITIALIZE: &str = AGENT_METHOD_NAMES.initialize;
 /// The `session/new` method — mints the session every later request is scoped to.
 pub const METHOD_SESSION_NEW: &str = AGENT_METHOD_NAMES.session_new;
+/// The `session/load` method — resumes an existing session by id instead of minting a new one.
+///
+/// Gated on the agent's `initialize` capability `loadSession`: an agent that does not advertise
+/// it is never sent this method, and a job that named a session to resume against such an agent
+/// is refused rather than silently started fresh.
+pub const METHOD_SESSION_LOAD: &str = AGENT_METHOD_NAMES.session_load;
 /// The `session/prompt` method — the ONE long-running request whose Response is the terminal
 /// result. It stays open for the whole turn.
 pub const METHOD_SESSION_PROMPT: &str = AGENT_METHOD_NAMES.session_prompt;
@@ -196,10 +202,10 @@ pub fn client_capabilities() -> ClientCapabilities {
 mod tests {
     use super::{
         METHOD_CANCEL_REQUEST, METHOD_FS_READ_TEXT_FILE, METHOD_FS_WRITE_TEXT_FILE,
-        METHOD_INITIALIZE, METHOD_SESSION_CANCEL, METHOD_SESSION_NEW, METHOD_SESSION_PROMPT,
-        METHOD_SESSION_REQUEST_PERMISSION, METHOD_SESSION_UPDATE, PROTOCOL_VERSION,
-        auth_required_code, client_capabilities, client_info, method_not_found_code,
-        request_cancelled_code,
+        METHOD_INITIALIZE, METHOD_SESSION_CANCEL, METHOD_SESSION_LOAD, METHOD_SESSION_NEW,
+        METHOD_SESSION_PROMPT, METHOD_SESSION_REQUEST_PERMISSION, METHOD_SESSION_UPDATE,
+        PROTOCOL_VERSION, auth_required_code, client_capabilities, client_info,
+        method_not_found_code, request_cancelled_code,
     };
 
     #[test]
@@ -215,6 +221,7 @@ mod tests {
         // speaking a method no agent implements.
         assert_eq!(METHOD_INITIALIZE, "initialize");
         assert_eq!(METHOD_SESSION_NEW, "session/new");
+        assert_eq!(METHOD_SESSION_LOAD, "session/load");
         assert_eq!(METHOD_SESSION_PROMPT, "session/prompt");
         assert_eq!(METHOD_SESSION_CANCEL, "session/cancel");
         assert_eq!(METHOD_SESSION_UPDATE, "session/update");

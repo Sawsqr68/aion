@@ -5,9 +5,11 @@ activity whose work is done by an AI agent — its output is decided by the
 agent at run time, so there is no Rust type to derive a schema from and the
 AWL document is the only authority on what the action looks like. Its result
 is always the **canonical agent-outcome record** — a declared record of
-exactly `text: String` (the agent's terminal reply) and `stop_reason: String`
+exactly `text: String` (the agent's terminal reply), `stop_reason: String`
 (the canonical snake_case reason: `end_turn | tool_use | limit_reached |
-cancelled | error | other`) — which every harness emits from its own
+cancelled | error | other`), and `session_id: String` (the handle of the
+conversation that produced the outcome — a fact the harness fills, meaningful
+only to the harness that minted it) — which every harness emits from its own
 integration boundary, so a flow reads `reply.text` and never parses
 harness-specific JSON. This guide covers the two ways to serve one:
 
@@ -510,8 +512,9 @@ the out-of-box workers' queue), and they are served by two different things:
   the parts about there being no sandbox and cancellation not being wired.
 - **`assistant` — this worker.** One norn round inside that workspace: one
   prompt string in, the canonical agent-outcome record out (`text` — the
-  agent's terminal reply — plus the canonical snake_case `stop_reason`; the
-  document declares the record type and the harness boundary emits it). It is
+  agent's terminal reply — plus the canonical snake_case `stop_reason` and
+  the `session_id` conversation handle; the document declares the record
+  type and the harness boundary emits it). It is
   the worker's ONLY advertised action.
 
 That split was not always so. Provisioning used to be a worker handler, and

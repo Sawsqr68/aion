@@ -3,7 +3,7 @@
 The single-lane sibling of [`norn-fleet`](../norn-fleet/): one bounded
 implementation brief goes to a norn-backed builder over the plain agent seam
 (one `String` prompt in, the canonical agent-outcome record out —
-`{text, stop_reason}`, the shape `aion worker agent` serves from the
+`{text, stop_reason, session_id}`, the shape `aion worker agent` serves from the
 installed binary, no crate, no rebuild), and the result is admitted or
 refused by a gate script the **server** runs, not by the builder's own account
 of itself.

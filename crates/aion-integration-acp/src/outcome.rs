@@ -21,7 +21,7 @@
 //! agent never spoke — would each report something that did not happen. A caller that requires text
 //! checks for it; this module will not invent it.
 
-use agent_client_protocol_schema::v1::{PromptResponse, StopReason};
+use agent_client_protocol_schema::v1::{PromptResponse, SessionId, StopReason};
 use aion_integrations::jsonrpc::{JsonRpcError, JsonRpcResponse};
 use aion_integrations::{AgentOutcome, HarnessError, Payload};
 
@@ -81,13 +81,17 @@ pub(crate) struct PromptOutcome {
 impl PumpEnd {
     /// Interprets a pump end as the activity's [`Payload`], or the honest error it is.
     ///
+    /// `session_id` is the session the turn ran in — minted by `session/new` or restored by
+    /// `session/load` — and becomes the outcome record's `session_id`: the handle of the
+    /// conversation that produced this result.
+    ///
     /// # Errors
     ///
     /// [`HarnessError::Transport`] for a turn that never got an answer, naming which of the two
     /// unanswered endings happened; otherwise every error [`outcome_into_payload`] can return.
-    pub(crate) fn into_payload(self) -> Result<Payload, HarnessError> {
+    pub(crate) fn into_payload(self, session_id: &SessionId) -> Result<Payload, HarnessError> {
         match self {
-            Self::Answered(outcome) => outcome_into_payload(*outcome),
+            Self::Answered(outcome) => outcome_into_payload(*outcome, session_id),
             Self::StreamEnded => Err(HarnessError::transport(
                 "the ACP agent closed its stdout while session/prompt was still outstanding — it \
                  exited without answering, so the turn has no terminal result (the agent's own \
@@ -104,12 +108,14 @@ impl PumpEnd {
 /// Interprets the terminal outcome as the activity's [`Payload`], or the honest error it is.
 ///
 /// - **`end_turn`** → the completed run. The payload is the canonical [`AgentOutcome`] record,
-///   `{"text": <the agent's answer>, "stop_reason": "end_turn"}` — ACP's native stop reason mapped
-///   through the adapter's existing neutral [`translate::stop_kind`] mapping and spelled by the one
-///   canonical [`StopKind::canonical_stop_reason`](aion_integrations::StopKind::canonical_stop_reason)
-///   vocabulary. ACP's Response carries ONLY a stop reason, so the answer itself has to come from
-///   the accumulated `agent_message_chunk` text; a payload of the stop reason alone would hand the
-///   workflow an activity result with no result in it.
+///   `{"text": <the agent's answer>, "stop_reason": "end_turn", "session_id": <the ACP session>}` —
+///   ACP's native stop reason mapped through the adapter's existing neutral
+///   [`translate::stop_kind`] mapping and spelled by the one canonical
+///   [`StopKind::canonical_stop_reason`](aion_integrations::StopKind::canonical_stop_reason)
+///   vocabulary, and the session the agent itself minted (or reloaded) as the record's
+///   conversation handle. ACP's Response carries ONLY a stop reason, so the answer itself has to
+///   come from the accumulated `agent_message_chunk` text; a payload of the stop reason alone
+///   would hand the workflow an activity result with no result in it.
 /// - **`refusal`, `max_tokens`, `max_turn_requests`** → [`HarnessError::Harness`] naming the reason.
 ///   None of them is a completed run: the agent stopped short. The partial text rides along,
 ///   labelled and bounded, so a caller's accept-the-partial policy stays reachable.
@@ -118,7 +124,10 @@ impl PumpEnd {
 /// - an **error Response** → [`HarnessError::Harness`]; code `-32000` names the authentication the
 ///   agent is demanding, and `-32800` is reported as a cancellation.
 /// - a Response with **neither** `result` nor `error` → [`HarnessError::Protocol`]. A broken frame.
-pub(crate) fn outcome_into_payload(outcome: PromptOutcome) -> Result<Payload, HarnessError> {
+pub(crate) fn outcome_into_payload(
+    outcome: PromptOutcome,
+    session_id: &SessionId,
+) -> Result<Payload, HarnessError> {
     let PromptOutcome { response, text } = outcome;
     if let Some(error) = response.error {
         return Err(prompt_error(&error, &text));
@@ -137,11 +146,15 @@ pub(crate) fn outcome_into_payload(outcome: PromptOutcome) -> Result<Payload, Ha
     if !translate::is_success(prompt.stop_reason) {
         return Err(non_completion(prompt.stop_reason, label, &text));
     }
-    AgentOutcome::new(text, &translate::stop_kind(prompt.stop_reason))
-        .into_payload()
-        .map_err(|source| {
-            HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
-        })
+    AgentOutcome::new(
+        text,
+        &translate::stop_kind(prompt.stop_reason),
+        session_id.to_string(),
+    )
+    .into_payload()
+    .map_err(|source| {
+        HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
+    })
 }
 
 /// The honest error for a turn that ended on a stop reason other than `end_turn`.
@@ -214,6 +227,7 @@ fn bounded_for_message(rendered: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use agent_client_protocol_schema::v1::SessionId;
     use aion_integrations::jsonrpc::{JsonRpcError, JsonRpcId, JsonRpcResponse};
     use serde_json::json;
 
@@ -221,23 +235,32 @@ mod tests {
     use crate::protocol;
     use aion_integrations::{ContentType, HarnessError, Payload};
 
+    /// The session every test turn runs in — the id the completed record must carry.
+    const TEST_SESSION: &str = "sess-outcome-test";
+
     /// Runs the terminal interpretation over a success Response carrying `result`.
     fn payload_of(result: serde_json::Value, text: &str) -> Result<Payload, HarnessError> {
-        outcome_into_payload(PromptOutcome {
-            response: JsonRpcResponse::success(JsonRpcId::number(1), result),
-            text: text.to_owned(),
-        })
+        outcome_into_payload(
+            PromptOutcome {
+                response: JsonRpcResponse::success(JsonRpcId::number(1), result),
+                text: text.to_owned(),
+            },
+            &SessionId::from(TEST_SESSION.to_owned()),
+        )
     }
 
     /// Runs the terminal interpretation over an error Response.
     fn error_of(code: i64, message: &str, text: &str) -> Result<Payload, HarnessError> {
-        outcome_into_payload(PromptOutcome {
-            response: JsonRpcResponse::failure(
-                JsonRpcId::number(1),
-                JsonRpcError::new(code, message),
-            ),
-            text: text.to_owned(),
-        })
+        outcome_into_payload(
+            PromptOutcome {
+                response: JsonRpcResponse::failure(
+                    JsonRpcId::number(1),
+                    JsonRpcError::new(code, message),
+                ),
+                text: text.to_owned(),
+            },
+            &SessionId::from(TEST_SESSION.to_owned()),
+        )
     }
 
     #[test]
@@ -247,9 +270,14 @@ mod tests {
         assert_eq!(payload.content_type(), &ContentType::Json);
         assert_eq!(
             payload.to_json()?,
-            json!({ "text": "the answer", "stop_reason": "end_turn" }),
+            json!({
+                "text": "the answer",
+                "stop_reason": "end_turn",
+                "session_id": TEST_SESSION,
+            }),
             "the completed payload is the canonical AgentOutcome record — ACP's response \
-             carries only a stop reason, so the text must come from the stream"
+             carries only a stop reason, so the text must come from the stream, and the \
+             session the turn ran in is the record's conversation handle"
         );
         Ok(())
     }
@@ -359,10 +387,13 @@ mod tests {
         let response: JsonRpcResponse =
             serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1 }))
                 .map_err(|source| format!("the bare frame must decode: {source}"))?;
-        let error = outcome_into_payload(PromptOutcome {
-            response,
-            text: String::new(),
-        })
+        let error = outcome_into_payload(
+            PromptOutcome {
+                response,
+                text: String::new(),
+            },
+            &SessionId::from(TEST_SESSION.to_owned()),
+        )
         .err()
         .ok_or("a broken frame is not a result")?;
         assert!(

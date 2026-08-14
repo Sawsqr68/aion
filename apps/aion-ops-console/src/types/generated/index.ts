@@ -1254,7 +1254,22 @@ text: string,
  * The canonical `snake_case` stop reason
  * ([`StopKind::canonical_stop_reason`]).
  */
-stop_reason: string, };
+stop_reason: string,
+/**
+ * The handle of the conversation that produced this outcome.
+ *
+ * A FACT, not a promise: the id names the session the harness actually
+ * ran — minted, loaded, or derived by that harness — and says nothing
+ * about whether it can be resumed. Resumability is the per-agent question
+ * a harness's own handshake answers (for ACP, the `initialize` response's
+ * `loadSession` capability), never something this field asserts.
+ *
+ * The id is meaningful only to the harness that minted it; resume routing
+ * pairs the id with the harness identity the workflow record already
+ * carries. It is never empty — a harness with a vacant handle is refused
+ * at [`AgentOutcome::into_payload`], not shipped.
+ */
+session_id: string, };
 
 export type ActivityEventKind = { "kind": "Message",
 /**

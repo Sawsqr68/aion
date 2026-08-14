@@ -1,0 +1,31 @@
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.04s
+     Running tests/checker.rs (target/debug/deps/checker-9f77d92ad6b0b3af)
+
+running 8 tests
+test diagnostics_arrive_sorted_by_source_position ... ok
+test check_without_a_root_reports_unresolvable_imports ... ok
+test duplicate_step_names_are_refused ... ok
+test unknown_binding_error_is_span_exact ... ok
+test imported_optional_field_is_optional_in_the_projection_direction ... ok
+test every_check_staged_invalid_fixture_is_rejected_as_expected ... FAILED
+test route_targeted_earlier_step_reads_a_later_steps_binding ... ok
+test every_valid_fixture_checks_clean ... FAILED
+
+failures:
+
+---- every_check_staged_invalid_fixture_is_rejected_as_expected stdout ----
+Error: "/Users/tom/Developer/ablative/stack/aion/crates/aion-awl/tests/fixtures/rev2/declarations/invalid/agent_returns_the_two_field_record.awl checked clean but must fail"
+
+---- every_valid_fixture_checks_clean stdout ----
+Error: "/Users/tom/Developer/ablative/stack/aion/crates/aion-awl/tests/fixtures/rev2/declarations/valid/agent_seam.awl must check clean but reported 1 error(s); first: \"`agent` action `ask` returns `Reply` — an agent action returns the canonical agent-outcome record: a declared record with exactly three fields, `text: String`, `stop_reason: String`, and `session_id: String`; every harness emits that record, so declare it (any type name) and read `.text` where the flow needs the reply\" at line 24, column 5"
+
+
+failures:
+    every_check_staged_invalid_fixture_is_rejected_as_expected
+    every_valid_fixture_checks_clean
+
+test result: FAILED. 6 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p aion-awl --test checker`
+EXIT=101

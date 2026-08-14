@@ -1,0 +1,21 @@
+    Checking getrandom v0.4.2
+    Checking serde v1.0.228
+    Checking ref-cast v1.0.25
+    Checking mio v1.2.1
+    Checking strum v0.28.0
+    Checking derive_more v2.1.1
+    Checking rustix v1.1.4
+    Checking tracing v0.1.44
+    Checking uuid v1.23.4
+    Checking tokio v1.52.3
+    Checking chrono v0.4.45
+    Checking schemars v1.2.1
+    Checking tempfile v3.27.0
+    Checking serde_with v3.21.0
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking agent-client-protocol-schema v1.5.0
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.96s
+EXIT=0

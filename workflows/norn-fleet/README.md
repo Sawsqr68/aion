@@ -35,9 +35,9 @@ The claim being judged, the file paths to start from, the standard to judge
 against, and the reply format all have to be inside the prompt. Building that
 string is deliberately the dispatcher's job: it keeps the judge action on the
 plain agent seam (one String prompt in, the canonical agent-outcome record
-out — `{text, stop_reason}`, the judge's terminal text plus why the run
-stopped), which is the one shape a norn worker started from the installed
-binary can serve honestly.
+out — `{text, stop_reason, session_id}`, the judge's terminal text, why the
+run stopped, and the handle of the session that produced it), which is the
+one shape a norn worker started from the installed binary can serve honestly.
 
 ### The control
 
@@ -183,10 +183,10 @@ throttle between the list and the processes.
 
 ## The trade this shape records
 
-The judge returns the canonical agent-outcome record — `text: String` plus
-`stop_reason: String` (task #181; the record superseded #98's bare-`String`
-rule and is enforced by the checker, which refuses any other agent return
-shape). The record carries the reply and why the run stopped; it does NOT
+The judge returns the canonical agent-outcome record — `text: String`,
+`stop_reason: String`, and `session_id: String` (tasks #181 and #205; the
+record superseded #98's bare-`String` rule and is enforced by the checker,
+which refuses any other agent return shape). The record carries the reply and why the run stopped; it does NOT
 carry a structured verdict type. A structured schema (verdict enum, evidence
 list, proposal field) would be better data — but serving it requires a
 custom harness binary that parses and validates model output into the

@@ -105,10 +105,11 @@ declared action, and choosing between them is an authoring decision:
 
 3. **An agent harness**, with the `agent` marker — the action's one `String`
    input is a prompt and its output is the canonical agent-outcome record, a
-   record you declare with exactly `text: String` and `stop_reason: String`:
+   record you declare with exactly `text: String`, `stop_reason: String`, and
+   `session_id: String`:
 
    ```awl
-   type Reply { text: String, stop_reason: String }
+   type Reply { text: String, stop_reason: String, session_id: String }
 
    worker assistants
      action ask(prompt: String) -> Reply

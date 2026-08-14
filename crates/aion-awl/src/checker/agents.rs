@@ -2,9 +2,12 @@
 //!
 //! `agent` on an action declaration says one thing and one thing only: this
 //! action carries a PROMPT in a `String` parameter and its result is the
-//! canonical agent-outcome record — a declared record with exactly two
-//! fields, `text: String` (the agent's terminal reply) and
-//! `stop_reason: String` (the canonical `snake_case` stop reason). That is the
+//! canonical agent-outcome record — a declared record with exactly three
+//! fields, `text: String` (the agent's terminal reply),
+//! `stop_reason: String` (the canonical `snake_case` stop reason), and
+//! `session_id: String` (the handle of the conversation that produced the
+//! outcome — a fact minted by the harness, not a promise that the session
+//! can be resumed). That is the
 //! whole of what an adapter needs in order to hand the call to an agent
 //! harness instead of executing it as an ordinary activity, and it is the
 //! shape every harness emits from its `wait_result` boundary (task #181's
@@ -53,10 +56,10 @@ pub(super) fn check(
             marker,
             format!(
                 "`agent` action `{}` returns `{}` — an agent action returns the canonical \
-                 agent-outcome record: a declared record with exactly two fields, \
-                 `text: String` and `stop_reason: String`; every harness emits that \
-                 record, so declare it (any type name) and read `.text` where the flow \
-                 needs the reply",
+                 agent-outcome record: a declared record with exactly three fields, \
+                 `text: String`, `stop_reason: String`, and `session_id: String`; every \
+                 harness emits that record, so declare it (any type name) and read \
+                 `.text` where the flow needs the reply",
                 action.name, callable.returns
             ),
         );
@@ -160,8 +163,9 @@ fn is_string(ty: &Ty) -> bool {
 }
 
 /// Whether the declared return type is (structurally) the canonical
-/// agent-outcome record: exactly the two fields `text: String` and
-/// `stop_reason: String`, in any order, under any declared name.
+/// agent-outcome record: exactly the three fields `text: String`,
+/// `stop_reason: String`, and `session_id: String`, in any order, under any
+/// declared name.
 ///
 /// The check is structural through the type table — a `Named` reference
 /// resolves to its definition, and each field's own type resolves too, so a
@@ -172,9 +176,10 @@ fn returns_agent_outcome_record(returns: &Ty, table: &TypeTable) -> bool {
     match resolve(returns, table) {
         Ty::Unknown => true,
         Ty::Record(record) => {
-            record.fields.len() == 2
+            record.fields.len() == 3
                 && field_is_string(&record, "text", table)
                 && field_is_string(&record, "stop_reason", table)
+                && field_is_string(&record, "session_id", table)
         }
         _ => false,
     }

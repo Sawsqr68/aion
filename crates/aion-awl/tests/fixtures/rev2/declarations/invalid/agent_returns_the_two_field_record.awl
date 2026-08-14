@@ -1,0 +1,17 @@
+//! The pre-#205 record is not the agent-outcome contract any more. The
+//! harness emits exactly `text`, `stop_reason`, AND `session_id`; a declared
+//! record carrying only the first two is a stale producer's shape, and the
+//! wire will never deliver it — REPLACE semantics, no compatibility window.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type String, route success
+
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply.text)

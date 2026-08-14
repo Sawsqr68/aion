@@ -1,0 +1,18 @@
+    Checking axum v0.8.9
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking referencing v0.46.6
+    Checking anyhow v1.0.102
+    Checking cranelift-module v0.131.2
+    Checking jsonschema v0.46.6
+    Checking cranelift-jit v0.131.2
+    Checking beamr v0.18.2
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.5
+    Checking aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Checking aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Checking aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.53s
+EXIT=0

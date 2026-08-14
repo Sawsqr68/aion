@@ -1,0 +1,60 @@
+   Compiling axum v0.8.9
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling tonic v0.14.6
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-integration-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli)
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.29s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_cli-71fe34e1658baf6f)
+
+running 20 tests
+test demux::tests::a_bare_json_value_is_raw_not_mapped ... ok
+test demux::tests::a_plain_log_line_falls_through_to_raw_verbatim ... ok
+test demux::tests::a_json_object_with_unknown_type_is_raw_but_keeps_structure ... ok
+test demux::tests::message_line_maps_to_message_event ... ok
+test demux::tests::tool_result_line_maps_to_tool_result_event ... ok
+test demux::tests::stop_line_maps_stop_reasons ... ok
+test demux::tests::worker_seq_is_carried_onto_the_event ... ok
+test demux::tests::unknown_stop_reason_falls_through_to_other ... ok
+test demux::tests::tool_call_line_maps_to_tool_call_event ... ok
+test mock::tests::accepts_an_advertised_command_and_records_it ... ok
+test mock::tests::rejects_respond_to_approval_as_capability_not_supported ... ok
+test session::tests::capabilities_are_always_empty ... ok
+test mock::tests::advertises_inject_message_and_cancel_only ... ok
+test session::tests::an_event_is_never_the_result_the_two_are_separate_channels ... ok
+test mock::tests::streams_a_transcript_and_returns_a_result ... ok
+test session::tests::intervene_rejects_every_command_as_capability_not_supported ... ok
+test session::tests::a_run_that_announced_no_stop_falls_back_to_end_turn ... ok
+test session::tests::stdout_lines_demux_into_a_live_event_stream ... ok
+test session::tests::the_last_announced_stop_wins ... ok
+test session::tests::the_announced_stop_reason_reaches_the_outcome_record ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli_observability_e2e.rs (target/debug/deps/cli_observability_e2e-38fdc02208ac7fe7)
+
+running 3 tests
+test cli_harness_reports_a_non_zero_exit_as_a_harness_failure ... ok
+test cli_harness_streams_a_live_transcript_with_no_controls ... ok
+test a_signal_killed_agent_is_not_reported_as_choosing_to_stop ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/mock_intervention_e2e.rs (target/debug/deps/mock_intervention_e2e-3d9ae5b6806c67d3)
+
+running 1 test
+test drives_inject_and_cancel_end_to_end_and_rejects_respond_to_approval ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests aion_integration_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

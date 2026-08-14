@@ -7,7 +7,7 @@
 //!   and `assistant` (the `assistant` workflow): routed through the composed
 //!   [`NornHarness`] (observable + intervenable). Input is the prompt string,
 //!   output the canonical agent-outcome record
-//!   (`aion_core::AgentOutcome`: `text` + `stop_reason`). Each run's Norn session id is
+//!   (`aion_core::AgentOutcome`: `text` + `stop_reason` + `session_id`). Each run's Norn session id is
 //!   `{workflow_id}-{activity_type}` and its `--workspace-root` AND `-C`
 //!   (tool-execution cwd) are the run's own clone
 //!   `<workspace root>/{workflow_id}/repo` — the placeholders are expanded per

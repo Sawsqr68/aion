@@ -43,7 +43,7 @@ It is the counterpart to the `agent` marker on an action declaration, and the
 `harness` section beside it is where the launch is declared:
 
 ```awl
-type Reply { text: String, stop_reason: String }
+type Reply { text: String, stop_reason: String, session_id: String }
 
 worker assistants
   harness
@@ -60,9 +60,10 @@ worker assistants
 
 The marker says the action's single `String` input is a prompt and its output
 is the canonical agent-outcome record — a declared record of exactly
-`text: String` (the agent's terminal reply) and `stop_reason: String` (the
-canonical snake_case stop reason), which every harness emits from its own
-boundary. That is the whole contract an adapter needs, and it is why the
+`text: String` (the agent's terminal reply), `stop_reason: String` (the
+canonical snake_case stop reason), and `session_id: String` (the handle of
+the conversation that produced the outcome), which every harness emits from
+its own boundary. That is the whole contract an adapter needs, and it is why the
 document is the ONLY possible source of the advertised schemas: an agent
 activity's output is decided by the agent, so there is no Rust type to derive
 one from.

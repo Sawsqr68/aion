@@ -1,0 +1,15 @@
+    Checking futures-core v0.3.32
+    Checking serde v1.0.228
+    Checking thiserror v2.0.18
+    Checking serde_json v1.0.150
+    Checking tokio v1.52.3
+    Checking futures-channel v0.3.32
+    Checking chrono v0.4.45
+    Checking futures-util v0.3.32
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking futures-executor v0.3.32
+    Checking futures v0.3.32
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.59s
+EXIT=0

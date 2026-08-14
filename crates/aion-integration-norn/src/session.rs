@@ -224,7 +224,8 @@ fn response_into_ack(response: JsonRpcResponse) -> Result<(), HarnessError> {
 /// [`translate::run_result_to_outcome`]:
 ///
 /// - `stop.reason == "completed"` with a String `output` → the neutral [`Payload`] is the
-///   canonical agent-outcome record `{"text": <the output string>, "stop_reason": "end_turn"}`
+///   canonical agent-outcome record
+///   `{"text": <the output string>, "stop_reason": "end_turn", "session_id": <the envelope's own id>}`
 ///   (the envelope's own `stop.reason`, mapped through the neutral vocabulary — never invented),
 /// - `stop.reason == "completed"` with a non-String `output` → [`HarnessError::Contract`]
 ///   naming the canonical agent-outcome contract and what was found — a typed, DETERMINISTIC
@@ -486,7 +487,7 @@ mod tests {
             .map_err(|error| format!("the result payload must be JSON: {error}"))?;
         assert_eq!(
             decoded,
-            json!({ "text": "the id-matched answer", "stop_reason": "end_turn" })
+            json!({ "text": "the id-matched answer", "stop_reason": "end_turn", "session_id": "step-042" })
         );
         Ok(())
     }
@@ -622,7 +623,7 @@ mod tests {
             .map_err(|error| format!("the result payload must be JSON: {error}"))?;
         assert_eq!(
             decoded,
-            json!({ "text": "the real result", "stop_reason": "end_turn" })
+            json!({ "text": "the real result", "stop_reason": "end_turn", "session_id": "step-042" })
         );
         Ok(())
     }
@@ -641,7 +642,7 @@ mod tests {
             .map_err(|error| format!("the payload must be JSON: {error}"))?;
         assert_eq!(
             decoded,
-            json!({ "text": "the final answer", "stop_reason": "end_turn" })
+            json!({ "text": "the final answer", "stop_reason": "end_turn", "session_id": "step-042" })
         );
         Ok(())
     }

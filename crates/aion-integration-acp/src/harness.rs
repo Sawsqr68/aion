@@ -57,14 +57,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_client_protocol_schema::v1::{
-    AuthMethod, ContentBlock, InitializeRequest, InitializeResponse, NewSessionRequest,
-    NewSessionResponse, PromptRequest, SessionId, TextContent,
+    AuthMethod, ContentBlock, InitializeRequest, InitializeResponse, LoadSessionRequest,
+    LoadSessionResponse, NewSessionRequest, NewSessionResponse, PromptRequest, SessionId,
+    TextContent,
 };
 use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
 };
-use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError, HarnessWorkspace};
+use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError, HarnessWorkspace, Payload};
 use async_trait::async_trait;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -146,6 +147,7 @@ pub struct AcpHarness {
     additional_directories: Vec<PathBuf>,
     permission_policy: PermissionPolicy,
     exit_grace: Duration,
+    session_parameter: Option<String>,
 }
 
 /// What the transport-independent opening of a turn produces.
@@ -153,7 +155,8 @@ pub struct AcpHarness {
 /// Grouped rather than returned as a tuple so the deferred notifications cannot be silently dropped
 /// at a call site that only wanted the two ids.
 pub(crate) struct OpenedTurn {
-    /// The session `session/new` minted.
+    /// The session this turn runs in — minted by `session/new`, or the prior id `session/load`
+    /// confirmed.
     pub(crate) session_id: SessionId,
     /// The id of the outstanding `session/prompt` request.
     pub(crate) prompt_id: JsonRpcId,
@@ -206,7 +209,68 @@ impl AcpHarness {
             additional_directories: Vec::new(),
             permission_policy,
             exit_grace,
+            session_parameter: None,
         }
+    }
+
+    /// Declares the job-input parameter that names a prior session to resume.
+    ///
+    /// Like the per-run workspace parameter, this is a SOURCE, resolved once per attempt against
+    /// that attempt's input. The parameter is OPTIONAL per job: a job that omits it starts a fresh
+    /// session with `session/new` exactly as before (every run has a session; not every job
+    /// resumes one), while a job that carries it asks to resume that session with `session/load`.
+    /// A harness that never declares this source serves only fresh sessions.
+    ///
+    /// The asymmetry with the outcome record is deliberate: the result's `session_id` is
+    /// mandatory (every completed run HAS a conversation to name), while this input parameter is
+    /// optional (resuming is a per-job choice).
+    #[must_use]
+    pub fn with_session_parameter(mut self, parameter: impl Into<String>) -> Self {
+        self.session_parameter = Some(parameter.into());
+        self
+    }
+
+    /// The prior session this attempt asks to resume, read from its input — `None` for a fresh
+    /// session.
+    ///
+    /// `None` when no session parameter is declared, when the input is not a JSON object (a bare
+    /// string prompt names no parameters at all), or when the declared parameter is absent from
+    /// the object — all three are jobs that did not ask to resume, and a fresh session is the
+    /// correct answer, not a fallback.
+    ///
+    /// # Errors
+    ///
+    /// [`HarnessError::Configuration`] — terminal, never retried — when the declared parameter is
+    /// PRESENT but is not a string or is blank. A job that TRIED to name a session must never
+    /// silently get a fresh one: the next attempt reads the same input and meets the same wall.
+    fn session_for_attempt(&self, input: &Payload) -> Result<Option<SessionId>, HarnessError> {
+        let Some(parameter) = &self.session_parameter else {
+            return Ok(None);
+        };
+        let Ok(serde_json::Value::Object(fields)) =
+            serde_json::from_slice::<serde_json::Value>(input.bytes())
+        else {
+            return Ok(None);
+        };
+        let Some(value) = fields.get(parameter.as_str()) else {
+            return Ok(None);
+        };
+        let Some(id) = value.as_str() else {
+            return Err(HarnessError::configuration(format!(
+                "this worker takes the session to resume from the `{parameter}` parameter of the \
+                 job, and this job carries it as something other than a string — a job that names \
+                 a session must name it in text, and starting a fresh session instead would \
+                 silently discard the conversation the job asked for"
+            )));
+        };
+        if id.trim().is_empty() {
+            return Err(HarnessError::configuration(format!(
+                "this worker takes the session to resume from the `{parameter}` parameter of the \
+                 job, and this job carries it empty — an empty id names no session, and starting \
+                 a fresh session instead would silently discard the conversation the job asked for"
+            )));
+        }
+        Ok(Some(SessionId::from(id.to_owned())))
     }
 
     /// Declares the agent child's WHOLE environment.
@@ -521,7 +585,8 @@ fn auth_method_ids(methods: &[AuthMethod]) -> Vec<String> {
 
 impl AcpHarness {
     /// Runs the whole transport-independent opening of a turn over an already-connected channel:
-    /// the `initialize` handshake, `session/new`, then the outstanding `session/prompt`.
+    /// the `initialize` handshake, `session/new` (or `session/load` for a job that named a prior
+    /// session), then the outstanding `session/prompt`.
     ///
     /// Split out from [`AgentHarness::start`] so the protocol conversation is exercised over any
     /// [`tokio::io::AsyncRead`] / [`tokio::io::AsyncWrite`] pair, not only a spawned child's stdio.
@@ -534,55 +599,121 @@ impl AcpHarness {
         connection: &JsonRpcConnection<R, W>,
         cwd: PathBuf,
         prompt: String,
+        prior: Option<SessionId>,
     ) -> Result<OpenedTurn, HarnessError>
     where
         R: tokio::io::AsyncRead + Unpin + Send,
         W: tokio::io::AsyncWrite + Unpin + Send,
     {
         let mut deferred = Vec::new();
-        initialize(connection, &mut deferred).await?;
-        self.open_turn(connection, cwd, prompt, deferred).await
+        // The InitializeResponse is READ here, not dropped: `loadSession` is the per-agent answer
+        // to "can a prior conversation be resumed", and it exists nowhere but this handshake.
+        let negotiated = initialize(connection, &mut deferred).await?;
+        self.open_turn(
+            connection,
+            cwd,
+            prompt,
+            deferred,
+            negotiated.agent_capabilities.load_session,
+            prior,
+        )
+        .await
     }
 
-    /// Creates the session and issues the prompt, returning the session id, the outstanding
-    /// `session/prompt` request id, and the notifications read before the pump could exist.
+    /// Opens the session — resuming `prior` via `session/load` when the agent can, refusing when
+    /// it cannot, minting fresh via `session/new` when no prior was named — and issues the prompt,
+    /// returning the session id, the outstanding `session/prompt` request id, and the
+    /// notifications read before the pump could exist.
+    ///
+    /// The three arms are exclusive and none falls through to another:
+    ///
+    /// - **`prior` named + `loadSession` advertised** → `session/load` with that id. The replayed
+    ///   `session/update` notifications an agent streams during the load land in `deferred`
+    ///   exactly like any other pre-pump notification, and the session's pump replays them onto
+    ///   the transcript.
+    /// - **`prior` named + `loadSession` NOT advertised** → [`HarnessError::Configuration`]. The
+    ///   refusal is deterministic — the same worker document launches the same agent, which
+    ///   advertises the same capabilities — so it is terminal, like a relative `cwd`. "Asked to
+    ///   resume and silently started fresh" is the defect this arm exists to make impossible.
+    /// - **no `prior`** → `session/new`, exactly as before.
     async fn open_turn<R, W>(
         &self,
         connection: &JsonRpcConnection<R, W>,
         cwd: PathBuf,
         prompt: String,
         mut deferred: Vec<JsonRpcNotification>,
+        load_session: bool,
+        prior: Option<SessionId>,
     ) -> Result<OpenedTurn, HarnessError>
     where
         R: tokio::io::AsyncRead + Unpin + Send,
         W: tokio::io::AsyncWrite + Unpin + Send,
     {
-        // `mcpServers` is REQUIRED by `session/new`, so it must appear on the wire. This call sets
-        // the value; it is the SCHEMA that guarantees the key's presence — the field carries no
-        // `skip_serializing_if`, so an empty list serialises as `"mcpServers": []` whether or not
-        // this call is made. It is written explicitly anyway, so the empty list is a stated decision
-        // rather than a reliance on the schema's default, and `wire_tests` asserts the key is there.
-        let new_session = NewSessionRequest::new(cwd)
-            .mcp_servers(Vec::new())
-            .additional_directories(self.additional_directories.clone());
-        let session: NewSessionResponse = call(
-            connection,
-            protocol::METHOD_SESSION_NEW,
-            &new_session,
-            &mut deferred,
-        )
-        .await?;
-        tracing::debug!(
-            session = %session.session_id,
-            modes = ?session.modes,
-            "acp adapter: session created"
-        );
+        let session_id = match prior {
+            Some(prior_id) if load_session => {
+                // `mcpServers` is REQUIRED by `session/load` exactly as by `session/new`; the
+                // explicit empty list is the same stated decision made below for the fresh path.
+                let load_request = LoadSessionRequest::new(prior_id.clone(), cwd)
+                    .mcp_servers(Vec::new())
+                    .additional_directories(self.additional_directories.clone());
+                // The response's fields are all optional and carry nothing this adapter acts on;
+                // what matters is that the agent ANSWERED rather than erred — an unknown id is a
+                // JSON-RPC error surfaced by `call` — and that any replayed `session/update`s
+                // were deferred for the pump.
+                let _loaded: LoadSessionResponse = call(
+                    connection,
+                    protocol::METHOD_SESSION_LOAD,
+                    &load_request,
+                    &mut deferred,
+                )
+                .await?;
+                tracing::debug!(
+                    session = %prior_id,
+                    replayed = deferred.len(),
+                    "acp adapter: session loaded"
+                );
+                prior_id
+            }
+            Some(prior_id) => {
+                return Err(HarnessError::configuration(format!(
+                    "this job asks to resume ACP session `{prior_id}`, and the configured agent \
+                     did not advertise the `loadSession` capability in its initialize response — \
+                     it cannot load a prior session, and starting a fresh one instead would \
+                     silently discard the conversation the job asked for; run this job against \
+                     an agent that supports session loading, or dispatch it without a session id"
+                )));
+            }
+            None => {
+                // `mcpServers` is REQUIRED by `session/new`, so it must appear on the wire. This
+                // call sets the value; it is the SCHEMA that guarantees the key's presence — the
+                // field carries no `skip_serializing_if`, so an empty list serialises as
+                // `"mcpServers": []` whether or not this call is made. It is written explicitly
+                // anyway, so the empty list is a stated decision rather than a reliance on the
+                // schema's default, and `wire_tests` asserts the key is there.
+                let new_session = NewSessionRequest::new(cwd)
+                    .mcp_servers(Vec::new())
+                    .additional_directories(self.additional_directories.clone());
+                let session: NewSessionResponse = call(
+                    connection,
+                    protocol::METHOD_SESSION_NEW,
+                    &new_session,
+                    &mut deferred,
+                )
+                .await?;
+                tracing::debug!(
+                    session = %session.session_id,
+                    modes = ?session.modes,
+                    "acp adapter: session created"
+                );
+                session.session_id
+            }
+        };
 
         // `text` is one of the two content-block types every ACP agent MUST support (the other being
         // `resource_link`); the rest are gated on `promptCapabilities`, so a text block needs no
         // capability check.
         let prompt_request = PromptRequest::new(
-            session.session_id.clone(),
+            session_id.clone(),
             vec![ContentBlock::Text(TextContent::new(prompt))],
         );
         let params = serde_json::to_value(&prompt_request).map_err(|source| {
@@ -598,7 +729,7 @@ impl AcpHarness {
         );
         connection.send_request(&frame).await?;
         Ok(OpenedTurn {
-            session_id: session.session_id,
+            session_id,
             prompt_id,
             deferred,
         })
@@ -626,13 +757,20 @@ impl AgentHarness for AcpHarness {
         // asked with and the field it stands in are decided from one input by one rule. An
         // adapter that read the prompt on its own would be the second place that rule lives,
         // and the first place it drifts.
-        let prompt = self.workspace.prompt_for_attempt(&spec.input)?;
+        let reserved: Vec<&str> = self.session_parameter.iter().map(String::as_str).collect();
+        let prompt = self.workspace.prompt_for_attempt(&spec.input, &reserved)?;
+        // Read BEFORE the spawn: a malformed session parameter is a configuration refusal, and a
+        // refusal that has already started a child process would leave it to be torn down for an
+        // error the input alone decided.
+        let prior = self.session_for_attempt(&spec.input)?;
         let mut child = self.spawn(&cwd)?;
         let (stdout, stdin) = take_child_io(&mut child)?;
         let connection = Arc::new(JsonRpcConnection::new(stdout, stdin));
 
         // The handshake, the session, and the prompt whose id the session captures the result under.
-        let opened = self.connect(connection.as_ref(), cwd, prompt).await?;
+        let opened = self
+            .connect(connection.as_ref(), cwd, prompt, prior)
+            .await?;
 
         let identity = EventIdentity {
             workflow_id: spec.workflow_id,
@@ -1013,7 +1151,7 @@ mod tests {
             PathBuf::from(WORKSPACE)
         );
         assert_eq!(
-            harness.workspace.prompt_for_attempt(&spec.input)?,
+            harness.workspace.prompt_for_attempt(&spec.input, &[])?,
             "review the diff"
         );
         Ok(())

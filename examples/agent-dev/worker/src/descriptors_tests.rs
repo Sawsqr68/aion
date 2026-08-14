@@ -306,9 +306,9 @@ fn the_agent_split_is_exactly_what_the_document_marks() -> TestResult {
 
 /// The control arm for the marker itself: the AWL checker must REFUSE `agent`
 /// on an action whose return type is not the canonical agent-outcome record —
-/// a declared record of exactly `text: String` and `stop_reason: String`
-/// (#181; the pre-#181 rule demanded a bare `String`, and a bare `String` is
-/// now itself the refused shape).
+/// a declared record of exactly `text: String`, `stop_reason: String`, and
+/// `session_id: String` (#181, widened by #205; the pre-#181 rule demanded a
+/// bare `String`, and a bare `String` is now itself the refused shape).
 ///
 /// Without this, `agent_names` would be a set the worker trusts for its shape
 /// and nothing would establish that shape — the marker would be a name in the
@@ -374,7 +374,7 @@ fn the_checker_accepts_the_agent_marker_on_the_canonical_record() -> TestResult 
                       input question: String\n  \
                       outcome answered: type Answer, route success\n\n\
                     type Answer { reply: String }\n\
-                    type Reply { text: String, stop_reason: String }\n\n\
+                    type Reply { text: String, stop_reason: String, session_id: String }\n\n\
                     worker default\n  \
                       action ask(prompt: String) -> Reply\n    \
                         agent\n\n\

@@ -245,7 +245,7 @@ fn the_gate_refuses_the_retired_agent_shape() -> Result<(), Box<dyn std::error::
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        rendered.contains("`text: String` and `stop_reason: String`"),
+        rendered.contains("`text: String`, `stop_reason: String`, and `session_id: String`"),
         "the refusal names the canonical record: {rendered}"
     );
     Ok(())

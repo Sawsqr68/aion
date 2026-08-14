@@ -1,0 +1,286 @@
+   Compiling aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+     Running unittests src/lib.rs (target/debug/deps/aion_core-5e04a0584d48c360)
+
+running 116 tests
+test agent_outcome::tests::every_stop_kind_has_its_canonical_snake_case_spelling ... ok
+test agent_outcome::tests::an_empty_session_id_is_refused_by_name ... ok
+test agent_outcome::tests::the_record_round_trips_through_its_payload ... ok
+test agent_outcome::tests::a_two_field_payload_no_longer_decodes ... ok
+test agent_outcome::tests::the_record_serializes_as_the_three_snake_case_fields ... ok
+test current_step::tests::a_dispatch_without_a_scheduling_opens_nothing ... ok
+test current_step::tests::a_new_run_segment_drops_the_prior_segments_open_step ... ok
+test activity_event::tests::ephemeral_delta_round_trips_without_store_seq ... ok
+test activity_event::tests::envelope_round_trips_through_json ... ok
+test activity_event::tests::the_run_axis_survives_the_wire_and_separates_two_generations ... ok
+test current_step::tests::a_fan_out_keeps_every_sibling_and_current_is_the_most_recently_advanced ... ok
+test current_step::tests::a_reopen_of_an_unscheduled_ordinal_reports_nothing ... ok
+test current_step::tests::a_reopen_reopens_only_the_activities_it_names ... ok
+test current_step::tests::a_retried_ordinal_reports_the_new_attempt_once ... ok
+test current_step::tests::a_run_with_no_activity_has_no_current_step ... ok
+test current_step::tests::a_scheduled_step_is_current_and_carries_its_stamped_address ... ok
+test current_step::tests::advisory_exhaustion_is_not_a_terminal ... ok
+test current_step::tests::an_empty_history_folds_to_nothing ... ok
+test current_step::tests::dispatch_advances_the_same_ordinal ... ok
+test activity_event::tests::every_event_kind_round_trips ... ok
+test current_step::tests::re_dispatch_after_a_reopen_advances_the_ordinal ... ok
+test current_step::tests::each_terminal_retires_only_its_own_ordinal ... ok
+test current_step::tests::unrelated_events_neither_open_nor_retire_a_step ... ok
+test error::tests::activity_error_reports_retryable_classification ... ok
+test error::tests::activity_error_reports_terminal_classification ... ok
+test error::tests::errors_round_trip_through_json ... ok
+test error::tests::workflow_error_from_activity_error_preserves_message_and_details ... ok
+test event::tests::activity_scheduled_decodes_old_history_without_node_as_none ... ok
+test event::tests::activity_lifecycle_records_and_reads_back_its_attempt ... ok
+test event::tests::activity_scheduled_records_and_reads_back_its_node ... ok
+test event::tests::activity_scheduled_decodes_old_history_without_task_queue_as_default ... ok
+test event::tests::activity_scheduled_records_and_reads_back_its_task_queue ... ok
+test event::tests::activity_lifecycle_decodes_old_history_without_attempt_as_legacy_sentinel ... ok
+test event::tests::display_name_is_none_without_the_attribute ... ok
+test event::tests::display_name_later_update_overrides_earlier ... ok
+test event::tests::display_name_projects_from_recorded_attribute ... ok
+test event::tests::event_accessors_return_envelope_fields ... ok
+test event::tests::child_events_round_trip_through_json ... ok
+test event::tests::old_history_without_pause_resume_decodes_unchanged ... ok
+test event::tests::start_time_task_queue_is_none_without_the_attribute ... ok
+test event::tests::pause_resume_events_round_trip_through_json ... ok
+test event::tests::start_time_task_queue_projects_from_recorded_attribute ... ok
+test filter::tests::a_continue_as_new_successor_inherits_its_predecessors_display_name ... ok
+test filter::tests::combined_filter_requires_every_field_to_match ... ok
+test event::tests::timer_cancelled_decodes_old_history_without_cause_as_workflow_intent ... ok
+test filter::tests::default_filter_matches_all_summaries ... ok
+test filter::tests::failure_projection_attributes_failed_step_and_reason ... ok
+test filter::tests::failure_projection_has_reason_but_no_step_when_no_activity_failed ... ok
+test event::tests::extended_events_round_trip_through_json ... ok
+test filter::tests::failure_projection_ignores_a_failed_step_that_later_succeeded ... ok
+test filter::tests::failure_projection_is_none_for_non_failed ... ok
+test filter::tests::failure_projection_is_reset_by_reopen ... ok
+test filter::tests::parent_filter_matches_parent_workflow_id ... ok
+test filter::tests::schedule_events_do_not_set_summary_end_time ... ok
+test event::tests::events_round_trip_through_json ... ok
+test filter::tests::started_after_filter_matches_start_time_inclusively ... ok
+test filter::tests::started_before_filter_matches_start_time_inclusively ... ok
+test filter::tests::status_filter_matches_projected_status ... ok
+test filter::tests::summary_end_time_uses_last_terminal_event ... ok
+test filter::tests::summary_from_history_projects_latest_display_name ... ok
+test filter::tests::summary_from_history_without_start_returns_none ... ok
+test filter::tests::summary_from_history_projects_required_fields ... ok
+test filter::tests::summary_projects_continued_as_new ... ok
+test filter::tests::workflow_type_filter_matches_exact_type ... ok
+test filter::tests::summary_projects_current_run_after_continue_as_new ... ok
+test generated_types::the_display_name_key_needs_no_escaping ... ok
+test ids::tests::display_formats_are_stable ... ok
+test ids::tests::identifiers_round_trip_through_json ... ok
+test ids::tests::named_timer_rejects_empty_name ... ok
+test ids::tests::sequence_identifiers_expose_positions ... ok
+test ids::tests::uuid_identifiers_are_hash_map_keys ... ok
+test intervention::tests::capabilities_gate_on_advertised_primitives ... ok
+test intervention::tests::command_without_auth_subject_round_trips ... ok
+test intervention::tests::empty_capability_set_is_first_class ... ok
+test intervention::tests::every_outcome_round_trips ... ok
+test payload::tests::json_null_is_the_serialized_null_document ... ok
+test schedule::tests::catch_up_policies_round_trip_through_json ... ok
+test payload::tests::json_values_round_trip_losslessly ... ok
+test schedule::tests::overlap_policies_round_trip_through_json ... ok
+test schedule::tests::schedule_config_defaults_missing_policy_fields ... ok
+test schedule::tests::schedule_id_display_and_from_str_use_uuid_format ... ok
+test schedule::tests::schedule_config_round_trips_through_json ... ok
+test schedule::tests::schedule_id_is_a_hash_map_key ... ok
+test intervention::tests::every_intervention_variant_round_trips ... ok
+test schedule::tests::schedule_id_round_trips_through_json ... ok
+test schedule::tests::trigger_specs_round_trip_through_json ... ok
+test search::tests::registering_same_name_with_different_type_errors ... ok
+test search::tests::schema_registers_and_validates_matching_types ... ok
+test search::tests::search_attribute_types_round_trip_through_json ... ok
+test search::tests::validating_unregistered_attribute_errors ... ok
+test search::tests::validating_mismatched_type_errors ... ok
+test search::tests::search_attribute_values_round_trip_through_json ... ok
+test search::tests::values_report_matching_attribute_types ... ok
+test status::tests::cancelled_terminal_event_projects_to_cancelled ... ok
+test status::tests::complete_while_paused_still_projects_completed ... ok
+test status::tests::complete_after_resume_projects_completed ... ok
+test status::tests::completed_terminal_event_projects_to_completed ... ok
+test status::tests::continued_as_new_projects_status ... ok
+test status::tests::current_lease_terminal_is_none_for_running_and_reopened ... ok
+test status::tests::current_lease_terminal_returns_terminal_after_reopen_and_retermination ... ok
+test status::tests::empty_history_projects_to_running ... ok
+test status::tests::failed_terminal_event_projects_to_failed ... ok
+test status::tests::last_terminal_lifecycle_event_determines_status ... ok
+test status::tests::non_terminal_history_projects_to_running ... ok
+test status::tests::pause_projects_paused_and_is_non_terminal ... ok
+test status::tests::projection_is_deterministic ... ok
+test status::tests::reopen_after_failure_projects_running ... ok
+test status::tests::reopen_then_new_terminal_projects_that_terminal ... ok
+test status::tests::resume_after_pause_projects_running ... ok
+test status::tests::replacement_start_projects_continue_as_new_chain_running ... ok
+test status::tests::run_segment_scopes_to_the_named_run ... ok
+test status::tests::schedule_events_do_not_change_workflow_status ... ok
+test status::tests::started_then_continued_as_new_projects_status ... ok
+test status::tests::timed_out_terminal_event_projects_to_timed_out ... ok
+test status::tests::workflow_status_terminality_classifies_running_and_terminal_statuses ... ok
+test generated_types::export_ops_console_wire_types ... ok
+
+test result: ok. 116 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_acp-332781e14cb9258d)
+
+running 98 tests
+test harness::tests::absolute_paths_pass_validation ... ok
+test harness::tests::the_child_runs_in_the_session_cwd ... ok
+test harness::tests::a_job_that_names_no_tree_is_refused_before_any_spawn ... ok
+test harness::tests::a_relative_additional_directory_is_refused ... ok
+test harness::tests::the_prompt_is_read_through_the_same_workspace_that_places_the_agent ... ok
+test harness::tests::a_relative_directory_from_the_job_is_refused_the_same_way ... ok
+test harness::tests::each_job_roots_its_session_in_the_tree_that_job_named ... ok
+test harness::tests::removed_env_vars_are_expressed_as_child_removals ... ok
+test harness::tests::a_relative_cwd_is_refused_as_a_terminal_configuration_error ... ok
+test harness::tests::the_configured_command_and_args_are_passed_through_verbatim ... ok
+test harness::tests::the_registration_set_is_the_negotiated_set ... ok
+test messages::tests::a_dropped_message_id_does_not_fabricate_a_boundary ... ok
+test messages::tests::a_changed_message_id_closes_the_previous_message_durably ... ok
+test messages::tests::a_first_untagged_chunk_does_not_split_a_later_tagged_one ... ok
+test harness::tests::the_published_set_is_exactly_what_the_adapter_can_translate ... ok
+test messages::tests::a_new_user_message_id_closes_the_previous_user_turn ... ok
+test messages::tests::a_non_text_chunk_survives_verbatim_and_is_not_appended ... ok
+test messages::tests::a_non_text_thought_or_user_block_is_recorded_under_its_own_stream ... ok
+test messages::tests::a_streamed_user_turn_becomes_one_durable_message ... ok
+test messages::tests::each_agent_chunk_yields_one_ephemeral_delta ... ok
+test messages::tests::reasoning_never_enters_the_runs_result ... ok
+test messages::tests::reasoning_streams_live_and_survives_durably ... ok
+test messages::tests::finish_closes_the_open_message_and_is_idempotent ... ok
+test messages::tests::the_three_streams_do_not_interleave_into_each_other ... ok
+test messages::tests::two_completed_messages_are_joined_by_a_newline ... ok
+test messages::tests::untagged_chunks_accumulate_as_one_message ... ok
+test outcome::tests::a_request_cancelled_error_is_reported_as_a_cancellation ... ok
+test outcome::tests::a_response_with_neither_result_nor_error_is_a_protocol_error ... ok
+test outcome::tests::an_auth_required_error_names_the_authentication_it_needs ... ok
+test outcome::tests::a_result_that_is_not_a_prompt_response_is_a_protocol_error ... ok
+test outcome::tests::an_ordinary_error_response_surfaces_its_code_and_message ... ok
+test outcome::tests::an_enormous_partial_answer_is_bounded_with_an_explicit_marker ... ok
+test outcome::tests::cancelled_is_distinguishable_from_any_other_failure ... ok
+test outcome::tests::each_non_completing_stop_reason_is_a_failure_naming_itself ... ok
+test outcome::tests::end_turn_yields_the_canonical_agent_outcome_record ... ok
+test outcome::tests::refusal_is_never_reported_as_success ... ok
+test permission::tests::allow_once_never_widens_to_allow_always ... ok
+test permission::tests::allow_once_selects_the_allow_once_option ... ok
+test permission::tests::an_empty_option_list_still_produces_an_answer ... ok
+test permission::tests::deny_cancels_when_no_reject_option_is_offered ... ok
+test permission::tests::deny_falls_back_to_reject_always_when_no_reject_once_is_offered ... ok
+test permission::tests::deny_selects_the_reject_once_option ... ok
+test permission::tests::each_policy_has_a_distinct_audit_label ... ok
+test protocol::tests::client_info_names_this_crate_and_its_real_version ... ok
+test protocol::tests::advertised_client_capabilities_are_all_false ... ok
+test protocol::tests::error_codes_match_the_specified_numbers ... ok
+test protocol::tests::method_names_match_the_published_wire_strings ... ok
+test protocol::tests::protocol_version_is_the_integer_one ... ok
+test translate::tests::a_cancelled_decision_is_recorded_as_cancelled ... ok
+test translate::tests::a_mismatched_protocol_version_is_refused_naming_both_versions ... ok
+test translate::tests::a_completed_tool_call_update_yields_a_tool_result ... ok
+test translate::tests::a_failed_tool_call_update_marks_the_result_as_an_error ... ok
+test translate::tests::a_non_terminal_tool_call_update_is_the_verbatim_frame_alone ... ok
+test translate::tests::a_plan_reaches_the_transcript_with_all_its_entries ... ok
+test translate::tests::a_permission_request_and_its_decision_are_both_recorded ... ok
+test translate::tests::a_tool_call_yields_the_classified_event_and_the_verbatim_frame ... ok
+test translate::tests::a_user_message_chunk_accumulates_into_a_durable_user_message ... ok
+test translate::tests::a_refused_peer_request_is_recorded_with_its_code ... ok
+test translate::tests::an_agent_message_chunk_streams_an_ephemeral_delta ... ok
+test translate::tests::an_agent_thought_chunk_streams_a_note_and_survives_durably ... ok
+test translate::tests::every_stop_reason_maps_to_a_kind_and_a_wire_label ... ok
+test translate::tests::only_cancel_is_advertised ... ok
+test translate::tests::only_end_turn_is_a_completed_run ... ok
+test translate::tests::stamping_fills_the_run_identity_and_the_acp_attribution ... ok
+test translate::tests::the_matching_protocol_version_passes_the_gate ... ok
+test translate::tests::the_terminal_response_is_recorded_verbatim_with_its_meta ... ok
+test translate::tests::the_remaining_variants_each_reach_the_transcript_verbatim ... ok
+test wire_tests::a_failed_terminal_frame_still_emits_a_terminal_boundary ... ok
+test wire_tests::a_user_message_chunk_becomes_one_durable_user_message ... ok
+test wire_tests::a_multi_chunk_user_turn_is_still_one_durable_message ... ok
+test wire_tests::a_plan_reaches_the_transcript_with_every_entry ... ok
+test wire_tests::a_failed_tool_call_update_is_an_error_result ... ok
+test wire_tests::a_line_that_is_not_a_jsonrpc_frame_does_not_destroy_the_turn ... ok
+test wire_tests::a_cancelled_stop_reason_is_distinguishable_from_a_failure ... ok
+test wire_tests::a_notification_read_during_the_handshake_reaches_the_transcript ... ok
+test wire_tests::a_version_the_adapter_cannot_speak_is_refused_before_a_session_exists ... ok
+test wire_tests::a_permission_request_arriving_after_a_cancel_is_answered_cancelled ... ok
+test wire_tests::a_tool_call_and_its_completion_become_a_call_and_a_result ... ok
+test wire_tests::an_agent_message_chunk_streams_a_delta_and_closes_a_durable_message ... ok
+test wire_tests::an_unadvertised_primitive_is_gated_before_anything_is_written ... ok
+test wire_tests::an_agent_thought_chunk_streams_live_and_survives_durably ... ok
+test wire_tests::an_unrecognised_update_variant_still_reaches_the_transcript ... ok
+test wire_tests::an_inbound_terminal_create_is_refused_the_same_way ... ok
+test wire_tests::an_undecodable_terminal_result_still_emits_a_terminal_boundary ... ok
+test wire_tests::an_inbound_fs_read_gets_an_error_response_rather_than_silence ... ok
+test wire_tests::cancelling_sends_session_cancel_and_ends_the_turn_as_cancelled ... ok
+test wire_tests::end_turn_is_the_completed_run_and_carries_the_agents_text ... ok
+test wire_tests::the_agent_closing_the_channel_is_a_transport_error_not_a_hang ... ok
+test wire_tests::the_initialize_request_sends_the_integer_version_and_all_false_capabilities ... ok
+test wire_tests::the_handshake_negotiates_version_one_and_opens_a_session ... ok
+test wire_tests::reasoning_never_becomes_the_activitys_result ... ok
+test wire_tests::the_allow_once_policy_selects_allow_once_and_records_the_decision ... ok
+test wire_tests::the_driver_contract_completes_against_an_agent_that_stays_alive ... ok
+test wire_tests::the_deny_policy_selects_a_reject_option_and_records_the_decision ... ok
+test wire_tests::the_terminal_response_is_recorded_verbatim_on_the_transcript ... ok
+test wire_tests::refusal_and_the_two_limits_are_failures_naming_themselves ... ok
+test wire_tests::the_six_remaining_update_variants_each_reach_the_transcript ... ok
+test wire_tests::answering_a_flood_of_peer_requests_does_not_stall_the_read_loop ... ok
+
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/acp_live_agent.rs (target/debug/deps/acp_live_agent-2222aae162e24490)
+
+running 1 test
+test a_real_acp_agent_completes_a_turn ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-d3cf7a62fbebefa5)
+
+running 3 tests
+test a_bare_command_with_no_path_declared_is_refused_naming_path ... ok
+test a_declared_environment_keeps_claudecode_out_of_the_agent_child ... ok
+test without_a_declaration_the_child_still_inherits_which_is_what_makes_the_pin_meaningful ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_cli-a9797ade2b07f209)
+
+running 20 tests
+test demux::tests::a_bare_json_value_is_raw_not_mapped ... ok
+test demux::tests::a_plain_log_line_falls_through_to_raw_verbatim ... ok
+test demux::tests::a_json_object_with_unknown_type_is_raw_but_keeps_structure ... ok
+test demux::tests::worker_seq_is_carried_onto_the_event ... ok
+test demux::tests::message_line_maps_to_message_event ... ok
+test demux::tests::unknown_stop_reason_falls_through_to_other ... ok
+test demux::tests::tool_result_line_maps_to_tool_result_event ... ok
+test demux::tests::tool_call_line_maps_to_tool_call_event ... ok
+test demux::tests::stop_line_maps_stop_reasons ... ok
+test session::tests::intervene_rejects_every_command_as_capability_not_supported ... ok
+test mock::tests::rejects_respond_to_approval_as_capability_not_supported ... ok
+test mock::tests::advertises_inject_message_and_cancel_only ... ok
+test mock::tests::accepts_an_advertised_command_and_records_it ... ok
+test session::tests::capabilities_are_always_empty ... ok
+test session::tests::stdout_lines_demux_into_a_live_event_stream ... ok
+test session::tests::an_event_is_never_the_result_the_two_are_separate_channels ... ok
+test session::tests::a_run_that_announced_no_stop_falls_back_to_end_turn ... ok
+test session::tests::the_announced_stop_reason_reaches_the_outcome_record ... ok
+test session::tests::the_last_announced_stop_wins ... ok
+test mock::tests::streams_a_transcript_and_returns_a_result ... FAILED
+
+failures:
+
+---- mock::tests::streams_a_transcript_and_returns_a_result stdout ----
+
+thread 'mock::tests::streams_a_transcript_and_returns_a_result' (9506025) panicked at crates/aion-integration-cli/src/mock.rs:333:9:
+assertion `left == right` failed: the mock emits the same canonical agent-outcome record every real harness does
+  left: Object {"text": String("working"), "stop_reason": String("end_turn"), "session_id": String("00000000-0000-0000-0000-000000000000:0fdcc09d-cd64-4a44-8749-2625f6f40e60:activity:4:2")}
+ right: Object {"text": String("working"), "stop_reason": String("end_turn")}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    mock::tests::streams_a_transcript_and_returns_a_result
+
+test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-integration-cli --lib`
+EXIT=101

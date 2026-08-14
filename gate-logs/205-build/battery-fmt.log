@@ -1,0 +1,85 @@
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp/src/outcome.rs:152:
+         session_id.to_string(),
+     )
+     .into_payload()
+[31m-        .map_err(|source| {
+(B[m[31m-            HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
+(B[m[31m-        })
+(B[m[32m+    .map_err(|source| {
+(B[m[32m+        HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
+(B[m[32m+    })
+(B[m }
+ 
+ /// The honest error for a turn that ended on a stop reason other than `end_turn`.
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp/src/protocol.rs:202:
+ mod tests {
+     use super::{
+         METHOD_CANCEL_REQUEST, METHOD_FS_READ_TEXT_FILE, METHOD_FS_WRITE_TEXT_FILE,
+[31m-        METHOD_INITIALIZE, METHOD_SESSION_CANCEL, METHOD_SESSION_NEW, METHOD_SESSION_PROMPT,
+(B[m[31m-        METHOD_SESSION_LOAD, METHOD_SESSION_REQUEST_PERMISSION, METHOD_SESSION_UPDATE,
+(B[m[32m+        METHOD_INITIALIZE, METHOD_SESSION_CANCEL, METHOD_SESSION_LOAD, METHOD_SESSION_NEW,
+(B[m[32m+        METHOD_SESSION_PROMPT, METHOD_SESSION_REQUEST_PERMISSION, METHOD_SESSION_UPDATE,
+(B[m         PROTOCOL_VERSION, auth_required_code, client_capabilities, client_info,
+         method_not_found_code, request_cancelled_code,
+     };
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp/src/wire_tests.rs:687:
+     let decoded = payload
+         .to_json()
+         .map_err(|error| fail("the payload is JSON", &error))?;
+[31m-    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION }));
+(B[m[32m+    assert_eq!(
+(B[m[32m+        decoded,
+(B[m[32m+        json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION })
+(B[m[32m+    );
+(B[m     drop(agent);
+     Ok(())
+ }
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp/src/wire_tests.rs:901:
+     let decoded = payload
+         .to_json()
+         .map_err(|error| fail("the payload is JSON", &error))?;
+[31m-    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION }));
+(B[m[32m+    assert_eq!(
+(B[m[32m+        decoded,
+(B[m[32m+        json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION })
+(B[m[32m+    );
+(B[m     Ok(())
+ }
+ 
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli/tests/cli_observability_e2e.rs:72:
+     let harness = fake_cli_harness();
+     let spec = spec();
+     let expected_sid = expected_session_id(&spec);
+[31m-    let mut session = harness
+(B[m[31m-        .start(spec)
+(B[m[31m-        .await
+(B[m[31m-        .expect("spawn the fake cli agent");
+(B[m[32m+    let mut session = harness.start(spec).await.expect("spawn the fake cli agent");
+(B[m 
+     // (gate 1) NO controls offered — the observability-only session advertises an empty set.
+     assert!(
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli/tests/cli_observability_e2e.rs:192:
+         .with_arg("printf '%s\\n' 'started'; kill -TERM $$; sleep 10");
+     let spec = spec();
+     let expected_sid = expected_session_id(&spec);
+[31m-    let mut session = harness
+(B[m[31m-        .start(spec)
+(B[m[31m-        .await
+(B[m[31m-        .expect("spawn the fake cli agent");
+(B[m[32m+    let mut session = harness.start(spec).await.expect("spawn the fake cli agent");
+(B[m     let events: Vec<_> = session.events().collect().await;
+     // The detail lives on the TRANSCRIPT: the pump synthesizes a terminal Stop
+     // event whose `Other` reason carries "terminated by signal" verbatim —
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-integrations/src/workspace/tests.rs:170:
+         workspace.for_attempt(&carried)?,
+         std::path::PathBuf::from("/srv/lane-3")
+     );
+[31m-    assert_eq!(workspace.prompt_for_attempt(&carried, &[])?, "review the diff");
+(B[m[32m+    assert_eq!(
+(B[m[32m+        workspace.prompt_for_attempt(&carried, &[])?,
+(B[m[32m+        "review the diff"
+(B[m[32m+    );
+(B[m     Ok(())
+ }
+ 
+EXIT=1

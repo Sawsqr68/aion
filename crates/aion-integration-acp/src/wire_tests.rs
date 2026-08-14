@@ -258,6 +258,7 @@ async fn wire_up_with_capacity(policy: PermissionPolicy, capacity: usize) -> Tes
             connection.as_ref(),
             PathBuf::from(WORKSPACE),
             "do the thing".to_owned(),
+            None,
         )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
@@ -413,6 +414,7 @@ async fn the_initialize_request_sends_the_integer_version_and_all_false_capabili
                 connection.as_ref(),
                 PathBuf::from(WORKSPACE),
                 "prompt".to_owned(),
+                None,
             )
             .await
     });
@@ -475,6 +477,7 @@ async fn a_version_the_adapter_cannot_speak_is_refused_before_a_session_exists()
             connection.as_ref(),
             PathBuf::from(WORKSPACE),
             "prompt".to_owned(),
+            None,
         )
         .await
         .err()
@@ -684,7 +687,10 @@ async fn reasoning_never_becomes_the_activitys_result() -> TestResult {
     let decoded = payload
         .to_json()
         .map_err(|error| fail("the payload is JSON", &error))?;
-    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn" }));
+    assert_eq!(
+        decoded,
+        json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION })
+    );
     drop(agent);
     Ok(())
 }
@@ -898,7 +904,10 @@ async fn end_turn_is_the_completed_run_and_carries_the_agents_text() -> TestResu
     let decoded = payload
         .to_json()
         .map_err(|error| fail("the payload is JSON", &error))?;
-    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn" }));
+    assert_eq!(
+        decoded,
+        json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION })
+    );
     Ok(())
 }
 
@@ -1413,7 +1422,7 @@ async fn the_driver_contract_completes_against_an_agent_that_stays_alive() -> Te
         .map_err(|error| fail("the payload is JSON", &error))?;
     assert_eq!(
         decoded,
-        json!({ "text": "ablative", "stop_reason": "end_turn" })
+        json!({ "text": "ablative", "stop_reason": "end_turn", "session_id": SESSION })
     );
     drop(agent);
     Ok(())
@@ -1634,6 +1643,7 @@ async fn a_notification_read_during_the_handshake_reaches_the_transcript() -> Te
             connection.as_ref(),
             PathBuf::from(WORKSPACE),
             "do the thing".to_owned(),
+            None,
         )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
@@ -1762,6 +1772,7 @@ async fn wire_up_raw(policy: PermissionPolicy) -> TestResult<RawWired> {
             connection.as_ref(),
             PathBuf::from(WORKSPACE),
             "do the thing".to_owned(),
+            None,
         )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
@@ -1853,10 +1864,215 @@ async fn a_line_that_is_not_a_jsonrpc_frame_does_not_destroy_the_turn() -> TestR
         .map_err(|error| fail("the payload is JSON", &error))?;
     assert_eq!(
         decoded,
-        json!({ "text": "42", "stop_reason": "end_turn" }),
+        json!({ "text": "42", "stop_reason": "end_turn", "session_id": SESSION }),
         "the answer received before the bad line survives it"
     );
     drop(reader);
     drop(writer);
+    Ok(())
+}
+
+// --- session/load: the resume lane (#205) ---
+
+/// The prior session id the resume tests carry into `connect`.
+const PRIOR_SESSION: &str = "sess-prior";
+
+/// The fake agent's opening conversation for a RESUMED turn: advertises `loadSession: true`,
+/// verifies and answers `session/load` for [`PRIOR_SESSION`] — replaying one history update
+/// mid-load, exactly where a real agent streams them — and consumes the prompt, asserting it is
+/// scoped to the LOADED session, not a fresh one.
+async fn agent_opens_with_load(agent: &Wire) -> Result<(), HarnessError> {
+    let initialize = expect_request(agent, protocol::METHOD_INITIALIZE).await?;
+    agent
+        .send_response(&JsonRpcResponse::success(
+            initialize.id,
+            json!({
+                "protocolVersion": protocol::PROTOCOL_VERSION.as_u16(),
+                "agentCapabilities": { "loadSession": true },
+                "authMethods": [],
+                "agentInfo": { "name": "fake-acp-agent", "version": "0.0.0" }
+            }),
+        ))
+        .await?;
+    // THE arm under test: the very next frame must be `session/load` — a `session/new` here
+    // would be the silent-fresh-session defect, and `expect_request` fails the script on it.
+    let load = expect_request(agent, protocol::METHOD_SESSION_LOAD).await?;
+    let params = load
+        .params
+        .as_ref()
+        .ok_or_else(|| HarnessError::protocol("session/load carried no params"))?;
+    if params["sessionId"] != json!(PRIOR_SESSION) {
+        return Err(HarnessError::protocol(format!(
+            "session/load must name the job's prior session, got {}",
+            params["sessionId"]
+        )));
+    }
+    if params["cwd"] != json!(WORKSPACE) {
+        return Err(HarnessError::protocol(format!(
+            "session/load must send the configured absolute cwd, got {}",
+            params["cwd"]
+        )));
+    }
+    if params.get("mcpServers") != Some(&json!([])) {
+        return Err(HarnessError::protocol(format!(
+            "session/load must always send `mcpServers`, got {:?}",
+            params.get("mcpServers")
+        )));
+    }
+    // Replayed history streams as `session/update` notifications DURING the load, before the
+    // response — the adapter must defer it for the pump, not lose it.
+    agent
+        .send_notification(&JsonRpcNotification::new(
+            protocol::METHOD_SESSION_UPDATE,
+            Some(json!({
+                "sessionId": PRIOR_SESSION,
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": { "type": "text", "text": "replayed history" },
+                },
+            })),
+        ))
+        .await?;
+    agent
+        .send_response(&JsonRpcResponse::success(load.id, json!({})))
+        .await?;
+    let prompt = expect_request(agent, protocol::METHOD_SESSION_PROMPT).await?;
+    let prompt_params = prompt
+        .params
+        .as_ref()
+        .ok_or_else(|| HarnessError::protocol("session/prompt carried no params"))?;
+    if prompt_params["sessionId"] != json!(PRIOR_SESSION) {
+        return Err(HarnessError::protocol(format!(
+            "the prompt must be scoped to the LOADED session, got {}",
+            prompt_params["sessionId"]
+        )));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_prior_session_and_a_load_capable_agent_resume_via_session_load() -> TestResult {
+    let (client_io, agent_io) = duplex(DUPLEX_CAPACITY);
+    let (client_read, client_write) = split(client_io);
+    let (agent_read, agent_write) = split(agent_io);
+    let connection = Arc::new(JsonRpcConnection::new(client_read, client_write));
+    let agent = Arc::new(JsonRpcConnection::new(agent_read, agent_write));
+
+    let script = {
+        let agent = Arc::clone(&agent);
+        tokio::spawn(async move { agent_opens_with_load(agent.as_ref()).await })
+    };
+    let opened = within(
+        "the resume handshake",
+        harness(PermissionPolicy::Deny).connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "carry on".to_owned(),
+            Some(agent_client_protocol_schema::v1::SessionId::from(
+                PRIOR_SESSION.to_owned(),
+            )),
+        ),
+    )
+    .await?
+    .map_err(|error| fail("the resume handshake must succeed", &error))?;
+    within("the agent script", script)
+        .await?
+        .map_err(|error| fail("the agent script task must not panic", &error))?
+        .map_err(|error| fail("the agent script must complete", &error))?;
+
+    // The turn runs IN the loaded session: its id — not a fresh mint — is what the session (and
+    // ultimately the outcome record's `session_id`) carries.
+    assert_eq!(
+        opened.session_id.to_string(),
+        PRIOR_SESSION,
+        "the opened turn carries the loaded session's id"
+    );
+    // The history the agent replayed during the load was deferred for the pump, not dropped.
+    assert!(
+        opened.deferred.iter().any(|note| {
+            note.method == protocol::METHOD_SESSION_UPDATE
+                && note.params.as_ref().is_some_and(|params| {
+                    params["update"]["content"]["text"] == json!("replayed history")
+                })
+        }),
+        "the replayed session/update is deferred for the pump: {:?}",
+        opened.deferred
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn asking_to_resume_an_agent_that_cannot_load_refuses_and_mints_nothing() -> TestResult {
+    // The existing opening script advertises `loadSession: false` and, on an aborted handshake,
+    // stops after answering `initialize` — exactly the conversation this refusal produces.
+    let (client_io, agent_io) = duplex(DUPLEX_CAPACITY);
+    let (client_read, client_write) = split(client_io);
+    let (agent_read, agent_write) = split(agent_io);
+    let connection = Arc::new(JsonRpcConnection::new(client_read, client_write));
+    let agent = Arc::new(JsonRpcConnection::new(agent_read, agent_write));
+
+    let script = {
+        let agent = Arc::clone(&agent);
+        tokio::spawn(async move {
+            let initialize = expect_request(agent.as_ref(), protocol::METHOD_INITIALIZE).await?;
+            agent
+                .send_response(&JsonRpcResponse::success(
+                    initialize.id,
+                    json!({
+                        "protocolVersion": protocol::PROTOCOL_VERSION.as_u16(),
+                        "agentCapabilities": { "loadSession": false },
+                        "authMethods": [],
+                        "agentInfo": { "name": "fake-acp-agent", "version": "0.0.0" }
+                    }),
+                ))
+                .await?;
+            Ok::<(), HarnessError>(())
+        })
+    };
+    let result = within(
+        "the refused resume handshake",
+        harness(PermissionPolicy::Deny).connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "carry on".to_owned(),
+            Some(agent_client_protocol_schema::v1::SessionId::from(
+                PRIOR_SESSION.to_owned(),
+            )),
+        ),
+    )
+    .await?;
+    within("the agent script", script)
+        .await?
+        .map_err(|error| fail("the agent script task must not panic", &error))?
+        .map_err(|error| fail("the agent script must complete", &error))?;
+
+    let Err(error) = result else {
+        return Err("resume against a load-incapable agent must refuse, not open a turn".into());
+    };
+    assert!(
+        matches!(error, HarnessError::Configuration { .. }),
+        "the refusal is a deterministic Configuration error, got {error:?}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.contains("loadSession"),
+        "the refusal names the missing capability: {message}"
+    );
+    assert!(
+        message.contains(PRIOR_SESSION),
+        "the refusal names the session the job asked for: {message}"
+    );
+
+    // No session was minted and no load attempted: after the client end is dropped, the agent's
+    // reader sees a clean end-of-stream with NO further frame — a `session/new` here would be
+    // the silent-fresh-session defect.
+    drop(connection);
+    let next = within("the agent's post-refusal read", agent.recv())
+        .await?
+        .map_err(|error| fail("the agent's read must not error", &error))?;
+    assert!(
+        next.is_none(),
+        "no frame follows the refusal — nothing was minted, got {next:?}"
+    );
     Ok(())
 }

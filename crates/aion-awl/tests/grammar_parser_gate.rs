@@ -431,7 +431,7 @@ const WORKER_WITNESSES: &[WorkerWitness] = &[
         word: "agent",
         source: "//! Witness: `agent` marking an action inside a worker block.\nworkflow \
                  witness\n  input question: String\n  outcome done: type String, route \
-                 success\n\ntype Reply { text: String, stop_reason: String }\n\nworker crew\n  \
+                 success\n\ntype Reply { text: String, stop_reason: String, session_id: String }\n\nworker crew\n  \
                  action ask(prompt: String) -> Reply\n    agent, timeout 10m\n\nstep go\n  \
                  ask(prompt: question) -> reply\n  route done(reply.text)\n",
     },

@@ -167,7 +167,7 @@ pub(crate) const ADVISORY: GuideEntry = GuideEntry::new(
 pub(crate) const AGENT: GuideEntry = GuideEntry::new(
     "agent",
     WordKind::Reserved,
-    "Marks an action as an agent seam: its one `String` parameter carries a prompt and its declared record result carries the agent's `text` and `stop_reason`.",
+    "Marks an action as an agent seam: its one `String` parameter carries a prompt and its declared record result carries the agent's `text`, `stop_reason`, and `session_id`.",
     WORKERS_AND_ACTIONS,
     examples::AGENT,
 );

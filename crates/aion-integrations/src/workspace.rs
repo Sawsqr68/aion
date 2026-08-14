@@ -99,19 +99,24 @@ impl HarnessWorkspace {
     ///   dumb carrier that does not validate on construction).
     /// - JSON **string** → the inner string, so the agent receives the exact text a caller
     ///   passed and a multi-line prompt survives verbatim.
-    /// - JSON **object** → the ONE field that is not this workspace's directory parameter,
-    ///   read by name. This is the shape an authored action produces: its input is an
-    ///   object keyed by parameter name even when it declares a single parameter, so an
-    ///   adapter that passed the object through handed the agent `{"prompt":"…"}` as its
-    ///   literal instructions.
+    /// - JSON **object** → the ONE field that is not this workspace's directory parameter
+    ///   and not one of the caller's `reserved` parameter names, read by name. This is the
+    ///   shape an authored action produces: its input is an object keyed by parameter name
+    ///   even when it declares a single parameter, so an adapter that passed the object
+    ///   through handed the agent `{"prompt":"…"}` as its literal instructions.
     /// - Any other JSON value (array, number, boolean, null) → the raw JSON text: there is
     ///   no field to read by, and inventing a projection would lose information.
     ///
+    /// `reserved` names every further input parameter the caller's adapter reads for
+    /// itself — a session parameter, say — so the prompt stays defined by SUBTRACTION: the
+    /// prompt is whatever remains once every parameter the adapter already knows by name is
+    /// removed. An adapter with no such parameters passes `&[]` and the rule is unchanged.
+    ///
     /// The object arm is read by NAME rather than by position because position is not
     /// carried on the wire — a JSON object has no order that survives serialization — and
-    /// because the directory field is the one field whose name the adapter already knows.
-    /// Subtracting it leaves exactly one field for every shape the checker admits, which is
-    /// what makes this a total function rather than a guess.
+    /// because the subtracted fields are exactly the fields whose names the adapter already
+    /// knows. Subtracting them leaves exactly one field for every shape the checker admits,
+    /// which is what makes this a total function rather than a guess.
     ///
     /// # Errors
     ///
@@ -120,7 +125,11 @@ impl HarnessWorkspace {
     /// no prompt field, carries more than one, or carries one that is not a string. Each is
     /// a call that did not state what to ask the agent, and an adapter that guessed would
     /// send an agent instructions nobody wrote.
-    pub fn prompt_for_attempt(&self, input: &Payload) -> Result<String, HarnessError> {
+    pub fn prompt_for_attempt(
+        &self,
+        input: &Payload,
+        reserved: &[&str],
+    ) -> Result<String, HarnessError> {
         let text = std::str::from_utf8(input.bytes())
             .map(str::to_owned)
             .map_err(|source| {
@@ -134,22 +143,26 @@ impl HarnessWorkspace {
             aion_core::ContentType::Json => {
                 match serde_json::from_str::<serde_json::Value>(&text) {
                     Ok(serde_json::Value::String(inner)) => Ok(inner),
-                    Ok(serde_json::Value::Object(fields)) => self.prompt_field(&fields),
+                    Ok(serde_json::Value::Object(fields)) => self.prompt_field(&fields, reserved),
                     _ => Ok(text),
                 }
             }
         }
     }
 
-    /// Reads the prompt out of an input object: the one field that is not the directory.
+    /// Reads the prompt out of an input object: the one field that is neither the
+    /// directory nor a reserved adapter parameter.
     fn prompt_field(
         &self,
         fields: &serde_json::Map<String, serde_json::Value>,
+        reserved: &[&str],
     ) -> Result<String, HarnessError> {
         let directory = self.per_run();
         let carried = fields
             .iter()
-            .filter(|(name, _)| Some(name.as_str()) != directory)
+            .filter(|(name, _)| {
+                Some(name.as_str()) != directory && !reserved.contains(&name.as_str())
+            })
             .collect::<Vec<_>>();
         let [(name, value)] = carried.as_slice() else {
             return Err(HarnessError::configuration(format!(
@@ -157,9 +170,10 @@ impl HarnessWorkspace {
                  {besides} to ask it with{named}. The agent is not started rather than \
                  started on instructions nobody wrote.",
                 carried = carried.len(),
-                besides = match directory {
-                    Some(_) => "fields besides the working directory",
-                    None => "fields",
+                besides = match (directory, reserved.is_empty()) {
+                    (Some(_), _) | (None, false) =>
+                        "fields besides the parameters this worker's harness reads itself",
+                    (None, true) => "fields",
                 },
                 named = list(&carried)
             )));

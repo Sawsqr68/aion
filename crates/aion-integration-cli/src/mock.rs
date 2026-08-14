@@ -141,8 +141,13 @@ impl AgentHarness for MockAgentHarness {
         }
         // The fixed terminal result is the canonical agent-outcome record — this crate exists to
         // prove the seam is harness-neutral, so its mock emits the same shape every real harness
-        // does: the transcript's message text as `text`, its terminal EndTurn as `end_turn`.
-        let result = AgentOutcome::new("working", &StopKind::EndTurn)
+        // does: the transcript's message text as `text`, its terminal EndTurn as `end_turn`,
+        // and the spec-derived identity as the conversation handle.
+        let session_id = format!(
+            "{}:{}:{}:{}",
+            spec.workflow_id, spec.run_id, spec.activity_id, spec.attempt
+        );
+        let result = AgentOutcome::new("working", &StopKind::EndTurn, session_id)
             .into_payload()
             .map_err(|source| {
                 HarnessError::protocol(format!("mock agent result is not encodable: {source}"))
@@ -231,13 +236,25 @@ mod tests {
     use futures::StreamExt;
 
     fn spec() -> AgentRunSpec {
+        // A fixed run id so the identity-derived session handle the mock mints is a known value
+        // the transcript test can assert byte-for-byte.
         AgentRunSpec::new(
             WorkflowId::new(Uuid::nil()),
-            RunId::new_v4(),
+            RunId::new(Uuid::from_u128(0x2c)),
             ActivityId::from_sequence_position(4),
             2,
             "mock-activity",
             Payload::new(ContentType::Json, b"\"in\"".to_vec()),
+        )
+    }
+
+    /// The session handle the mock derives from [`spec`]'s identity quadruple — computed from the
+    /// same values, never hand-transcribed.
+    fn expected_session_id() -> String {
+        let spec = spec();
+        format!(
+            "{}:{}:{}:{}",
+            spec.workflow_id, spec.run_id, spec.activity_id, spec.attempt
         )
     }
 
@@ -327,7 +344,11 @@ mod tests {
         let decoded = payload.to_json().unwrap();
         assert_eq!(
             decoded,
-            serde_json::json!({ "text": "working", "stop_reason": "end_turn" }),
+            serde_json::json!({
+                "text": "working",
+                "stop_reason": "end_turn",
+                "session_id": expected_session_id(),
+            }),
             "the mock emits the same canonical agent-outcome record every real harness does"
         );
     }

@@ -3,7 +3,7 @@ exports: run/1, definition/0, execute/1
 == effect schedule ==
   step_ask:
     aion@activity:timeout/2 [activities] (v1, v2)
-    aion@activity:task_queue/2 [activities] (v3, lit#11)
+    aion@activity:task_queue/2 [activities] (v3, lit#12)
     aion@workflow:run/1 [activities] (v4)
 == durable families == activities
 == atoms ==
@@ -17,21 +17,23 @@ exports: run/1, definition/0, execute/1
   [0] "reply"
   [1] "text"
   [2] "stop_reason"
-  [3] "prompt"
-  [4] "question"
-  [5] "answered"
-  [6] "outcome"
-  [7] ""
-  [8] "AskTheAgentOutcome"
-  [9] "answered"
-  [10] "payload"
-  [11] "assistants"
+  [3] "session_id"
+  [4] "prompt"
+  [5] "question"
+  [6] "answered"
+  [7] "outcome"
+  [8] ""
+  [9] "AskTheAgentOutcome"
+  [10] "answered"
+  [11] "payload"
+  [12] "assistants"
 == types ==
   record Answer tag=answer
     reply: string
   record Reply tag=reply
     text: string
     stop_reason: string
+    session_id: string
   record AskInput tag=ask_input
     prompt: string
   record AskTheAgentInput tag=ask_the_agent_input
@@ -75,8 +77,9 @@ exports: run/1, definition/0, execute/1
   sig: (ask_the_agent.Reply) -> Json
   v1 = field(v0, 1)
   v2 = field(v0, 2)
-  v3 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json}
-  return v3
+  v3 = field(v0, 3)
+  v4 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json, "session_id": v3|>awlc.string_to_json}
+  return v4
 == fn reply_decoder/0 origin=codec_template(RecordTrio, Reply, record#1) ==
   sig: () -> Decoder(ask_the_agent.Reply)
   v0 = call_rt aion@awl@codec:string_decoder/0()
@@ -89,8 +92,13 @@ exports: run/1, definition/0, execute/1
   tail_rt gleam@dynamic@decode:field/3(lit#2, v1, v2)
 == fn reply_decoder$1/2 origin=lifted(reply_decoder, #1) ==
   sig: (String, String) -> Decoder(ask_the_agent.Reply)
-  v2 = record(reply, [v1, v0])
-  tail_rt gleam@dynamic@decode:success/1(v2)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure reply_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v2, v3)
+== fn reply_decoder$2/3 origin=lifted(reply_decoder, #2) ==
+  sig: (String, String, String) -> Decoder(ask_the_agent.Reply)
+  v3 = record(reply, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
 == fn ask_input_codec/0 origin=codec_template(RecordTrio, AskInput, record#2) ==
   sig: () -> Codec(ask_the_agent.AskInput)
   v0 = make_closure ask_input_to_json captures=[]
@@ -105,7 +113,7 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(ask_the_agent.AskInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure ask_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
 == fn ask_input_decoder$0/1 origin=lifted(ask_input_decoder, #0) ==
   sig: (String) -> Decoder(ask_the_agent.AskInput)
   v1 = record(ask_input, [v0])
@@ -124,7 +132,7 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(ask_the_agent.AskTheAgentInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure ask_the_agent_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
 == fn ask_the_agent_input_decoder$0/1 origin=lifted(ask_the_agent_input_decoder, #0) ==
   sig: (String) -> Decoder(ask_the_agent.AskTheAgentInput)
   v1 = record(ask_the_agent_input, [v0])
@@ -137,23 +145,23 @@ exports: run/1, definition/0, execute/1
 == fn ask_the_agent_outcome_to_json/1 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#4) ==
   sig: (ask_the_agent.AskTheAgentOutcome) -> Json
   v1 = field(v0, 1)
-  v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>answer_to_json}
+  v2 = json_obj {"outcome": lit#6|>awlc.string_to_json, "payload": v1|>answer_to_json}
   return v2
 == fn ask_the_agent_outcome_decoder/0 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#4) ==
   sig: () -> Decoder(ask_the_agent.AskTheAgentOutcome)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure ask_the_agent_outcome_decoder$outcome captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
 == fn ask_the_agent_outcome_decoder$outcome/1 origin=lifted(ask_the_agent_outcome_decoder, #0) ==
   sig: (String) -> Decoder(ask_the_agent.AskTheAgentOutcome)
-  if cmp Eq v0 lit#9:
+  if cmp Eq v0 lit#10:
     v3 = call_local answer_decoder()
     v4 = make_closure ask_the_agent_outcome_decoder$arm0 captures=[]
-    tail_rt gleam@dynamic@decode:field/3(lit#10, v3, v4)
+    tail_rt gleam@dynamic@decode:field/3(lit#11, v3, v4)
   else:
-    v1 = record(answer, [lit#7])
+    v1 = record(answer, [lit#8])
     v2 = record(answered_outcome, [v1])
-    tail_rt gleam@dynamic@decode:failure/2(v2, lit#8)
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#9)
 == fn ask_the_agent_outcome_decoder$arm0/1 origin=lifted(ask_the_agent_outcome_decoder, #1) ==
   sig: (ask_the_agent.Answer) -> Decoder(ask_the_agent.AskTheAgentOutcome)
   v1 = record(answered_outcome, [v0])
@@ -166,7 +174,7 @@ exports: run/1, definition/0, execute/1
   v1 = call_local ask_activity(v0)
   v2 = call_rt aion@duration:milliseconds/1(600000) live_after=[v1]
   v3 = call_rt aion@activity:timeout/2(v1, v2)
-  v4 = call_rt aion@activity:task_queue/2(v3, lit#11)
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#12)
   v5 = call_rt aion@workflow:run/1(v4)
   v6 = call_rt aion@awl@error:map_activity_error/1(v5)
   v7 = try_bind v6

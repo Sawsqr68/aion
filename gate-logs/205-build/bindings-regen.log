@@ -1,0 +1,10 @@
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.99s
+     Running unittests src/lib.rs (target/debug/deps/aion_core-1f9d46a96494f906)
+
+running 1 test
+test generated_types::export_ops_console_wire_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+EXIT=0

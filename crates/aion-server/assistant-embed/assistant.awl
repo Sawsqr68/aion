@@ -246,7 +246,7 @@ type Provisioned { exit_code: Int, stdout: String }
 /// checker on any `agent`-marked action; the NAME is this document's own.
 /// `stop_reason` is available to route on; this session deliberately does not
 /// — its routing behaviour predates the field and stands unchanged.
-type Reply { text: String, stop_reason: String }
+type Reply { text: String, stop_reason: String, session_id: String }
 
 /// The one value the round loop threads, and the ONLY thing readable after
 /// the loop: the prompt the next round will send, the last reply received,
@@ -378,7 +378,8 @@ worker assistant
     run "sh -c 'set -eu; case \"$2\" in \"\"|.|..|*/*) echo provision: run_id must be a single path component >&2; exit 9;; esac; if [ -z \"$1\" ]; then echo provision: workspace_root must not be empty >&2; exit 9; fi; mkdir -p \"$1\" >&2; if [ -e \"$1/$2\" ]; then mv \"$1/$2\" \"$1/$2.superseded-$(date +%Y%m%dT%H%M%S)-$$\" >&2; fi; mkdir \"$1/$2\" >&2; if [ -z \"$3\" ]; then mkdir -p \"$1/$2/repo\" >&2; git init \"$1/$2/repo\" >&2; else git clone \"$3\" \"$1/$2/repo\" >&2; fi; printf \"%s\" \"$1/$2/repo\"' -- {workspace_root} $run_id $repo_path"
 
   /// One agent round under the canonical agent-outcome contract: ONE prompt
-  /// string in, the `Reply` record out (`text` + `stop_reason`) — the shape
+  /// string in, the `Reply` record out (`text` + `stop_reason` +
+  /// `session_id`) — the shape
   /// every harness emits from its boundary. NO timeout, by design. The worker
   /// pins one norn session per action type per run, so repeated dispatches
   /// resume one conversation.

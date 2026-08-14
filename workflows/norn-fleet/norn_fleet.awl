@@ -57,8 +57,9 @@ type FleetReport { attempted: Int, issue_ids: [String], verdicts: [String], cont
 type Refused { control_expect: String, control_reply: String, reason: String }
 
 /// The canonical agent-outcome record every dispatch of the agent seam
-/// returns: the judge's terminal `text` and the canonical `stop_reason`.
-type Reply { text: String, stop_reason: String }
+/// returns: the judge's terminal `text`, the canonical `stop_reason`, and
+/// the `session_id` handle of the conversation that produced it.
+type Reply { text: String, stop_reason: String, session_id: String }
 
 worker fleet
   /// The judge. Served by `aion worker agent` with the norn harness: the
