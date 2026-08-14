@@ -225,6 +225,89 @@ fails to persist.
   (`aion-worker/src/lib.rs:82`). Whether a cancel escalates past it, and after
   how long, is declared — not invented here.
 
+---
+
+# PLAN CORRECTION (measured 2026-08-14, post-compaction — this supersedes steps 5
+# and the routing decision above; both were wrong, and are kept for the record)
+
+## Correction 1 — the settle hook is the BOOT path, not the live one
+
+The plan above put the cancel fan-out "beside the settle, which already runs on
+terminal". **It does not run on terminal.** `settle_terminal_outbox_rows` has
+exactly two callers — `aion-server/src/run.rs:504` (boot) and
+`aion-server/src/cluster.rs:133` (shard adoption). Its own module doc says so
+(`outbox_settle.rs:5-11`): *"The Recorder settles a workflow's live rows at
+terminal-record time (the live window); this module is the BOOT/ADOPTION
+backstop."*
+
+So a fan-out placed there would fire on server boot and never on a live cancel:
+by the time it ran, the Recorder (`recorder.rs:438`, inside the `aion` crate)
+would already have settled the rows and it would find nothing. **The hook was
+placed at the one site that cannot see the event it needs.**
+
+## Correction 2 — the live worker↔activity map EXISTS, so broadcast is superseded
+
+The broadcast-to-pool decision above was reasoned from a true premise about the
+DURABLE row (`OutboxRow` carries no worker id) and a false unstated one — that no
+live mapping existed anywhere. It does:
+
+`aion-server/src/worker/heartbeat.rs:102` —
+```rust
+struct TaskKey(WorkerId, WorkflowId, ActivityId);
+struct HeartbeatState { tasks: HashMap<TaskKey, TaskLiveness>, ... }
+```
+
+`HeartbeatTracker` is the server's live registry of what every connected worker
+is executing right now. It is already used for exactly this class of question:
+`fail_all_in_flight_workers` (`:719`), `park_all_in_flight_workers` (`:788`),
+`remove_worker_tasks` (`:896`), `in_flight_count` (`:591`). Entries are added on
+dispatch (`track_task`, `:471`) and removed on completion, disconnect, or
+expiry — so a tracked entry means *a live worker holds this activity now*.
+
+**Direct routing wins on every axis the broadcast argument used.** It is precise
+(no no-op traffic), it cannot be stale (the tracker drops the entry when the
+worker goes), and it needs no durable schema change either. The staleness hazard
+that ruled out "record the WorkerId on claim" does not apply here: the tracker's
+worker id is not a recorded historical fact, it is present membership.
+
+## Correction 3 — liminal transport has no control channel, and must SAY so
+
+`drain_worker` (`registry.rs:1014-1048`) proves the shape: `WorkerDelivery` is an
+enum, and only the `Grpc(WorkerTaskSender)` arm can carry a control message. The
+`Liminal` arm logs at error level and deregisters, because *"liminal transport
+has no drain control channel"*. A cancel faces the identical wall. It must
+therefore report **asked-but-undeliverable** for a liminal worker, named and
+logged — never a silent skip. That is this defect's own shape and must not be
+reproduced inside its fix.
+
+## The corrected build, in order
+
+1. **`crates/aion-proto-generated/proto/worker.proto`** — `CancelActivity
+   { WorkflowId workflow_id = 1; ActivityId activity_id = 2; }` plus a sixth
+   `ServerToWorker` oneof member (tag `6`). Stubs generate at build time.
+2. **`WorkerMessage::CancelActivity`** (`registry.rs:63`).
+3. **`encode_server_to_worker`** (`worker_grpc.rs:738`) — the encoding arm.
+4. **`decode_server_message`** (`session.rs:636`) — the arm constructing
+   `WorkerSessionEvent::Cancel`, with `decode_result_ack`'s missing-field
+   refusals. This is the line that makes `loop_.rs:245-247` reachable.
+5. **`HeartbeatTracker::in_flight_for_workflow(&WorkflowId)`** — read the tracked
+   entries for one workflow. `TaskLiveness` already carries `worker_id`,
+   `activity_id`, and `attempt`.
+6. **A new `aion-server/src/worker/activity_cancel.rs`** — asks each tracked
+   worker to stop, and returns WHAT WAS ASKED AND WHAT WAS OBSERVED per entry
+   (requested / worker gone / transport cannot carry it / send failed). It never
+   asserts a stop.
+7. **The call site: the server's cancel path**, after the engine's cancel returns
+   Ok. All three transports (HTTP `api/http/workflows.rs:83`, gRPC
+   `api/grpc/mod.rs:227`, MCP `mcp/tools/control.rs:162`) converge on
+   `handlers::workflows::cancel` (`:302`) and all three hold a `ServerState`,
+   so there is ONE site.
+
+**Scope stated honestly:** this covers cancel. A run that ends by TIMEOUT or
+FAILURE leaks its in-flight activity the same way, and this fix does not close
+that — the terminal for those is recorded inside the engine, which must not learn
+about workers. That is a separate, named follow-up, not a silent omission.
+
 ## Battery scope for this change
 
 Closure, not diff: `aion-proto-generated`, `aion-proto`, `aion-worker`,

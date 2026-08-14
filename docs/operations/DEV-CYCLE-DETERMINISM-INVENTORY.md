@@ -50,12 +50,15 @@ run when skipped.
 
 | # | decision | the rule | lives where |
 |---|---|---|---|
-| 1.1 | Is the box quiet enough to measure on? | Refuse to start a battery when load exceeds core count. A contended red is not a red. | **SCRIPT** (the battery runner refuses; nothing refuses at dispatch time) |
+| 1.1 | Where should this run? | 🔴 **Ruled by Tom, 2026-08-14: send it somewhere that can measure, don't gate on quiet.** A contended red is still not a red — but the answer is to route the work to a box with capacity, not to refuse and wait. Today the battery runner refuses on load>cores, which stops a bad measurement and delivers nothing. | **SCRIPT** (refuses locally; nothing routes) |
 | 1.2 | Is there disk headroom for a cold build? | A cold workspace build needs roughly 25–37 GiB. Below that, clean `target/` first — after checking no live process holds it. | **WRITTEN** |
 | 1.3 | Is another agent already writing to this tree? | One mutating lane per tree. An unmarked dirty tree means stop and find out whose it is. | **WRITTEN** |
 | 1.4 | Main tree, or an isolated worktree? | Concurrent writers get their own worktree. Always, not when it seems likely to collide. | **WRITTEN** (and repeatedly not done — this is what #221 is) |
 | 1.5 | Is HEAD green right now? | You cannot attribute a new red without a green baseline. If HEAD is already red, that red must be named and dispositioned first. | **HEAD** |
 | 1.6 | Which server/worker processes must not be touched? | Kill only recorded pids, never a pattern match. An actuator must sit outside what it fires into. | **WRITTEN** |
+| 1.7 | Is the tree clean before I start? | Uncommitted changes belonging to someone else are a stop, not a thing to work around. Anything left behind gets attributed to this work. | **HEAD** |
+| 1.8 | Is the base current? | Fetch and rebase onto the real base before starting, or the first gate measures a tree nobody will ever have. | **HEAD** |
+| 1.9 | Which branch does this work go on? | Never the default branch. Branch named for the work, cut from a current base. | **WRITTEN** |
 
 ## Phase 2 — deciding what the change drags with it
 
@@ -100,6 +103,8 @@ changed, therefore that must be regenerated and this gate must run.*
 | 4.5 | Does this need a version bump? | Anything published. | **HEAD** |
 | 4.6 | Which task does this close, and what evidence closes it? | Every close names the commit and the measurement. | **WRITTEN** |
 | 4.7 | Push, or hold? | Held branches are held for a reason and the reason is written down. | **WRITTEN** |
+| 4.8 | Is the tree clean at the end — nothing left behind? | Untracked leftovers get attributed to whoever touched the tree next. Check what is there, not how many things are there: a count that hasn't changed while the *composition* has is the trap. | **HEAD** |
+| 4.9 | Did the gates run on the tree actually being landed? | A green measured before the last three commits proves nothing about what lands. | **HEAD** |
 
 ## Phase 5 — release
 
@@ -117,19 +122,24 @@ changed, therefore that must be regenerated and this gate must run.*
 
 ## What the inventory says
 
-Counted, not estimated — 44 rows above:
+Counted, not estimated — 49 rows above (44 at first writing, plus the five git
+rows Tom asked for on 2026-08-14):
 
 | lives where | count |
 |---|---|
 | **WORKFLOW** | 8 |
-| **WRITTEN** | 23 |
-| **HEAD** | 9 |
+| **WRITTEN** | 24 |
+| **HEAD** | 13 |
 | **SCRIPT** | 3 |
 | split (script + head) | 1 |
 
-**Eight of forty-four decisions are in a workflow. Nine are nowhere but in the
-head of whoever is working, and twenty-three rest on someone remembering to read
-a document.**
+**Eight of forty-nine decisions are in a workflow. Thirteen are nowhere but in
+the head of whoever is working, and twenty-four rest on someone remembering to
+read a document.**
+
+The five git rows all landed in the **HEAD** column bar one. That is the answer
+to "should we automate the git workflow at the start and the end": there is
+almost nothing there to automate *from* — it has never been written down at all.
 
 The eight that are in a workflow are all in *one* place — the gate battery.
 Everything before it (can I even start?) and everything after it (what does this
@@ -142,10 +152,12 @@ version string it prints rather than by its bytes.
 
 ## The four that would pay for themselves first
 
-1. **Phase 1 as a preflight workflow (1.1–1.6).** Six conditions, all mechanical,
-   all currently checked by memory. A run that cannot produce a trustworthy
-   measurement should refuse to start, loudly, rather than spend four hours
-   producing one nobody can use.
+1. **Phase 1 as a preflight workflow (1.2–1.6), kept small.** Five conditions,
+   all mechanical, all currently checked by memory. Tom's steer on 2026-08-14:
+   *keep the preflight really clean, don't overdo it* — and 1.1 is not a
+   precondition at all, it is a **routing** decision. A battery that cannot be
+   measured here should be sent to a box where it can be, which is work Aion is
+   already shaped to do; refusing and waiting is the worse half of the answer.
 
 2. **Phase 2 derived from the diff (2.1–2.9).** "These files changed, therefore
    these gates and these regenerations" is a pure function of the diff. Today an
