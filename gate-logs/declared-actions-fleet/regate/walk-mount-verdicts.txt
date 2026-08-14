@@ -1,0 +1,2 @@
+2154:[registry] registry: delivery 10 REFUSED — mount 'ablative/people/rsvp' by @rsvp (MalformedDeclaration): the declar
+2209:[registry] registry: delivery 13 ACCEPTED — mount 'ablative/people/rsvp' by @rsvp, feed entry 37 at delivery sequen
