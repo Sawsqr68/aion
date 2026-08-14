@@ -6,7 +6,7 @@
 # script's to remove. Non-zero exit routes the run to `unforked`.
 WT=/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-actions
 TREES=/Users/tom/Developer/ablative/apps/manifold/.worktrees
-for leg in L1 L2 L3; do
+for leg in L1 L2; do
   LWT=$TREES/declared-actions-$leg
   BR=declared-actions-$leg
   if [ -e "$LWT" ]; then

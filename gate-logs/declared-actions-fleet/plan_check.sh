@@ -4,7 +4,7 @@
 # on stdout. Non-zero exit routes the run to `unplanned`.
 WT=/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-actions
 missing=0
-for f in "$WT/.fleet/plan.md" "$WT/.fleet/legs/L1.md" "$WT/.fleet/legs/L2.md" "$WT/.fleet/legs/L3.md"; do
+for f in "$WT/.fleet/plan.md" "$WT/.fleet/legs/L1.md" "$WT/.fleet/legs/L2.md"; do
   if [ ! -s "$f" ]; then
     echo "MISSING: $f"
     missing=1

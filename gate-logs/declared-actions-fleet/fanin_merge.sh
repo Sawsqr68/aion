@@ -1,5 +1,5 @@
 # fanin_merge — carry each leg's report back to the primary tree, then merge
-# each leg branch into declared-actions in dispatch order (L1, L2, L3).
+# each leg branch into declared-actions in dispatch order (L1, L2).
 # Run by the aion server via fleet_dev's `fanin` action: `zsh $script`.
 # A conflict is a finding about the plan's leg boundaries: the conflicting
 # files are named on stdout, the merge is aborted clean, every leg branch is
@@ -11,7 +11,7 @@ mkdir -p .fleet/reports
 
 # Reports first (untracked in the leg trees, so the merge does not carry
 # them): even a run that goes on to conflict keeps the builders' accounts.
-for leg in L1 L2 L3; do
+for leg in L1 L2; do
   SRC=$TREES/declared-actions-$leg/.fleet/reports/$leg.md
   if [ -s "$SRC" ]; then
     cp "$SRC" ".fleet/reports/$leg.md" || { echo "FANIN FAILED carrying report $leg"; exit 1; }
@@ -21,7 +21,7 @@ for leg in L1 L2 L3; do
   fi
 done
 
-for leg in L1 L2 L3; do
+for leg in L1 L2; do
   BR=declared-actions-$leg
   if git merge --no-ff -m "fleet fan-in: merge $BR" "$BR"; then
     echo "merged: $BR"

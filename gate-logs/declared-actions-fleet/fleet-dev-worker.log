@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-14T13:57:09.229541Z","level":"INFO","fields":{"message":"agent worker dialing liminal candidates","candidates":"127.0.0.1:50061","task_queue":"dev","identity":"fleet-dev-worker","namespace":"default","harness":"norn","cwd":"each job names its own directory in its `repo` parameter"},"target":"aion::worker_agent::serve"}
+{"timestamp":"2026-08-14T13:57:09.238667Z","level":"INFO","fields":{"message":"agent worker registered; serving through the composed agent harness","task_queue":"dev","actions":"delegate"},"target":"aion::worker_agent::serve"}

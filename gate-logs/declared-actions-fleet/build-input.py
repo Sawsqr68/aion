@@ -23,7 +23,7 @@ import sys
 
 BRIEF = "/Users/tom/Developer/ablative/docs/briefs/manifold-click-actions-fleet-20260814.md"
 SCRIPTS = "/Users/tom/Developer/ablative/stack/aion/gate-logs/declared-actions-fleet"
-LEGS = ["L1", "L2", "L3"]
+LEGS = ["L1", "L2"]
 
 
 def section(text, heading, next_heading):
@@ -49,8 +49,8 @@ def main():
         + "\n\nYou are the PLANNER of a fleet run. Your working directory is the"
         " target repository worktree. Write .fleet/plan.md (the whole plan,"
         " every requirement anchored file:line into THIS tree) and one"
-        " complete builder brief per leg at .fleet/legs/L1.md, .fleet/legs/L2.md,"
-        " .fleet/legs/L3.md. The legs will run IN PARALLEL, each builder in"
+        " complete builder brief per leg at .fleet/legs/L1.md and"
+        " .fleet/legs/L2.md. The legs will run IN PARALLEL, each builder in"
         " its own isolated worktree on its own branch — no leg sees another"
         " leg's work, and the branches are merged mechanically afterwards."
         " Each brief must therefore be fully self-contained and independent"
@@ -85,7 +85,7 @@ def main():
 
     judge_prompt = (
         "You are the JUDGE of a fleet run. Your working directory is the"
-        " target repository worktree: three parallel leg branches, already"
+        " target repository worktree: the parallel leg branches, already"
         " merged by the server, built, and mechanically gated green. Read"
         " .fleet/plan.md, every brief under .fleet/legs/, every report under"
         " .fleet/reports/, and the git log and diff of this branch (the"
@@ -112,13 +112,15 @@ def main():
         "counsel_control_prompt": (
             "Read surface/page/src/declared-face.ts and reply with ONLY the"
             " name of the const that lists the members a badge element"
-            " permits."
+            " permits. Reply as bare plain text: no backticks, no quotes,"
+            " no code formatting, no punctuation — the name alone."
         ),
         "counsel_control_expect": "BADGE_MEMBERS",
         "control_prompt": (
             "Read surface/page/package.json in this repository and reply with"
             " ONLY the value of its \"name\" field — the exact string, nothing"
-            " else."
+            " else. Reply as bare plain text: no backticks, no quotes, no"
+            " code formatting — the value alone."
         ),
         "control_expect": "manifold-surface-page",
         "plan_prompt": plan_prompt,

@@ -5,7 +5,7 @@
 # Non-zero exit routes the run to `unreported`.
 WT=/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-actions
 missing=0
-for leg in L1 L2 L3; do
+for leg in L1 L2; do
   f="$WT/.fleet/reports/$leg.md"
   if [ ! -s "$f" ]; then
     echo "MISSING LEG: $leg ($f)"
