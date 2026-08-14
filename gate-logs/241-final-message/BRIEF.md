@@ -1,0 +1,144 @@
+# #241 — AgentOutcome carries the agent's FINAL message as a distinct field
+
+Waffles' Defect-3 ruling (fleet run 2), pulled forward on Tom's press
+2026-08-14 23:46Z ("It's not good enough to have things that are working
+coming up as failed"). Ratified by Waffles 23:47Z: "the final message as its
+own field on AgentOutcome, harness-side in every adapter, and the judge reads
+THAT field."
+
+## The defect this kills
+
+The ACP harness accumulates EVERY completed agent answer of a session into
+`AgentOutcome.text` (joined). A workflow that routes on an exact reply token
+(fleet_dev's judge: reply exactly `fleet-judge-pass`) can never match when the
+agent narrates before its verdict — the token is buried in the accumulation.
+Fleet run 2's judge PASSED both duties and said the exact token as its last
+message, yet the run recorded WorkflowFailed. A working delivery wore a failed
+badge in the operator's console. Direction of error is false-alarm, never
+false-accept — keep that property.
+
+## The contract change
+
+`AgentOutcome` (crates/aion-core/src/agent_outcome.rs) gains a mandatory
+fourth field:
+
+```
+pub struct AgentOutcome {
+    pub text: String,          // unchanged: the run's whole output (accumulated)
+    pub final_message: String, // NEW: the agent's LAST completed message, alone
+    pub stop_reason: String,   // unchanged
+    pub session_id: String,    // unchanged
+}
+```
+
+This is a REPLACEMENT, not an addition beside (house law: no backwards
+compatibility, no compat shims). Follow the #205 precedent exactly:
+
+- The wire shape is exactly the four snake_case keys.
+- A three-field payload NO LONGER DECODES (pin with a test, as
+  `a_two_field_payload_no_longer_decodes` pins the previous widening —
+  update/extend that test family).
+- A three-field AWL declaration NO LONGER CHECKS (checker change below).
+- `AgentOutcome::new` takes the final message as a parameter — no defaulting,
+  no `Option`, no builder that lets a harness forget it.
+
+Semantics of `final_message`:
+
+- The LAST completed agent ANSWER message of the run, exactly as the agent
+  said it. Not reasoning, not tool output, not user turns.
+- Empty is honest when the agent produced no answer text at all (tool-only
+  turn): both `text` and `final_message` are `""` then. NO refusal on empty
+  final_message (unlike session_id — an agent that said nothing said nothing).
+- When the run produced exactly one answer message, `final_message == text`.
+  That equality is the honest degenerate case, not a bug.
+
+## Sites (R1..R7)
+
+R1 — **aion-core** `agent_outcome.rs`: the field, the doc comments (state the
+semantics above, including WHY the field exists — the fleet-judge false-flag),
+`new()` signature, tests: 4-key wire shape pinned as JSON; 3-field payload
+refused at decode; round-trip; empty final_message survives.
+
+R2 — **aion-integration-acp**: `MessageAccumulator`
+(src/messages.rs) additionally tracks the text of the LAST completed agent
+ANSWER (reasoning/user streams never touch it; `finish()` must fold a
+still-open answer in, same as `completed_text` does). `PromptOutcome`
+(src/outcome.rs) carries it alongside `text`; `outcome_into_payload` feeds it
+to `AgentOutcome::new`. Tests: a turn with three answer messages → `text` is
+all three joined, `final_message` is the third alone (THIS is the defect's
+pin — it must fail on the old accumulate-only behavior); single-message turn
+→ equal; tool-only turn → both empty; thought-chunks never contaminate
+final_message.
+
+R3 — **aion-integration-norn** (src/translate.rs:242): norn's envelope
+`output` IS the final value by norn's own protocol (DRIVEN-PROTOCOL.md stop
+envelope), so `final_message` = the same string as `text`. Say so in a doc
+comment citing the protocol — the duplication is honest, not lazy.
+
+R4 — **aion-integration-cli** (src/session.rs:300 + src/mock.rs:150): same —
+the CLI harness's `final_line` is already the final message; both fields get
+it. Doc comment states it.
+
+R5 — **aion-awl checker** (src/checker/agents.rs): the structural demand
+becomes exactly FOUR fields (`final_message: String` joins; len == 4). Update
+the error message at ~:60 to name all four. `String?` stays refused for the
+new field (always present on the wire). Tests: 4-field record checks; 3-field
+record refuses naming the missing field; the fixture corpus.
+
+R6 — **the document sweep**: every AWL document in this repo that declares
+the agent record must move to the 4-field shape or the corpus gate
+(#181's derived gate) goes red — that gate red is your acceptance signal
+running green AFTER the sweep. Sweep by the claim's vocabulary (`session_id`
+/ `stop_reason` in .awl files and embedded resources), not by a directory
+guess: workflows/, the embedded assistant/awl resources in the server crate,
+guide examples (aion-awl guide corpus — the guide gates must stay green),
+docs/ examples, templates scaffolded by `aion new` if they declare the
+record. List EVERY file you touched and every file you checked-and-left in
+the report.
+
+R7 — **docs + generated surfaces**: AgentOutcome derives `ts_rs::TS` — check
+whether generated TS types are committed (search for the generated
+AgentOutcome text) and regenerate if so. Sweep sdks/python, sdks/typescript,
+conformance/, and any CLIENT-CONTRACT / API docs for the 3-field shape by
+vocabulary (the #211 lesson: the footprint reached sdks/ when the marker said
+it didn't). Update prose docs that state the record shape
+(AWL-WORKER-DOCUMENTS.md, integration READMEs, DECLARED-COMMANDS.md if it
+names the record).
+
+## Out of scope (disclosed non-goals — do NOT take them)
+
+- fleet_dev.awl v3 (judge reads final_message + stdout-token oracle grammar)
+  — the dispatcher authors that separately on top of your landing.
+- Any deploy, restart, or swap of serving processes (HARD WALL — fleets are
+  flying; landed is not running).
+- The seated documents under ~/.aion (not in this repo; the dispatcher
+  handles reseating at the cut).
+
+## Laws (house, non-negotiable)
+
+- Work ONLY in this worktree (branch 241-final-message). Commit as you go.
+  Never push. Never touch ~/.aion, .manifold*, any live process, or files
+  outside this worktree.
+- No `#[allow]`, `#[expect]`, `#[ignore]`, `_var` renames, `#[cfg(any())]`.
+  Clippy fires → fix the code.
+- No `.unwrap()`/`.expect()` in library code. Every file ≤500 LOC or split.
+- Write the defect's pin (R2's three-message test) FIRST, run it against the
+  pre-change accumulator to see it red, and commit it failing with the red
+  output quoted in the commit message. Then build until green.
+- Gates before you call it done, output to FILES under
+  gate-logs/241-final-message/ in the WORKTREE (create it):
+  `cargo clippy --workspace --all-targets -- -D warnings` AND
+  `cargo clippy -p aion-core -p aion-integration-acp -p aion-integration-norn
+  -p aion-integration-cli -p aion-awl --all-targets -- -D warnings` (both
+  resolutions are required — feature resolution differs), `cargo fmt --check`,
+  `cargo test --workspace > gate-logs/241-final-message/battery.log 2>&1`
+  (never pipe through head/tail — write the file, read the tail after).
+  Record the box load beside any red — builders are contending on this box
+  and a starvation-shaped red on a loaded box is attributed, not accepted.
+
+## Report (your reply, verbatim demands)
+
+File-by-file: what changed and why. The red-then-green evidence for the R2
+pin (commit ids, the quoted red). Every file the R6/R7 sweeps touched AND
+every file checked-and-left with why. Every permitted choice made. Every
+disclosed non-goal left. Gate exit codes with log paths.
