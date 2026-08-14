@@ -405,3 +405,22 @@ recorded below when it lands.
 own EXIT=0 certifies every target ran to a verdict — a crashed binary
 would have propagated nonzero. This is the closure run; run 1 stays
 beside it as the contended-red exhibit.
+
+## Review gate (own hand, per session rule) — 2026-08-14
+
+Full committed diff of eaac2510a re-read against the CLAUDE.md invariants:
+no EventStore::append anywhere (single-writer untouched), fan-out strictly
+after the durable record, lock poison typed + propagated with the reasoning
+written down, no arbitrary constants, cancel rides the worker's own dispatch
+channel. ONE finding: `CancelDelivery::TransportCannotCarry` was the only
+arm never seen red — reachable solely through a liminal registration
+(feature default-on, so it SHIPS compiled) and untested. Closed in the same
+session: new feature-gated test
+`a_liminal_worker_is_reported_as_transport_cannot_carry` (real
+ConnectionSupervisor connected to nothing, precedent from
+grpc_liminal_one_eligibility_set.rs). Proven: green on the working fixture,
+then mutation (no-sender arm → WorkerGone, the plausible-wrong mis-report)
+killed it with exactly `left: WorkerGone / right: TransportCannotCarry`,
+restored by writing bytes, all 6 activity_cancel tests green on the rebuilt
+tree. Clippy both resolutions EXIT=0 (clippy-ws3.log / clippy-p3.log).
+Every CancelDelivery arm has now been observed failing.

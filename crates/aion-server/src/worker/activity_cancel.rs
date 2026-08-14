@@ -356,6 +356,50 @@ mod tests {
         Ok(())
     }
 
+    /// A worker on a transport that carries no control messages is reported as
+    /// exactly that — never as gone (it is still registered) and never as
+    /// asked (the ask cannot be expressed to it).
+    ///
+    /// The supervisor is real but deliberately connected to nothing: what is
+    /// under test is the registry's answer for a liminal delivery, not liminal
+    /// itself.
+    #[cfg(feature = "liminal-transport")]
+    #[tokio::test]
+    async fn a_liminal_worker_is_reported_as_transport_cannot_carry() -> TestResult {
+        use crate::worker::liminal_transport::LiminalWorkerDelivery;
+        use crate::worker::registry::WorkerDelivery;
+
+        let registry = ConnectedWorkerRegistry::default();
+        let supervisor = liminal_server::server::connection::ConnectionSupervisor::new()?;
+        let activity_types = [String::from("work")];
+        // The guard must outlive the fan-out call: dropping it deregisters.
+        let registration = registry.register_delivery(
+            [String::from("tenant-a")],
+            String::from("default"),
+            None,
+            None,
+            activity_types.iter(),
+            WorkerDelivery::Liminal(LiminalWorkerDelivery::new(supervisor, 7)),
+        )?;
+        let worker_id = registration
+            .worker_id()
+            .ok_or_else(|| ServerError::lock_poisoned("test worker registration"))?;
+        let tracker = HeartbeatTracker::new(WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        track(&tracker, worker_id, &workflow_id, 1)?;
+
+        let requests = cancel_in_flight_activities(&tracker, &registry, &workflow_id)?;
+
+        assert_eq!(requests.len(), 1, "the entry is reported, not dropped");
+        assert_eq!(
+            requests[0].delivery,
+            CancelDelivery::TransportCannotCarry,
+            "a control-less transport must be named as such, not as gone or asked"
+        );
+        drop(registration);
+        Ok(())
+    }
+
     /// A closed dispatch channel is reported as unavailable, not as an ask.
     #[tokio::test]
     async fn a_closed_dispatch_channel_is_reported_as_unavailable() -> TestResult {
