@@ -7,14 +7,19 @@
 //! JSON shapes. The fix is this record, defined by aion, snake_case and
 //! AWL-expressible: every harness maps its native terminal outcome onto it at
 //! the integration boundary, and a workflow's `agent` action declares a record
-//! of exactly this shape and reads `text` / `stop_reason` / `session_id` as
-//! fields.
+//! of exactly this shape and reads `text` / `final_message` / `stop_reason` /
+//! `session_id` as fields.
 //!
 //! Task #205's ruling widened the record with a third mandatory field,
 //! `session_id` — see [`AgentOutcome::session_id`] for its semantics. The
 //! widening is a replacement, not an addition: the wire shape is exactly the
-//! three keys, a two-field payload no longer decodes, and a two-field AWL
-//! declaration no longer checks.
+//! three keys, a two-field payload no longer decodes, and a two-field AWL declaration no longer
+//! checks. Task #241 replaces that record in turn with a fourth mandatory field,
+//! `final_message`: [`AgentOutcome::text`] remains the whole accumulated output, while
+//! [`AgentOutcome::final_message`] is the last completed answer alone. That distinction prevents an
+//! exact-token judge from falsely failing a successful run merely because earlier narrated answers
+//! precede the final verdict. The wire shape is now exactly four keys; a three-field payload no
+//! longer decodes and a three-field AWL declaration no longer checks.
 //!
 //! # One stop-reason vocabulary, by subtraction
 //!
@@ -72,7 +77,7 @@ pub enum AgentOutcomeError {
          names no conversation"
     )]
     EmptySessionId,
-    /// The record could not be encoded as JSON — unreachable for three plain
+    /// The record could not be encoded as JSON — unreachable for four plain
     /// strings, but never swallowed.
     #[error("the agent-outcome record is not encodable: {0}")]
     Encode(#[from] serde_json::Error),
@@ -81,22 +86,28 @@ pub enum AgentOutcomeError {
 /// The canonical agent-outcome record: what a completed agent activity's
 /// result payload carries, from every harness.
 ///
-/// Three fields, all `snake_case`, all mandatory, all AWL-expressible — the
+/// Four fields, all `snake_case`, all mandatory, all AWL-expressible — the
 /// AWL checker demands an `agent` action's declared return type be a record of
-/// exactly this shape (`text: String`, `stop_reason: String`,
-/// `session_id: String`), so a workflow reads `reply.text`,
-/// `reply.stop_reason`, and `reply.session_id` as ordinary record fields.
+/// exactly this shape (`text: String`, `final_message: String`, `stop_reason: String`,
+/// `session_id: String`), so a workflow reads those values as ordinary record fields.
 ///
-/// An empty `text` on a completed run is honest, not a bug: an agent that
-/// finished its turn having emitted only tool calls said nothing, and the
-/// harness reports that truth rather than inventing words (the work is on the
-/// transcript). `stop_reason` is one of the canonical strings produced by
-/// [`StopKind::canonical_stop_reason`]:
+/// Empty `text` and `final_message` values on a completed run are honest, not a bug: an agent that
+/// finished its turn having emitted only tool calls said nothing, and the harness reports that
+/// truth rather than inventing words (the work is on the transcript). When the run produced exactly
+/// one completed answer, `final_message == text`; that duplication is the honest degenerate case.
+/// `stop_reason` is one of the canonical strings produced by [`StopKind::canonical_stop_reason`]:
 /// `end_turn | tool_use | limit_reached | cancelled | error | other`.
 #[derive(Serialize, Deserialize, ts_rs::TS, Clone, Debug, PartialEq, Eq)]
 pub struct AgentOutcome {
-    /// The agent's terminal text — the run's actual output.
+    /// The whole run output: every completed agent answer, accumulated by the harness.
     pub text: String,
+    /// The run's LAST completed agent answer message, alone and exactly as the agent said it.
+    ///
+    /// Reasoning, tool output, and user turns never enter this field. It exists separately from
+    /// [`Self::text`] so an exact-token judge reads the actual final verdict rather than falsely
+    /// failing a successful run because narration from earlier answers precedes it. It is empty when
+    /// the agent produced no answer text at all, and equals `text` when there was exactly one answer.
+    pub final_message: String,
     /// The canonical `snake_case` stop reason
     /// ([`StopKind::canonical_stop_reason`]).
     pub stop_reason: String,
@@ -116,13 +127,19 @@ pub struct AgentOutcome {
 }
 
 impl AgentOutcome {
-    /// Builds the record from the agent's terminal text, the neutral stop
-    /// kind, and the conversation handle, spelling `stop_reason` through the
-    /// one canonical mapping.
+    /// Builds the record from the whole accumulated answer text, the last completed answer alone,
+    /// the neutral stop kind, and the conversation handle, spelling `stop_reason` through the one
+    /// canonical mapping.
     #[must_use]
-    pub fn new(text: impl Into<String>, stop: &StopKind, session_id: impl Into<String>) -> Self {
+    pub fn new(
+        text: impl Into<String>,
+        final_message: impl Into<String>,
+        stop: &StopKind,
+        session_id: impl Into<String>,
+    ) -> Self {
         Self {
             text: text.into(),
+            final_message: final_message.into(),
             stop_reason: stop.canonical_stop_reason().to_owned(),
             session_id: session_id.into(),
         }
@@ -135,7 +152,7 @@ impl AgentOutcome {
     /// [`AgentOutcomeError::EmptySessionId`] when the mandatory `session_id`
     /// is the empty string — the vacancy is refused by name rather than
     /// shipped. [`AgentOutcomeError::Encode`] when the record cannot be
-    /// encoded — unreachable for three plain strings, but never swallowed.
+    /// encoded — unreachable for four plain strings, but never swallowed.
     pub fn into_payload(self) -> Result<Payload, AgentOutcomeError> {
         if self.session_id.is_empty() {
             return Err(AgentOutcomeError::EmptySessionId);
@@ -181,22 +198,32 @@ mod tests {
         }
     }
 
-    /// The wire form is exactly the three `snake_case` keys the AWL record
+    /// The wire form is exactly the four `snake_case` keys the AWL record
     /// declares — this is the shape every harness emits and every workflow
     /// decodes, so it is pinned as JSON, not as a Rust round-trip alone.
     #[test]
-    fn the_record_serializes_as_the_three_snake_case_fields() -> TestResult {
-        let outcome = AgentOutcome::new("the answer", &StopKind::EndTurn, "sess-7");
+    fn the_record_serializes_as_the_four_snake_case_fields() -> TestResult {
+        let outcome = AgentOutcome::new(
+            "narration\nthe answer",
+            "the answer",
+            &StopKind::EndTurn,
+            "sess-7",
+        );
         assert_eq!(
             serde_json::to_value(&outcome)?,
-            json!({ "text": "the answer", "stop_reason": "end_turn", "session_id": "sess-7" })
+            json!({
+                "text": "narration\nthe answer",
+                "final_message": "the answer",
+                "stop_reason": "end_turn",
+                "session_id": "sess-7",
+            })
         );
         Ok(())
     }
 
     #[test]
     fn the_record_round_trips_through_its_payload() -> TestResult {
-        let outcome = AgentOutcome::new("", &StopKind::EndTurn, "sess-7");
+        let outcome = AgentOutcome::new("", "", &StopKind::EndTurn, "sess-7");
         let payload = outcome.clone().into_payload()?;
         assert_eq!(payload.content_type(), &super::ContentType::Json);
         let decoded: AgentOutcome = serde_json::from_slice(payload.bytes())?;
@@ -205,6 +232,10 @@ mod tests {
             decoded.text, "",
             "an empty text on a completed run is honest and survives the wire"
         );
+        assert_eq!(
+            decoded.final_message, "",
+            "an empty final_message is honest and survives the wire without refusal"
+        );
         Ok(())
     }
 
@@ -212,7 +243,7 @@ mod tests {
     /// funnel — no harness can ship a silently empty handle.
     #[test]
     fn an_empty_session_id_is_refused_by_name() -> Result<(), String> {
-        let error = AgentOutcome::new("the answer", &StopKind::EndTurn, "")
+        let error = AgentOutcome::new("the answer", "the answer", &StopKind::EndTurn, "")
             .into_payload()
             .err()
             .ok_or("an empty session_id must not serialize")?;
@@ -227,17 +258,20 @@ mod tests {
         Ok(())
     }
 
-    /// A two-field payload — the pre-#205 wire shape — no longer decodes: the
-    /// widening replaced the record rather than adding beside it, so a stale
-    /// emitter fails loudly at the decode boundary instead of producing a
-    /// record with an invented handle.
+    /// A three-field payload — the pre-#241 wire shape — no longer decodes: the widening replaced the
+    /// record rather than adding beside it, so a stale emitter fails loudly at the decode boundary
+    /// instead of producing an invented final message.
     #[test]
-    fn a_two_field_payload_no_longer_decodes() {
-        let stale = json!({ "text": "the answer", "stop_reason": "end_turn" });
+    fn a_three_field_payload_no_longer_decodes() {
+        let stale = json!({
+            "text": "the answer",
+            "stop_reason": "end_turn",
+            "session_id": "sess-7",
+        });
         let decoded: Result<AgentOutcome, _> = serde_json::from_value(stale);
         assert!(
             decoded.is_err(),
-            "the pre-widening shape must be refused, not defaulted"
+            "the pre-#241 shape must be refused, not defaulted"
         );
     }
 }

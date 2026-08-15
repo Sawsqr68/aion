@@ -9,8 +9,8 @@
 //!    truncated answer as though it were the real one.
 //! 2. **Where the answer itself comes from.** Not the Response — it has no output field. The agent's
 //!    words were streamed as `agent_message_chunk` updates and reassembled by
-//!    [`crate::messages::MessageAccumulator`], so the accumulated text travels here alongside the
-//!    Response and becomes the payload's `text`.
+//!    [`crate::messages::MessageAccumulator`], so both the accumulated text and the last completed
+//!    answer travel here alongside the Response and become the payload's `text` and `final_message`.
 //!
 //! # An empty `text` on a completed turn is honest, not a bug
 //!
@@ -74,8 +74,10 @@ pub(crate) enum PumpEnd {
 pub(crate) struct PromptOutcome {
     /// The id-matched `session/prompt` Response, exactly as the agent sent it.
     pub(crate) response: JsonRpcResponse,
-    /// Every agent message completed during the turn, joined — the run's actual output.
+    /// Every agent answer completed during the turn, joined — the run's whole output.
     pub(crate) text: String,
+    /// The LAST completed agent answer alone, exactly as the agent streamed it.
+    pub(crate) final_message: String,
 }
 
 impl PumpEnd {
@@ -128,7 +130,11 @@ pub(crate) fn outcome_into_payload(
     outcome: PromptOutcome,
     session_id: &SessionId,
 ) -> Result<Payload, HarnessError> {
-    let PromptOutcome { response, text } = outcome;
+    let PromptOutcome {
+        response,
+        text,
+        final_message,
+    } = outcome;
     if let Some(error) = response.error {
         return Err(prompt_error(&error, &text));
     }
@@ -148,6 +154,7 @@ pub(crate) fn outcome_into_payload(
     }
     AgentOutcome::new(
         text,
+        final_message,
         &translate::stop_kind(prompt.stop_reason),
         session_id.to_string(),
     )
@@ -244,6 +251,7 @@ mod tests {
             PromptOutcome {
                 response: JsonRpcResponse::success(JsonRpcId::number(1), result),
                 text: text.to_owned(),
+                final_message: text.to_owned(),
             },
             &SessionId::from(TEST_SESSION.to_owned()),
         )
@@ -258,6 +266,7 @@ mod tests {
                     JsonRpcError::new(code, message),
                 ),
                 text: text.to_owned(),
+                final_message: text.to_owned(),
             },
             &SessionId::from(TEST_SESSION.to_owned()),
         )
@@ -272,6 +281,7 @@ mod tests {
             payload.to_json()?,
             json!({
                 "text": "the answer",
+                "final_message": "the answer",
                 "stop_reason": "end_turn",
                 "session_id": TEST_SESSION,
             }),
@@ -391,6 +401,7 @@ mod tests {
             PromptOutcome {
                 response,
                 text: String::new(),
+                final_message: String::new(),
             },
             &SessionId::from(TEST_SESSION.to_owned()),
         )

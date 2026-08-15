@@ -301,6 +301,7 @@ fn handle_response<R, W>(
     let outcome = PromptOutcome {
         response,
         text: state.accumulator.completed_text().to_owned(),
+        final_message: state.accumulator.final_message().to_owned(),
     };
     // A dropped receiver means the caller abandoned `wait_result`; not an error worth surfacing.
     let _ = outcome_tx.send(PumpEnd::Answered(Box::new(outcome)));

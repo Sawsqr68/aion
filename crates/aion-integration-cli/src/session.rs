@@ -266,7 +266,9 @@ impl AgentSession for CliSession {
 /// persisted session, so the conversation the record names IS that one invocation, and the
 /// identity quadruple is its honest handle. Per the record's contract the id is meaningful only
 /// to the harness that minted it — this harness has no load path, so the handle identifies the
-/// conversation and promises nothing.
+/// conversation and promises nothing. The harness's `final_line` is already the final agent
+/// message, so it honestly fills both `text` and `final_message`; there is no earlier-answer
+/// accumulation in this adapter.
 fn terminal_outcome_into_payload(
     outcome: TerminalOutcome,
     identity: &EventIdentity,
@@ -297,7 +299,8 @@ fn terminal_outcome_into_payload(
         "{}:{}:{}:{}",
         identity.workflow_id, identity.run_id, identity.activity_id, identity.attempt
     );
-    AgentOutcome::new(final_line.unwrap_or_default(), &stop, session_id)
+    let final_line = final_line.unwrap_or_default();
+    AgentOutcome::new(final_line.clone(), final_line, &stop, session_id)
         .into_payload()
         .map_err(|source| {
             HarnessError::protocol(format!("cli agent result is not encodable: {source}"))

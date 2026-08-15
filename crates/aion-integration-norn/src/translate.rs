@@ -109,8 +109,11 @@ pub fn parse_capabilities(
 /// [`AgentOutcome`] record, or the honest error a non-completion (or an off-contract output) is.
 ///
 /// - `stop.reason == "completed"` with a **String** `output` → `Ok(AgentOutcome)`: the string is
-///   the record's `text`, `stop_reason` is the canonical spelling of the completed run
-///   (see [`completed_stop_kind`] — norn's real `stop.reason`, mapped, never invented), and
+///   both the record's `text` and `final_message`. This equality follows norn's own
+///   DRIVEN-PROTOCOL.md "Stop envelope" contract: `output` holds the run's final value. The
+///   duplication is therefore honest, not an adapter shortcut. `stop_reason` is the canonical
+///   spelling of the completed run (see [`completed_stop_kind`] — norn's real `stop.reason`, mapped,
+///   never invented), and
 ///   `session_id` is the envelope's own `session_id` — the session norn actually persisted,
 ///   read as a fact, never derived by this adapter. A completed envelope whose `session_id` is
 ///   `null` (a `--no-session` invocation — the one case the stop-envelope contract names) is a
@@ -198,8 +201,9 @@ pub fn run_result_to_outcome(result: &Value) -> Result<AgentOutcome, HarnessErro
     let Value::String(text) = output else {
         return Err(HarnessError::contract(format!(
             "the run completed but its output cannot satisfy the canonical agent-outcome \
-             contract (a record of `text: String`, `stop_reason: String`, and \
-             `session_id: String`): the envelope's `output` is {}, not the String that becomes \
+             contract (a record of `text: String`, `final_message: String`, \
+             `stop_reason: String`, and `session_id: String`): the envelope's `output` is {}, not \
+             the String that becomes both `text` and `final_message` \
              `text` — a norn run serving an `agent` action must end with terminal text (a \
              structured output schema has no place in the agent seam)",
             json_kind(output)
@@ -240,6 +244,7 @@ pub fn run_result_to_outcome(result: &Value) -> Result<AgentOutcome, HarnessErro
         }
     };
     Ok(AgentOutcome::new(
+        text.clone(),
         text.clone(),
         &completed_stop_kind(),
         session_id,

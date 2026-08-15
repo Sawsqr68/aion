@@ -141,13 +141,14 @@ impl AgentHarness for MockAgentHarness {
         }
         // The fixed terminal result is the canonical agent-outcome record — this crate exists to
         // prove the seam is harness-neutral, so its mock emits the same shape every real harness
-        // does: the transcript's message text as `text`, its terminal EndTurn as `end_turn`,
-        // and the spec-derived identity as the conversation handle.
+        // does: the transcript's one final message as both `text` and `final_message` (the CLI
+        // harness has no accumulated earlier answers), its terminal EndTurn as `end_turn`, and the
+        // spec-derived identity as the conversation handle.
         let session_id = format!(
             "{}:{}:{}:{}",
             spec.workflow_id, spec.run_id, spec.activity_id, spec.attempt
         );
-        let result = AgentOutcome::new("working", &StopKind::EndTurn, session_id)
+        let result = AgentOutcome::new("working", "working", &StopKind::EndTurn, session_id)
             .into_payload()
             .map_err(|source| {
                 HarnessError::protocol(format!("mock agent result is not encodable: {source}"))

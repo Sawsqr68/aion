@@ -21,7 +21,7 @@
 //!
 //! | stream | live event | durable event | in the run's result? |
 //! |---|---|---|---|
-//! | `agent_message_chunk` | ephemeral [`ActivityEventKind::Delta`] | `Message { role: Assistant }` | **yes** |
+//! | `agent_message_chunk` | ephemeral [`ActivityEventKind::Delta`] | `Message { role: Assistant }` | **yes: accumulated and last-message forms** |
 //! | `agent_thought_chunk` | ephemeral `Progress::Note` | `Message { role: Assistant }` | no |
 //! | `user_message_chunk` | none (see below) | `Message { role: User }` | no |
 //!
@@ -33,8 +33,8 @@
 //!   answer message are both `Message { role: Assistant }` and a consumer cannot tell them apart.
 //!   Inventing a role or a marker would be fabrication; the distinction that IS preserved is the
 //!   one that matters for correctness — only the `agent_message_chunk` stream contributes to
-//!   [`MessageAccumulator::completed_text`], so reasoning can never leak into the activity's
-//!   replay-authoritative result.
+//!   [`MessageAccumulator::completed_text`] or [`MessageAccumulator::final_message`], so reasoning
+//!   can never leak into either result view.
 //! - **A user chunk has no live event.** The neutral [`ActivityEventKind::Delta`] carries no role,
 //!   so streaming the operator's own words through it would present them downstream as the agent's
 //!   answer. Nothing is lost: every user chunk's text is in the durable message its boundary emits,
@@ -136,6 +136,8 @@ pub struct MessageAccumulator {
     user: Option<OpenMessage>,
     /// Every completed AGENT ANSWER's text, joined by [`MESSAGE_JOIN`] — the run's output so far.
     completed: String,
+    /// The LAST completed AGENT ANSWER alone, exactly as accumulated from its text chunks.
+    final_message: String,
 }
 
 impl MessageAccumulator {
@@ -154,6 +156,16 @@ impl MessageAccumulator {
     #[must_use]
     pub fn completed_text(&self) -> &str {
         &self.completed
+    }
+
+    /// The LAST completed agent ANSWER alone, exactly as the agent streamed it.
+    ///
+    /// Reasoning and user streams never touch this value. It is empty when no answer text was
+    /// produced. Call [`Self::finish`] before reading it at the end of a turn so an answer still open
+    /// when the terminal Response arrived is folded in.
+    #[must_use]
+    pub fn final_message(&self) -> &str {
+        &self.final_message
     }
 
     /// Absorbs one `agent_message_chunk`, returning the events it produces in emission order.
@@ -275,7 +287,8 @@ impl MessageAccumulator {
     }
 
     /// Closes `stream`'s open message, emitting its durable [`ActivityEventKind::Message`] and — for
-    /// the answer stream only — folding its text into [`Self::completed_text`].
+    /// the answer stream only — folding its text into [`Self::completed_text`] and replacing
+    /// [`Self::final_message`].
     fn close(&mut self, stream: ChunkStream) -> Vec<EventKind> {
         let Some(open) = self.slot_mut(stream).take() else {
             return Vec::new();
@@ -288,6 +301,7 @@ impl MessageAccumulator {
                 self.completed.push_str(MESSAGE_JOIN);
             }
             self.completed.push_str(&open.text);
+            self.final_message.clone_from(&open.text);
         }
         vec![(
             ActivityEventKind::Message {
@@ -432,6 +446,11 @@ mod tests {
             "a second finish must emit nothing"
         );
         assert_eq!(accumulator.completed_text(), "done");
+        assert_eq!(
+            accumulator.final_message(),
+            accumulator.completed_text(),
+            "one answer is honestly both the whole output and the final message"
+        );
         Ok(())
     }
 
@@ -515,6 +534,15 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_only_turn_has_no_text_or_final_message() {
+        let mut accumulator = MessageAccumulator::new();
+        accumulator.finish();
+
+        assert_eq!(accumulator.completed_text(), "");
+        assert_eq!(accumulator.final_message(), "");
+    }
+
+    #[test]
     fn a_non_text_chunk_survives_verbatim_and_is_not_appended() -> Result<(), String> {
         let mut accumulator = MessageAccumulator::new();
         let image = ContentChunk::new(ContentBlock::Image(ImageContent::new(
@@ -578,6 +606,11 @@ mod tests {
             accumulator.completed_text(),
             "42",
             "only the agent's answer is the activity's result"
+        );
+        assert_eq!(
+            accumulator.final_message(),
+            "42",
+            "thought chunks never contaminate the final answer"
         );
     }
 
