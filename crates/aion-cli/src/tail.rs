@@ -2,15 +2,14 @@
 
 use std::collections::HashMap;
 
-use aion_client::Client;
+use aion_client::{Client, ClientAuth, ClientBuilder};
 use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, Event, RunId, WorkflowId};
 use anyhow::{Context, Result, anyhow};
-use futures::{SinkExt, StreamExt};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
+
+mod live;
 
 const DEFAULT_BACKFILL: u32 = 2_000;
 
@@ -18,6 +17,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) namespace: &'a str,
     pub(crate) subject: &'a str,
     pub(crate) token: Option<&'a str>,
+    pub(crate) grpc_endpoint: &'a str,
     pub(crate) http_endpoint: &'a str,
     pub(crate) follow: bool,
 }
@@ -65,12 +65,6 @@ struct StreamEntry {
 struct TranscriptResponse {
     events: Vec<ActivityEvent>,
     head_seq: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct ActivityFrame {
-    activity_event: Option<ActivityEvent>,
-    error: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,7 +117,7 @@ pub(crate) async fn run(
     }
 
     let mut targets = Vec::new();
-    for source in sources {
+    for source in &sources {
         let streams: StreamsResponse = http
             .post(
                 "/workflows/transcripts",
@@ -191,98 +185,29 @@ pub(crate) async fn run(
         return Ok(Value::Null);
     }
 
-    let (sender, mut receiver) = mpsc::channel::<Result<String>>(256);
-    for (target, after_seq) in targets
-        .into_iter()
-        .zip(heads)
-        .filter(|(target, _)| target.superseded_by.is_none())
-    {
-        let sender = sender.clone();
-        let socket_url = socket_url(config.http_endpoint)?;
-        let headers = http.headers.clone();
-        let namespace = config.namespace.to_owned();
-        tokio::spawn(async move {
-            let result = tail_socket(
-                target,
-                &namespace,
-                &socket_url,
-                headers,
-                after_seq,
-                sender.clone(),
-            )
-            .await;
-            if let Err(error) = result {
-                let _ = sender.send(Err(error)).await;
-            }
-        });
+    let socket_url = socket_url(config.http_endpoint)?;
+    let mut builder = ClientBuilder::new(config.grpc_endpoint)
+        .with_stream_endpoint(&socket_url)
+        .with_namespace(config.namespace)
+        .with_subject(config.subject)
+        .with_authorized_namespaces([config.namespace]);
+    if let Some(token) = config.token {
+        builder = builder.with_auth(ClientAuth::bearer(token));
     }
-    drop(sender);
-    loop {
-        tokio::select! {
-            message = receiver.recv() => match message {
-                Some(Ok(line)) => println!("{line}"),
-                Some(Err(error)) => return Err(error),
-                None => return Ok(Value::Null),
-            },
-            signal = tokio::signal::ctrl_c() => {
-                signal.context("failed to listen for Ctrl-C")?;
-                return Ok(Value::Null);
-            }
-        }
-    }
-}
-
-async fn tail_socket(
-    target: Target,
-    namespace: &str,
-    socket_url: &str,
-    headers: HeaderMap,
-    after_seq: Option<u64>,
-    sender: mpsc::Sender<Result<String>>,
-) -> Result<()> {
-    let mut request = socket_url.into_client_request()?;
-    request.headers_mut().extend(headers);
-    let (mut socket, _) = connect_async(request).await.with_context(|| {
-        format!(
-            "failed to connect transcript socket for {}",
-            prefix(&target)
-        )
-    })?;
-    let mut transcript = json!({
-        "namespace": namespace,
-        "workflow_id": target.source.workflow_id,
-        "run_id": target.source.run_id,
-        "activity_id": target.activity_id,
-        "attempt": target.attempt,
-    });
-    if let Some(after_seq) = after_seq {
-        transcript["after_seq"] = json!(after_seq);
-    }
-    socket
-        .send(tokio_tungstenite::tungstenite::Message::Text(
-            json!({"type":"subscribe", "subscription":{"transcript":transcript}})
-                .to_string()
-                .into(),
-        ))
-        .await?;
-    while let Some(frame) = socket.next().await {
-        let frame = frame?;
-        if !frame.is_text() && !frame.is_binary() {
-            continue;
-        }
-        let decoded: ActivityFrame = serde_json::from_slice(&frame.into_data())
-            .context("invalid transcript WebSocket frame")?;
-        if let Some(error) = decoded.error {
-            return Err(anyhow!("transcript socket error: {error}"));
-        }
-        if let Some(event) = decoded.activity_event {
-            sender
-                .send(Ok(format!("{} {}", prefix(&target), render_event(&event))))
-                .await
-                .map_err(|_| anyhow!("tail output closed"))?;
-        }
-    }
-    Ok(())
+    let stream_client = builder
+        .build()
+        .await
+        .context("failed to connect tail workflow-event sockets")?;
+    live::follow(
+        stream_client,
+        sources,
+        targets,
+        heads,
+        config.namespace,
+        &socket_url,
+        http.headers.clone(),
+    )
+    .await
 }
 
 struct HttpTailClient {

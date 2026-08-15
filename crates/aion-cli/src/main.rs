@@ -1005,6 +1005,7 @@ async fn execute(client: &Client, command: &RemoteCommand, cli: &Cli) -> Result<
             no_follow,
         } => {
             let token = deploy::resolve_token(cli.token.clone());
+            let grpc_endpoint = cli.endpoint();
             tail::run(
                 client,
                 workflow_id,
@@ -1013,6 +1014,7 @@ async fn execute(client: &Client, command: &RemoteCommand, cli: &Cli) -> Result<
                     namespace: &cli.namespace,
                     subject: &cli.subject,
                     token: token.as_deref(),
+                    grpc_endpoint: &grpc_endpoint,
                     http_endpoint,
                     follow: !no_follow,
                 },
