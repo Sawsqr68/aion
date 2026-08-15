@@ -274,12 +274,12 @@ async fn backfill_and_print(
             transcript
                 .events
                 .into_iter()
-                .map(|event| (event.emitted_at, prefix(target), event)),
+                .map(|event| (event.emitted_at, (prefix(target), event))),
         );
         heads.push(transcript.head_seq.checked_sub(1));
     }
-    backfill.sort_by_key(|(emitted_at, _, _)| *emitted_at);
-    for (_, prefix, event) in backfill {
+    order_backfill(&mut backfill);
+    for (_, (prefix, event)) in backfill {
         println!("{prefix} {}", render_event(&event));
     }
     for target in targets
@@ -346,6 +346,10 @@ impl HttpTailClient {
             .await
             .context("Aion HTTP response was invalid")
     }
+}
+
+fn order_backfill<K: Ord, T>(backfill: &mut [(K, T)]) {
+    backfill.sort_by(|left, right| left.0.cmp(&right.0));
 }
 
 fn backfill_notice(
@@ -472,6 +476,13 @@ mod tests {
         assert_eq!(targets[0].superseded_by, Some(2));
         assert!(prefix(&targets[0]).contains("attempt:1 SUPERSEDED→2"));
         assert!(prefix(&targets[1]).contains("Builder L1 24410000"));
+    }
+
+    #[test]
+    fn retained_events_interleave_by_emitted_timestamp() {
+        let mut backfill = [(2_u64, "child"), (1_u64, "parent")];
+        order_backfill(&mut backfill);
+        assert_eq!(backfill.map(|(_, label)| label), ["parent", "child"]);
     }
 
     #[test]
