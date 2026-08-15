@@ -347,14 +347,29 @@ impl NornHarness {
         Ok(command)
     }
 
-    /// Spawns the `norn` child for one run, its arguments expanded from `spec`.
+    /// Spawns the `norn` child for one run after atomically claiming its declared
+    /// worktree against a live sibling.
     fn spawn(&self, spec: &AgentRunSpec) -> Result<tokio::process::Child, HarnessError> {
-        self.command(spec)?.spawn().map_err(|source| {
+        let invocation = self.invocation(spec)?;
+        Self::require_launchable_cwd(&invocation.cwd)?;
+        let claim = crate::spawn_guard::SpawnClaim::acquire(&invocation.cwd, spec)?;
+        let mut child = self.command(spec)?.spawn().map_err(|source| {
             HarnessError::transport(format!(
                 "failed to spawn `{}`: {source}",
                 self.binary.display()
             ))
-        })
+        })?;
+        let child_pid = child.id().ok_or_else(|| {
+            HarnessError::transport(format!(
+                "spawned `{}` child has no process id",
+                self.binary.display()
+            ))
+        })?;
+        if let Err(error) = claim.bind_child(spec, child_pid) {
+            let _ = child.start_kill();
+            return Err(error);
+        }
+        Ok(child)
     }
 }
 
@@ -812,6 +827,29 @@ mod tests {
             "{refusal}"
         );
         drop(first);
+        Ok(())
+    }
+
+    /// A marker is a liveness claim, not ownership of the worktree. Once the
+    /// exact recorded process incarnation is dead, the next spawn cleans the
+    /// marker and proceeds.
+    #[tokio::test]
+    async fn stale_dead_sibling_marker_is_cleaned_before_spawn() -> TestResult {
+        let tree = tempfile::tempdir()?;
+        let binary = sleeping_binary(tree.path())?;
+        let harness = NornHarness::with_binary(binary, fixed(tree.path()));
+        let spec = spec();
+        let mut first = harness.spawn(&spec)?;
+        first.kill().await?;
+        let status = first.wait().await?;
+        assert!(!status.success(), "the fixture's first child must be dead");
+
+        let mut successor = harness.spawn(&spec)?;
+        assert!(
+            successor.id().is_some(),
+            "cleanup of a dead sibling marker must permit a successor spawn"
+        );
+        successor.kill().await?;
         Ok(())
     }
 

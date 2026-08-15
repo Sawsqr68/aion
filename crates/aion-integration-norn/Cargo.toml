@@ -21,6 +21,7 @@ aion-integrations = { version = "0.15.0", path = "../aion-integrations" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+nix = { version = "0.30", features = ["signal"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = [

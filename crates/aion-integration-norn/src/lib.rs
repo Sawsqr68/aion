@@ -54,6 +54,7 @@ pub mod advice;
 pub mod harness;
 pub mod protocol;
 pub mod session;
+mod spawn_guard;
 pub mod translate;
 
 pub use advice::{
