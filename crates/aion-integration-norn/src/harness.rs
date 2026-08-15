@@ -505,12 +505,12 @@ impl AgentHarness for NornHarness {
 
 #[cfg(test)]
 mod tests {
-    //! Fast unit tests of the spec-aware argument construction — no process is spawned; the
-    //! built [`Command`]'s argv is inspected directly, and that argv is exactly what a spawn
-    //! would exec. What each shape of input yields as a prompt is proven where the reading
-    //! lives, in `aion_integrations::HarnessWorkspace`.
+    //! Fast unit tests of spec-aware launch construction. Most inspect the built
+    //! [`Command`] directly; the #246 collision fixture spawns only a local sleep
+    //! script in a temporary directory.
 
     use std::error::Error;
+    use std::os::unix::fs::PermissionsExt;
 
     use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
 
@@ -541,6 +541,15 @@ mod tests {
             "dev",
             input,
         )
+    }
+
+    fn sleeping_binary(root: &std::path::Path) -> TestResult<std::path::PathBuf> {
+        let binary = root.join("held-agent.sh");
+        std::fs::write(&binary, "#!/bin/sh\nsleep 30\n")?;
+        let mut permissions = std::fs::metadata(&binary)?.permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&binary, permissions)?;
+        Ok(binary)
     }
 
     /// The argv the built command would exec, decoded as UTF-8 strings.
@@ -775,6 +784,34 @@ mod tests {
             .get_current_dir()
             .ok_or("the spawned child's working directory must be the declared cwd")?;
         assert_eq!(directory, tree.path());
+        Ok(())
+    }
+
+    /// #246 red: two dispatches for the same declared worktree currently both
+    /// spawn. The second must instead return a typed configuration refusal that
+    /// names the live sibling pid holding the tree.
+    #[tokio::test]
+    async fn second_spawn_in_one_declared_tree_is_refused_typed() -> TestResult {
+        let tree = tempfile::tempdir()?;
+        let binary = sleeping_binary(tree.path())?;
+        let harness = NornHarness::with_binary(binary, fixed(tree.path()));
+        let spec = spec();
+        let first = harness.spawn(&spec)?;
+
+        let refusal = harness
+            .spawn(&spec)
+            .err()
+            .ok_or("today both sibling agents spawn into the same declared cwd")?;
+
+        assert!(
+            matches!(refusal, HarnessError::Configuration { .. }),
+            "spawn collision must be typed: {refusal:?}"
+        );
+        assert!(
+            refusal.to_string().contains("live sibling pid"),
+            "{refusal}"
+        );
+        drop(first);
         Ok(())
     }
 
