@@ -24,7 +24,8 @@ import aion/testing
 /// The three agent handlers stay TEXT handlers: a scenario scripts what the
 /// agent said, and `register` wraps each in the same text-to-record mapping
 /// the production worker's harness boundary performs (the canonical
-/// agent-outcome record, `stop_reason: "end_turn"` on a completed round).
+/// agent-outcome record, including the same one-answer `text` / `final_message`
+/// value and `stop_reason: "end_turn"` on a completed round).
 pub type Handlers {
   Handlers(
     provision: fn(io.ProvisionInput) ->
@@ -154,6 +155,7 @@ fn as_outcome(
       Ok(text) ->
         Ok(AgentOutcome(
           text: text,
+          final_message: text,
           stop_reason: "end_turn",
           session_id: "sess-test-agent-dev",
         ))

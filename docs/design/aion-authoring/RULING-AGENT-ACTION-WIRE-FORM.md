@@ -319,3 +319,16 @@ narration precedes its final verdict. Reasoning, tools, and user turns never ent
 When there was no answer, `text` and `final_message` are both honestly empty; with one answer they
 are honestly equal. This is replacement semantics again: a three-field payload no longer decodes
 and a three-field AWL declaration no longer checks. No field is optional or defaulted.
+
+The operational consequence is immediate: after a binary swap, a three-field agent result already
+recorded in a run's history hard-fails when replay or resume feeds it to the current four-field
+workflow codec. This includes running, parked, paused, and crashed-but-recoverable runs; a terminal
+run remains readable through today's opaque describe/history/console projections, but is unsafe if
+replay-inspect, reopen, or any execution-bearing path can revisit the result. The enumerated
+file-by-file census and per-site verdicts are in
+[`AGENT-OUTCOME-DECODE-CENSUS.md`](AGENT-OUTCOME-DECODE-CENSUS.md).
+
+**Deploy constraint:** the binary must not swap while any run's retained history holds a three-field
+agent result unless every path that could read that result semantically is proven unused for that
+specific run. “Completed” proves only that the ordinary read-only projections do not decode it; it
+is not by itself a waiver for replay, inspection, or reopen.

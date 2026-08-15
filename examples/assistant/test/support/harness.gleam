@@ -63,6 +63,7 @@ pub fn passing() -> Handlers {
     assistant: fn(prompt) {
       Ok(AgentOutcome(
         text: "REPLY\n" <> prompt,
+        final_message: "REPLY\n" <> prompt,
         stop_reason: "end_turn",
         session_id: "sess-test-assistant",
       ))

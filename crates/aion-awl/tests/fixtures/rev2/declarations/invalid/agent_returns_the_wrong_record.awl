@@ -1,6 +1,6 @@
 //! A record of the wrong fields is not the agent-outcome contract. The
-//! harness emits exactly `text`, `stop_reason`, and `session_id`; a shape the
-//! wire will never carry is a decode failure scheduled for run time.
+//! harness emits exactly `text`, `final_message`, `stop_reason`, and
+//! `session_id`; this `Answer` shape would defer a guaranteed decode failure to run time.
 workflow ask_the_agent
   input question: String
   outcome answered: type Answer, route success

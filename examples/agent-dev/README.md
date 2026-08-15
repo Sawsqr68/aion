@@ -21,8 +21,9 @@ provision -> scout -> dev -> review
   the brief and returns the workspace `{path, branch}`.
 - **scout / dev / review** are agent activities under the canonical
   agent-outcome contract: ONE prompt string in, the agent-outcome record out
-  (`{text, stop_reason, session_id}`; the workflow threads each outcome's text). The
-  workflow composes every prompt (`src/agent_dev/prompts.gleam`): round one carries
+  (`{text, final_message, stop_reason, session_id}`; `text` is the accumulated
+  output and `final_message` the last answer). The workflow composes every prompt
+  (`src/agent_dev/prompts.gleam`): round one carries
   the full contract (brief + design notes + acceptance + scout plan), resume
   rounds are lean feedback-only prompts, because the worker pins one norn
   session per role per run.

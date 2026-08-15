@@ -3,8 +3,9 @@
 //// Every activity here is served by the agent-dev worker in production. The
 //// scout/dev/review agent activities speak the canonical agent-outcome
 //// contract: ONE prompt string in, the `aion/agent.AgentOutcome` record out
-//// (`text` + `stop_reason` + `session_id`) — the workflow composes every prompt, threads
-//// each outcome's TEXT, and decodes the review verdict defensively
+//// (`text` + `final_message` + `stop_reason` + `session_id`) — the workflow
+//// composes every prompt, threads each outcome's accumulated TEXT, and decodes
+//// the review verdict defensively
 //// (`agent_dev/verdict`). The worker pins one norn session per role per run,
 //// so a resume round's lean feedback-only prompt lands in the same session
 //// that did the original work.

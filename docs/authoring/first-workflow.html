@@ -707,7 +707,7 @@ step verify after fetch
       <tr><td><code>worker</code></td><td>a name for the thing that does real work — the queue</td></tr>
       <tr><td><code>action</code></td><td>one job, with its parameters and the shape it returns</td></tr>
       <tr><td><code>run</code></td><td>the action's implementation, right here in the document — the server executes this command itself</td></tr>
-      <tr><td><code>agent</code></td><td>an action served by an agent worker: one String prompt in, the agent-outcome record out — a declared record of <code>text</code> and <code>stop_reason</code></td></tr>
+      <tr><td><code>agent</code></td><td>an action served by an agent worker: one String prompt in, the agent-outcome record out — exactly <code>text</code>, <code>final_message</code>, <code>stop_reason</code>, and <code>session_id</code></td></tr>
       <tr><td><code>timeout</code></td><td>an authored action deadline carried in the contract; not enforced by the 0.11.0 engine</td></tr>
       <tr><td><code>retry</code> <code>backoff</code></td><td>how many transient failures to absorb, and how long to wait between attempts</td></tr>
       <tr><td><b>WHAT HAPPENS, IN WHAT ORDER</b></td><td><i>the plan the workflow actually executes</i></td></tr>

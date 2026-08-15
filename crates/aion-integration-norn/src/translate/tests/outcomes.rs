@@ -11,6 +11,10 @@ fn completed_string_output_becomes_the_agent_outcome_record() -> TestResult {
     let outcome = run_result_to_outcome(&envelope)
         .map_err(|error| format!("a completed string output must yield the record: {error}"))?;
     assert_eq!(outcome.text, "the final answer");
+    assert_eq!(
+        outcome.final_message, outcome.text,
+        "norn has one terminal output, so the last message equals the accumulated text"
+    );
     assert_eq!(outcome.stop_reason, "end_turn");
     assert_eq!(
         outcome.session_id, "norn-sess-7",

@@ -1,7 +1,7 @@
 //! An agent seam declared in the language. `agent` says the action's one
 //! `String` carries a prompt and its result is the canonical agent-outcome
-//! record — a declared record of exactly `text`, `stop_reason`, and
-//! `session_id` (all `String`) — which is the whole of what an adapter needs to
+//! record — a declared record of exactly `text`, `final_message`, `stop_reason`,
+//! and `session_id` (all `String`) — which is the whole of what an adapter needs to
 //! hand the call to a harness instead of running it as an ordinary activity.
 //!
 //! `agent_seam_unmarked_control.awl` is this document with the marker removed.

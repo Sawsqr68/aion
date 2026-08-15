@@ -231,9 +231,16 @@ async fn a_real_acp_agent_completes_a_turn() -> TestResult {
     let text = decoded["text"]
         .as_str()
         .ok_or_else(|| format!("the payload carries the agent's text: {decoded}"))?;
+    let final_message = decoded["final_message"]
+        .as_str()
+        .ok_or_else(|| format!("the payload carries the agent's final message: {decoded}"))?;
     assert!(
         !text.is_empty(),
         "the agent's answer must reach the terminal payload: {decoded}"
+    );
+    assert_eq!(
+        final_message, text,
+        "this one-answer live turn duplicates its answer as final_message: {decoded}"
     );
     Ok(())
 }

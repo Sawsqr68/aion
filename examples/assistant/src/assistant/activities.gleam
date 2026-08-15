@@ -3,8 +3,8 @@
 //// Both activities are served by the agent-dev worker in production. The
 //// `assistant` agent activity speaks the canonical agent-outcome contract:
 //// ONE prompt string in, the `aion/agent.AgentOutcome` record out (`text` +
-//// `stop_reason` + `session_id`) — the workflow composes every prompt
-//// (`assistant/prompts`). The worker pins one norn session per
+//// `final_message` + `stop_reason` + `session_id`) — the workflow composes
+//// every prompt (`assistant/prompts`). The worker pins one norn session per
 //// activity TYPE per run (`{workflow_id}-assistant` + `--resume-if-exists`),
 //// so every round of this session — each a fresh dispatch of the same
 //// `assistant` activity type — resumes the SAME conversation.

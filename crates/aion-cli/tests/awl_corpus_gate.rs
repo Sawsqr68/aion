@@ -246,7 +246,7 @@ fn the_gate_refuses_the_retired_three_field_agent_shape() -> Result<(), Box<dyn 
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        rendered.contains("`final_message: String`"),
+        rendered.contains("a declared record with exactly four fields, `text: String`, `final_message: String`, `stop_reason: String`, and `session_id: String`"),
         "the refusal names the canonical record: {rendered}"
     );
     Ok(())
