@@ -35,7 +35,12 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
   // presentational content so the content stays a pure function of its props.
   const summary = useWorkflowSummary({ workflowId });
   const runId = latestRunId(live.events);
-  const children = useChildren({ namespace, workflowId, runId });
+  const children = useChildren({
+    namespace,
+    workflowId,
+    runId,
+    discoveryRevision: latestChildStartSequence(live.events),
+  });
 
   return (
     <>
@@ -83,6 +88,16 @@ function latestRunId(events: readonly Event[]): RunId | null {
     }
   }
   return null;
+}
+
+function latestChildStartSequence(events: readonly Event[]): number {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'ChildWorkflowStarted') {
+      return event.data.envelope.seq;
+    }
+  }
+  return 0;
 }
 
 // Import-stability re-export: `Swimlane.test.tsx` and `swimlane/index.ts` import
