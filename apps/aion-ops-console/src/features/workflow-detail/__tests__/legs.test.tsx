@@ -1,46 +1,58 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import type { ActivityId, RunId, WorkflowId } from '@/types';
+import type { ChildLeg } from '@/lib/api';
+import type { ActivityId, Namespace, RunId, WorkflowId } from '@/types';
 
-import { LegsSection, type LegView } from '../components/LegsSection';
+import {
+  LiveLegsSection,
+  type LiveLegReaders,
+} from '../components/LegsSection';
 
-const fixture: LegView[] = [
-  {
-    workflowId: '24410000-0000-0000-0000-000000000001' as WorkflowId,
-    runId: '24420000-0000-0000-0000-000000000002' as RunId,
-    workflowType: 'builder_leg',
-    displayName: 'Builder L1',
-    status: 'Running',
-    currentActivityId: 7 as ActivityId,
-    currentAttempt: 2,
-    attempts: [
-      {
-        activityId: 7 as ActivityId,
-        activityType: 'build',
-        attempt: 1,
-        state: 'superseded',
-        supersededBy: 2,
-      },
-      {
-        activityId: 7 as ActivityId,
-        activityType: 'build',
-        attempt: 2,
-        state: 'current',
-        supersededBy: null,
-      },
-    ],
-  },
-];
+const namespace = '244-test' as Namespace;
+const startedLeg: ChildLeg = {
+  workflowId: '24410000-0000-0000-0000-000000000001' as WorkflowId,
+  runId: '24420000-0000-0000-0000-000000000002' as RunId,
+  workflowType: 'builder_leg',
+  displayName: 'Builder L1',
+  status: 'Running',
+  currentActivityId: 7 as ActivityId,
+  currentAttempt: 2,
+};
 
-test('run page legs fixture shows name, short id, status, current attempt, and supersession', () => {
-  const markup = renderToStaticMarkup(<LegsSection legs={fixture} />);
+const emptyLive = {
+  events: [],
+  isTerminal: false,
+  lastSeenSequence: undefined,
+  terminalOutcome: null,
+  timeline: [],
+} as const;
 
-  expect(markup).toContain('>Legs<');
-  expect(markup).toContain('Builder L1');
-  expect(markup).toContain('24410000');
-  expect(markup).toContain('Running');
-  expect(markup).toContain('Activity 7 · attempt 2');
-  expect(markup).toContain('attempt 1');
-  expect(markup).toContain('Superseded by attempt 2');
+test('shipped leg container renders an explicit history error instead of a false empty transcript', () => {
+  const readers: LiveLegReaders = {
+    useHistory: () => ({ data: [], error: new Error('history unavailable'), state: 'error' }),
+    useLiveEvents: () => emptyLive,
+  };
+
+  const markup = renderToStaticMarkup(
+    <LiveLegsSection legs={[startedLeg]} namespace={namespace} readers={readers} />
+  );
+
+  expect(markup).toContain('role="alert"');
+  expect(markup).toContain('Could not load activity history');
+  expect(markup).not.toContain('No activity transcript stream recorded.');
+});
+
+test('shipped leg container keeps loading distinct from a recorded empty transcript', () => {
+  const readers: LiveLegReaders = {
+    useHistory: () => ({ data: [], error: null, state: 'loading' }),
+    useLiveEvents: () => emptyLive,
+  };
+
+  const markup = renderToStaticMarkup(
+    <LiveLegsSection legs={[startedLeg]} namespace={namespace} readers={readers} />
+  );
+
+  expect(markup).toContain('Loading activity history');
+  expect(markup).not.toContain('No activity transcript stream recorded.');
 });
