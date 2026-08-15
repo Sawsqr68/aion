@@ -830,9 +830,16 @@ async fn main() -> ExitCode {
             }
         }
         Some(Command::Client(ref command)) => {
-            let result = run(&cli, command)
-                .await
-                .and_then(|value| print_json(&value, cli.pretty));
+            let result = run(&cli, command).await.and_then(|value| {
+                // `tail` owns a human transcript reporting contract, just as
+                // AWL owns its compiler-style contract above. Do not append the
+                // command dispatcher's JSON rendering after the transcript.
+                if matches!(command, ClientCommand::Remote(RemoteCommand::Tail(_))) {
+                    Ok(())
+                } else {
+                    print_json(&value, cli.pretty)
+                }
+            });
             match result {
                 Ok(()) => ExitCode::SUCCESS,
                 // The single rendering contract for every client subcommand:
