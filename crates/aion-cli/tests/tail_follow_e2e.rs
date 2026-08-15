@@ -321,6 +321,9 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
     let parent_id = WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)).to_string();
     let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
     if workflow_id == Some(parent_id.as_str()) {
+        if request.pointer("/per_workflow/resume_from_seq") != Some(&json!(1)) {
+            return;
+        }
         state.parent_attached.notify_waiters();
         state.emit_fanout.notified().await;
         let Some(event) = child_started() else {
