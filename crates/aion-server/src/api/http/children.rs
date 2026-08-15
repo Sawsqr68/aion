@@ -8,9 +8,12 @@
 //! The parent history discloses a child id and workflow type, but child-owned
 //! display names and progress are projected only after applying the same
 //! per-workflow describe gate as sibling history routes. A child that resolves
-//! to the guard's anti-leak `not_found`/`namespace_denied` result is OMITTED from
-//! the listing. This deliberately makes unauthorized and nonexistent children
-//! indistinguishable and never emits a partly disclosed row.
+//! to the guard's anti-leak `not_found`/`namespace_denied` result is OMITTED
+//! from the listing. This deliberately makes unauthorized and nonexistent
+//! children indistinguishable and never emits a partly disclosed row. Because
+//! children inherit the parent namespace, `not_found` can also mean attribution
+//! has not caught up with the durable parent event; that indistinguishable lag
+//! case is logged internally before omission.
 //!
 //! # Read-shape decision
 //!
@@ -21,8 +24,14 @@
 //! only after their per-workflow gate. K9-scale cost therefore grows with real
 //! direct fanout and recorded history size; correctness and one authoritative
 //! event projection are chosen over an arbitrary cap that would lie about
-//! status or activity. A future bounded read requires a store-level filtered
-//! history contract, not a limit invented at this HTTP route.
+//! status or activity. Child gates and reads run concurrently while the final
+//! response preserves parent-history discovery order. The console re-reads the
+//! projection as fanout changes and while any child is pending, so cumulative
+//! page traffic can be quadratic in fanout; a future bounded read requires a
+//! store-level filtered/batched history contract or incremental projection,
+//! not a limit invented at this HTTP route.
+
+use std::collections::HashSet;
 
 use aion_core::{
     ActivityId, Event, RunId, WorkflowId, WorkflowStatus, display_name, run_segment,
@@ -30,6 +39,7 @@ use aion_core::{
 };
 use aion_proto::{WireError, WireErrorCode};
 use axum::{Json, extract::State};
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 
 use super::auth::HttpCaller;
@@ -112,8 +122,8 @@ pub(crate) async fn list_children(
     let parent_run = selected_run
         .as_ref()
         .map_or(&[][..], |run| run_segment(&parent_history, run));
-    let mut children = Vec::new();
-
+    let mut seen = HashSet::new();
+    let mut candidates = Vec::new();
     for event in parent_run {
         let Event::ChildWorkflowStarted {
             child_workflow_id,
@@ -123,45 +133,65 @@ pub(crate) async fn list_children(
         else {
             continue;
         };
-        if children
-            .iter()
-            .any(|child: &ChildEntry| child.workflow_id == *child_workflow_id)
-        {
-            continue;
+        if seen.insert(child_workflow_id.clone()) {
+            candidates.push((child_workflow_id.clone(), workflow_type.clone()));
         }
-        let child_wire = child_workflow_id.to_string();
-        let child_engine = match scoped_engine(
-            &state,
-            &caller,
-            &request.namespace,
-            &child_wire,
-            child_workflow_id,
-        )
-        .await
-        {
-            Ok(child_engine) => child_engine,
-            Err(error)
-                if matches!(
-                    error.0.code,
-                    WireErrorCode::NotFound | WireErrorCode::NamespaceDenied
-                ) =>
-            {
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        let child_history = child_engine
-            .store()
-            .read_history(child_workflow_id)
-            .await
-            .map_err(store_error)?;
-        children.push(project_child(
-            child_workflow_id.clone(),
-            workflow_type.clone(),
-            &child_history,
-        ));
     }
 
+    let projections = join_all(
+        candidates
+            .into_iter()
+            .map(|(child_workflow_id, workflow_type)| {
+                let state = state.clone();
+                let caller = caller.clone();
+                let namespace = request.namespace.clone();
+                let parent_workflow_id = request.workflow_id.clone();
+                async move {
+                    let child_wire = child_workflow_id.to_string();
+                    let child_engine = match scoped_engine(
+                        &state,
+                        &caller,
+                        &namespace,
+                        &child_wire,
+                        &child_workflow_id,
+                    )
+                    .await
+                    {
+                        Ok(child_engine) => child_engine,
+                        Err(error) if error.0.code == WireErrorCode::NotFound => {
+                            tracing::warn!(
+                                parent_workflow_id = %parent_workflow_id,
+                                child_workflow_id = %child_workflow_id,
+                                "omitting child whose namespace attribution is not yet resolvable"
+                            );
+                            return Ok(None);
+                        }
+                        Err(error) if error.0.code == WireErrorCode::NamespaceDenied => {
+                            return Ok(None);
+                        }
+                        Err(error) => return Err(error),
+                    };
+                    let child_history = child_engine
+                        .store()
+                        .read_history(&child_workflow_id)
+                        .await
+                        .map_err(store_error)?;
+                    Ok::<_, HttpWireError>(Some(project_child(
+                        child_workflow_id,
+                        workflow_type,
+                        &child_history,
+                    )))
+                }
+            }),
+    )
+    .await;
+
+    let mut children = Vec::new();
+    for projection in projections {
+        if let Some(child) = projection? {
+            children.push(child);
+        }
+    }
     Ok(Json(ChildrenResponse { children }))
 }
 

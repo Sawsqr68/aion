@@ -166,7 +166,10 @@ async fn explicit_and_implicit_parent_runs_project_different_generations() -> Te
         .await?;
     assert_eq!(explicit.status(), StatusCode::OK);
     let explicit_body: Value = read_json(explicit).await?;
-    assert_eq!(explicit_body["children"][0]["workflow_id"], json!(old_child));
+    assert_eq!(
+        explicit_body["children"][0]["workflow_id"],
+        json!(old_child)
+    );
 
     let implicit = router
         .oneshot(json_request(
@@ -176,7 +179,10 @@ async fn explicit_and_implicit_parent_runs_project_different_generations() -> Te
         .await?;
     assert_eq!(implicit.status(), StatusCode::OK);
     let implicit_body: Value = read_json(implicit).await?;
-    assert_eq!(implicit_body["children"][0]["workflow_id"], json!(new_child));
+    assert_eq!(
+        implicit_body["children"][0]["workflow_id"],
+        json!(new_child)
+    );
     Ok(())
 }
 
