@@ -1,0 +1,10 @@
+timestamp_utc=2026-08-15T05:23:41Z
+box_load=15:23  up 2 days,  2:57, 4 users, load averages: 39.53 26.13 20.97
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.01s
+     Running tests/outbox_e2e.rs (target/debug/deps/outbox_e2e-ca2c471179b8087e)
+
+running 1 test
+test outbox_duplicate_completion_records_exactly_one_terminal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.81s
+
