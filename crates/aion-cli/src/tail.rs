@@ -357,7 +357,15 @@ fn backfill_notice(
     head_seq: u64,
     first_store_seq: Option<u64>,
 ) -> Option<String> {
-    let first_store_seq = first_store_seq?;
+    let first_store_seq = match first_store_seq {
+        Some(first_store_seq) => first_store_seq,
+        None if event_count == 0 && head_seq > 0 => {
+            return Some(format!(
+                "no retained events; head at durable seq {head_seq}; earlier records were trimmed by retention"
+            ));
+        }
+        None => return None,
+    };
     if first_store_seq <= 1 {
         return None;
     }

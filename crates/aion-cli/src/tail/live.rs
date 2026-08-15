@@ -142,6 +142,9 @@ async fn monitor_source(
             }
             continue;
         }
+        if !selected_run_seen {
+            continue;
+        }
         if source.is_parent
             && let Event::ChildWorkflowStarted {
                 child_workflow_id,
