@@ -1,5 +1,6 @@
 //! Shipping-binary e2e for post-attach child transcript visibility.
 
+#[path = "tail_follow_e2e/fixtures.rs"]
 mod tail_follow_fixtures;
 
 use std::io::{BufRead, BufReader, Read};

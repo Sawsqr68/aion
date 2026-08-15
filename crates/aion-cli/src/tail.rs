@@ -182,7 +182,7 @@ async fn discover_sources(
         .await?;
     let mut pending = Vec::new();
     for child in children.children {
-        let name = child.display_name.unwrap_or(child.workflow_type);
+        let name = child_label(child.display_name.as_deref(), &child.workflow_type);
         let label = format!("{name} {}", short_id(&child.workflow_id));
         if let Some(child_run) = child.run_id {
             sources.push(Source {
@@ -421,6 +421,13 @@ fn render_event(event: &ActivityEvent) -> String {
     }
 }
 
+fn child_label(display_name: Option<&str>, workflow_type: &str) -> String {
+    display_name
+        .filter(|name| !name.is_empty())
+        .unwrap_or(workflow_type)
+        .to_owned()
+}
+
 fn short_id(workflow_id: &WorkflowId) -> String {
     workflow_id.to_string().chars().take(8).collect()
 }
@@ -465,6 +472,13 @@ mod tests {
         assert_eq!(targets[0].superseded_by, Some(2));
         assert!(prefix(&targets[0]).contains("attempt:1 SUPERSEDED→2"));
         assert!(prefix(&targets[1]).contains("Builder L1 24410000"));
+    }
+
+    #[test]
+    fn child_label_falls_back_for_absent_or_empty_display_names() {
+        assert_eq!(child_label(None, "builder_leg"), "builder_leg");
+        assert_eq!(child_label(Some(""), "builder_leg"), "builder_leg");
+        assert_eq!(child_label(Some("Builder"), "builder_leg"), "Builder");
     }
 
     #[test]
