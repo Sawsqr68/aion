@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use aion_core::{
-    ActivityId, Event, EventEnvelope, PackageVersion, Payload, RunId, SearchAttributeValue,
-    WorkflowId, DISPLAY_NAME_ATTRIBUTE,
+    ActivityId, DISPLAY_NAME_ATTRIBUTE, Event, EventEnvelope, PackageVersion, Payload, RunId,
+    SearchAttributeValue, WorkflowId,
 };
 use aion_store::{EventStore, WriteToken};
 use axum::http::StatusCode;
@@ -42,6 +42,7 @@ async fn parent_run_derives_its_visible_leg_from_recorded_history() -> TestResul
     let router = workflow_router(server_state(resolver, runtime_config()).await?);
 
     let response = router
+        .clone()
         .oneshot(json_request(
             "/workflows/children",
             &json!({
@@ -67,6 +68,19 @@ async fn parent_run_derives_its_visible_leg_from_recorded_history() -> TestResul
             }]
         })
     );
+
+    let current_run_response = router
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({
+                "namespace": NAMESPACE,
+                "workflow_id": parent_id,
+            }),
+        )?)
+        .await?;
+    assert_eq!(current_run_response.status(), StatusCode::OK);
+    let current_run_body: Value = read_json(current_run_response).await?;
+    assert_eq!(current_run_body, body);
     Ok(())
 }
 

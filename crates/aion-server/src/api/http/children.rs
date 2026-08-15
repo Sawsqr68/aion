@@ -18,7 +18,8 @@ use crate::{ServerError, ServerState};
 pub(crate) struct ChildrenRequest {
     namespace: String,
     workflow_id: WorkflowId,
-    run_id: RunId,
+    #[serde(default)]
+    run_id: Option<RunId>,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,7 +58,15 @@ pub(crate) async fn list_children(
         .read_history(&request.workflow_id)
         .await
         .map_err(store_error)?;
-    let parent_run = run_segment(&parent_history, &request.run_id);
+    let selected_run = request.run_id.or_else(|| {
+        parent_history.iter().rev().find_map(|event| match event {
+            Event::WorkflowStarted { run_id, .. } => Some(run_id.clone()),
+            _ => None,
+        })
+    });
+    let parent_run = selected_run
+        .as_ref()
+        .map_or(&[][..], |run| run_segment(&parent_history, run));
     let mut children = Vec::new();
 
     for event in parent_run {
@@ -98,10 +107,10 @@ fn project_child(workflow_id: WorkflowId, workflow_type: String, history: &[Even
     let run = run_id
         .as_ref()
         .map_or(&[][..], |run_id| run_segment(history, run_id));
-    let (current_activity_id, current_attempt) = current_attempt(run).map_or(
-        (None, None),
-        |(activity_id, attempt)| (Some(activity_id), Some(attempt)),
-    );
+    let (current_activity_id, current_attempt) = current_attempt(run)
+        .map_or((None, None), |(activity_id, attempt)| {
+            (Some(activity_id), Some(attempt))
+        });
     let status = if run_id.is_some() {
         format!("{:?}", status_from_events(run))
     } else {
@@ -142,9 +151,9 @@ fn current_attempt(events: &[Event]) -> Option<(ActivityId, u32)> {
                 activity_id,
                 attempt,
                 ..
-            } if current
-                .as_ref()
-                .is_some_and(|(id, active_attempt)| id == activity_id && active_attempt == attempt) =>
+            } if current.as_ref().is_some_and(|(id, active_attempt)| {
+                id == activity_id && active_attempt == attempt
+            }) =>
             {
                 current = None;
             }
