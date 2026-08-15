@@ -3,6 +3,7 @@
 //! Module layout:
 //! - [`router`] — public router construction (the only public surface).
 //! - `workflows` — workflow management handlers.
+//! - `children` — authorized direct-child projection for one parent run.
 //! - `schedules` — schedule management handlers.
 //! - `events` — websocket event-subscription handlers.
 //! - `deploy` — operator deploy handlers (mounted only when `[deploy].enabled`).

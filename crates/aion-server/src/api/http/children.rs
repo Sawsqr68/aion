@@ -261,7 +261,7 @@ fn store_error(error: aion_store::StoreError) -> HttpWireError {
 
 #[cfg(test)]
 mod tests {
-    use aion_core::{EventEnvelope, PackageVersion, Payload};
+    use aion_core::{ActivityError, ActivityErrorKind, EventEnvelope, PackageVersion, Payload};
     use chrono::Utc;
     use serde_json::json;
 
@@ -300,5 +300,62 @@ mod tests {
         ];
         assert_eq!(current_attempt(&history), None);
         Ok(())
+    }
+
+    #[test]
+    fn failed_and_cancelled_attempts_are_not_projected_as_current() {
+        let activity_id = ActivityId::from_sequence_position(3);
+        let started = Event::ActivityStarted {
+            envelope: test_envelope(1),
+            activity_id: activity_id.clone(),
+            attempt: 2,
+        };
+        let failed = Event::ActivityFailed {
+            envelope: test_envelope(2),
+            activity_id: activity_id.clone(),
+            error: ActivityError {
+                kind: ActivityErrorKind::Terminal,
+                message: "boom".to_owned(),
+                details: None,
+            },
+            attempt: 2,
+        };
+        assert_eq!(current_attempt(&[started.clone(), failed]), None);
+
+        let cancelled = Event::ActivityCancelled {
+            envelope: test_envelope(3),
+            activity_id,
+            attempt: 2,
+        };
+        assert_eq!(current_attempt(&[started, cancelled]), None);
+    }
+
+    #[test]
+    fn mismatched_terminal_attempt_does_not_clear_the_current_attempt()
+    -> Result<(), aion_core::PayloadError> {
+        let activity_id = ActivityId::from_sequence_position(3);
+        let history = vec![
+            Event::ActivityStarted {
+                envelope: test_envelope(1),
+                activity_id: activity_id.clone(),
+                attempt: 2,
+            },
+            Event::ActivityCompleted {
+                envelope: test_envelope(2),
+                activity_id: activity_id.clone(),
+                result: Payload::from_json(&json!(null))?,
+                attempt: 1,
+            },
+        ];
+        assert_eq!(current_attempt(&history), Some((activity_id, 2)));
+        Ok(())
+    }
+
+    fn test_envelope(seq: u64) -> EventEnvelope {
+        EventEnvelope {
+            seq,
+            recorded_at: Utc::now(),
+            workflow_id: WorkflowId::new(uuid::Uuid::from_u128(1)),
+        }
     }
 }

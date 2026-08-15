@@ -277,6 +277,53 @@ async fn recorded_child_without_a_started_run_has_null_status() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn duplicate_child_start_is_projected_once_in_first_discovery_position() -> TestResult {
+    let parent_id = WorkflowId::new(uuid::Uuid::from_u128(0x249));
+    let parent_run = RunId::new(uuid::Uuid::from_u128(0x2490));
+    let child_id = WorkflowId::new(uuid::Uuid::from_u128(0x2491));
+    let child_run = RunId::new(uuid::Uuid::from_u128(0x2492));
+    let (engine, store, _visibility) = shared_engine().await?;
+    seed_parent(&store, &parent_id, &parent_run, &child_id).await?;
+    store
+        .append(
+            WriteToken::recorder(),
+            &parent_id,
+            &[Event::ChildWorkflowStarted {
+                envelope: envelope(3, &parent_id),
+                child_workflow_id: child_id.clone(),
+                workflow_type: "duplicate_should_not_replace".to_owned(),
+                input: payload()?,
+                package_version: version(),
+            }],
+            2,
+        )
+        .await?;
+    seed_child(&store, &child_id, &child_run).await?;
+
+    let ownership = StaticWorkflowNamespaces::default();
+    ownership.record(parent_id.clone(), NAMESPACE)?;
+    ownership.record(child_id.clone(), NAMESPACE)?;
+    let resolver = NamespaceResolver::from_parts(
+        NamespaceMode::SharedEngine,
+        Some(engine),
+        Arc::new(ownership),
+        Arc::new(StaticScheduleNamespaces::default()),
+    );
+    let response = workflow_router(server_state(resolver, runtime_config()).await?)
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({"namespace": NAMESPACE, "workflow_id": parent_id, "run_id": parent_run}),
+        )?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = read_json(response).await?;
+    assert_eq!(body["children"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["children"][0]["workflow_type"], "builder_leg");
+    Ok(())
+}
+
 async fn seed_parent(
     store: &Arc<dyn EventStore>,
     parent_id: &WorkflowId,
