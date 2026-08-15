@@ -133,6 +133,61 @@ impl_describe_fixture!(
 );
 
 #[tokio::test(flavor = "multi_thread")]
+async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    let grpc_listener = TcpListener::bind("127.0.0.1:0").await?;
+    let grpc_address = grpc_listener.local_addr()?;
+    let grpc = tonic::transport::Server::builder()
+        .add_service(
+            generated::workflow_service_server::WorkflowServiceServer::new(DescribeFixture {
+                response: describe_response()?,
+            }),
+        )
+        .serve_with_incoming(TcpListenerStream::new(grpc_listener));
+    let grpc_task = tokio::spawn(grpc);
+
+    let http_state = HttpFixture {
+        parent_attached: Arc::new(Notify::new()),
+        emit_fanout: Arc::new(Notify::new()),
+        transcript_attached: Arc::new(Notify::new()),
+        emit_live: Arc::new(Notify::new()),
+    };
+    let app = Router::new()
+        .route("/workflows/children", post(children))
+        .route("/workflows/transcripts", post(transcripts))
+        .route("/workflows/transcript", post(transcript))
+        .route("/events/stream", any(stream))
+        .with_state(http_state);
+    let http_listener = TcpListener::bind("127.0.0.1:0").await?;
+    let http_address = http_listener.local_addr()?;
+    let http_task = tokio::spawn(axum::serve(http_listener, app).into_future());
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aion"))
+        .args([
+            "--endpoint",
+            &format!("http://{grpc_address}"),
+            "tail",
+            &WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)).to_string(),
+            "--run-id",
+            &RunId::new(uuid::Uuid::from_u128(PARENT_RUN)).to_string(),
+            "--http-endpoint",
+            &format!("http://{http_address}"),
+            "--no-follow",
+        ])
+        .output()?;
+    http_task.abort();
+    grpc_task.abort();
+
+    assert!(output.status.success(), "tail failed: {output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout)?,
+        "",
+        "tail owns its transcript rendering and must not append a JSON result"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn tail_follow_prints_child_events_emitted_after_attach()
 -> Result<(), Box<dyn std::error::Error>> {
     let grpc_listener = TcpListener::bind("127.0.0.1:0").await?;
