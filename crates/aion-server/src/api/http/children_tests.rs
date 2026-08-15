@@ -85,6 +85,102 @@ async fn parent_run_derives_its_visible_leg_from_recorded_history() -> TestResul
 }
 
 #[tokio::test]
+async fn unknown_parent_run_is_not_reported_as_an_empty_child_list() -> TestResult {
+    let parent_id = WorkflowId::new(uuid::Uuid::from_u128(0x247));
+    let parent_run = RunId::new(uuid::Uuid::from_u128(0x2470));
+    let unknown_run = RunId::new(uuid::Uuid::from_u128(0x247f));
+    let child_id = WorkflowId::new(uuid::Uuid::from_u128(0x2471));
+    let (engine, store, _visibility) = shared_engine().await?;
+    seed_parent(&store, &parent_id, &parent_run, &child_id).await?;
+
+    let ownership = StaticWorkflowNamespaces::default();
+    ownership.record(parent_id.clone(), NAMESPACE)?;
+    let resolver = NamespaceResolver::from_parts(
+        NamespaceMode::SharedEngine,
+        Some(engine),
+        Arc::new(ownership),
+        Arc::new(StaticScheduleNamespaces::default()),
+    );
+    let router = workflow_router(server_state(resolver, runtime_config()).await?);
+
+    let response = router
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({
+                "namespace": NAMESPACE,
+                "workflow_id": parent_id,
+                "run_id": unknown_run,
+            }),
+        )?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_and_implicit_parent_runs_project_different_generations() -> TestResult {
+    let parent_id = WorkflowId::new(uuid::Uuid::from_u128(0x248));
+    let old_run = RunId::new(uuid::Uuid::from_u128(0x2480));
+    let new_run = RunId::new(uuid::Uuid::from_u128(0x2481));
+    let old_child = WorkflowId::new(uuid::Uuid::from_u128(0x2482));
+    let new_child = WorkflowId::new(uuid::Uuid::from_u128(0x2483));
+    let (engine, store, _visibility) = shared_engine().await?;
+    seed_parent(&store, &parent_id, &old_run, &old_child).await?;
+    store
+        .append(
+            WriteToken::recorder(),
+            &parent_id,
+            &[
+                started(3, &parent_id, &new_run, "fleet_dev")?,
+                Event::ChildWorkflowStarted {
+                    envelope: envelope(4, &parent_id),
+                    child_workflow_id: new_child.clone(),
+                    workflow_type: "new_leg".to_owned(),
+                    input: payload()?,
+                    package_version: version(),
+                },
+            ],
+            2,
+        )
+        .await?;
+
+    let ownership = StaticWorkflowNamespaces::default();
+    for workflow_id in [&parent_id, &old_child, &new_child] {
+        ownership.record(workflow_id.clone(), NAMESPACE)?;
+    }
+    let resolver = NamespaceResolver::from_parts(
+        NamespaceMode::SharedEngine,
+        Some(engine),
+        Arc::new(ownership),
+        Arc::new(StaticScheduleNamespaces::default()),
+    );
+    let router = workflow_router(server_state(resolver, runtime_config()).await?);
+
+    let explicit = router
+        .clone()
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({"namespace": NAMESPACE, "workflow_id": parent_id, "run_id": old_run}),
+        )?)
+        .await?;
+    assert_eq!(explicit.status(), StatusCode::OK);
+    let explicit_body: Value = read_json(explicit).await?;
+    assert_eq!(explicit_body["children"][0]["workflow_id"], json!(old_child));
+
+    let implicit = router
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({"namespace": NAMESPACE, "workflow_id": parent_id}),
+        )?)
+        .await?;
+    assert_eq!(implicit.status(), StatusCode::OK);
+    let implicit_body: Value = read_json(implicit).await?;
+    assert_eq!(implicit_body["children"][0]["workflow_id"], json!(new_child));
+    Ok(())
+}
+
+#[tokio::test]
 async fn unauthorized_child_is_omitted_without_projecting_its_history() -> TestResult {
     let parent_id = WorkflowId::new(uuid::Uuid::from_u128(0x245));
     let parent_run = RunId::new(uuid::Uuid::from_u128(0x2450));
