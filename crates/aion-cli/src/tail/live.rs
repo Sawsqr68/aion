@@ -2,15 +2,23 @@
 
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU64;
+use std::time::Duration;
 
 use aion_client::{Client, TranscriptStreamItem, TranscriptTarget};
-use aion_core::{ActivityId, Event};
+use aion_core::{ActivityId, Event, WorkflowId};
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::{PendingSource, Source, Target, prefix, render_event, short_id};
+
+/// Bounds queued rendered lines while allowing a moderate fanout burst to drain through stdout.
+/// Producers await capacity, so 256 limits memory without dropping transcript or notice lines.
+const TAIL_OUTPUT_CHANNEL_CAPACITY: usize = 256;
+
+/// Prevent persistent broadcast lag from becoming a tight reconnect storm against the server.
+const LAG_RECONNECT_DELAY: Duration = Duration::from_millis(250);
 
 pub(super) async fn follow(
     client: Client,
@@ -19,7 +27,7 @@ pub(super) async fn follow(
     targets: Vec<Target>,
     heads: Vec<Option<u64>>,
 ) -> Result<Value> {
-    let (sender, mut receiver) = mpsc::channel::<String>(256);
+    let (sender, mut receiver) = mpsc::channel::<String>(TAIL_OUTPUT_CHANNEL_CAPACITY);
     for (target, after_seq) in targets
         .iter()
         .cloned()
@@ -28,9 +36,26 @@ pub(super) async fn follow(
     {
         spawn_transcript(client.clone(), target, after_seq, sender.clone());
     }
+    let known_children: HashSet<WorkflowId> = sources
+        .iter()
+        .filter(|source| !source.is_parent)
+        .map(|source| source.workflow_id.clone())
+        .chain(pending.iter().map(|source| source.workflow_id.clone()))
+        .collect();
     for source in sources {
         let current = current_attempts(&source, &targets);
-        spawn_source_monitor(client.clone(), source, current, sender.clone());
+        let discovered_children = if source.is_parent {
+            known_children.clone()
+        } else {
+            HashSet::new()
+        };
+        spawn_source_monitor(
+            client.clone(),
+            source,
+            current,
+            discovered_children,
+            sender.clone(),
+        );
     }
     for pending_source in pending {
         spawn_pending_monitor(client.clone(), pending_source, sender.clone());
@@ -69,10 +94,11 @@ fn spawn_source_monitor(
     client: Client,
     source: Source,
     current: HashMap<ActivityId, u32>,
+    discovered_children: HashSet<WorkflowId>,
     sender: mpsc::Sender<String>,
 ) {
     tokio::spawn(async move {
-        monitor_source(client, source, current, sender).await;
+        monitor_source(client, source, current, discovered_children, sender).await;
     });
 }
 
@@ -80,10 +106,11 @@ async fn monitor_source(
     client: Client,
     source: Source,
     mut current: HashMap<ActivityId, u32>,
+    mut discovered_children: HashSet<WorkflowId>,
     sender: mpsc::Sender<String>,
 ) {
-    let mut discovered_children = HashSet::new();
-    let mut events = client.subscribe_workflow(&source.workflow_id);
+    let mut selected_run_seen = false;
+    let mut events = client.subscribe_workflow_from(&source.workflow_id, NonZeroU64::MIN);
     while let Some(next) = events.next().await {
         let event = match next {
             Ok(event) => event,
@@ -99,18 +126,21 @@ async fn monitor_source(
                 return;
             }
         };
-        if let Event::WorkflowStarted { run_id, .. } = &event
-            && run_id != &source.run_id
-        {
-            send_line(
-                &sender,
-                format!(
-                    "[{}] NOTICE: continued as new as run {run_id}; this generation is no longer followed",
-                    source.label
-                ),
-            )
-            .await;
-            return;
+        if let Event::WorkflowStarted { run_id, .. } = &event {
+            if run_id == &source.run_id {
+                selected_run_seen = true;
+            } else if selected_run_seen {
+                send_line(
+                    &sender,
+                    format!(
+                        "[{}] NOTICE: continued as new as run {run_id}; this generation is no longer followed",
+                        source.label
+                    ),
+                )
+                .await;
+                return;
+            }
+            continue;
         }
         if source.is_parent
             && let Event::ChildWorkflowStarted {
@@ -358,6 +388,7 @@ async fn follow_transcript(
             .await;
             return;
         }
+        tokio::time::sleep(LAG_RECONNECT_DELAY).await;
     }
 }
 
