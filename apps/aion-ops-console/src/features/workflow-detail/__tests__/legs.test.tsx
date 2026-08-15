@@ -26,7 +26,7 @@ const emptyLive = {
   lastSeenSequence: undefined,
   terminalOutcome: null,
   timeline: [],
-} as const;
+};
 
 test('shipped leg container renders an explicit history error instead of a false empty transcript', () => {
   const readers: LiveLegReaders = {
