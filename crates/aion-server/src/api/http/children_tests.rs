@@ -91,7 +91,7 @@ async fn seed_parent(
     child_id: &WorkflowId,
 ) -> TestResult {
     let events = vec![
-        started(1, parent_id, parent_run, "fleet_dev"),
+        started(1, parent_id, parent_run, "fleet_dev")?,
         Event::ChildWorkflowStarted {
             envelope: envelope(2, parent_id),
             child_workflow_id: child_id.clone(),
@@ -118,7 +118,7 @@ async fn seed_child(
     );
     let activity_id = ActivityId::from_sequence_position(7);
     let events = vec![
-        started(1, child_id, child_run, "builder_leg"),
+        started(1, child_id, child_run, "builder_leg")?,
         Event::SearchAttributesUpdated {
             envelope: envelope(2, child_id),
             workflow_id: child_id.clone(),
@@ -144,15 +144,20 @@ async fn seed_child(
     Ok(())
 }
 
-fn started(seq: u64, workflow_id: &WorkflowId, run_id: &RunId, workflow_type: &str) -> Event {
-    Event::WorkflowStarted {
+fn started(
+    seq: u64,
+    workflow_id: &WorkflowId,
+    run_id: &RunId,
+    workflow_type: &str,
+) -> Result<Event, aion_core::PayloadError> {
+    Ok(Event::WorkflowStarted {
         envelope: envelope(seq, workflow_id),
         workflow_type: workflow_type.to_owned(),
-        input: payload().expect("fixture payload"),
+        input: payload()?,
         run_id: run_id.clone(),
         parent_run_id: None,
         package_version: version(),
-    }
+    })
 }
 
 fn envelope(seq: u64, workflow_id: &WorkflowId) -> EventEnvelope {

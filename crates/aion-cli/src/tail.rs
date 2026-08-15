@@ -82,47 +82,93 @@ pub(crate) async fn run(
 ) -> Result<Value> {
     let workflow_id = parse_workflow_id(workflow_id)?;
     let requested_run = run_id.map(parse_run_id).transpose()?;
+    let http = HttpTailClient::new(&config)?;
+    let sources = discover_sources(client, &http, &workflow_id, requested_run, &config).await?;
+    let mut targets = discover_targets(&http, &sources, config.namespace).await?;
+    mark_superseded(&mut targets);
+    let heads = backfill_and_print(&http, &targets, config.namespace).await?;
+    if !config.follow {
+        return Ok(Value::Null);
+    }
+
+    let socket_url = socket_url(config.http_endpoint)?;
+    let mut builder = ClientBuilder::new(config.grpc_endpoint)
+        .with_stream_endpoint(&socket_url)
+        .with_namespace(config.namespace)
+        .with_subject(config.subject)
+        .with_authorized_namespaces([config.namespace]);
+    if let Some(token) = config.token {
+        builder = builder.with_auth(ClientAuth::bearer(token));
+    }
+    let stream_client = builder
+        .build()
+        .await
+        .context("failed to connect tail workflow-event sockets")?;
+    live::follow(
+        stream_client,
+        sources,
+        targets,
+        heads,
+        config.namespace,
+        &socket_url,
+        http.headers.clone(),
+    )
+    .await
+}
+
+async fn discover_sources(
+    client: &Client,
+    http: &HttpTailClient,
+    workflow_id: &WorkflowId,
+    requested_run: Option<RunId>,
+    config: &TailConfig<'_>,
+) -> Result<Vec<Source>> {
     let description = client
-        .describe(&workflow_id, requested_run.as_ref())
+        .describe(workflow_id, requested_run.as_ref())
         .await
         .context("failed to resolve workflow run for tail")?;
     let parent_run = requested_run
         .or_else(|| latest_run(&description.history))
         .ok_or_else(|| anyhow!("workflow history contains no WorkflowStarted run"))?;
-    let http = HttpTailClient::new(&config)?;
     let mut sources = vec![Source {
         workflow_id: workflow_id.clone(),
         run_id: parent_run.clone(),
-        label: format!("parent {}", short_id(&workflow_id)),
+        label: format!("parent {}", short_id(workflow_id)),
     }];
     let children: ChildrenResponse = http
         .post(
             "/workflows/children",
             &ChildrenRequest {
                 namespace: config.namespace,
-                workflow_id: &workflow_id,
+                workflow_id,
                 run_id: &parent_run,
             },
         )
         .await?;
-    for child in children.children {
-        if let Some(child_run) = child.run_id {
-            let name = child.display_name.unwrap_or(child.workflow_type);
-            sources.push(Source {
-                label: format!("{name} {}", short_id(&child.workflow_id)),
-                workflow_id: child.workflow_id,
-                run_id: child_run,
-            });
-        }
-    }
+    sources.extend(children.children.into_iter().filter_map(|child| {
+        let child_run = child.run_id?;
+        let name = child.display_name.unwrap_or(child.workflow_type);
+        Some(Source {
+            label: format!("{name} {}", short_id(&child.workflow_id)),
+            workflow_id: child.workflow_id,
+            run_id: child_run,
+        })
+    }));
+    Ok(sources)
+}
 
+async fn discover_targets(
+    http: &HttpTailClient,
+    sources: &[Source],
+    namespace: &str,
+) -> Result<Vec<Target>> {
     let mut targets = Vec::new();
-    for source in &sources {
+    for source in sources {
         let streams: StreamsResponse = http
             .post(
                 "/workflows/transcripts",
                 &json!({
-                    "namespace": config.namespace,
+                    "namespace": namespace,
                     "workflow_id": source.workflow_id,
                     "run_id": source.run_id,
                 }),
@@ -141,16 +187,22 @@ pub(crate) async fn run(
             superseded_by: None,
         }));
     }
-    mark_superseded(&mut targets);
+    Ok(targets)
+}
 
+async fn backfill_and_print(
+    http: &HttpTailClient,
+    targets: &[Target],
+    namespace: &str,
+) -> Result<Vec<Option<u64>>> {
     let mut backfill = Vec::new();
     let mut heads = Vec::new();
-    for target in &targets {
+    for target in targets {
         let transcript: TranscriptResponse = http
             .post(
                 "/workflows/transcript",
                 &json!({
-                    "namespace": config.namespace,
+                    "namespace": namespace,
                     "workflow_id": target.source.workflow_id,
                     "run_id": target.source.run_id,
                     "activity_id": target.activity_id,
@@ -181,33 +233,7 @@ pub(crate) async fn run(
             prefix(target)
         );
     }
-    if !config.follow {
-        return Ok(Value::Null);
-    }
-
-    let socket_url = socket_url(config.http_endpoint)?;
-    let mut builder = ClientBuilder::new(config.grpc_endpoint)
-        .with_stream_endpoint(&socket_url)
-        .with_namespace(config.namespace)
-        .with_subject(config.subject)
-        .with_authorized_namespaces([config.namespace]);
-    if let Some(token) = config.token {
-        builder = builder.with_auth(ClientAuth::bearer(token));
-    }
-    let stream_client = builder
-        .build()
-        .await
-        .context("failed to connect tail workflow-event sockets")?;
-    live::follow(
-        stream_client,
-        sources,
-        targets,
-        heads,
-        config.namespace,
-        &socket_url,
-        http.headers.clone(),
-    )
-    .await
+    Ok(heads)
 }
 
 struct HttpTailClient {
