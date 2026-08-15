@@ -83,6 +83,7 @@ export interface WorkerToServer {
   register?: RegisterWorker | undefined;
   result?: ActivityResult | undefined;
   heartbeat?: Heartbeat | undefined;
+  livenessAnswer?: LivenessAnswer | undefined;
 }
 
 /** Messages sent by the server to a worker over the bidirectional stream. */
@@ -91,6 +92,72 @@ export interface ServerToWorker {
   drain?: DrainRequest | undefined;
   registerAck?: RegisterAck | undefined;
   resultAck?: ResultAck | undefined;
+  livenessPing?: LivenessPing | undefined;
+  cancelActivity?: CancelActivity | undefined;
+}
+
+/**
+ * Server-initiated cancellation of ONE in-flight activity (#233).
+ *
+ * A REQUEST, never a guarantee. The server asks the worker holding this
+ * activity to stop it; the worker fires the activity's cancellation handle,
+ * which cooperative action code observes and which terminates a contained
+ * child process group. A worker that no longer holds the named activity
+ * ignores the message — the (workflow_id, activity_id) pair is globally
+ * unique, so this can never stop somebody else's work.
+ *
+ * Distinct from DrainRequest: drain is about the WORKER (finish what you hold,
+ * expect nothing new, reconnect), this is about ONE ACTIVITY (stop this piece
+ * of work now, keep serving). A drained worker still finishes the very work
+ * this message exists to interrupt.
+ *
+ * The server records what it ASKED and what it OBSERVED. It never records that
+ * the work stopped, because delivering this message does not establish that.
+ */
+export interface CancelActivity {
+  /** Workflow whose activity is to be cancelled. */
+  workflowId:
+    | WorkflowId
+    | undefined;
+  /**
+   * Activity within that workflow. With workflow_id it forms the key the
+   * worker's in-flight registry is addressed by.
+   */
+  activityId: ActivityId | undefined;
+}
+
+/**
+ * Transport-level liveness ping, pushed by the server down the SAME stream a
+ * dispatch travels. It is answered by the worker SDK RUNTIME, never by action
+ * code: the fact it establishes is "the server can reach this worker's
+ * dispatch path", and only a frame that rides that exact path can establish
+ * it. An open stream sender is not an answering worker — the server can hold a
+ * perfectly healthy-looking channel to a wedged process indefinitely, which is
+ * the failure class this ping exists to detect.
+ *
+ * Distinct from Heartbeat: Heartbeat travels worker-to-server and proves the
+ * worker PROCESS is alive; this pair travels server-to-worker-and-back and
+ * proves the server-to-worker LEG carries. Those are different facts, and only
+ * the second is a dispatch precondition.
+ */
+export interface LivenessPing {
+  /**
+   * Monotonic ping sequence within this server's probe, echoed verbatim on the
+   * answer so a stale or reordered answer cannot be mistaken for a fresh one.
+   */
+  livenessPing: bigint;
+  /**
+   * How long the worker may hear NOTHING on this stream before it should treat
+   * the link as dead — this server's operator-configured heartbeat window,
+   * carried on the wire so the worker never holds a second copy of it.
+   */
+  silenceWindowMs: bigint;
+}
+
+/** The worker runtime's answer to a LivenessPing, echoing its sequence. */
+export interface LivenessAnswer {
+  /** The sequence of the ping being answered, echoed verbatim. */
+  livenessPing: bigint;
 }
 
 /**
@@ -160,6 +227,14 @@ export interface ActivityDescriptor {
   outputSchemaJson: string;
 }
 
+/** Stable identity of one worker process within an operator deployment. */
+export interface WorkerInstanceIdentity {
+  /** Durable worker-deployment record name. */
+  deployment: string;
+  /** Operator/launcher-assigned instance identifier. */
+  instanceId: string;
+}
+
 export interface RegisterWorker {
   /**
    * Set of correctness/isolation boundaries this worker is authorized for. The
@@ -188,6 +263,8 @@ export interface RegisterWorker {
   activities: ActivityDescriptor[];
   /** Stable worker-build identity used to correlate compatibility decisions. */
   identity: string;
+  /** Deployment association for this worker instance. Distinct from build identity. */
+  instance?: WorkerInstanceIdentity | undefined;
 }
 
 /** Activity invocation pushed by the server to a registered worker. */
@@ -321,7 +398,7 @@ export const DrainRequest: MessageFns<DrainRequest> = {
 };
 
 function createBaseWorkerToServer(): WorkerToServer {
-  return { register: undefined, result: undefined, heartbeat: undefined };
+  return { register: undefined, result: undefined, heartbeat: undefined, livenessAnswer: undefined };
 }
 
 export const WorkerToServer: MessageFns<WorkerToServer> = {
@@ -334,6 +411,9 @@ export const WorkerToServer: MessageFns<WorkerToServer> = {
     }
     if (message.heartbeat !== undefined) {
       Heartbeat.encode(message.heartbeat, writer.uint32(26).fork()).join();
+    }
+    if (message.livenessAnswer !== undefined) {
+      LivenessAnswer.encode(message.livenessAnswer, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -369,6 +449,14 @@ export const WorkerToServer: MessageFns<WorkerToServer> = {
           message.heartbeat = Heartbeat.decode(reader, reader.uint32());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.livenessAnswer = LivenessAnswer.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -383,6 +471,11 @@ export const WorkerToServer: MessageFns<WorkerToServer> = {
       register: isSet(object.register) ? RegisterWorker.fromJSON(object.register) : undefined,
       result: isSet(object.result) ? ActivityResult.fromJSON(object.result) : undefined,
       heartbeat: isSet(object.heartbeat) ? Heartbeat.fromJSON(object.heartbeat) : undefined,
+      livenessAnswer: isSet(object.livenessAnswer)
+        ? LivenessAnswer.fromJSON(object.livenessAnswer)
+        : isSet(object.liveness_answer)
+        ? LivenessAnswer.fromJSON(object.liveness_answer)
+        : undefined,
     };
   },
 
@@ -396,6 +489,9 @@ export const WorkerToServer: MessageFns<WorkerToServer> = {
     }
     if (message.heartbeat !== undefined) {
       obj.heartbeat = Heartbeat.toJSON(message.heartbeat);
+    }
+    if (message.livenessAnswer !== undefined) {
+      obj.livenessAnswer = LivenessAnswer.toJSON(message.livenessAnswer);
     }
     return obj;
   },
@@ -414,12 +510,22 @@ export const WorkerToServer: MessageFns<WorkerToServer> = {
     message.heartbeat = (object.heartbeat !== undefined && object.heartbeat !== null)
       ? Heartbeat.fromPartial(object.heartbeat)
       : undefined;
+    message.livenessAnswer = (object.livenessAnswer !== undefined && object.livenessAnswer !== null)
+      ? LivenessAnswer.fromPartial(object.livenessAnswer)
+      : undefined;
     return message;
   },
 };
 
 function createBaseServerToWorker(): ServerToWorker {
-  return { task: undefined, drain: undefined, registerAck: undefined, resultAck: undefined };
+  return {
+    task: undefined,
+    drain: undefined,
+    registerAck: undefined,
+    resultAck: undefined,
+    livenessPing: undefined,
+    cancelActivity: undefined,
+  };
 }
 
 export const ServerToWorker: MessageFns<ServerToWorker> = {
@@ -435,6 +541,12 @@ export const ServerToWorker: MessageFns<ServerToWorker> = {
     }
     if (message.resultAck !== undefined) {
       ResultAck.encode(message.resultAck, writer.uint32(34).fork()).join();
+    }
+    if (message.livenessPing !== undefined) {
+      LivenessPing.encode(message.livenessPing, writer.uint32(42).fork()).join();
+    }
+    if (message.cancelActivity !== undefined) {
+      CancelActivity.encode(message.cancelActivity, writer.uint32(50).fork()).join();
     }
     return writer;
   },
@@ -478,6 +590,22 @@ export const ServerToWorker: MessageFns<ServerToWorker> = {
           message.resultAck = ResultAck.decode(reader, reader.uint32());
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.livenessPing = LivenessPing.decode(reader, reader.uint32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.cancelActivity = CancelActivity.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -501,6 +629,16 @@ export const ServerToWorker: MessageFns<ServerToWorker> = {
         : isSet(object.result_ack)
         ? ResultAck.fromJSON(object.result_ack)
         : undefined,
+      livenessPing: isSet(object.livenessPing)
+        ? LivenessPing.fromJSON(object.livenessPing)
+        : isSet(object.liveness_ping)
+        ? LivenessPing.fromJSON(object.liveness_ping)
+        : undefined,
+      cancelActivity: isSet(object.cancelActivity)
+        ? CancelActivity.fromJSON(object.cancelActivity)
+        : isSet(object.cancel_activity)
+        ? CancelActivity.fromJSON(object.cancel_activity)
+        : undefined,
     };
   },
 
@@ -517,6 +655,12 @@ export const ServerToWorker: MessageFns<ServerToWorker> = {
     }
     if (message.resultAck !== undefined) {
       obj.resultAck = ResultAck.toJSON(message.resultAck);
+    }
+    if (message.livenessPing !== undefined) {
+      obj.livenessPing = LivenessPing.toJSON(message.livenessPing);
+    }
+    if (message.cancelActivity !== undefined) {
+      obj.cancelActivity = CancelActivity.toJSON(message.cancelActivity);
     }
     return obj;
   },
@@ -538,6 +682,257 @@ export const ServerToWorker: MessageFns<ServerToWorker> = {
     message.resultAck = (object.resultAck !== undefined && object.resultAck !== null)
       ? ResultAck.fromPartial(object.resultAck)
       : undefined;
+    message.livenessPing = (object.livenessPing !== undefined && object.livenessPing !== null)
+      ? LivenessPing.fromPartial(object.livenessPing)
+      : undefined;
+    message.cancelActivity = (object.cancelActivity !== undefined && object.cancelActivity !== null)
+      ? CancelActivity.fromPartial(object.cancelActivity)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseCancelActivity(): CancelActivity {
+  return { workflowId: undefined, activityId: undefined };
+}
+
+export const CancelActivity: MessageFns<CancelActivity> = {
+  encode(message: CancelActivity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.workflowId !== undefined) {
+      WorkflowId.encode(message.workflowId, writer.uint32(10).fork()).join();
+    }
+    if (message.activityId !== undefined) {
+      ActivityId.encode(message.activityId, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): CancelActivity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCancelActivity();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.workflowId = WorkflowId.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.activityId = ActivityId.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CancelActivity {
+    return {
+      workflowId: isSet(object.workflowId)
+        ? WorkflowId.fromJSON(object.workflowId)
+        : isSet(object.workflow_id)
+        ? WorkflowId.fromJSON(object.workflow_id)
+        : undefined,
+      activityId: isSet(object.activityId)
+        ? ActivityId.fromJSON(object.activityId)
+        : isSet(object.activity_id)
+        ? ActivityId.fromJSON(object.activity_id)
+        : undefined,
+    };
+  },
+
+  toJSON(message: CancelActivity): unknown {
+    const obj: any = {};
+    if (message.workflowId !== undefined) {
+      obj.workflowId = WorkflowId.toJSON(message.workflowId);
+    }
+    if (message.activityId !== undefined) {
+      obj.activityId = ActivityId.toJSON(message.activityId);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<CancelActivity>): CancelActivity {
+    return CancelActivity.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<CancelActivity>): CancelActivity {
+    const message = createBaseCancelActivity();
+    message.workflowId = (object.workflowId !== undefined && object.workflowId !== null)
+      ? WorkflowId.fromPartial(object.workflowId)
+      : undefined;
+    message.activityId = (object.activityId !== undefined && object.activityId !== null)
+      ? ActivityId.fromPartial(object.activityId)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseLivenessPing(): LivenessPing {
+  return { livenessPing: 0n, silenceWindowMs: 0n };
+}
+
+export const LivenessPing: MessageFns<LivenessPing> = {
+  encode(message: LivenessPing, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.livenessPing !== 0n) {
+      if (BigInt.asUintN(64, message.livenessPing) !== message.livenessPing) {
+        throw new globalThis.Error("value provided for field message.livenessPing of type uint64 too large");
+      }
+      writer.uint32(8).uint64(message.livenessPing);
+    }
+    if (message.silenceWindowMs !== 0n) {
+      if (BigInt.asUintN(64, message.silenceWindowMs) !== message.silenceWindowMs) {
+        throw new globalThis.Error("value provided for field message.silenceWindowMs of type uint64 too large");
+      }
+      writer.uint32(16).uint64(message.silenceWindowMs);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LivenessPing {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLivenessPing();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.livenessPing = reader.uint64() as bigint;
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.silenceWindowMs = reader.uint64() as bigint;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LivenessPing {
+    return {
+      livenessPing: isSet(object.livenessPing)
+        ? BigInt(object.livenessPing)
+        : isSet(object.liveness_ping)
+        ? BigInt(object.liveness_ping)
+        : 0n,
+      silenceWindowMs: isSet(object.silenceWindowMs)
+        ? BigInt(object.silenceWindowMs)
+        : isSet(object.silence_window_ms)
+        ? BigInt(object.silence_window_ms)
+        : 0n,
+    };
+  },
+
+  toJSON(message: LivenessPing): unknown {
+    const obj: any = {};
+    if (message.livenessPing !== 0n) {
+      obj.livenessPing = message.livenessPing.toString();
+    }
+    if (message.silenceWindowMs !== 0n) {
+      obj.silenceWindowMs = message.silenceWindowMs.toString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<LivenessPing>): LivenessPing {
+    return LivenessPing.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<LivenessPing>): LivenessPing {
+    const message = createBaseLivenessPing();
+    message.livenessPing = object.livenessPing ?? 0n;
+    message.silenceWindowMs = object.silenceWindowMs ?? 0n;
+    return message;
+  },
+};
+
+function createBaseLivenessAnswer(): LivenessAnswer {
+  return { livenessPing: 0n };
+}
+
+export const LivenessAnswer: MessageFns<LivenessAnswer> = {
+  encode(message: LivenessAnswer, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.livenessPing !== 0n) {
+      if (BigInt.asUintN(64, message.livenessPing) !== message.livenessPing) {
+        throw new globalThis.Error("value provided for field message.livenessPing of type uint64 too large");
+      }
+      writer.uint32(8).uint64(message.livenessPing);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): LivenessAnswer {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseLivenessAnswer();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.livenessPing = reader.uint64() as bigint;
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): LivenessAnswer {
+    return {
+      livenessPing: isSet(object.livenessPing)
+        ? BigInt(object.livenessPing)
+        : isSet(object.liveness_ping)
+        ? BigInt(object.liveness_ping)
+        : 0n,
+    };
+  },
+
+  toJSON(message: LivenessAnswer): unknown {
+    const obj: any = {};
+    if (message.livenessPing !== 0n) {
+      obj.livenessPing = message.livenessPing.toString();
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<LivenessAnswer>): LivenessAnswer {
+    return LivenessAnswer.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<LivenessAnswer>): LivenessAnswer {
+    const message = createBaseLivenessAnswer();
+    message.livenessPing = object.livenessPing ?? 0n;
     return message;
   },
 };
@@ -836,8 +1231,96 @@ export const ActivityDescriptor: MessageFns<ActivityDescriptor> = {
   },
 };
 
+function createBaseWorkerInstanceIdentity(): WorkerInstanceIdentity {
+  return { deployment: "", instanceId: "" };
+}
+
+export const WorkerInstanceIdentity: MessageFns<WorkerInstanceIdentity> = {
+  encode(message: WorkerInstanceIdentity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.deployment !== "") {
+      writer.uint32(10).string(message.deployment);
+    }
+    if (message.instanceId !== "") {
+      writer.uint32(18).string(message.instanceId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WorkerInstanceIdentity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWorkerInstanceIdentity();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.deployment = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.instanceId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WorkerInstanceIdentity {
+    return {
+      deployment: isSet(object.deployment) ? globalThis.String(object.deployment) : "",
+      instanceId: isSet(object.instanceId)
+        ? globalThis.String(object.instanceId)
+        : isSet(object.instance_id)
+        ? globalThis.String(object.instance_id)
+        : "",
+    };
+  },
+
+  toJSON(message: WorkerInstanceIdentity): unknown {
+    const obj: any = {};
+    if (message.deployment !== "") {
+      obj.deployment = message.deployment;
+    }
+    if (message.instanceId !== "") {
+      obj.instanceId = message.instanceId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<WorkerInstanceIdentity>): WorkerInstanceIdentity {
+    return WorkerInstanceIdentity.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<WorkerInstanceIdentity>): WorkerInstanceIdentity {
+    const message = createBaseWorkerInstanceIdentity();
+    message.deployment = object.deployment ?? "";
+    message.instanceId = object.instanceId ?? "";
+    return message;
+  },
+};
+
 function createBaseRegisterWorker(): RegisterWorker {
-  return { namespaces: [], activityTypes: [], taskQueue: "", node: "", activities: [], identity: "" };
+  return {
+    namespaces: [],
+    activityTypes: [],
+    taskQueue: "",
+    node: "",
+    activities: [],
+    identity: "",
+    instance: undefined,
+  };
 }
 
 export const RegisterWorker: MessageFns<RegisterWorker> = {
@@ -859,6 +1342,9 @@ export const RegisterWorker: MessageFns<RegisterWorker> = {
     }
     if (message.identity !== "") {
       writer.uint32(50).string(message.identity);
+    }
+    if (message.instance !== undefined) {
+      WorkerInstanceIdentity.encode(message.instance, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -918,6 +1404,14 @@ export const RegisterWorker: MessageFns<RegisterWorker> = {
           message.identity = reader.string();
           continue;
         }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.instance = WorkerInstanceIdentity.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -947,6 +1441,7 @@ export const RegisterWorker: MessageFns<RegisterWorker> = {
         ? object.activities.map((e: any) => ActivityDescriptor.fromJSON(e))
         : [],
       identity: isSet(object.identity) ? globalThis.String(object.identity) : "",
+      instance: isSet(object.instance) ? WorkerInstanceIdentity.fromJSON(object.instance) : undefined,
     };
   },
 
@@ -970,6 +1465,9 @@ export const RegisterWorker: MessageFns<RegisterWorker> = {
     if (message.identity !== "") {
       obj.identity = message.identity;
     }
+    if (message.instance !== undefined) {
+      obj.instance = WorkerInstanceIdentity.toJSON(message.instance);
+    }
     return obj;
   },
 
@@ -984,6 +1482,9 @@ export const RegisterWorker: MessageFns<RegisterWorker> = {
     message.node = object.node ?? "";
     message.activities = object.activities?.map((e) => ActivityDescriptor.fromPartial(e)) || [];
     message.identity = object.identity ?? "";
+    message.instance = (object.instance !== undefined && object.instance !== null)
+      ? WorkerInstanceIdentity.fromPartial(object.instance)
+      : undefined;
     return message;
   },
 };
@@ -1693,8 +2194,8 @@ export const Heartbeat: MessageFns<Heartbeat> = {
  * RegisterWorker first; the server answers with RegisterAck as the guaranteed
  * first frame on the response stream before any other server-to-worker
  * message. The worker then sends ActivityResult and Heartbeat messages while
- * the server pushes ActivityTask, ResultAck, and DrainRequest messages down
- * the same stream; there is no polling RPC.
+ * the server pushes ActivityTask, ResultAck, DrainRequest, LivenessPing, and
+ * CancelActivity messages down the same stream; there is no polling RPC.
  */
 export type WorkerProtocolService = typeof WorkerProtocolService;
 export const WorkerProtocolService = {

@@ -1,0 +1,53 @@
+# #241 TypeScript worker stub micro-fix evidence
+timestamp_utc=2026-08-15T07:34:18Z
+head_before=844174e550f16b656519f1c3ba236556273d0411
+
+## Pre-fix red of record (from final-battery.log)
+=== ts-worker:proto-drift ===
+$ node scripts/generate-proto.mjs --check
+src/proto/ is STALE relative to /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto-generated/proto
+  differing: worker.ts
+  missing from src/proto/: none
+  present but not generated: none
+  the SDK is speaking an older wire contract than the server.
+  run `npm run generate:proto` and commit the result.
+error: script "check:proto" exited with code 1
+--- ts-worker:proto-drift exit 1 ---
+
+## SDK-owned regeneration: bun run generate:proto
+$ node scripts/generate-proto.mjs
+regenerated src/proto/ from /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto-generated/proto
+generate_proto_exit=0
+
+## Post-fix drift check: bun run check:proto
+$ node scripts/generate-proto.mjs --check
+src/proto/ matches the authoritative proto contract
+check_proto_exit=0
+
+## Post-fix typecheck: bun run typecheck
+$ tsc -p tsconfig.json --noEmit
+typecheck_exit=0
+
+## Battery command after regeneration: bun test
+bun test v1.3.14 (0d9b296a)
+
+src/reconnect.test.ts:
+319 | 			controller.signal,
+320 | 		).then(() => {
+321 | 			slept = true;
+322 | 		});
+323 | 		expect(vi.getTimerCount()).toBe(1);
+324 | 		await vi.advanceTimersByTimeAsync(25);
+                 ^
+TypeError: vi.advanceTimersByTimeAsync is not a function. (In 'vi.advanceTimersByTimeAsync(25)', 'vi.advanceTimersByTimeAsync' is undefined)
+      at <anonymous> (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/sdks/typescript/aion-worker/src/reconnect.test.ts:324:12)
+(fail) reconnect > completes an unaborted default sleep and leaves no timer behind [0.18ms]
+
+ 118 pass
+ 1 fail
+ 358 expect() calls
+Ran 119 tests across 6 files. [1.84s]
+bun_test_exit=1
+
+## Evidence summary
+generate=0 drift=0 typecheck=0 bun_test=1
