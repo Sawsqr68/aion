@@ -1,0 +1,52 @@
+# Remaining per-touched-crate clippy: aion-awl
+timestamp_utc=2026-08-15T07:28:06Z
+    Checking serde_core v1.0.228
+    Checking mio v1.2.1
+    Checking tracing v0.1.44
+    Checking regalloc2 v0.15.1
+    Checking axum-core v0.5.6
+   Compiling prost-build v0.14.3
+    Checking getrandom v0.3.4
+    Checking prost v0.14.3
+    Checking zip v8.6.0
+    Checking rustix v1.1.4
+    Checking tokio v1.52.3
+    Checking cranelift-codegen v0.131.2
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking serde_spanned v1.1.1
+   Compiling tonic-prost-build v0.14.5
+    Checking toml v1.1.2+spec-1.1.0
+    Checking chrono v0.4.45
+    Checking fluent-uri v0.4.1
+    Checking ahash v0.8.12
+    Checking email_address v0.2.9
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto-generated)
+    Checking schemars v1.2.1
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking referencing v0.46.6
+    Checking ts-rs v12.0.1
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking jsonschema v0.46.6
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-core)
+    Checking axum v0.8.9
+    Checking cranelift-native v0.131.2
+    Checking cranelift-module v0.131.2
+    Checking cranelift-frontend v0.131.2
+    Checking hyper v1.10.1
+    Checking cranelift-jit v0.131.2
+    Checking beamr v0.18.2
+    Checking hyper-util v0.1.20
+    Checking hyper-timeout v0.5.2
+    Checking tonic v0.14.6
+    Checking aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-package)
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integrations)
+    Checking tonic-prost v0.14.5
+    Checking aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl)
+    Checking aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto)
+    Checking aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 33.84s
