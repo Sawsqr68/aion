@@ -197,10 +197,11 @@ build(repo: request.repo, clean: true) -> built
 
 `agent` says exactly one thing: the action's single `String` parameter carries
 a PROMPT and its result is the canonical agent-outcome record — a record you
-declare yourself, under any name, with exactly three fields: `text: String`
-(the agent's terminal reply), `stop_reason: String` (the canonical snake_case
-stop reason: `end_turn | tool_use | limit_reached | cancelled | error |
-other`), and `session_id: String` (the handle of the conversation that
+declare yourself, under any name, with exactly four fields: `text: String`
+(the whole accumulated output), `final_message: String` (the last completed
+agent answer alone, exactly as said), `stop_reason: String` (the canonical
+snake_case stop reason: `end_turn | tool_use | limit_reached | cancelled |
+error | other`), and `session_id: String` (the handle of the conversation that
 produced the outcome — a fact the harness fills, not a promise the session
 can be resumed; it is meaningful only to the harness that minted it). That is
 the whole of what an adapter needs to hand the call to an
@@ -215,7 +216,7 @@ workflow ask_the_agent
   input question: String
   outcome done: type String, route success
 
-type Reply { text: String, stop_reason: String, session_id: String }
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 worker assistants
   action ask(prompt: String) -> Reply
@@ -228,10 +229,11 @@ step ask
 
 The checker enforces the shape: exactly one parameter, that parameter `String`
 (not `String?`), the return type a declared record of exactly `text: String`,
-`stop_reason: String`, and `session_id: String` (an empty `text` on a
-completed run is honest — an agent that finished its turn emitting only tool
-calls said nothing; an empty `session_id` is refused at the harness boundary —
-a harness that ran a conversation can name it), and never
+`final_message: String`, `stop_reason: String`, and `session_id: String` (empty
+`text` and `final_message` values on a completed tool-only run are honest — the
+agent said nothing; one answer makes them equal; an empty `session_id` is
+refused at the harness boundary — a harness that ran a conversation can name
+it), and never
 together with a `run` body — the server runs a declared body itself and never
 hands it to a harness. The marker classifies the declaration and must not
 change the flow: `agent_seam.awl` and `agent_seam_unmarked_control.awl` must

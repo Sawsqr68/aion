@@ -306,3 +306,16 @@ structurally, and an empty-string `session_id` is refused by name at
 `AgentOutcome::into_payload`. Everything else this ruling establishes — the
 seam belongs in the language, the marker classifies the declaration, the
 prompt is the parameter's TEXT — stands unchanged.
+
+---
+
+## Amendment — 2026-08-14, task #241: the final message is distinct
+
+Task #241 replaced the three-field record with exactly four mandatory fields: `text: String` is the
+whole accumulated run output, `final_message: String` is the LAST completed agent answer alone,
+`stop_reason: String` is the canonical reason, and `session_id: String` is the conversation handle.
+The distinction prevents exact-token judges from falsely failing a successful run when earlier
+narration precedes its final verdict. Reasoning, tools, and user turns never enter `final_message`.
+When there was no answer, `text` and `final_message` are both honestly empty; with one answer they
+are honestly equal. This is replacement semantics again: a three-field payload no longer decodes
+and a three-field AWL declaration no longer checks. No field is optional or defaulted.

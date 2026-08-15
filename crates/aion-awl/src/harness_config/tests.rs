@@ -30,7 +30,7 @@ fn worker_with(settings: &str) -> Result<crate::WorkerDecl, Box<dyn std::error::
     let source = format!(
         "//! Launch-seam backstop probe.\nworkflow probe\n  input question: String\n  outcome \
          answered: type Answer, route success\n\ntype Answer {{ reply: String }}\n\ntype Reply \
-         {{ text: String, stop_reason: String, session_id: String }}\n\nworker assistants\n  harness\n{block}  \
+         {{ text: String, final_message: String, stop_reason: String, session_id: String }}\n\nworker assistants\n  harness\n{block}  \
          action ask(prompt: String) -> Reply\n    agent\n\nstep ask\n  ask(prompt: question) -> \
          reply\n  route answered(reply: reply.text)\n"
     );

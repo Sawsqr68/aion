@@ -1,0 +1,39 @@
+Recorded at: 2026-08-15T02:20:44Z
+Box load: 12:20  up 1 day, 23:54, 4 users, load averages: 20.40 15.98 19.03
+   Compiling aws-lc-rs v1.17.0
+    Checking aws-lc-sys v0.41.0
+    Checking aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package)
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-server)
+    Checking aion-awl-lsp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-lsp)
+    Checking aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-acp)
+    Checking aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store-libsql)
+   Compiling rustls v0.23.40
+    Checking aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integrations)
+    Checking aion-integration-norn v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-norn)
+    Checking aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion)
+    Checking rustls-webpki v0.103.13
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/benchmarks/million-processes)
+    Checking tokio-rustls v0.26.4
+    Checking tungstenite v0.29.0
+    Checking rustls-platform-verifier v0.7.0
+    Checking aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store-haematite)
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking tokio-tungstenite v0.29.0
+    Checking aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store)
+    Checking aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-package)
+    Checking axum v0.8.9
+    Checking aion-mcp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-mcp)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/xtask)
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-core)
+    Checking aion-darwin-acl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-darwin-acl)
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.5
+    Checking aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto-generated)
+    Checking aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto)
+    Checking aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-worker)
+    Checking aion-client v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-client)
+    Checking aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl)
+    Checking aion-integration-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-cli)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 37s

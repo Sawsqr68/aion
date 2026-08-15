@@ -170,6 +170,7 @@ async fn cli_harness_streams_a_live_transcript_with_no_controls() {
         decoded,
         serde_json::json!({
             "text": "the final answer is 42",
+            "final_message": "the final answer is 42",
             "stop_reason": "tool_use",
             "session_id": expected_sid,
         }),
@@ -216,6 +217,7 @@ async fn a_signal_killed_agent_is_not_reported_as_choosing_to_stop() {
         decoded,
         serde_json::json!({
             "text": "started",
+            "final_message": "started",
             "stop_reason": "other",
             "session_id": expected_sid,
         }),

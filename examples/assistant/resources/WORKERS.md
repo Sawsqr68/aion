@@ -43,7 +43,7 @@ It is the counterpart to the `agent` marker on an action declaration, and the
 `harness` section beside it is where the launch is declared:
 
 ```awl
-type Reply { text: String, stop_reason: String, session_id: String }
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 worker assistants
   harness

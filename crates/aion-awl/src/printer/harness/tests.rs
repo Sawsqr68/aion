@@ -35,7 +35,7 @@ workflow every_harness_field
 
 type Answer { reply: String }
 
-type Reply { text: String, stop_reason: String, session_id: String }
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 worker assistants
   harness

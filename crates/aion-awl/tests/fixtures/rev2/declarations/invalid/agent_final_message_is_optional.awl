@@ -1,0 +1,16 @@
+//! `final_message` is always present on the AgentOutcome wire, with the empty string honestly
+//! representing a run that produced no answer. An optional field declares an absence that cannot
+//! happen and therefore is not the canonical record.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type String, route success
+
+type Reply { text: String, final_message: String?, stop_reason: String, session_id: String }
+
+worker assistants
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply.text)

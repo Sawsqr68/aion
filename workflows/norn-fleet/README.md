@@ -35,8 +35,8 @@ The claim being judged, the file paths to start from, the standard to judge
 against, and the reply format all have to be inside the prompt. Building that
 string is deliberately the dispatcher's job: it keeps the judge action on the
 plain agent seam (one String prompt in, the canonical agent-outcome record
-out — `{text, stop_reason, session_id}`, the judge's terminal text, why the
-run stopped, and the handle of the session that produced it), which is the
+out — `{text, final_message, stop_reason, session_id}`, the whole output, last completed answer,
+why the run stopped, and the handle of the session that produced it), which is the
 one shape a norn worker started from the installed binary can serve honestly.
 
 ### The control

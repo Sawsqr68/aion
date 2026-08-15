@@ -109,7 +109,7 @@ declared action, and choosing between them is an authoring decision:
    `session_id: String`:
 
    ```awl
-   type Reply { text: String, stop_reason: String, session_id: String }
+   type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
    worker assistants
      action ask(prompt: String) -> Reply

@@ -6,7 +6,7 @@ workflow brief_the_agent
 
 type Answer { reply: String }
 type Brief  { question: String }
-type Reply  { text: String, stop_reason: String, session_id: String }
+type Reply  { text: String, final_message: String, stop_reason: String, session_id: String }
 
 worker assistants
   action ask(brief: Brief) -> Reply

@@ -1,0 +1,25 @@
+Recorded at: 2026-08-15T00:02:08Z
+Box load: 10:02  up 1 day, 21:36, 4 users, load averages: 15.89 19.67 17.98
+    Blocking waiting for file lock on package cache
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-core)
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integrations)
+   Compiling aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-acp)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.01s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_acp-ac7b14089df38d3c)
+
+running 1 test
+test messages::tests::three_answer_messages_keep_the_last_message_distinct ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 101 filtered out; finished in 0.06s
+
+     Running tests/acp_live_agent.rs (target/debug/deps/acp_live_agent-5ccc142adb423623)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.03s
+
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-eb40d3fb02b2e114)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s

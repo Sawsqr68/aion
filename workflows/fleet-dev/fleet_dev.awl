@@ -99,12 +99,10 @@ workflow fleet_dev
 /// CONTENT lives in the tree.
 type Leg { id: String, prompt: String, repo: String }
 
-/// The canonical agent-outcome record every dispatch of an agent seam
-/// returns: the leg's terminal `text` and the canonical `stop_reason`.
-/// Two fields exactly — the running 0.15.0 reader demands the shape
-/// structurally. The three-field record (`session_id`) revs WITH the next
-/// cut, not ahead of it; the upgrade is recorded in this folder's README.
-type Reply { text: String, stop_reason: String }
+/// The canonical agent-outcome record every dispatch of an agent seam returns: the leg's whole
+/// accumulated `text`, its last answer alone as `final_message`, the canonical `stop_reason`, and
+/// the `session_id` handle of the conversation that produced it.
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 /// What actually ran: the sealed command's exit status and both streams,
 /// filled by the server for every `run`-bodied action.

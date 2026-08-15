@@ -40,7 +40,7 @@ fn document_source(env_pass: &str) -> String {
     format!(
         "//! Absence-report probe.\nworkflow ask\n  input question: String\n  outcome \
          answered: type Answer, route success\n\ntype Answer {{ reply: String }}\n\ntype \
-         Reply {{ text: String, stop_reason: String, session_id: String }}\n\nworker reviewers\n  harness\n    \
+         Reply {{ text: String, final_message: String, stop_reason: String, session_id: String }}\n\nworker reviewers\n  harness\n    \
          kind norn\n    concurrency 1\n    reconnect_initial_backoff 5s\n    \
          reconnect_max_backoff 1m\n    reconnect_max_attempts 10\n    env_pass \
          {env_pass}\n    cwd \"/srv/agents\"\n  action ask(prompt: String) -> \

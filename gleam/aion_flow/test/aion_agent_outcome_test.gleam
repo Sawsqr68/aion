@@ -1,9 +1,6 @@
 //// Pins the Gleam-side canonical agent-outcome record (`aion/agent`) to the
-//// exact wire shape the Rust harnesses emit from `wait_result` — a JSON
-//// object of `text` + `stop_reason` + `session_id`, snake_case, nothing
-//// else. The decode side is exercised against harness-authored bytes (key
-//// order the Rust serializer produces) rather than only against this codec's
-//// own encode, so the pin cannot degenerate into a self-consistency check.
+//// exact four-key wire shape the Rust harnesses emit from `wait_result`.
+//// Decoding uses harness-authored field order rather than only this codec's own output.
 
 import aion/agent.{AgentOutcome}
 import gleam/string
@@ -13,42 +10,46 @@ pub fn the_record_round_trips_through_its_codec_test() {
   let codec = agent.outcome_codec()
   let outcome =
     AgentOutcome(
-      text: "the answer",
+      text: "narration\nthe answer",
+      final_message: "the answer",
       stop_reason: "end_turn",
       session_id: "sess-roundtrip",
     )
-  let wire = codec.encode(outcome)
-  codec.decode(wire)
+  codec.decode(codec.encode(outcome))
   |> should.equal(Ok(outcome))
 }
 
 pub fn the_harness_wire_bytes_decode_test() {
-  // Bytes as the Rust side writes them (serde field order: text first).
   let codec = agent.outcome_codec()
   codec.decode(
-    "{\"text\":\"done\",\"stop_reason\":\"end_turn\",\"session_id\":\"sess-wire-9\"}",
+    "{\"text\":\"narration\\nthe answer\",\"final_message\":\"the answer\",\"stop_reason\":\"end_turn\",\"session_id\":\"sess-wire-9\"}",
   )
   |> should.equal(
     Ok(AgentOutcome(
-      text: "done",
+      text: "narration\nthe answer",
+      final_message: "the answer",
       stop_reason: "end_turn",
       session_id: "sess-wire-9",
     )),
   )
 }
 
-pub fn an_empty_text_on_a_completed_run_is_honest_test() {
+pub fn empty_text_and_final_message_are_honest_test() {
   let codec = agent.outcome_codec()
   codec.decode(
-    "{\"text\":\"\",\"stop_reason\":\"end_turn\",\"session_id\":\"sess-quiet\"}",
+    "{\"text\":\"\",\"final_message\":\"\",\"stop_reason\":\"end_turn\",\"session_id\":\"sess-quiet\"}",
   )
   |> should.equal(
-    Ok(AgentOutcome(text: "", stop_reason: "end_turn", session_id: "sess-quiet")),
+    Ok(AgentOutcome(
+      text: "",
+      final_message: "",
+      stop_reason: "end_turn",
+      session_id: "sess-quiet",
+    )),
   )
 }
 
 pub fn a_bare_string_is_refused_by_the_decoder_test() {
-  // The pre-#181 wire shape must not decode: the record is the contract now.
   let codec = agent.outcome_codec()
   let assert Error(failure) = codec.decode("\"just text\"")
   failure.reason
@@ -56,13 +57,12 @@ pub fn a_bare_string_is_refused_by_the_decoder_test() {
   |> should.be_false
 }
 
-pub fn a_two_field_payload_is_refused_by_the_decoder_test() {
-  // The pre-#205 wire shape must not decode either: `session_id` is a
-  // mandatory fact, and a payload without it is a stale producer, not a
-  // record to accept quietly.
+pub fn a_three_field_payload_is_refused_by_the_decoder_test() {
+  // The pre-#241 shape cannot decode: final_message is mandatory, never defaulted.
   let codec = agent.outcome_codec()
-  let assert Error(failure) =
-    codec.decode("{\"text\":\"done\",\"stop_reason\":\"end_turn\"}")
+  let assert Error(failure) = codec.decode(
+    "{\"text\":\"done\",\"stop_reason\":\"end_turn\",\"session_id\":\"sess-stale\"}",
+  )
   failure.reason
   |> string.is_empty
   |> should.be_false

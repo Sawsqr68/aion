@@ -238,15 +238,15 @@ type AssistantStatus { phase: String, round: Int? }
 type Provisioned { exit_code: Int, stdout: String }
 
 /// The canonical agent-outcome record, as this document declares it: what
-/// every dispatch of the `assistant` agent action returns. `text` is the
-/// agent's terminal reply (the honest empty string when the agent finished a
-/// round saying nothing); `stop_reason` is the canonical snake_case reason
+/// every dispatch of the `assistant` agent action returns. `text` is the whole accumulated output;
+/// `final_message` is the last completed answer alone (both are honestly empty when the agent said
+/// nothing, and equal for this harness's one-answer case); `stop_reason` is the canonical reason
 /// (`end_turn` on every completed norn round — a non-completion fails the
 /// dispatch instead of returning a record). The shape is demanded by the
 /// checker on any `agent`-marked action; the NAME is this document's own.
 /// `stop_reason` is available to route on; this session deliberately does not
 /// — its routing behaviour predates the field and stands unchanged.
-type Reply { text: String, stop_reason: String, session_id: String }
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 /// The one value the round loop threads, and the ONLY thing readable after
 /// the loop: the prompt the next round will send, the last reply received,

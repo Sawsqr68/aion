@@ -13,10 +13,10 @@ workflow repo_gate
 
 /// What a `run` body hands back. Name only the parts you use.
 type Report { stdout: String, stderr: String }
-/// The canonical agent-outcome record the agent seam hands back: the judge's
-/// terminal `text`, the canonical `stop_reason`, and the `session_id` handle
-/// of the conversation that produced it.
-type Reply   { text: String, stop_reason: String, session_id: String }
+/// The canonical agent-outcome record the agent seam hands back: accumulated `text`, the judge's
+/// last answer as `final_message`, the canonical `stop_reason`, and the `session_id` handle of the
+/// conversation that produced it.
+type Reply   { text: String, final_message: String, stop_reason: String, session_id: String }
 type Gate    { cloned: String, commit: String, checks: String, tests: String, judgement: String }
 type Refused { reason: String, judge_reply: String }
 

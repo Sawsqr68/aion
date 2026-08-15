@@ -1,0 +1,22 @@
+   Compiling serde_core v1.0.228
+   Compiling libc v0.2.186
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling memchr v2.8.1
+   Compiling syn v2.0.117
+   Compiling getrandom v0.4.2
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling ts-rs-macros v12.0.1
+   Compiling uuid v1.23.4
+   Compiling thiserror v2.0.18
+   Compiling chrono v0.4.45
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 33.00s
+     Running unittests src/lib.rs (target/debug/deps/aion_core-1f9d46a96494f906)
+
+running 1 test
+test generated_types::export_ops_console_wire_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.05s

@@ -6,7 +6,7 @@ workflow brief_the_agent
   outcome answered: type Answer, route success
 
 type Answer { reply: String }
-type Reply  { text: String, stop_reason: String, session_id: String }
+type Reply  { text: String, final_message: String, stop_reason: String, session_id: String }
 
 worker assistants
   action ask(prompt: String, context: String) -> Reply

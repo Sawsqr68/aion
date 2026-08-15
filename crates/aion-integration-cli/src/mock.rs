@@ -347,6 +347,7 @@ mod tests {
             decoded,
             serde_json::json!({
                 "text": "working",
+                "final_message": "working",
                 "stop_reason": "end_turn",
                 "session_id": expected_session_id(),
             }),

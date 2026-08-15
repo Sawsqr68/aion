@@ -136,7 +136,7 @@ type Provisioned { exit_code: Int, stdout: String }
 /// name and shape as `assistant.awl`'s — the two documents share queue
 /// `assistant`, so the shared action's signature must agree (see the module
 /// note); the record type is part of that signature.
-type Reply { text: String, stop_reason: String, session_id: String }
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
 /// What one proven round returns: the agent's reply text and where it worked.
 type Answered { reply: String, workspace_path: String }

@@ -1,0 +1,47 @@
+Recorded at: 2026-08-15T01:27:44Z
+Box load: 11:27  up 1 day, 23:01, 4 users, load averages: 39.81 34.03 28.00
+warning: Unused imported module
+  ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/awl-hello/src/awl_hello.gleam:8:1
+  │
+8 │ import aion/duration
+  │ ^^^^^^^^^^^^^^^^^^^^ This imported module is never used
+
+Hint: You can safely remove it.
+
+warning: Unused imported module
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/awl-hello/src/awl_hello.gleam:10:1
+   │
+10 │ import aion/signal
+   │ ^^^^^^^^^^^^^^^^^^ This imported module is never used
+
+Hint: You can safely remove it.
+
+warning: Unused imported type
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/awl-hello/src/awl_hello.gleam:15:22
+   │
+15 │ import gleam/option.{type Option, None, Some}
+   │                      ^^^^^^^^^^^ This imported type is never used
+
+Hint: You can safely remove it.
+
+warning: Unused imported item
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/awl-hello/src/awl_hello.gleam:15:35
+   │
+15 │ import gleam/option.{type Option, None, Some}
+   │                                   ^^^^ This imported constructor is never used
+
+Hint: You can safely remove it.
+
+warning: Unused imported item
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/awl-hello/src/awl_hello.gleam:15:41
+   │
+15 │ import gleam/option.{type Option, None, Some}
+   │                                         ^^^^ This imported constructor is never used
+
+Hint: You can safely remove it.
+
+   Compiled in 0.34s
+production closure:aion_flow gleam_json gleam_stdlib
+regenerated: 47 modules, aion_flow 0.7.0
+  closure:   /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package/sdk-closure
+  generated: /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package/src/bundle_data.rs

@@ -90,14 +90,12 @@ at the operator's desk, after this workflow returns.
 
 ## Recorded trade-offs and ruled values (document review, 2026-08-14)
 
-- **`Reply` is the two-field record** `{text, stop_reason}` — RULED. The
-  running 0.15.0 server is the READER and it refuses the three-field record;
-  protocol changes land reader-first, and landed-is-not-running applies to
-  the `session_id` contract like anything else. The pilot proved this
-  register against this server, and this document checks clean on the
-  installed binary (`ok, 12 steps` after the fan-out re-shape). **The upgrade**: the three-field record
-  (`session_id`, post-#205) rides the next release cut, and this document
-  revs to it WITH that cut, not ahead of it.
+- **`Reply` is now the four-field record**
+  `{text, final_message, stop_reason, session_id}` — #241 replacement semantics. `text` remains the
+  whole accumulated output and `final_message` is the last completed answer alone. This source
+  change is landed, not deployed: no serving process is restarted or swapped by this document
+  update. The fleet v3 judge that routes on `final_message` is a separate dispatcher-authored
+  change; this revision changes only the declared record shape.
 - **`distribute` with per-leg worktrees — TOM'S RULING (2026-08-14),
   superseding the sequential v1.** The review had ratified `sequence`
   (shared tree, no merge phase to go wrong) with the parallel variant as a

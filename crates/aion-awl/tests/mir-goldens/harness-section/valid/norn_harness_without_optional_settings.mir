@@ -2,7 +2,7 @@ module norn_harness_minimal_launch source=norn_harness_minimal_launch.awl
 exports: run/1, definition/0, execute/1
 == effect schedule ==
   step_ask:
-    aion@activity:task_queue/2 [activities] (v1, lit#12)
+    aion@activity:task_queue/2 [activities] (v1, lit#13)
     aion@workflow:run/1 [activities] (v2)
 == durable families == activities
 == atoms ==
@@ -15,22 +15,24 @@ exports: run/1, definition/0, execute/1
 == literals ==
   [0] "reply"
   [1] "text"
-  [2] "stop_reason"
-  [3] "session_id"
-  [4] "prompt"
-  [5] "question"
-  [6] "answered"
-  [7] "outcome"
-  [8] ""
-  [9] "NornHarnessMinimalLaunchOutcome"
-  [10] "answered"
-  [11] "payload"
-  [12] "assistants"
+  [2] "final_message"
+  [3] "stop_reason"
+  [4] "session_id"
+  [5] "prompt"
+  [6] "question"
+  [7] "answered"
+  [8] "outcome"
+  [9] ""
+  [10] "NornHarnessMinimalLaunchOutcome"
+  [11] "answered"
+  [12] "payload"
+  [13] "assistants"
 == types ==
   record Answer tag=answer
     reply: string
   record Reply tag=reply
     text: string
+    final_message: string
     stop_reason: string
     session_id: string
   record AskInput tag=ask_input
@@ -77,8 +79,9 @@ exports: run/1, definition/0, execute/1
   v1 = field(v0, 1)
   v2 = field(v0, 2)
   v3 = field(v0, 3)
-  v4 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json, "session_id": v3|>awlc.string_to_json}
-  return v4
+  v4 = field(v0, 4)
+  v5 = json_obj {"text": v1|>awlc.string_to_json, "final_message": v2|>awlc.string_to_json, "stop_reason": v3|>awlc.string_to_json, "session_id": v4|>awlc.string_to_json}
+  return v5
 == fn reply_decoder/0 origin=codec_template(RecordTrio, Reply, record#1) ==
   sig: () -> Decoder(norn_harness_minimal_launch.Reply)
   v0 = call_rt aion@awl@codec:string_decoder/0()
@@ -96,8 +99,13 @@ exports: run/1, definition/0, execute/1
   tail_rt gleam@dynamic@decode:field/3(lit#3, v2, v3)
 == fn reply_decoder$2/3 origin=lifted(reply_decoder, #2) ==
   sig: (String, String, String) -> Decoder(norn_harness_minimal_launch.Reply)
-  v3 = record(reply, [v1, v2, v0])
-  tail_rt gleam@dynamic@decode:success/1(v3)
+  v3 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1, v2]
+  v4 = make_closure reply_decoder$3 captures=[v1, v2, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v3, v4)
+== fn reply_decoder$3/4 origin=lifted(reply_decoder, #3) ==
+  sig: (String, String, String, String) -> Decoder(norn_harness_minimal_launch.Reply)
+  v4 = record(reply, [v1, v2, v3, v0])
+  tail_rt gleam@dynamic@decode:success/1(v4)
 == fn ask_input_codec/0 origin=codec_template(RecordTrio, AskInput, record#2) ==
   sig: () -> Codec(norn_harness_minimal_launch.AskInput)
   v0 = make_closure ask_input_to_json captures=[]
@@ -112,7 +120,7 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(norn_harness_minimal_launch.AskInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure ask_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
 == fn ask_input_decoder$0/1 origin=lifted(ask_input_decoder, #0) ==
   sig: (String) -> Decoder(norn_harness_minimal_launch.AskInput)
   v1 = record(ask_input, [v0])
@@ -131,7 +139,7 @@ exports: run/1, definition/0, execute/1
   sig: () -> Decoder(norn_harness_minimal_launch.NornHarnessMinimalLaunchInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure norn_harness_minimal_launch_input_decoder$0 captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
 == fn norn_harness_minimal_launch_input_decoder$0/1 origin=lifted(norn_harness_minimal_launch_input_decoder, #0) ==
   sig: (String) -> Decoder(norn_harness_minimal_launch.NornHarnessMinimalLaunchInput)
   v1 = record(norn_harness_minimal_launch_input, [v0])
@@ -144,23 +152,23 @@ exports: run/1, definition/0, execute/1
 == fn norn_harness_minimal_launch_outcome_to_json/1 origin=codec_template(UnionTrio, NornHarnessMinimalLaunchOutcome, union#4) ==
   sig: (norn_harness_minimal_launch.NornHarnessMinimalLaunchOutcome) -> Json
   v1 = field(v0, 1)
-  v2 = json_obj {"outcome": lit#6|>awlc.string_to_json, "payload": v1|>answer_to_json}
+  v2 = json_obj {"outcome": lit#7|>awlc.string_to_json, "payload": v1|>answer_to_json}
   return v2
 == fn norn_harness_minimal_launch_outcome_decoder/0 origin=codec_template(UnionTrio, NornHarnessMinimalLaunchOutcome, union#4) ==
   sig: () -> Decoder(norn_harness_minimal_launch.NornHarnessMinimalLaunchOutcome)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure norn_harness_minimal_launch_outcome_decoder$outcome captures=[]
-  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
 == fn norn_harness_minimal_launch_outcome_decoder$outcome/1 origin=lifted(norn_harness_minimal_launch_outcome_decoder, #0) ==
   sig: (String) -> Decoder(norn_harness_minimal_launch.NornHarnessMinimalLaunchOutcome)
-  if cmp Eq v0 lit#10:
+  if cmp Eq v0 lit#11:
     v3 = call_local answer_decoder()
     v4 = make_closure norn_harness_minimal_launch_outcome_decoder$arm0 captures=[]
-    tail_rt gleam@dynamic@decode:field/3(lit#11, v3, v4)
+    tail_rt gleam@dynamic@decode:field/3(lit#12, v3, v4)
   else:
-    v1 = record(answer, [lit#8])
+    v1 = record(answer, [lit#9])
     v2 = record(answered_outcome, [v1])
-    tail_rt gleam@dynamic@decode:failure/2(v2, lit#9)
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#10)
 == fn norn_harness_minimal_launch_outcome_decoder$arm0/1 origin=lifted(norn_harness_minimal_launch_outcome_decoder, #1) ==
   sig: (norn_harness_minimal_launch.Answer) -> Decoder(norn_harness_minimal_launch.NornHarnessMinimalLaunchOutcome)
   v1 = record(answered_outcome, [v0])
@@ -171,7 +179,7 @@ exports: run/1, definition/0, execute/1
 == fn step_ask/1 origin=region(ask) ==
   sig: (String) -> Result(norn_harness_minimal_launch.NornHarnessMinimalLaunchOutcome, AwlError)
   v1 = call_local ask_activity(v0)
-  v2 = call_rt aion@activity:task_queue/2(v1, lit#12)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#13)
   v3 = call_rt aion@workflow:run/1(v2)
   v4 = call_rt aion@awl@error:map_activity_error/1(v3)
   v5 = try_bind v4

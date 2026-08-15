@@ -1247,9 +1247,18 @@ reason: string, };
 
 export type AgentOutcome = {
 /**
- * The agent's terminal text — the run's actual output.
+ * The whole run output: every completed agent answer, accumulated by the harness.
  */
 text: string,
+/**
+ * The run's LAST completed agent answer message, alone and exactly as the agent said it.
+ *
+ * Reasoning, tool output, and user turns never enter this field. It exists separately from
+ * [`Self::text`] so an exact-token judge reads the actual final verdict rather than falsely
+ * failing a successful run because narration from earlier answers precedes it. It is empty when
+ * the agent produced no answer text at all, and equals `text` when there was exactly one answer.
+ */
+final_message: string,
 /**
  * The canonical `snake_case` stop reason
  * ([`StopKind::canonical_stop_reason`]).

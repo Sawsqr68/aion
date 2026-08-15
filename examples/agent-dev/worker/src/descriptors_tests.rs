@@ -374,7 +374,7 @@ fn the_checker_accepts_the_agent_marker_on_the_canonical_record() -> TestResult 
                       input question: String\n  \
                       outcome answered: type Answer, route success\n\n\
                     type Answer { reply: String }\n\
-                    type Reply { text: String, stop_reason: String, session_id: String }\n\n\
+                    type Reply { text: String, final_message: String, stop_reason: String, session_id: String }\n\n\
                     worker default\n  \
                       action ask(prompt: String) -> Reply\n    \
                         agent\n\n\

@@ -213,23 +213,24 @@ fn every_living_awl_document_checks_clean() {
     );
 }
 
-/// The negative control: the gate must be able to fail. A document carrying
-/// the exact shape #181 retired (an `agent` action returning bare `String`)
-/// is written to a scratch directory and must be REFUSED by the same binary
-/// and argv the gate runs — proving the checking path can go red, so a green
-/// sweep above is a measurement rather than a mood.
+/// The negative control: the gate must be able to fail. A document carrying the exact three-field
+/// shape #241 retired is written to a scratch directory and must be REFUSED by the same binary and
+/// argv the gate runs — proving the checking path can go red, so a green sweep above is a
+/// measurement rather than a mood.
 #[test]
-fn the_gate_refuses_the_retired_agent_shape() -> Result<(), Box<dyn std::error::Error>> {
+fn the_gate_refuses_the_retired_three_field_agent_shape() -> Result<(), Box<dyn std::error::Error>>
+{
     let binary = aion_binary()
         .ok_or("the `aion` binary is not built beside this test; run `cargo test -p aion-cli`")?;
     let scratch = tempfile::tempdir()?;
     let document = scratch.path().join("retired_shape.awl");
     fs::write(
         &document,
-        "//! The pre-#181 agent shape: refused, so the corpus gate can fail.\n\
+        "//! The pre-#241 three-field agent shape: refused, so the corpus gate can fail.\n\
          workflow retired\n  input question: String\n  outcome done: type String, route success\n\n\
-         worker assistants\n  action ask(prompt: String) -> String\n    agent\n\n\
-         step ask\n  ask(prompt: question) -> reply\n  route done(reply)\n",
+         type Reply { text: String, stop_reason: String, session_id: String }\n\n\
+         worker assistants\n  action ask(prompt: String) -> Reply\n    agent\n\n\
+         step ask\n  ask(prompt: question) -> reply\n  route done(reply.text)\n",
     )?;
     let output = Command::new(&binary)
         .args(["awl", "check"])
@@ -245,7 +246,7 @@ fn the_gate_refuses_the_retired_agent_shape() -> Result<(), Box<dyn std::error::
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        rendered.contains("`text: String`, `stop_reason: String`, and `session_id: String`"),
+        rendered.contains("`final_message: String`"),
         "the refusal names the canonical record: {rendered}"
     );
     Ok(())

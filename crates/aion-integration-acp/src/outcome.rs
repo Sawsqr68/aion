@@ -110,7 +110,8 @@ impl PumpEnd {
 /// Interprets the terminal outcome as the activity's [`Payload`], or the honest error it is.
 ///
 /// - **`end_turn`** → the completed run. The payload is the canonical [`AgentOutcome`] record,
-///   `{"text": <the agent's answer>, "stop_reason": "end_turn", "session_id": <the ACP session>}` —
+///   `{"text": <all completed answers>, "final_message": <the last completed answer>,
+///   "stop_reason": "end_turn", "session_id": <the ACP session>}` —
 ///   ACP's native stop reason mapped through the adapter's existing neutral
 ///   [`translate::stop_kind`] mapping and spelled by the one canonical
 ///   [`StopKind::canonical_stop_reason`](aion_integrations::StopKind::canonical_stop_reason)
