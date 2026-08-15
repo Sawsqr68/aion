@@ -166,9 +166,7 @@ pub(crate) async fn list_children(
                             );
                             return Ok(None);
                         }
-                        Err(error) if error.0.code == WireErrorCode::NamespaceDenied => {
-                            return Ok(None);
-                        }
+                        Err(error) if is_omitted_child_error(&error) => return Ok(None),
                         Err(error) => return Err(error),
                     };
                     let child_history = child_engine
@@ -193,6 +191,10 @@ pub(crate) async fn list_children(
         }
     }
     Ok(Json(ChildrenResponse { children }))
+}
+
+fn is_omitted_child_error(error: &HttpWireError) -> bool {
+    error.0.code == WireErrorCode::NamespaceDenied
 }
 
 fn project_child(workflow_id: WorkflowId, workflow_type: String, history: &[Event]) -> ChildEntry {
@@ -300,6 +302,14 @@ mod tests {
         ];
         assert_eq!(current_attempt(&history), None);
         Ok(())
+    }
+
+    #[test]
+    fn only_namespace_denial_is_silently_omitted_after_not_found_is_logged() {
+        let denied = HttpWireError(WireError::new(WireErrorCode::NamespaceDenied, "denied"));
+        let backend = HttpWireError(WireError::backend("store unavailable"));
+        assert!(is_omitted_child_error(&denied));
+        assert!(!is_omitted_child_error(&backend));
     }
 
     #[test]
