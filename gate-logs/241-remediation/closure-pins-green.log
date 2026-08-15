@@ -1,0 +1,99 @@
+# #241 closure pin remediation after complete workspace red
+timestamp_utc=2026-08-15T04:32:31Z
+box_load=14:32  up 2 days,  2:06, 4 users, load averages: 27.73 24.32 25.75
+    Blocking waiting for file lock on build directory
+   Compiling aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 28s
+     Running tests/awl_assemble.rs (target/debug/deps/awl_assemble-6520468e2d94c938)
+
+running 10 tests
+test workflow_name_colliding_with_a_bundle_module_is_refused_typed ... ok
+test unsafe_workflow_name_is_refused_typed ... ok
+test regeneration_script_is_documented_and_outside_the_product_path ... ok
+test fixed_input_archive_bytes_match_the_cross_process_pin ... ok
+test every_workflow_beam_import_is_shipped_in_the_closure ... ok
+test bundle_is_closed_under_imports_modulo_engine_and_erts_modules ... ok
+test bundle_is_versioned_pinned_and_carries_the_imported_sdk_modules ... ok
+test format_v1_loader_admits_the_archive_with_derived_manifest ... ok
+test assembling_twice_yields_byte_identical_archives ... ok
+test document_timeout_reaches_the_manifest_and_absence_arms_nothing ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+    Checking smallvec v1.15.1
+   Compiling libc v0.2.186
+    Checking serde_core v1.0.228
+    Checking log v0.4.32
+    Checking zerofrom v0.1.8
+    Checking getrandom v0.4.2
+    Checking fnv v1.0.7
+    Checking cpufeatures v0.3.0
+    Checking ref-cast v1.0.25
+    Checking getrandom v0.3.4
+    Checking parking_lot_core v0.9.12
+    Checking yoke v0.8.3
+    Checking regalloc2 v0.15.1
+   Compiling jobserver v0.1.34
+    Checking gimli v0.33.0
+    Checking thiserror v2.0.18
+    Checking sha2 v0.11.0
+    Checking anyhow v1.0.102
+    Checking mach2 v0.4.3
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking zerovec v0.11.6
+   Compiling cc v1.2.63
+    Checking zerotrie v0.2.4
+    Checking parking_lot v0.12.5
+    Checking uuid v1.23.4
+    Checking errno v0.3.14
+    Checking region v3.0.2
+    Checking ahash v0.8.12
+    Checking chrono v0.4.45
+    Checking tinystr v0.8.3
+    Checking potential_utf v0.1.5
+    Checking fluent-uri v0.4.1
+    Checking rustix v1.1.4
+    Checking email_address v0.2.9
+    Checking aes v0.9.1
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking cranelift-codegen v0.131.2
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+    Checking icu_collections v2.2.0
+    Checking icu_locale_core v2.2.0
+    Checking lzma-rust2 v0.16.4
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking serde_spanned v1.1.1
+    Checking referencing v0.46.6
+    Checking ts-rs v12.0.1
+    Checking sha1 v0.11.0
+    Checking mio v1.2.1
+    Checking zopfli v0.8.3
+    Checking wasmtime-internal-jit-icache-coherence v44.0.2
+    Checking icu_provider v2.2.0
+    Checking socket2 v0.6.4
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking dashmap v6.2.1
+    Checking rand v0.10.2
+    Checking num_cpus v1.17.0
+    Checking tempfile v3.27.0
+    Checking icu_properties v2.2.0
+    Checking icu_normalizer v2.2.0
+    Checking tokio v1.52.3
+    Checking aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-core)
+    Checking toml v1.1.2+spec-1.1.0
+    Checking cranelift-module v0.131.2
+    Checking cranelift-native v0.131.2
+    Checking idna_adapter v1.2.2
+    Checking cranelift-frontend v0.131.2
+    Checking cranelift-jit v0.131.2
+    Checking idna v1.1.0
+    Checking jsonschema v0.46.6
+   Compiling zstd-safe v7.2.4
+   Compiling zstd v0.13.3
+    Checking zip v8.6.0
+   Compiling beamr v0.18.2
+    Checking aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-package)
+    Checking aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl)
+    Checking aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 52.61s

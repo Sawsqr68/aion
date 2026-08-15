@@ -43,7 +43,12 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// (`committed_closure_matches_a_fresh_oracle_harvest`) is what forced this
 /// repin: a workspace battery red on `fresh-only: ["aion@agent"]`, caught at
 /// the 0.13.7 release gate rather than at an operator's runtime.
-const BUNDLE_CHECKSUM: &str = "2e457591a9a047ae08a9cae90cdf6110171198828136364419e9c48d33f32aa1";
+/// Repinned 2026-08-15 for #241: the canonical record's mandatory
+/// `final_message` field changed the committed `aion@agent` BEAM. The closure
+/// freshness gate and its focused green prove the committed bytes match a fresh
+/// harvest; this checksum pins those shipped bytes rather than the pre-#241
+/// module.
+const BUNDLE_CHECKSUM: &str = "b301746fa0244ecedff4743ffbbb35f8f80e3426bed834f83f8801d2cabef657";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -144,9 +149,13 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// the CLOSURE, not with any workflow source edit. The bundle checksum moved
 /// in the same commit for the same reason, and
 /// `assembling_twice_yields_byte_identical_archives` still passes, so the
-/// new bytes remain deterministic.
+/// new bytes remain deterministic. Repinned on 2026-08-15 for #241: adding
+/// mandatory `final_message` regenerated the committed `aion@agent` closure
+/// module, which is an input to every archive. The same-process determinism and
+/// fresh-closure tests are the controls: this pin moves with those intentional,
+/// deterministic shipped bytes.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "448d69212fb6d57d6a856083573d503901c5df6b06b616d24692f80fdfbbf49d";
+    "9c0181ccdd7a27240ff8a915768b0dfb72184342ae2bd27e301a0f77d4678813";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
