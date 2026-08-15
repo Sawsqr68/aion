@@ -121,6 +121,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 aion-store = { version = "0.15.0", path = "../aion-store" }
+axum = { workspace = true, features = ["ws"] }
 chrono = { workspace = true }
 fs4 = { workspace = true }
 tempfile = { workspace = true }
