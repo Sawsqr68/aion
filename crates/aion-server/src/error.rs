@@ -154,6 +154,19 @@ pub enum ServerError {
         detail: String,
     },
 
+    /// A second dispatcher tried to install a responder for an execution site
+    /// whose prior attempt is still held live.
+    #[error(
+        "pending activity collision for workflow {workflow_id}, activity {activity_id}: \
+         a live responder already owns this execution site"
+    )]
+    PendingActivityCollision {
+        /// Workflow whose responder slot is already occupied.
+        workflow_id: WorkflowId,
+        /// Activity site whose responder slot is already occupied.
+        activity_id: ActivityId,
+    },
+
     /// A worker result did not prove ownership of the current execution
     /// generation and was refused before reaching workflow state.
     #[error(
@@ -231,6 +244,9 @@ impl ServerError {
             | Self::LockPoisoned { .. } => WireError::backend("server backend failure"),
             Self::ActivityCompletionRejected { .. } => {
                 WireError::backend("stale activity completion rejected")
+            }
+            Self::PendingActivityCollision { .. } => {
+                WireError::backend("pending activity collision")
             }
             Self::WorkerDispatch { .. } => WireError::backend("worker dispatch failed"),
             Self::WorkerConnectionLost { .. } => {
@@ -438,6 +454,11 @@ impl ServerError {
                 error_type: Cow::Borrowed("WorkerBusy"),
                 store_error_type: None,
                 reason: detail,
+            },
+            Self::PendingActivityCollision { activity_id, .. } => ErrorTraceFields {
+                error_type: Cow::Borrowed("PendingActivityCollision"),
+                store_error_type: None,
+                reason: activity_id,
             },
             Self::ActivityCompletionRejected { reason, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("ActivityCompletionRejected"),

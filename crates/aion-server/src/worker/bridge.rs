@@ -68,6 +68,7 @@ use aion::{ActivityDispatch, ActivityDispatcher};
 use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
 use aion_proto::{ProtoActivityId, ProtoActivityTask, ProtoPayload, ProtoWorkflowId};
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 
 use super::dispatch::{ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink};
 use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
@@ -195,8 +196,20 @@ impl PendingActivities {
     ) -> Result<(CompletionToken, SyncReceiver), ServerError> {
         let completion_token = self.completion_fences.issue(&workflow_id, &activity_id)?;
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
-        self.pending.insert((workflow_id, activity_id), tx);
-        Ok((completion_token, rx))
+        let key = (workflow_id, activity_id);
+        match self.pending.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(tx);
+                Ok((completion_token, rx))
+            }
+            Entry::Occupied(entry) => {
+                let (workflow_id, activity_id) = entry.key();
+                Err(ServerError::PendingActivityCollision {
+                    workflow_id: workflow_id.clone(),
+                    activity_id: activity_id.clone(),
+                })
+            }
+        }
     }
 
     /// Share the generation registry with non-blocking outbox dispatch.
