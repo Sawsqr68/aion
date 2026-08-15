@@ -1,3 +1,7 @@
+import type { Event, RunId } from '@/types';
+
+import { LiveLegsSection } from '../components/LegsSection';
+import { useChildren } from '../hooks/useChildren';
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { useWorkflowSelectionParams } from '../hooks/useWorkflowSelectionParams';
@@ -30,33 +34,55 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
   // The server-projected name (#211). Read here rather than inside the
   // presentational content so the content stays a pure function of its props.
   const summary = useWorkflowSummary({ workflowId });
+  const runId = latestRunId(live.events);
+  const children = useChildren({ namespace, workflowId, runId });
 
   return (
-    <WorkflowDetailViewContent
-      error={historyQuery.error}
-      hasEarlier={historyQuery.hasEarlier}
-      history={live.events}
-      isError={historyQuery.isError}
-      isFetchingEarlier={historyQuery.isFetchingEarlier}
-      isLive={!live.isTerminal && namespace !== null}
-      isLoading={historyQuery.isLoading || historyQuery.isPending}
-      isTerminal={live.isTerminal}
-      mode={selection.mode}
-      namespace={namespace}
-      onLoadEarlier={() => void historyQuery.loadEarlier()}
-      onModeChange={selection.setMode}
-      onRetry={() => void historyQuery.refetch()}
-      onScrubChange={selection.setScrub}
-      onSelectSequence={selection.setSelectedSequence}
-      scrubPosition={selection.scrubPosition}
-      selectedSequence={selection.selectedSequence}
-      summaryDisplayName={summary.data?.display_name ?? null}
-      summaryUnavailable={summary.isError}
-      terminalOutcome={live.terminalOutcome}
-      timeline={live.timeline}
-      workflowId={workflowId}
-    />
+    <>
+      <WorkflowDetailViewContent
+        error={historyQuery.error}
+        hasEarlier={historyQuery.hasEarlier}
+        history={live.events}
+        isError={historyQuery.isError}
+        isFetchingEarlier={historyQuery.isFetchingEarlier}
+        isLive={!live.isTerminal && namespace !== null}
+        isLoading={historyQuery.isLoading || historyQuery.isPending}
+        isTerminal={live.isTerminal}
+        mode={selection.mode}
+        namespace={namespace}
+        onLoadEarlier={() => void historyQuery.loadEarlier()}
+        onModeChange={selection.setMode}
+        onRetry={() => void historyQuery.refetch()}
+        onScrubChange={selection.setScrub}
+        onSelectSequence={selection.setSelectedSequence}
+        scrubPosition={selection.scrubPosition}
+        selectedSequence={selection.selectedSequence}
+        summaryDisplayName={summary.data?.display_name ?? null}
+        summaryUnavailable={summary.isError}
+        terminalOutcome={live.terminalOutcome}
+        timeline={live.timeline}
+        workflowId={workflowId}
+      />
+      {namespace !== null && children.data !== undefined ? (
+        <LiveLegsSection legs={children.data} namespace={namespace} />
+      ) : null}
+      {children.isError ? (
+        <p className="border-t border-border px-6 py-4 text-xs text-danger" role="alert">
+          Could not load child legs: {String(children.error)}
+        </p>
+      ) : null}
+    </>
   );
+}
+
+function latestRunId(events: readonly Event[]): RunId | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === 'WorkflowStarted') {
+      return event.data.run_id;
+    }
+  }
+  return null;
 }
 
 // Import-stability re-export: `Swimlane.test.tsx` and `swimlane/index.ts` import

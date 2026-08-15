@@ -3,6 +3,7 @@ export {
   configuredClusterStream,
   configuredEventSocket,
   createConfiguredApiClient,
+  createConfiguredChildrenReader,
   createConfiguredClusterStream,
   createConfiguredTranscriptReader,
   createConfiguredTranscriptStream,

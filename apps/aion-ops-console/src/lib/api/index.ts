@@ -1,3 +1,5 @@
+export type { ChildLeg, ChildrenReadOptions } from './children-read';
+export { CHILDREN_ENDPOINT, ChildrenReadClient } from './children-read';
 export type {
   ApiClientOptions,
   ApiCredentials,

@@ -1,5 +1,6 @@
 import type { ApiClientOptions } from '@/lib/api';
 import { ApiClient } from '@/lib/api';
+import { ChildrenReadClient } from '@/lib/api/children-read';
 import { AionClusterStreamManager } from '@/lib/api/cluster-stream';
 import { TranscriptReadClient } from '@/lib/api/transcript-read';
 import { AionTranscriptStreamManager, type TranscriptTarget } from '@/lib/api/transcript-stream';
@@ -35,6 +36,19 @@ export function createConfiguredApiClient(options: ConfiguredClientOptions = {})
   const credentials = buildCredentials(config, options.namespace);
 
   return new ApiClient({
+    baseUrl: options.baseUrl ?? config.apiBaseUrl,
+    ...(credentials === undefined ? {} : { credentials }),
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  });
+}
+
+/** Build the history-derived direct-child reader with normal console scope. */
+export function createConfiguredChildrenReader(
+  options: ConfiguredClientOptions = {}
+): ChildrenReadClient {
+  const config = options.config ?? getOpsConsoleConfig();
+  const credentials = buildCredentials(config, options.namespace);
+  return new ChildrenReadClient({
     baseUrl: options.baseUrl ?? config.apiBaseUrl,
     ...(credentials === undefined ? {} : { credentials }),
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
