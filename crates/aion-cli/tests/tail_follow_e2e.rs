@@ -1,13 +1,14 @@
 //! Shipping-binary e2e for post-attach child transcript visibility.
 
+mod tail_follow_fixtures;
+
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use aion_core::{
-    ActivityEvent, ActivityEventKind, ActivityId, Event, EventEnvelope, PackageVersion, Payload,
-    RunId, WorkflowId, WorkflowSummary,
+    ActivityId, Event, EventEnvelope, PackageVersion, Payload, RunId, WorkflowId, WorkflowSummary,
 };
 use aion_proto::generated;
 use aion_proto::{StreamedActivityEvent, encode_streamed_event};
@@ -23,6 +24,8 @@ use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status};
+
+use tail_follow_fixtures::{backfill_event, live_event};
 
 const PARENT_ID: u128 = 0x2440;
 const PARENT_RUN: u128 = 0x2441;
@@ -179,10 +182,11 @@ async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
     grpc_task.abort();
 
     assert!(output.status.success(), "tail failed: {output:?}");
-    assert_eq!(
-        String::from_utf8(output.stdout)?,
-        "",
-        "tail owns its transcript rendering and must not append a JSON result"
+    let stdout = String::from_utf8(output.stdout)?;
+    assert!(stdout.contains("retained-backfill-parent"), "{stdout}");
+    assert!(
+        !stdout.lines().any(|line| line == "null"),
+        "tail owns its transcript rendering and must not append a JSON result: {stdout}"
     );
     Ok(())
 }
@@ -308,11 +312,24 @@ async fn transcripts(Json(request): Json<Value>) -> Json<Value> {
             "run_id": RunId::new(uuid::Uuid::from_u128(PARENT_RUN)),
         })
     );
-    Json(json!({"streams": []}))
+    Json(json!({
+        "streams": [{"activity_id": 7, "attempt": 1}]
+    }))
 }
 
-async fn transcript() -> Json<Value> {
-    Json(json!({"events": [], "head_seq": 0}))
+async fn transcript(Json(request): Json<Value>) -> Json<Value> {
+    assert_eq!(
+        request,
+        json!({
+            "namespace": "default",
+            "workflow_id": WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)),
+            "run_id": RunId::new(uuid::Uuid::from_u128(PARENT_RUN)),
+            "activity_id": 7,
+            "attempt": 1,
+            "last": 2_000,
+        })
+    );
+    Json(json!({"events": [backfill_event()], "head_seq": 2}))
 }
 
 async fn stream(ws: WebSocketUpgrade, State(state): State<HttpFixture>) -> impl IntoResponse {
@@ -330,8 +347,20 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
             return;
         }
     };
-    if request.get("transcript").is_some() {
-        serve_transcript(socket, state).await;
+    if request
+        .get("transcript")
+        .is_some_and(|transcript| !transcript.is_null())
+    {
+        let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
+        if request
+            .pointer("/transcript/workflow_id/uuid")
+            .and_then(Value::as_str)
+            == Some(child_id.as_str())
+        {
+            serve_transcript(socket, state).await;
+        } else {
+            while socket.next().await.is_some() {}
+        }
         return;
     }
     let workflow_id = request
@@ -433,26 +462,6 @@ fn event_envelope(seq: u64, workflow_id: u128) -> EventEnvelope {
         recorded_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
             .expect("fixed workflow fixture timestamp is valid"),
         workflow_id: WorkflowId::new(uuid::Uuid::from_u128(workflow_id)),
-    }
-}
-
-fn live_event() -> ActivityEvent {
-    ActivityEvent {
-        workflow_id: WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)),
-        run_id: RunId::new(uuid::Uuid::from_u128(CHILD_RUN)),
-        activity_id: ActivityId::from_sequence_position(7),
-        attempt: 1,
-        agent_id: uuid::Uuid::from_u128(0x2444),
-        agent_role: "builder".to_owned(),
-        emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_001, 0)
-            .expect("fixed transcript fixture timestamp is valid"),
-        worker_seq: 1,
-        store_seq: Some(1),
-        ephemeral: false,
-        kind: ActivityEventKind::Raw {
-            source: "post-attach-live-leg".to_owned(),
-            value: json!({"line": "visible only through the live socket"}),
-        },
     }
 }
 
