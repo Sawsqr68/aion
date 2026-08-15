@@ -18,6 +18,7 @@ use super::awl::{
 use super::awl_deployed::{get_deployed_document, list_deployed};
 use super::build::build_identity;
 use super::changelog::changelog;
+use super::children::list_children;
 use super::cluster_command::cluster_command;
 use super::deploy::{list_versions, route_version, unload_version, upload_package};
 use super::describe_live::describe_live;
@@ -371,6 +372,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/workflows/list", post(post_list_workflows))
         .route("/workflows/describe", post(describe_workflow))
         .route("/workflows/describe-live", post(describe_live))
+        .route("/workflows/children", post(list_children))
         .route("/workflows/history", post(fetch_history))
         .route("/workflows/event", post(fetch_event))
         .route("/workflows/intervene", post(intervene))

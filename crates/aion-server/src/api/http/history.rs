@@ -145,7 +145,7 @@ pub(crate) async fn fetch_event(
     Ok(Json(EventFetchResponse { event }))
 }
 
-async fn scoped_engine(
+pub(super) async fn scoped_engine(
     state: &ServerState,
     caller: &crate::CallerIdentity,
     namespace: &str,
