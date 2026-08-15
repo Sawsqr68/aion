@@ -1688,6 +1688,32 @@ mod tests {
         Ok(())
     }
 
+    /// #246 / #254 red: retrying an activity while the same worker still holds
+    /// the prior attempt must never replace its responder silently. Today's
+    /// attempt-free `DashMap::insert` drops the first sender, producing the
+    /// terminal "activity response channel dropped" specimen.
+    #[test]
+    fn same_execution_collision_is_a_named_typed_refusal() -> Result<(), ServerError> {
+        let pending = PendingActivities::default();
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(2);
+        let _first = pending.insert(workflow_id.clone(), id.clone())?;
+
+        let error = pending.insert(workflow_id, id).err().ok_or_else(|| {
+            ServerError::worker_dispatch(
+                "test",
+                "same-worker-collision",
+                "a live responder collision was silently replaced",
+            )
+        })?;
+
+        assert!(
+            error.to_string().contains("pending activity collision"),
+            "{error}"
+        );
+        Ok(())
+    }
+
     #[test]
     fn pending_complete_unknown_returns_false() {
         let pending = PendingActivities::default();
