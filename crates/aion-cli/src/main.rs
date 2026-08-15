@@ -42,6 +42,7 @@ mod render;
 mod server;
 mod settings;
 mod start;
+mod tail;
 mod worker_agent;
 mod worker_awl;
 mod worker_managed;
@@ -538,6 +539,20 @@ enum RemoteCommand {
         #[arg(long)]
         raw: bool,
     },
+    /// Tail this run and its direct child legs as one interleaved transcript.
+    Tail {
+        /// Parent workflow identifier. Child identifiers are derived; do not supply them.
+        workflow_id: String,
+        /// Specific parent run. Defaults to the latest recorded run.
+        #[arg(long)]
+        run_id: Option<String>,
+        /// HTTP/WebSocket listener used by the derived children and transcript APIs.
+        #[arg(long, default_value = "http://127.0.0.1:8080")]
+        http_endpoint: String,
+        /// Print the retained transcript snapshot and exit instead of following live sockets.
+        #[arg(long)]
+        no_follow: bool,
+    },
     /// Time-travel over a recorded run's event-store oplog.
     ///
     /// Reads the run's existing history over the same `describe` read every
@@ -894,7 +909,7 @@ async fn run(cli: &Cli, command: &ClientCommand) -> Result<Value> {
         } => deploy::unload(&deploy_target(cli), workflow_type, content_hash).await,
         ClientCommand::Remote(command) => {
             let client = build_client(cli).await?;
-            execute(&client, command).await
+            execute(&client, command, cli).await
         }
     }
 }
@@ -927,7 +942,7 @@ async fn build_client(cli: &Cli) -> Result<Client> {
         .context("failed to connect to Aion server")
 }
 
-async fn execute(client: &Client, command: &RemoteCommand) -> Result<Value> {
+async fn execute(client: &Client, command: &RemoteCommand, cli: &Cli) -> Result<Value> {
     match command {
         RemoteCommand::Start {
             workflow_type,
@@ -983,6 +998,27 @@ async fn execute(client: &Client, command: &RemoteCommand) -> Result<Value> {
             run_id,
             raw,
         } => describe_workflow(client, workflow_id, run_id.as_deref(), *raw).await,
+        RemoteCommand::Tail {
+            workflow_id,
+            run_id,
+            http_endpoint,
+            no_follow,
+        } => {
+            let token = deploy::resolve_token(cli.token.clone());
+            tail::run(
+                client,
+                workflow_id,
+                run_id.as_deref(),
+                tail::TailConfig {
+                    namespace: &cli.namespace,
+                    subject: &cli.subject,
+                    token: token.as_deref(),
+                    http_endpoint,
+                    follow: !no_follow,
+                },
+            )
+            .await
+        }
         RemoteCommand::Inspect {
             workflow_id,
             run_id,
@@ -1462,6 +1498,26 @@ mod tests {
     }
 
     #[test]
+    fn tail_accepts_parent_id_without_any_child_id() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "tail", WORKFLOW_ID, "--no-follow"])?;
+
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Tail {
+            workflow_id,
+            run_id,
+            http_endpoint,
+            no_follow,
+        }))) = cli.command
+        else {
+            anyhow::bail!("expected tail command");
+        };
+        assert_eq!(workflow_id, WORKFLOW_ID);
+        assert_eq!(run_id, None);
+        assert_eq!(http_endpoint, "http://127.0.0.1:8080");
+        assert!(no_follow);
+        Ok(())
+    }
+
+    #[test]
     fn describe_accepts_raw_payload_flag() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "describe", WORKFLOW_ID, "--raw"])?;
 
@@ -1864,6 +1920,7 @@ mod tests {
     fn workflow_operations_allow_omitted_run_id() -> anyhow::Result<()> {
         let commands = [
             vec!["aion", "describe", WORKFLOW_ID],
+            vec!["aion", "tail", WORKFLOW_ID, "--no-follow"],
             vec!["aion", "signal", WORKFLOW_ID, "poke", "--payload", "{}"],
             vec!["aion", "cancel", WORKFLOW_ID],
             vec!["aion", "reopen", WORKFLOW_ID],
@@ -1878,6 +1935,7 @@ mod tests {
             match command {
                 Command::Client(ClientCommand::Remote(
                     RemoteCommand::Describe { run_id, .. }
+                    | RemoteCommand::Tail { run_id, .. }
                     | RemoteCommand::Signal { run_id, .. }
                     | RemoteCommand::Cancel { run_id, .. }
                     | RemoteCommand::Reopen { run_id, .. }
@@ -1956,6 +2014,7 @@ mod tests {
                         RemoteCommand::Start { .. }
                         | RemoteCommand::List { .. }
                         | RemoteCommand::Describe { .. }
+                        | RemoteCommand::Tail { .. }
                         | RemoteCommand::Inspect { .. },
                     )
                     | ClientCommand::New(_)
