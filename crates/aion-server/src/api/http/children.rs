@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 use super::auth::HttpCaller;
 use super::error::HttpWireError;
 use super::history::scoped_engine;
-use crate::{ServerError, ServerState};
+use crate::{CallerIdentity, ServerError, ServerState};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -138,14 +138,32 @@ pub(crate) async fn list_children(
         }
     }
 
+    let children = project_candidates(
+        &state,
+        &caller,
+        &request.namespace,
+        &request.workflow_id,
+        candidates,
+    )
+    .await?;
+    Ok(Json(ChildrenResponse { children }))
+}
+
+async fn project_candidates(
+    state: &ServerState,
+    caller: &CallerIdentity,
+    namespace: &str,
+    parent_workflow_id: &WorkflowId,
+    candidates: Vec<(WorkflowId, String)>,
+) -> Result<Vec<ChildEntry>, HttpWireError> {
     let projections = join_all(
         candidates
             .into_iter()
             .map(|(child_workflow_id, workflow_type)| {
                 let state = state.clone();
                 let caller = caller.clone();
-                let namespace = request.namespace.clone();
-                let parent_workflow_id = request.workflow_id.clone();
+                let namespace = namespace.to_owned();
+                let parent_workflow_id = parent_workflow_id.clone();
                 async move {
                     let child_wire = child_workflow_id.to_string();
                     let child_engine = match scoped_engine(
@@ -184,13 +202,14 @@ pub(crate) async fn list_children(
     )
     .await;
 
-    let mut children = Vec::new();
-    for projection in projections {
-        if let Some(child) = projection? {
-            children.push(child);
-        }
-    }
-    Ok(Json(ChildrenResponse { children }))
+    projections
+        .into_iter()
+        .try_fold(Vec::new(), |mut children, projection| {
+            if let Some(child) = projection? {
+                children.push(child);
+            }
+            Ok(children)
+        })
 }
 
 fn is_omitted_child_error(error: &HttpWireError) -> bool {
