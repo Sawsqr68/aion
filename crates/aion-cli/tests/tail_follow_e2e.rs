@@ -287,12 +287,27 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
     Ok(())
 }
 
-async fn children() -> Json<Value> {
+async fn children(Json(request): Json<Value>) -> Json<Value> {
+    assert_eq!(
+        request,
+        json!({
+            "namespace": "default",
+            "workflow_id": WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)),
+            "run_id": RunId::new(uuid::Uuid::from_u128(PARENT_RUN)),
+        })
+    );
     Json(json!({"children": []}))
 }
 
 async fn transcripts(Json(request): Json<Value>) -> Json<Value> {
-    drop(request);
+    assert_eq!(
+        request,
+        json!({
+            "namespace": "default",
+            "workflow_id": WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)),
+            "run_id": RunId::new(uuid::Uuid::from_u128(PARENT_RUN)),
+        })
+    );
     Json(json!({"streams": []}))
 }
 
@@ -308,8 +323,12 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
     let Some(Ok(Message::Text(subscription))) = socket.next().await else {
         return;
     };
-    let Ok(request) = serde_json::from_str::<Value>(&subscription) else {
-        return;
+    let request = match serde_json::from_str::<Value>(&subscription) {
+        Ok(request) => request,
+        Err(error) => {
+            eprintln!("tail fixture could not decode subscription JSON: {error}");
+            return;
+        }
     };
     if request.get("transcript").is_some() {
         serve_transcript(socket, state).await;
@@ -348,8 +367,12 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
 async fn serve_transcript(mut socket: WebSocket, state: HttpFixture) {
     state.transcript_attached.notify_waiters();
     state.emit_live.notified().await;
-    let Ok(frame) = serde_json::to_string(&StreamedActivityEvent::new(live_event())) else {
-        return;
+    let frame = match serde_json::to_string(&StreamedActivityEvent::new(live_event())) {
+        Ok(frame) => frame,
+        Err(error) => {
+            eprintln!("tail fixture could not encode a live transcript frame: {error}");
+            return;
+        }
     };
     if socket.send(Message::Text(frame.into())).await.is_err() {
         return;
@@ -358,11 +381,19 @@ async fn serve_transcript(mut socket: WebSocket, state: HttpFixture) {
 }
 
 async fn send_workflow_event(socket: &mut WebSocket, event: Event) -> bool {
-    let Ok(encoded) = encode_streamed_event("default", None, &event) else {
-        return false;
+    let encoded = match encode_streamed_event("default", None, &event) {
+        Ok(encoded) => encoded,
+        Err(error) => {
+            eprintln!("tail fixture could not encode a workflow event: {error}");
+            return false;
+        }
     };
-    let Ok(frame) = serde_json::to_string(&encoded) else {
-        return false;
+    let frame = match serde_json::to_string(&encoded) {
+        Ok(frame) => frame,
+        Err(error) => {
+            eprintln!("tail fixture could not serialize a workflow frame: {error}");
+            return false;
+        }
     };
     socket.send(Message::Text(frame.into())).await.is_ok()
 }
@@ -399,7 +430,8 @@ fn child_activity_started() -> Event {
 fn event_envelope(seq: u64, workflow_id: u128) -> EventEnvelope {
     EventEnvelope {
         seq,
-        recorded_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap_or_default(),
+        recorded_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
+            .expect("fixed workflow fixture timestamp is valid"),
         workflow_id: WorkflowId::new(uuid::Uuid::from_u128(workflow_id)),
     }
 }
@@ -412,7 +444,8 @@ fn live_event() -> ActivityEvent {
         attempt: 1,
         agent_id: uuid::Uuid::from_u128(0x2444),
         agent_role: "builder".to_owned(),
-        emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_001, 0).unwrap_or_default(),
+        emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_001, 0)
+            .expect("fixed transcript fixture timestamp is valid"),
         worker_seq: 1,
         store_seq: Some(1),
         ephemeral: false,
