@@ -30,8 +30,8 @@ class WorkerProtocolStub:
     RegisterWorker first; the server answers with RegisterAck as the guaranteed
     first frame on the response stream before any other server-to-worker
     message. The worker then sends ActivityResult and Heartbeat messages while
-    the server pushes ActivityTask, ResultAck, and DrainRequest messages down
-    the same stream; there is no polling RPC.
+    the server pushes ActivityTask, ResultAck, DrainRequest, LivenessPing, and
+    CancelActivity messages down the same stream; there is no polling RPC.
     """
 
     def __init__(self, channel):
@@ -52,8 +52,8 @@ class WorkerProtocolServicer:
     RegisterWorker first; the server answers with RegisterAck as the guaranteed
     first frame on the response stream before any other server-to-worker
     message. The worker then sends ActivityResult and Heartbeat messages while
-    the server pushes ActivityTask, ResultAck, and DrainRequest messages down
-    the same stream; there is no polling RPC.
+    the server pushes ActivityTask, ResultAck, DrainRequest, LivenessPing, and
+    CancelActivity messages down the same stream; there is no polling RPC.
     """
 
     def StreamWorker(self, request_iterator, context):
@@ -83,8 +83,8 @@ class WorkerProtocol:
     RegisterWorker first; the server answers with RegisterAck as the guaranteed
     first frame on the response stream before any other server-to-worker
     message. The worker then sends ActivityResult and Heartbeat messages while
-    the server pushes ActivityTask, ResultAck, and DrainRequest messages down
-    the same stream; there is no polling RPC.
+    the server pushes ActivityTask, ResultAck, DrainRequest, LivenessPing, and
+    CancelActivity messages down the same stream; there is no polling RPC.
     """
 
     @staticmethod

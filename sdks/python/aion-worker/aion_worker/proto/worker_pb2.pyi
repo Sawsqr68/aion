@@ -22,26 +22,54 @@ class DrainRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class WorkerToServer(_message.Message):
-    __slots__ = ("register", "result", "heartbeat")
+    __slots__ = ("register", "result", "heartbeat", "liveness_answer")
     REGISTER_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
     HEARTBEAT_FIELD_NUMBER: _ClassVar[int]
+    LIVENESS_ANSWER_FIELD_NUMBER: _ClassVar[int]
     register: RegisterWorker
     result: ActivityResult
     heartbeat: Heartbeat
-    def __init__(self, register: _Optional[_Union[RegisterWorker, _Mapping]] = ..., result: _Optional[_Union[ActivityResult, _Mapping]] = ..., heartbeat: _Optional[_Union[Heartbeat, _Mapping]] = ...) -> None: ...
+    liveness_answer: LivenessAnswer
+    def __init__(self, register: _Optional[_Union[RegisterWorker, _Mapping]] = ..., result: _Optional[_Union[ActivityResult, _Mapping]] = ..., heartbeat: _Optional[_Union[Heartbeat, _Mapping]] = ..., liveness_answer: _Optional[_Union[LivenessAnswer, _Mapping]] = ...) -> None: ...
 
 class ServerToWorker(_message.Message):
-    __slots__ = ("task", "drain", "register_ack", "result_ack")
+    __slots__ = ("task", "drain", "register_ack", "result_ack", "liveness_ping", "cancel_activity")
     TASK_FIELD_NUMBER: _ClassVar[int]
     DRAIN_FIELD_NUMBER: _ClassVar[int]
     REGISTER_ACK_FIELD_NUMBER: _ClassVar[int]
     RESULT_ACK_FIELD_NUMBER: _ClassVar[int]
+    LIVENESS_PING_FIELD_NUMBER: _ClassVar[int]
+    CANCEL_ACTIVITY_FIELD_NUMBER: _ClassVar[int]
     task: ActivityTask
     drain: DrainRequest
     register_ack: RegisterAck
     result_ack: ResultAck
-    def __init__(self, task: _Optional[_Union[ActivityTask, _Mapping]] = ..., drain: _Optional[_Union[DrainRequest, _Mapping]] = ..., register_ack: _Optional[_Union[RegisterAck, _Mapping]] = ..., result_ack: _Optional[_Union[ResultAck, _Mapping]] = ...) -> None: ...
+    liveness_ping: LivenessPing
+    cancel_activity: CancelActivity
+    def __init__(self, task: _Optional[_Union[ActivityTask, _Mapping]] = ..., drain: _Optional[_Union[DrainRequest, _Mapping]] = ..., register_ack: _Optional[_Union[RegisterAck, _Mapping]] = ..., result_ack: _Optional[_Union[ResultAck, _Mapping]] = ..., liveness_ping: _Optional[_Union[LivenessPing, _Mapping]] = ..., cancel_activity: _Optional[_Union[CancelActivity, _Mapping]] = ...) -> None: ...
+
+class CancelActivity(_message.Message):
+    __slots__ = ("workflow_id", "activity_id")
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVITY_ID_FIELD_NUMBER: _ClassVar[int]
+    workflow_id: _common_pb2.WorkflowId
+    activity_id: _common_pb2.ActivityId
+    def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ...) -> None: ...
+
+class LivenessPing(_message.Message):
+    __slots__ = ("liveness_ping", "silence_window_ms")
+    LIVENESS_PING_FIELD_NUMBER: _ClassVar[int]
+    SILENCE_WINDOW_MS_FIELD_NUMBER: _ClassVar[int]
+    liveness_ping: int
+    silence_window_ms: int
+    def __init__(self, liveness_ping: _Optional[int] = ..., silence_window_ms: _Optional[int] = ...) -> None: ...
+
+class LivenessAnswer(_message.Message):
+    __slots__ = ("liveness_ping",)
+    LIVENESS_PING_FIELD_NUMBER: _ClassVar[int]
+    liveness_ping: int
+    def __init__(self, liveness_ping: _Optional[int] = ...) -> None: ...
 
 class RegisterAck(_message.Message):
     __slots__ = ("worker_id", "namespace", "heartbeat_window_ms")
@@ -71,21 +99,31 @@ class ActivityDescriptor(_message.Message):
     output_schema_json: str
     def __init__(self, name: _Optional[str] = ..., input_schema_json: _Optional[str] = ..., output_schema_json: _Optional[str] = ...) -> None: ...
 
+class WorkerInstanceIdentity(_message.Message):
+    __slots__ = ("deployment", "instance_id")
+    DEPLOYMENT_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    deployment: str
+    instance_id: str
+    def __init__(self, deployment: _Optional[str] = ..., instance_id: _Optional[str] = ...) -> None: ...
+
 class RegisterWorker(_message.Message):
-    __slots__ = ("namespaces", "activity_types", "task_queue", "node", "activities", "identity")
+    __slots__ = ("namespaces", "activity_types", "task_queue", "node", "activities", "identity", "instance")
     NAMESPACES_FIELD_NUMBER: _ClassVar[int]
     ACTIVITY_TYPES_FIELD_NUMBER: _ClassVar[int]
     TASK_QUEUE_FIELD_NUMBER: _ClassVar[int]
     NODE_FIELD_NUMBER: _ClassVar[int]
     ACTIVITIES_FIELD_NUMBER: _ClassVar[int]
     IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_FIELD_NUMBER: _ClassVar[int]
     namespaces: _containers.RepeatedScalarFieldContainer[str]
     activity_types: _containers.RepeatedScalarFieldContainer[str]
     task_queue: str
     node: str
     activities: _containers.RepeatedCompositeFieldContainer[ActivityDescriptor]
     identity: str
-    def __init__(self, namespaces: _Optional[_Iterable[str]] = ..., activity_types: _Optional[_Iterable[str]] = ..., task_queue: _Optional[str] = ..., node: _Optional[str] = ..., activities: _Optional[_Iterable[_Union[ActivityDescriptor, _Mapping]]] = ..., identity: _Optional[str] = ...) -> None: ...
+    instance: WorkerInstanceIdentity
+    def __init__(self, namespaces: _Optional[_Iterable[str]] = ..., activity_types: _Optional[_Iterable[str]] = ..., task_queue: _Optional[str] = ..., node: _Optional[str] = ..., activities: _Optional[_Iterable[_Union[ActivityDescriptor, _Mapping]]] = ..., identity: _Optional[str] = ..., instance: _Optional[_Union[WorkerInstanceIdentity, _Mapping]] = ...) -> None: ...
 
 class ActivityTask(_message.Message):
     __slots__ = ("workflow_id", "activity_id", "activity_type", "input", "attempt", "labels", "run_id", "completion_token", "idempotency_key")
