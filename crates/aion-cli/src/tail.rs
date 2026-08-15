@@ -262,13 +262,13 @@ async fn backfill_and_print(
             )
             .await
             .with_context(|| format!("failed to backfill {}", prefix(target)))?;
-        if transcript.events.len() < usize::try_from(transcript.head_seq).unwrap_or(usize::MAX) {
-            println!(
-                "{} NOTICE: retained backfill truncated; showing the last {} of {} events (the server's published transcript window limit)",
-                prefix(target),
-                transcript.events.len(),
-                transcript.head_seq
-            );
+        let first_store_seq = transcript.events.first().and_then(|event| event.store_seq);
+        if let Some(notice) = backfill_notice(
+            transcript.events.len(),
+            transcript.head_seq,
+            first_store_seq,
+        ) {
+            println!("{} NOTICE: {notice}", prefix(target));
         }
         backfill.extend(
             transcript
@@ -303,15 +303,22 @@ struct HttpTailClient {
 impl HttpTailClient {
     fn new(config: &TailConfig<'_>) -> Result<Self> {
         let mut headers = HeaderMap::new();
-        headers.insert("x-aion-subject", HeaderValue::from_str(config.subject)?);
+        headers.insert(
+            "x-aion-subject",
+            HeaderValue::from_str(config.subject)
+                .with_context(|| format!("invalid x-aion-subject value {:?}", config.subject))?,
+        );
         headers.insert(
             "x-aion-namespaces",
-            HeaderValue::from_str(config.namespace)?,
+            HeaderValue::from_str(config.namespace).with_context(|| {
+                format!("invalid x-aion-namespaces value {:?}", config.namespace)
+            })?,
         );
         if let Some(token) = config.token {
             headers.insert(
                 AUTHORIZATION,
-                HeaderValue::from_str(&format!("Bearer {token}"))?,
+                HeaderValue::from_str(&format!("Bearer {token}"))
+                    .context("invalid authorization bearer token header value")?,
             );
         }
         Ok(Self {
@@ -339,6 +346,21 @@ impl HttpTailClient {
             .await
             .context("Aion HTTP response was invalid")
     }
+}
+
+fn backfill_notice(
+    event_count: usize,
+    head_seq: u64,
+    first_store_seq: Option<u64>,
+) -> Option<String> {
+    let first_store_seq = first_store_seq?;
+    if first_store_seq <= 1 {
+        return None;
+    }
+    let last_store_seq = head_seq.saturating_sub(1);
+    Some(format!(
+        "retained backfill begins at durable seq {first_store_seq}; showing {event_count} events through durable seq {last_store_seq} (earlier records may be unavailable because of retention or the CLI's {MAX_TRANSCRIPT_WINDOW_LIMIT}-event request bound; durable seq {first_store_seq}..{last_store_seq})"
+    ))
 }
 
 fn latest_run(history: &[Event]) -> Option<RunId> {
