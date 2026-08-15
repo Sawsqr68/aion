@@ -445,6 +445,15 @@ mod tests {
         assert!(prefix(&targets[1]).contains("Builder L1 24410000"));
     }
 
+    #[test]
+    fn backfill_notice_does_not_treat_head_sequence_as_an_event_count() {
+        let notice = backfill_notice(37, 1_042, Some(1_005)).expect("a sequence gap needs notice");
+        assert!(notice.contains("durable seq 1005..1041"));
+        assert!(notice.contains("retention or the CLI's 2000-event request bound"));
+        assert!(!notice.contains("37 of 1042 events"));
+        assert!(!notice.contains("server's published transcript window limit"));
+    }
+
     fn target(attempt: u32) -> Target {
         Target {
             source: Source {
