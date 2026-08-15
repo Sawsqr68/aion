@@ -5,11 +5,12 @@ mod tail_follow_fixtures;
 
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use aion_core::{
-    ActivityId, Event, EventEnvelope, PackageVersion, Payload, RunId, WorkflowId, WorkflowSummary,
+    Event, EventEnvelope, PackageVersion, Payload, RunId, WorkflowId, WorkflowSummary,
 };
 use aion_proto::generated;
 use aion_proto::{StreamedActivityEvent, encode_streamed_event};
@@ -26,19 +27,27 @@ use tokio::sync::Notify;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status};
 
-use tail_follow_fixtures::{backfill_event, live_event};
+use tail_follow_fixtures::{
+    backfill_event, child_run_events, generated_envelope, live_event, replayed_parent_events,
+    selected_parent_live_event,
+};
 
 const PARENT_ID: u128 = 0x2440;
 const PARENT_RUN: u128 = 0x2441;
 const CHILD_ID: u128 = 0x2442;
 const CHILD_RUN: u128 = 0x2443;
+const PRIOR_PARENT_RUN: u128 = 0x2431;
+const PRIOR_CHILD_ID: u128 = 0x2432;
 
 #[derive(Clone)]
 struct HttpFixture {
     parent_attached: Arc<Notify>,
     emit_fanout: Arc<Notify>,
     transcript_attached: Arc<Notify>,
+    selected_parent_transcript_attached: Arc<Notify>,
+    selected_child_attached: Arc<Notify>,
     emit_live: Arc<Notify>,
+    prior_child_attached: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -154,7 +163,10 @@ async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
         parent_attached: Arc::new(Notify::new()),
         emit_fanout: Arc::new(Notify::new()),
         transcript_attached: Arc::new(Notify::new()),
+        selected_parent_transcript_attached: Arc::new(Notify::new()),
+        selected_child_attached: Arc::new(Notify::new()),
         emit_live: Arc::new(Notify::new()),
+        prior_child_attached: Arc::new(AtomicBool::new(false)),
     };
     let app = Router::new()
         .route("/workflows/children", post(children))
@@ -193,7 +205,7 @@ async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn tail_follow_prints_child_events_emitted_after_attach()
+async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts()
 -> Result<(), Box<dyn std::error::Error>> {
     let grpc_listener = TcpListener::bind("127.0.0.1:0").await?;
     let grpc_address = grpc_listener.local_addr()?;
@@ -209,12 +221,18 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
     let parent_attached = Arc::new(Notify::new());
     let emit_fanout = Arc::new(Notify::new());
     let transcript_attached = Arc::new(Notify::new());
+    let selected_parent_transcript_attached = Arc::new(Notify::new());
+    let selected_child_attached = Arc::new(Notify::new());
     let emit_live = Arc::new(Notify::new());
+    let prior_child_attached = Arc::new(AtomicBool::new(false));
     let http_state = HttpFixture {
         parent_attached: parent_attached.clone(),
         emit_fanout: emit_fanout.clone(),
         transcript_attached: transcript_attached.clone(),
+        selected_parent_transcript_attached: selected_parent_transcript_attached.clone(),
+        selected_child_attached: selected_child_attached.clone(),
         emit_live: emit_live.clone(),
+        prior_child_attached: prior_child_attached.clone(),
     };
     let app = Router::new()
         .route("/workflows/children", post(children))
@@ -246,48 +264,80 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
     let (line_sender, line_receiver) = mpsc::channel();
     let reader = std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines() {
-            match line {
-                Ok(line) if line.contains("post-attach-live-leg") => {
-                    return line_sender.send(Ok(line));
-                }
-                Ok(_) => {}
-                Err(error) => return line_sender.send(Err(error.to_string())),
+            if line_sender
+                .send(line.map_err(|error| error.to_string()))
+                .is_err()
+            {
+                return;
             }
         }
-        line_sender.send(Err(
-            "tail exited before printing the live leg line".to_owned()
-        ))
     });
 
     tokio::time::timeout(Duration::from_secs(10), parent_attached.notified())
         .await
         .map_err(|_| "tail did not attach its parent workflow socket")?;
     emit_fanout.notify_waiters();
-    tokio::time::timeout(Duration::from_secs(10), transcript_attached.notified())
-        .await
-        .map_err(|_| "tail did not attach its transcript socket")?;
-    emit_live.notify_waiters();
-    let observed = line_receiver.recv_timeout(Duration::from_secs(5));
+    let selected_child_followed =
+        tokio::time::timeout(Duration::from_secs(5), selected_child_attached.notified())
+            .await
+            .is_ok();
+    let parent_attempt_attached = tokio::time::timeout(
+        Duration::from_secs(5),
+        selected_parent_transcript_attached.notified(),
+    )
+    .await
+    .is_ok();
+    if parent_attempt_attached {
+        emit_live.notify_waiters();
+    }
+    let mut lines = Vec::new();
+    while let Ok(line) = line_receiver.recv_timeout(Duration::from_secs(1)) {
+        let line = line.map_err(|error| format!("tail stdout read failed: {error}"))?;
+        lines.push(line);
+        if lines
+            .iter()
+            .any(|line| line.contains("selected-run-live-parent"))
+        {
+            break;
+        }
+    }
 
     child.kill()?;
     let status = child.wait()?;
     let mut stderr_text = String::new();
     BufReader::new(stderr).read_to_string(&mut stderr_text)?;
-    reader.join().map_err(|_| "stdout reader panicked")??;
+    reader.join().map_err(|_| "stdout reader panicked")?;
     http_task.abort();
     grpc_task.abort();
 
-    let line = observed
-        .map_err(|error| {
-            format!(
-                "post-attach leg line never appeared ({error}); tail status {status}; stderr: {stderr_text}"
-            )
-        })?
-        .map_err(|error| format!("tail output ended without the live leg line: {error}"))?;
-    assert!(line.contains("Builder"), "leg label missing from: {line}");
+    let mut violations = Vec::new();
+    if prior_child_attached.load(Ordering::SeqCst) {
+        violations.push("prior-generation child workflow socket was followed");
+    }
+    if lines.iter().any(|line| line.contains("PriorBuilder")) {
+        violations.push("prior-generation child was announced");
+    }
+    if lines.iter().any(|line| line.contains("SUPERSEDED→9")) {
+        violations.push("prior-generation activity printed a false superseded notice");
+    }
+    if !parent_attempt_attached {
+        violations.push(
+            "selected-run attempt 2 was suppressed after prior replay poisoned current attempts",
+        );
+    }
+    if !selected_child_followed {
+        violations.push("selected-generation child workflow socket was not followed");
+    }
+    if !lines
+        .iter()
+        .any(|line| line.contains("selected-run-live-parent"))
+    {
+        violations.push("selected-run attempt 2 live transcript was not printed");
+    }
     assert!(
-        line.contains("activity:7 attempt:1"),
-        "attempt identity missing from: {line}"
+        violations.is_empty(),
+        "{}; stdout: {lines:?}; tail status {status}; stderr: {stderr_text}",
+        violations.join("; ")
     );
     Ok(())
 }
@@ -352,13 +402,30 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
         .get("transcript")
         .is_some_and(|transcript| !transcript.is_null())
     {
-        let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
-        if request
+        let workflow_id = request
             .pointer("/transcript/workflow_id/uuid")
-            .and_then(Value::as_str)
-            == Some(child_id.as_str())
-        {
-            serve_transcript(socket, state).await;
+            .and_then(Value::as_str);
+        let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
+        let parent_id = WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)).to_string();
+        let attempt = request
+            .pointer("/transcript/attempt")
+            .and_then(Value::as_u64);
+        if workflow_id == Some(child_id.as_str()) {
+            serve_transcript(
+                socket,
+                state.transcript_attached,
+                state.emit_live,
+                live_event(),
+            )
+            .await;
+        } else if workflow_id == Some(parent_id.as_str()) && attempt == Some(2) {
+            serve_transcript(
+                socket,
+                state.selected_parent_transcript_attached,
+                state.emit_live,
+                selected_parent_live_event(),
+            )
+            .await;
         } else {
             while socket.next().await.is_some() {}
         }
@@ -369,35 +436,46 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
         .and_then(Value::as_str);
     let parent_id = WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)).to_string();
     let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
+    let prior_child_id = WorkflowId::new(uuid::Uuid::from_u128(PRIOR_CHILD_ID)).to_string();
     if workflow_id == Some(parent_id.as_str()) {
         if request.pointer("/per_workflow/resume_from_seq") != Some(&json!(1)) {
             return;
         }
         state.parent_attached.notify_waiters();
         state.emit_fanout.notified().await;
-        let Some(event) = child_started() else {
+        let Some(events) = replayed_parent_events() else {
             return;
         };
-        if !send_workflow_event(&mut socket, event).await {
-            return;
-        }
-    } else if workflow_id == Some(child_id.as_str()) {
-        let Some(started) = child_run_started() else {
-            return;
-        };
-        for event in [started, child_activity_started()] {
+        for event in events {
             if !send_workflow_event(&mut socket, event).await {
                 return;
             }
         }
+    } else if workflow_id == Some(child_id.as_str()) {
+        state.selected_child_attached.notify_one();
+        let Some(events) = child_run_events() else {
+            return;
+        };
+        for event in events {
+            if !send_workflow_event(&mut socket, event).await {
+                return;
+            }
+        }
+    } else if workflow_id == Some(prior_child_id.as_str()) {
+        state.prior_child_attached.store(true, Ordering::SeqCst);
     }
     while socket.next().await.is_some() {}
 }
 
-async fn serve_transcript(mut socket: WebSocket, state: HttpFixture) {
-    state.transcript_attached.notify_waiters();
-    state.emit_live.notified().await;
-    let frame = match serde_json::to_string(&StreamedActivityEvent::new(live_event())) {
+async fn serve_transcript(
+    mut socket: WebSocket,
+    attached: Arc<Notify>,
+    emit_live: Arc<Notify>,
+    event: aion_core::ActivityEvent,
+) {
+    attached.notify_one();
+    emit_live.notified().await;
+    let frame = match serde_json::to_string(&StreamedActivityEvent::new(event)) {
         Ok(frame) => frame,
         Err(error) => {
             eprintln!("tail fixture could not encode a live transcript frame: {error}");
@@ -428,43 +506,6 @@ async fn send_workflow_event(socket: &mut WebSocket, event: Event) -> bool {
     socket.send(Message::Text(frame.into())).await.is_ok()
 }
 
-fn child_started() -> Option<Event> {
-    Some(Event::ChildWorkflowStarted {
-        envelope: event_envelope(2, PARENT_ID),
-        child_workflow_id: WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)),
-        workflow_type: "Builder".to_owned(),
-        input: Payload::from_json(&json!({})).ok()?,
-        package_version: PackageVersion::new("a".repeat(64)),
-    })
-}
-
-fn child_run_started() -> Option<Event> {
-    Some(Event::WorkflowStarted {
-        envelope: event_envelope(1, CHILD_ID),
-        workflow_type: "Builder".to_owned(),
-        input: Payload::from_json(&json!({})).ok()?,
-        run_id: RunId::new(uuid::Uuid::from_u128(CHILD_RUN)),
-        parent_run_id: Some(RunId::new(uuid::Uuid::from_u128(PARENT_RUN))),
-        package_version: PackageVersion::new("a".repeat(64)),
-    })
-}
-
-fn child_activity_started() -> Event {
-    Event::ActivityStarted {
-        envelope: event_envelope(2, CHILD_ID),
-        activity_id: ActivityId::from_sequence_position(7),
-        attempt: 1,
-    }
-}
-
-fn event_envelope(seq: u64, workflow_id: u128) -> EventEnvelope {
-    EventEnvelope {
-        seq,
-        recorded_at: DateTime::<Utc>::from_timestamp_nanos(1_700_000_000_000_000_000),
-        workflow_id: WorkflowId::new(uuid::Uuid::from_u128(workflow_id)),
-    }
-}
-
 fn describe_response() -> Result<generated::DescribeWorkflowResponse, Box<dyn std::error::Error>> {
     let workflow_id = WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID));
     let started_at = DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
@@ -491,15 +532,4 @@ fn describe_response() -> Result<generated::DescribeWorkflowResponse, Box<dyn st
             "default", None, &started,
         )?)],
     })
-}
-
-fn generated_envelope(value: aion_proto::WireEnvelope) -> generated::WireEnvelope {
-    generated::WireEnvelope {
-        namespace: value.namespace,
-        request_id: value.request_id,
-        payload: value.payload.map(|payload| generated::Payload {
-            content_type: payload.content_type,
-            bytes: payload.bytes,
-        }),
-    }
 }

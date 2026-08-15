@@ -504,6 +504,15 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn empty_retained_backfill_reports_its_nonzero_durable_head() -> Result<(), &'static str> {
+        let notice = backfill_notice(0, 42, None).ok_or("an empty retained range needs notice")?;
+        assert!(notice.contains("no retained events"));
+        assert!(notice.contains("head at durable seq 42"));
+        assert!(notice.contains("earlier records were trimmed by retention"));
+        Ok(())
+    }
+
     fn target(attempt: u32) -> Target {
         Target {
             source: Source {
