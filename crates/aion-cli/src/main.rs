@@ -829,27 +829,25 @@ async fn main() -> ExitCode {
                 }
             }
         }
-        Some(Command::Client(ref command)) => {
-            let result = run(&cli, command).await.and_then(|value| {
-                // `tail` owns a human transcript reporting contract, just as
-                // AWL owns its compiler-style contract above. Do not append the
-                // command dispatcher's JSON rendering after the transcript.
-                if matches!(command, ClientCommand::Remote(RemoteCommand::Tail(_))) {
-                    Ok(())
-                } else {
-                    print_json(&value, cli.pretty)
-                }
-            });
-            match result {
-                Ok(()) => ExitCode::SUCCESS,
-                // The single rendering contract for every client subcommand:
-                // the taxonomy class, server detail, error type, and hint go
-                // to stderr; the process exits 1.
-                Err(error) => {
-                    report_client_error(&error);
-                    ExitCode::FAILURE
-                }
-            }
+        Some(Command::Client(ref command)) => run_client_command(&cli, command).await,
+    }
+}
+
+async fn run_client_command(cli: &Cli, command: &ClientCommand) -> ExitCode {
+    let result = run(cli, command).await.and_then(|value| {
+        // `tail` owns a human transcript reporting contract, just as AWL owns
+        // its compiler-style contract. Do not append JSON after the transcript.
+        if matches!(command, ClientCommand::Remote(RemoteCommand::Tail(_))) {
+            Ok(())
+        } else {
+            print_json(&value, cli.pretty)
+        }
+    });
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            report_client_error(&error);
+            ExitCode::FAILURE
         }
     }
 }

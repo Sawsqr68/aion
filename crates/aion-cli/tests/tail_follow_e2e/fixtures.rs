@@ -12,8 +12,7 @@ pub(super) fn backfill_event() -> ActivityEvent {
         attempt: 1,
         agent_id: uuid::Uuid::from_u128(0x2444),
         agent_role: "parent".to_owned(),
-        emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
-            .expect("fixed backfill fixture timestamp is valid"),
+        emitted_at: DateTime::<Utc>::from_timestamp_nanos(1_700_000_000_000_000_000),
         worker_seq: 1,
         store_seq: Some(1),
         ephemeral: false,
@@ -32,8 +31,7 @@ pub(super) fn live_event() -> ActivityEvent {
         attempt: 1,
         agent_id: uuid::Uuid::from_u128(0x2444),
         agent_role: "builder".to_owned(),
-        emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_001, 0)
-            .expect("fixed transcript fixture timestamp is valid"),
+        emitted_at: DateTime::<Utc>::from_timestamp_nanos(1_700_000_001_000_000_000),
         worker_seq: 1,
         store_seq: Some(1),
         ephemeral: false,

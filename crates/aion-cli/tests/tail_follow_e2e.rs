@@ -460,8 +460,7 @@ fn child_activity_started() -> Event {
 fn event_envelope(seq: u64, workflow_id: u128) -> EventEnvelope {
     EventEnvelope {
         seq,
-        recorded_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
-            .expect("fixed workflow fixture timestamp is valid"),
+        recorded_at: DateTime::<Utc>::from_timestamp_nanos(1_700_000_000_000_000_000),
         workflow_id: WorkflowId::new(uuid::Uuid::from_u128(workflow_id)),
     }
 }
