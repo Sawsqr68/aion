@@ -63,6 +63,8 @@ mod workers;
 mod workflows;
 
 #[cfg(test)]
+mod children_tests;
+#[cfg(test)]
 mod events_filter_integration_tests;
 #[cfg(test)]
 mod history_tests;

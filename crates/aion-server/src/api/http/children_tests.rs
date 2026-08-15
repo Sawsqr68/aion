@@ -1,0 +1,158 @@
+use std::{collections::HashMap, sync::Arc};
+
+use aion_core::{
+    ActivityId, Event, EventEnvelope, PackageVersion, Payload, RunId, SearchAttributeValue,
+    WorkflowId, DISPLAY_NAME_ATTRIBUTE,
+};
+use aion_store::{EventStore, WriteToken};
+use axum::http::StatusCode;
+use chrono::Utc;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use super::router::workflow_router;
+use super::test_support::{
+    NAMESPACE, json_request, read_json, runtime_config, server_state, shared_engine,
+};
+use crate::{
+    NamespaceResolver, StaticScheduleNamespaces, StaticWorkflowNamespaces, config::NamespaceMode,
+};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+#[tokio::test]
+async fn parent_run_derives_its_visible_leg_from_recorded_history() -> TestResult {
+    let parent_id = WorkflowId::new(uuid::Uuid::from_u128(0x244));
+    let parent_run = RunId::new(uuid::Uuid::from_u128(0x2440));
+    let child_id = WorkflowId::new(uuid::Uuid::from_u128(0x2441));
+    let child_run = RunId::new(uuid::Uuid::from_u128(0x2442));
+    let (engine, store, _visibility) = shared_engine().await?;
+    seed_parent(&store, &parent_id, &parent_run, &child_id).await?;
+    seed_child(&store, &child_id, &child_run).await?;
+
+    let ownership = StaticWorkflowNamespaces::default();
+    ownership.record(parent_id.clone(), NAMESPACE)?;
+    ownership.record(child_id.clone(), NAMESPACE)?;
+    let resolver = NamespaceResolver::from_parts(
+        NamespaceMode::SharedEngine,
+        Some(engine),
+        Arc::new(ownership),
+        Arc::new(StaticScheduleNamespaces::default()),
+    );
+    let router = workflow_router(server_state(resolver, runtime_config()).await?);
+
+    let response = router
+        .oneshot(json_request(
+            "/workflows/children",
+            &json!({
+                "namespace": NAMESPACE,
+                "workflow_id": parent_id,
+                "run_id": parent_run,
+            }),
+        )?)
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = read_json(response).await?;
+    assert_eq!(
+        body,
+        json!({
+            "children": [{
+                "workflow_id": child_id,
+                "run_id": child_run,
+                "workflow_type": "builder_leg",
+                "display_name": "Builder L1",
+                "status": "Running",
+                "current_activity_id": 7,
+                "current_attempt": 2,
+            }]
+        })
+    );
+    Ok(())
+}
+
+async fn seed_parent(
+    store: &Arc<dyn EventStore>,
+    parent_id: &WorkflowId,
+    parent_run: &RunId,
+    child_id: &WorkflowId,
+) -> TestResult {
+    let events = vec![
+        started(1, parent_id, parent_run, "fleet_dev"),
+        Event::ChildWorkflowStarted {
+            envelope: envelope(2, parent_id),
+            child_workflow_id: child_id.clone(),
+            workflow_type: "builder_leg".to_owned(),
+            input: payload()?,
+            package_version: version(),
+        },
+    ];
+    store
+        .append(WriteToken::recorder(), parent_id, &events, 0)
+        .await?;
+    Ok(())
+}
+
+async fn seed_child(
+    store: &Arc<dyn EventStore>,
+    child_id: &WorkflowId,
+    child_run: &RunId,
+) -> TestResult {
+    let mut attributes = HashMap::new();
+    attributes.insert(
+        DISPLAY_NAME_ATTRIBUTE.to_owned(),
+        SearchAttributeValue::String("Builder L1".to_owned()),
+    );
+    let activity_id = ActivityId::from_sequence_position(7);
+    let events = vec![
+        started(1, child_id, child_run, "builder_leg"),
+        Event::SearchAttributesUpdated {
+            envelope: envelope(2, child_id),
+            workflow_id: child_id.clone(),
+            attributes,
+        },
+        Event::ActivityScheduled {
+            envelope: envelope(3, child_id),
+            activity_id: activity_id.clone(),
+            activity_type: "build".to_owned(),
+            input: payload()?,
+            task_queue: "builders".to_owned(),
+            node: None,
+        },
+        Event::ActivityStarted {
+            envelope: envelope(4, child_id),
+            activity_id,
+            attempt: 2,
+        },
+    ];
+    store
+        .append(WriteToken::recorder(), child_id, &events, 0)
+        .await?;
+    Ok(())
+}
+
+fn started(seq: u64, workflow_id: &WorkflowId, run_id: &RunId, workflow_type: &str) -> Event {
+    Event::WorkflowStarted {
+        envelope: envelope(seq, workflow_id),
+        workflow_type: workflow_type.to_owned(),
+        input: payload().expect("fixture payload"),
+        run_id: run_id.clone(),
+        parent_run_id: None,
+        package_version: version(),
+    }
+}
+
+fn envelope(seq: u64, workflow_id: &WorkflowId) -> EventEnvelope {
+    EventEnvelope {
+        seq,
+        recorded_at: Utc::now(),
+        workflow_id: workflow_id.clone(),
+    }
+}
+
+fn payload() -> Result<Payload, aion_core::PayloadError> {
+    Payload::from_json(&json!({ "fixture": true }))
+}
+
+fn version() -> PackageVersion {
+    PackageVersion::new("a".repeat(64))
+}
