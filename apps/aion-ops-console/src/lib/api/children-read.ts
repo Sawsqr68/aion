@@ -44,12 +44,14 @@ export class ChildrenReadClient {
   async listChildren(
     namespace: Namespace,
     workflowId: WorkflowId,
-    runId: RunId | null
+    runId: RunId | null,
+    signal?: AbortSignal
   ): Promise<ChildLeg[]> {
     const response = await this.fetchImpl(buildUrl(this.baseUrl, CHILDREN_ENDPOINT), {
       method: 'POST',
       headers: buildScopedHeaders(this.credentials),
       body: JSON.stringify({ namespace, workflow_id: workflowId, run_id: runId }),
+      ...(signal === undefined ? {} : { signal }),
     });
     if (!response.ok) {
       const errorBody = await readJson(response).catch(() => null);
@@ -93,7 +95,7 @@ function readChildLeg(value: unknown): ChildLeg {
 
 function nullableString(value: unknown): string | null {
   if (value === null) return null;
-  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'string') return value;
   throw new ApiError(200, 'workflows/children child row has an invalid string field');
 }
 

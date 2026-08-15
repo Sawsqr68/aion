@@ -32,6 +32,28 @@ function child(overrides: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
+test('children request emits the strict wire body and forwards cancellation', async () => {
+  const controller = new AbortController();
+  let captured: { url: string; init: RequestInit | undefined } | undefined;
+  const client = new ChildrenReadClient({
+    baseUrl: 'http://console.test',
+    fetchImpl: async (input, init) => {
+      captured = { url: String(input), init };
+      return new Response(JSON.stringify({ children: [] }), { status: 200 });
+    },
+  });
+
+  await client.listChildren(namespace, parentId, parentRun, controller.signal);
+
+  expect(captured?.url).toBe('http://console.test/workflows/children');
+  expect(captured?.init?.signal).toBe(controller.signal);
+  expect(JSON.parse(String(captured?.init?.body))).toEqual({
+    namespace,
+    workflow_id: parentId,
+    run_id: parentRun,
+  });
+});
+
 test('children decoder preserves typed status and explicit not-started state', async () => {
   const running = await clientReturning(child()).listChildren(namespace, parentId, parentRun);
   const pending = await clientReturning(
@@ -41,6 +63,15 @@ test('children decoder preserves typed status and explicit not-started state', a
   expect(running[0]?.status).toBe('Running');
   expect(pending[0]?.runId).toBeNull();
   expect(pending[0]?.status).toBeNull();
+});
+
+test('children decoder accepts an empty display name for caller fallback', async () => {
+  const rows = await clientReturning(child({ display_name: '' })).listChildren(
+    namespace,
+    parentId,
+    parentRun
+  );
+  expect(rows[0]?.displayName).toBe('');
 });
 
 test('children decoder rejects present wrong-typed nullable strings', async () => {
