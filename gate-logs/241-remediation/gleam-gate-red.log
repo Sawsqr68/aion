@@ -1,0 +1,90 @@
+# #241 Gleam battery-gate red proof
+timestamp_utc=2026-08-15T03:26:12Z
+head=4ca454d9c27b1037ee6583d75968f01e002af715
+branch=241-final-message
+platform=Darwin Toms-MacBook-Pro.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:54:46 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T6000 arm64
+box_load=13:26  up 2 days, 1 hr, 4 users, load averages: 18.29 11.40 11.14
+logical_cpus=10
+memory_bytes=34359738368
+gleam=gleam 1.17.0
+
+=== gleam:aion-flow ===
+   Compiled in 0.08s
+    Running aion_flow_test.main
+[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m.[39m[32m
+165 passed, no failures[39m
+--- gleam:aion-flow exit 0 ---
+
+=== gleam:assistant ===
+  Resolving versions
+Downloading packages
+ Downloaded 3 packages in 0.03s
+  Compiling gleam_stdlib
+  Compiling gleam_json
+  Compiling aion_flow
+  Compiling gleeunit
+  Compiling assistant
+warning: Unused function argument
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/assistant/test/support/harness.gleam:63:19
+   │
+63 │     assistant: fn(prompt) {
+   │                   ^^^^^^ This argument is never used
+
+Hint: You can ignore it with an underscore: `_prompt`.
+
+error: Incorrect arity
+   ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/assistant/test/support/harness.gleam:64:10
+   │  
+64 │         Ok(AgentOutcome(
+   │ ╭──────────^
+65 │ │         text: "REPLY\n" <> prompt,
+66 │ │         stop_reason: "end_turn",
+67 │ │         session_id: "sess-test-assistant",
+68 │ │       ))
+   │ ╰───────^ Expected 4 arguments, got 3
+
+This call accepts these additional labelled arguments:
+
+  - final_message
+
+--- gleam:assistant exit 1 ---
+
+=== gleam:agent-dev ===
+  Resolving versions
+Downloading packages
+ Downloaded 3 packages in 0.08s
+  Compiling gleam_stdlib
+  Compiling gleam_json
+  Compiling aion_flow
+  Compiling gleeunit
+  Compiling agent_dev
+warning: Unused variable
+    ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/agent-dev/test/support/harness.gleam:154:10
+    │
+154 │       Ok(text) ->
+    │          ^^^^ This variable is never used
+
+Hint: You can ignore it with an underscore: `_text`.
+
+error: Incorrect arity
+    ┌─ /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/examples/agent-dev/test/support/harness.gleam:155:12
+    │  
+155 │           Ok(AgentOutcome(
+    │ ╭────────────^
+156 │ │           text: text,
+157 │ │           stop_reason: "end_turn",
+158 │ │           session_id: "sess-test-agent-dev",
+159 │ │         ))
+    │ ╰─────────^ Expected 4 arguments, got 3
+
+This call accepts these additional labelled arguments:
+
+  - final_message
+
+--- gleam:agent-dev exit 1 ---
+
+================ GLEAM GATE MANIFEST ================
+  PASS  gleam:aion-flow      exit 0
+  FAIL  gleam:assistant      exit 1
+  FAIL  gleam:agent-dev      exit 1
+=====================================================
