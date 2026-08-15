@@ -3,10 +3,10 @@
 #[path = "tail_follow_e2e/fixtures.rs"]
 mod tail_follow_fixtures;
 
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufReader, Read};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use aion_core::{
@@ -28,8 +28,8 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status};
 
 use tail_follow_fixtures::{
-    backfill_event, child_run_events, generated_envelope, live_event, replayed_parent_events,
-    selected_parent_live_event,
+    assert_replay_outcome, backfill_event, child_run_events, generated_envelope, live_event,
+    replayed_parent_events, selected_parent_live_event, spawn_line_reader,
 };
 
 const PARENT_ID: u128 = 0x2440;
@@ -261,17 +261,7 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
     let mut child = command.spawn()?;
     let stdout = child.stdout.take().ok_or("tail stdout was not piped")?;
     let stderr = child.stderr.take().ok_or("tail stderr was not piped")?;
-    let (line_sender, line_receiver) = mpsc::channel();
-    let reader = std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            if line_sender
-                .send(line.map_err(|error| error.to_string()))
-                .is_err()
-            {
-                return;
-            }
-        }
-    });
+    let (line_receiver, reader) = spawn_line_reader(stdout);
 
     tokio::time::timeout(Duration::from_secs(10), parent_attached.notified())
         .await
@@ -310,34 +300,13 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
     http_task.abort();
     grpc_task.abort();
 
-    let mut violations = Vec::new();
-    if prior_child_attached.load(Ordering::SeqCst) {
-        violations.push("prior-generation child workflow socket was followed");
-    }
-    if lines.iter().any(|line| line.contains("PriorBuilder")) {
-        violations.push("prior-generation child was announced");
-    }
-    if lines.iter().any(|line| line.contains("SUPERSEDED→9")) {
-        violations.push("prior-generation activity printed a false superseded notice");
-    }
-    if !parent_attempt_attached {
-        violations.push(
-            "selected-run attempt 2 was suppressed after prior replay poisoned current attempts",
-        );
-    }
-    if !selected_child_followed {
-        violations.push("selected-generation child workflow socket was not followed");
-    }
-    if !lines
-        .iter()
-        .any(|line| line.contains("selected-run-live-parent"))
-    {
-        violations.push("selected-run attempt 2 live transcript was not printed");
-    }
-    assert!(
-        violations.is_empty(),
-        "{}; stdout: {lines:?}; tail status {status}; stderr: {stderr_text}",
-        violations.join("; ")
+    assert_replay_outcome(
+        prior_child_attached.load(Ordering::SeqCst),
+        &lines,
+        parent_attempt_attached,
+        selected_child_followed,
+        status,
+        &stderr_text,
     );
     Ok(())
 }

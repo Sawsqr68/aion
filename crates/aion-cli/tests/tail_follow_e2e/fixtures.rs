@@ -1,3 +1,8 @@
+use std::io::{BufRead, BufReader};
+use std::process::{ChildStdout, ExitStatus};
+use std::sync::mpsc::{self, Receiver};
+use std::thread::JoinHandle;
+
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, Event, EventEnvelope, PackageVersion, Payload,
     RunId, WorkflowId,
@@ -145,4 +150,60 @@ pub(super) fn generated_envelope(value: aion_proto::WireEnvelope) -> generated::
             bytes: payload.bytes,
         }),
     }
+}
+
+pub(super) fn spawn_line_reader(
+    stdout: ChildStdout,
+) -> (Receiver<Result<String, String>>, JoinHandle<()>) {
+    let (line_sender, line_receiver) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            if line_sender
+                .send(line.map_err(|error| error.to_string()))
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
+    (line_receiver, reader)
+}
+
+pub(super) fn assert_replay_outcome(
+    prior_child_attached: bool,
+    lines: &[String],
+    parent_attempt_attached: bool,
+    selected_child_followed: bool,
+    status: ExitStatus,
+    stderr_text: &str,
+) {
+    let mut violations = Vec::new();
+    if prior_child_attached {
+        violations.push("prior-generation child workflow socket was followed");
+    }
+    if lines.iter().any(|line| line.contains("PriorBuilder")) {
+        violations.push("prior-generation child was announced");
+    }
+    if lines.iter().any(|line| line.contains("SUPERSEDED→9")) {
+        violations.push("prior-generation activity printed a false superseded notice");
+    }
+    if !parent_attempt_attached {
+        violations.push(
+            "selected-run attempt 2 was suppressed after prior replay poisoned current attempts",
+        );
+    }
+    if !selected_child_followed {
+        violations.push("selected-generation child workflow socket was not followed");
+    }
+    if !lines
+        .iter()
+        .any(|line| line.contains("selected-run-live-parent"))
+    {
+        violations.push("selected-run attempt 2 live transcript was not printed");
+    }
+    assert!(
+        violations.is_empty(),
+        "{}; stdout: {lines:?}; tail status {status}; stderr: {stderr_text}",
+        violations.join("; ")
+    );
 }
