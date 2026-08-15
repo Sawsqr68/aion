@@ -1,9 +1,10 @@
+import type { ReactNode } from 'react';
+
 import type { ChildLeg } from '@/lib/api';
 import { shortWorkflowId } from '@/lib/workflowIdentity';
-import type { ActivityId, Namespace, RunId } from '@/types';
+import type { ActivityId, Namespace, RunId, WorkflowStatus } from '@/types';
 
-import { TranscriptList } from '../../transcript/components/TranscriptList';
-import { useTranscript } from '../../transcript/hooks/useTranscript';
+import { TranscriptPanel } from '../../transcript/components/TranscriptPanel';
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { type AttemptNavigatorRow, deriveAttemptNavigator } from '../lib/attemptNavigator';
@@ -18,7 +19,7 @@ export type LegAttemptView = {
 
 export type LegView = ChildLeg & { attempts: LegAttemptView[] };
 
-/** Recorded-fixture-friendly presentation of the child legs folded into a run page. */
+/** Recorded fixture wrapper over the same LegCard presentation the live run page ships. */
 export function LegsSection({ legs }: { legs: readonly LegView[] }) {
   if (legs.length === 0) return null;
   return (
@@ -33,33 +34,20 @@ export function LegsSection({ legs }: { legs: readonly LegView[] }) {
       </div>
       <div className="space-y-4">
         {legs.map((leg) => (
-          <article className="rounded-md border border-border bg-surface" key={leg.workflowId}>
-            <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-              <strong>{leg.displayName ?? leg.workflowType}</strong>
-              <code className="text-xs text-muted-foreground">
-                {shortWorkflowId(leg.workflowId)}
-              </code>
-              <span className="ml-auto text-xs font-medium">{leg.status}</span>
-              {leg.currentActivityId !== null && leg.currentAttempt !== null ? (
-                <span className="text-xs text-muted-foreground">
-                  Activity {leg.currentActivityId} · attempt {leg.currentAttempt}
-                </span>
-              ) : null}
-            </header>
-            <div className="space-y-3 p-3">
-              {leg.runId === null ? (
-                <p className="text-xs text-muted-foreground">
-                  Child start recorded; run not started yet.
-                </p>
-              ) : null}
-              {leg.attempts.map((attempt) => (
-                <AttemptHeading
-                  attempt={attempt}
-                  key={`${attempt.activityId}:${attempt.attempt}`}
-                />
-              ))}
-            </div>
-          </article>
+          <LegCard
+            activityId={leg.currentActivityId}
+            attempt={leg.currentAttempt}
+            key={leg.workflowId}
+            leg={leg}
+            status={leg.status}
+          >
+            {leg.attempts.map((attempt) => (
+              <AttemptHeading
+                attempt={attempt}
+                key={`${attempt.activityId}:${attempt.attempt}`}
+              />
+            ))}
+          </LegCard>
         ))}
       </div>
     </section>
@@ -79,6 +67,60 @@ function AttemptHeading({ attempt }: { attempt: LegAttemptView }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function LegHeader({
+  activityId,
+  attempt,
+  leg,
+  status,
+}: {
+  activityId: ActivityId | null;
+  attempt: number | null;
+  leg: ChildLeg;
+  status: WorkflowStatus | null;
+}) {
+  return (
+    <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+      <strong>{leg.displayName ?? leg.workflowType}</strong>
+      <code className="text-xs text-muted-foreground">{shortWorkflowId(leg.workflowId)}</code>
+      <span className="ml-auto text-xs font-medium">{status ?? 'Not started'}</span>
+      {activityId !== null && attempt !== null ? (
+        <span className="text-xs text-muted-foreground">
+          Activity {activityId} · attempt {attempt}
+        </span>
+      ) : null}
+    </header>
+  );
+}
+
+/** Shared shipped leg card: both the fixture pin and live run page render this markup. */
+function LegCard({
+  activityId,
+  attempt,
+  children,
+  leg,
+  status,
+}: {
+  activityId: ActivityId | null;
+  attempt: number | null;
+  children: ReactNode;
+  leg: ChildLeg;
+  status: WorkflowStatus | null;
+}) {
+  return (
+    <article className="rounded-md border border-border bg-surface">
+      <LegHeader activityId={activityId} attempt={attempt} leg={leg} status={status} />
+      <div className="space-y-3 p-3">
+        {leg.runId === null ? (
+          <p className="text-xs text-muted-foreground">
+            Child start recorded; run not started yet.
+          </p>
+        ) : null}
+        {children}
+      </div>
+    </article>
   );
 }
 
@@ -133,39 +175,25 @@ function LiveLeg({ leg, namespace }: { leg: ChildLeg; namespace: Namespace }) {
   const displayed = fallback === null ? attempts : [fallback];
 
   return (
-    <article className="rounded-md border border-border bg-surface">
-      <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <strong>{leg.displayName ?? leg.workflowType}</strong>
-        <code className="text-xs text-muted-foreground">{shortWorkflowId(leg.workflowId)}</code>
-        <span className="ml-auto text-xs font-medium">
-          {liveStatus(leg.status, live.terminalOutcome)}
-        </span>
-        {(current ?? fallback) !== null ? (
-          <span className="text-xs text-muted-foreground">
-            Activity {(current ?? fallback)?.activityId} · attempt {(current ?? fallback)?.attempt}
-          </span>
-        ) : null}
-      </header>
-      <div className="space-y-3 p-3">
-        {leg.runId === null ? (
-          <p className="text-xs text-muted-foreground">
-            Child start recorded; run not started yet.
-          </p>
-        ) : null}
-        {displayed.map((attempt) => (
-          <LiveAttempt
-            attempt={attempt}
-            key={`${attempt.activityId}:${attempt.attempt}`}
-            namespace={namespace}
-            runId={leg.runId}
-            workflowId={leg.workflowId}
-          />
-        ))}
-        {leg.runId !== null && displayed.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No activity transcript stream recorded.</p>
-        ) : null}
-      </div>
-    </article>
+    <LegCard
+      activityId={(current ?? fallback)?.activityId ?? null}
+      attempt={(current ?? fallback)?.attempt ?? null}
+      leg={leg}
+      status={liveStatus(leg.status, live.terminalOutcome)}
+    >
+      {displayed.map((attempt) => (
+        <LiveAttempt
+          attempt={attempt}
+          key={`${attempt.activityId}:${attempt.attempt}`}
+          namespace={namespace}
+          runId={leg.runId}
+          workflowId={leg.workflowId}
+        />
+      ))}
+      {leg.runId !== null && displayed.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No activity transcript stream recorded.</p>
+      ) : null}
+    </LegCard>
   );
 }
 
@@ -180,40 +208,20 @@ function LiveAttempt({
   runId: RunId | null;
   workflowId: ChildLeg['workflowId'];
 }) {
-  const transcript = useTranscript({
-    target:
-      runId === null
-        ? null
-        : {
-            namespace,
-            workflowId,
-            runId,
-            activityId: attempt.activityId,
-            attempt: attempt.attempt,
-          },
-  });
+  const target =
+    runId === null
+      ? null
+      : {
+          namespace,
+          workflowId,
+          runId,
+          activityId: attempt.activityId,
+          attempt: attempt.attempt,
+        };
   return (
-    <div className="rounded border border-border" data-attempt-state={attempt.state}>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs">
-        <strong>{attempt.activityType ?? `Activity ${attempt.activityId}`}</strong>
-        <span>attempt {attempt.attempt}</span>
-        <span className="text-muted-foreground">
-          {attempt.state === 'superseded'
-            ? `Superseded by attempt ${attempt.supersededBy}`
-            : attempt.state}
-        </span>
-        <span className="ml-auto text-muted-foreground">{transcript.status}</span>
-      </div>
-      {transcript.entries.length === 0 ? (
-        <p className="px-3 py-4 text-xs text-muted-foreground">Waiting for transcript events.</p>
-      ) : (
-        <TranscriptList
-          entries={transcript.entries}
-          hasEarlier={transcript.hasEarlier}
-          isLoadingEarlier={transcript.isLoadingEarlier}
-          onLoadEarlier={transcript.loadEarlier}
-        />
-      )}
+    <div className="space-y-2 rounded border border-border p-2" data-attempt-state={attempt.state}>
+      <AttemptHeading attempt={attempt} />
+      <TranscriptPanel target={target} />
     </div>
   );
 }
@@ -234,14 +242,20 @@ function attemptsFromRows(rows: readonly AttemptNavigatorRow[]): LegAttemptView[
   });
 }
 
-function liveStatus(status: string, outcome: string | null): string {
+function liveStatus(status: WorkflowStatus | null, outcome: string | null): WorkflowStatus | null {
   if (outcome === null) return status;
-  const labels: Record<string, string> = {
-    cancelled: 'Cancelled',
-    completed: 'Completed',
-    continued_as_new: 'ContinuedAsNew',
-    failed: 'Failed',
-    timed_out: 'TimedOut',
-  };
-  return labels[outcome] ?? status;
+  switch (outcome) {
+    case 'cancelled':
+      return 'Cancelled';
+    case 'completed':
+      return 'Completed';
+    case 'continued_as_new':
+      return 'ContinuedAsNew';
+    case 'failed':
+      return 'Failed';
+    case 'timed_out':
+      return 'TimedOut';
+    default:
+      return status;
+  }
 }

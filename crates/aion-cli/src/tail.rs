@@ -4,14 +4,50 @@ use std::collections::HashMap;
 
 use aion_client::{Client, ClientAuth, ClientBuilder};
 use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, Event, RunId, WorkflowId};
+use aion_server::config::{DEFAULT_HTTP_ADDRESS, MAX_TRANSCRIPT_WINDOW_LIMIT};
 use anyhow::{Context, Result, anyhow};
+use clap::Args;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 mod live;
 
-const DEFAULT_BACKFILL: u32 = 2_000;
+/// Arguments owned by the `tail` verb rather than the binary entry point.
+#[derive(Debug, Args)]
+pub(crate) struct TailArgs {
+    /// Parent workflow identifier. Child identifiers are derived; do not supply them.
+    pub(crate) workflow_id: String,
+    /// Specific parent run. Defaults to the latest recorded run.
+    #[arg(long)]
+    pub(crate) run_id: Option<String>,
+    /// HTTP/WebSocket listener used by child and transcript APIs.
+    /// May also be set with `AION_HTTP_ENDPOINT`.
+    #[arg(long, env = "AION_HTTP_ENDPOINT", default_value_t = default_http_endpoint())]
+    pub(crate) http_endpoint: String,
+    /// Print the retained transcript snapshot and exit instead of following live sockets.
+    #[arg(long)]
+    pub(crate) no_follow: bool,
+}
+
+pub(crate) async fn dispatch(client: &Client, args: &TailArgs, cli: &crate::Cli) -> Result<Value> {
+    let token = crate::deploy::resolve_token(cli.token.clone());
+    let grpc_endpoint = cli.endpoint();
+    run(
+        client,
+        &args.workflow_id,
+        args.run_id.as_deref(),
+        TailConfig {
+            namespace: &cli.namespace,
+            subject: &cli.subject,
+            token: token.as_deref(),
+            grpc_endpoint: &grpc_endpoint,
+            http_endpoint: &args.http_endpoint,
+            follow: !args.no_follow,
+        },
+    )
+    .await
+}
 
 pub(crate) struct TailConfig<'a> {
     pub(crate) namespace: &'a str,
@@ -26,6 +62,13 @@ pub(crate) struct TailConfig<'a> {
 struct Source {
     workflow_id: WorkflowId,
     run_id: RunId,
+    label: String,
+    is_parent: bool,
+}
+
+#[derive(Clone, Debug)]
+struct PendingSource {
+    workflow_id: WorkflowId,
     label: String,
 }
 
@@ -83,7 +126,8 @@ pub(crate) async fn run(
     let workflow_id = parse_workflow_id(workflow_id)?;
     let requested_run = run_id.map(parse_run_id).transpose()?;
     let http = HttpTailClient::new(&config)?;
-    let sources = discover_sources(client, &http, &workflow_id, requested_run, &config).await?;
+    let (sources, pending) =
+        discover_sources(client, &http, &workflow_id, requested_run, &config).await?;
     let mut targets = discover_targets(&http, &sources, config.namespace).await?;
     mark_superseded(&mut targets);
     let heads = backfill_and_print(&http, &targets, config.namespace).await?;
@@ -91,9 +135,8 @@ pub(crate) async fn run(
         return Ok(Value::Null);
     }
 
-    let socket_url = socket_url(config.http_endpoint)?;
     let mut builder = ClientBuilder::new(config.grpc_endpoint)
-        .with_stream_endpoint(&socket_url)
+        .with_stream_endpoint(transcript_socket_url(config.http_endpoint)?)
         .with_namespace(config.namespace)
         .with_subject(config.subject)
         .with_authorized_namespaces([config.namespace]);
@@ -104,16 +147,7 @@ pub(crate) async fn run(
         .build()
         .await
         .context("failed to connect tail workflow-event sockets")?;
-    live::follow(
-        stream_client,
-        sources,
-        targets,
-        heads,
-        config.namespace,
-        &socket_url,
-        http.headers.clone(),
-    )
-    .await
+    live::follow(stream_client, sources, pending, targets, heads).await
 }
 
 async fn discover_sources(
@@ -122,7 +156,7 @@ async fn discover_sources(
     workflow_id: &WorkflowId,
     requested_run: Option<RunId>,
     config: &TailConfig<'_>,
-) -> Result<Vec<Source>> {
+) -> Result<(Vec<Source>, Vec<PendingSource>)> {
     let description = client
         .describe(workflow_id, requested_run.as_ref())
         .await
@@ -134,6 +168,7 @@ async fn discover_sources(
         workflow_id: workflow_id.clone(),
         run_id: parent_run.clone(),
         label: format!("parent {}", short_id(workflow_id)),
+        is_parent: true,
     }];
     let children: ChildrenResponse = http
         .post(
@@ -145,16 +180,31 @@ async fn discover_sources(
             },
         )
         .await?;
-    sources.extend(children.children.into_iter().filter_map(|child| {
-        let child_run = child.run_id?;
+    let mut pending = Vec::new();
+    for child in children.children {
         let name = child.display_name.unwrap_or(child.workflow_type);
-        Some(Source {
-            label: format!("{name} {}", short_id(&child.workflow_id)),
-            workflow_id: child.workflow_id,
-            run_id: child_run,
-        })
-    }));
-    Ok(sources)
+        let label = format!("{name} {}", short_id(&child.workflow_id));
+        if let Some(child_run) = child.run_id {
+            sources.push(Source {
+                label,
+                workflow_id: child.workflow_id,
+                run_id: child_run,
+                is_parent: false,
+            });
+        } else {
+            let action = if config.follow {
+                "following for its run"
+            } else {
+                "no transcript exists in this snapshot"
+            };
+            println!("[{label}] child start recorded; run not started yet; {action}");
+            pending.push(PendingSource {
+                label,
+                workflow_id: child.workflow_id,
+            });
+        }
+    }
+    Ok((sources, pending))
 }
 
 async fn discover_targets(
@@ -207,11 +257,19 @@ async fn backfill_and_print(
                     "run_id": target.source.run_id,
                     "activity_id": target.activity_id,
                     "attempt": target.attempt,
-                    "last": DEFAULT_BACKFILL,
+                    "last": MAX_TRANSCRIPT_WINDOW_LIMIT,
                 }),
             )
             .await
             .with_context(|| format!("failed to backfill {}", prefix(target)))?;
+        if transcript.events.len() < usize::try_from(transcript.head_seq).unwrap_or(usize::MAX) {
+            println!(
+                "{} NOTICE: retained backfill truncated; showing the last {} of {} events (the server's published transcript window limit)",
+                prefix(target),
+                transcript.events.len(),
+                transcript.head_seq
+            );
+        }
         backfill.extend(
             transcript
                 .events
@@ -345,7 +403,11 @@ fn short_id(workflow_id: &WorkflowId) -> String {
     workflow_id.to_string().chars().take(8).collect()
 }
 
-fn socket_url(endpoint: &str) -> Result<String> {
+pub(crate) fn default_http_endpoint() -> String {
+    format!("http://{DEFAULT_HTTP_ADDRESS}")
+}
+
+fn transcript_socket_url(endpoint: &str) -> Result<String> {
     let base = endpoint.trim_end_matches('/');
     if let Some(rest) = base.strip_prefix("https://") {
         Ok(format!("wss://{rest}/events/stream"))
@@ -389,6 +451,7 @@ mod tests {
                 workflow_id: WorkflowId::new(uuid::Uuid::from_u128(0x2441)),
                 run_id: RunId::new(uuid::Uuid::from_u128(0x2442)),
                 label: "Builder L1 24410000".to_owned(),
+                is_parent: false,
             },
             activity_id: ActivityId::from_sequence_position(7),
             attempt,

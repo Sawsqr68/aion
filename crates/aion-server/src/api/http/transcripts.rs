@@ -36,9 +36,8 @@ use serde::{Deserialize, Serialize};
 use super::auth::HttpCaller;
 use super::error::HttpWireError;
 use crate::ServerState;
+use crate::config::MAX_TRANSCRIPT_WINDOW_LIMIT;
 use crate::stream::gate_transcript_workflow;
-
-const MAX_WINDOW_LIMIT: u32 = 2_000;
 
 /// The transcript-fetch request body: the target stream's full identity plus
 /// the namespace the workflow runs under (the auth scope), an optional resume
@@ -176,7 +175,7 @@ pub(crate) async fn fetch_transcript(
     }
     let limit = request
         .limit
-        .map(|limit| limit.clamp(1, MAX_WINDOW_LIMIT) as usize);
+        .map(|limit| limit.clamp(1, MAX_TRANSCRIPT_WINDOW_LIMIT) as usize);
     let next_from_seq = limit.and_then(|limit| records.get(limit).map(|record| record.store_seq));
     if let Some(limit) = limit {
         records.truncate(limit);

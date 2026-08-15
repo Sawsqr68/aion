@@ -9,8 +9,8 @@ use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, Event, EventEnvelope, PackageVersion, Payload,
     RunId, WorkflowId, WorkflowSummary,
 };
-use aion_proto::StreamedActivityEvent;
 use aion_proto::generated;
+use aion_proto::{StreamedActivityEvent, encode_streamed_event};
 use axum::Router;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Json, State};
@@ -31,6 +31,8 @@ const CHILD_RUN: u128 = 0x2443;
 
 #[derive(Clone)]
 struct HttpFixture {
+    parent_attached: Arc<Notify>,
+    emit_fanout: Arc<Notify>,
     transcript_attached: Arc<Notify>,
     emit_live: Arc<Notify>,
 }
@@ -144,9 +146,13 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
         .serve_with_incoming(TcpListenerStream::new(grpc_listener));
     let grpc_task = tokio::spawn(grpc);
 
+    let parent_attached = Arc::new(Notify::new());
+    let emit_fanout = Arc::new(Notify::new());
     let transcript_attached = Arc::new(Notify::new());
     let emit_live = Arc::new(Notify::new());
     let http_state = HttpFixture {
+        parent_attached: parent_attached.clone(),
+        emit_fanout: emit_fanout.clone(),
         transcript_attached: transcript_attached.clone(),
         emit_live: emit_live.clone(),
     };
@@ -193,6 +199,10 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
         ))
     });
 
+    tokio::time::timeout(Duration::from_secs(10), parent_attached.notified())
+        .await
+        .map_err(|_| "tail did not attach its parent workflow socket")?;
+    emit_fanout.notify_waiters();
     tokio::time::timeout(Duration::from_secs(10), transcript_attached.notified())
         .await
         .map_err(|_| "tail did not attach its transcript socket")?;
@@ -223,26 +233,12 @@ async fn tail_follow_prints_child_events_emitted_after_attach()
 }
 
 async fn children() -> Json<Value> {
-    Json(json!({
-        "children": [{
-            "workflow_id": WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)),
-            "run_id": RunId::new(uuid::Uuid::from_u128(CHILD_RUN)),
-            "workflow_type": "builder-leg",
-            "display_name": "Builder",
-            "status": "Running",
-            "current_activity": {"activity_id": 7, "attempt": 1}
-        }]
-    }))
+    Json(json!({"children": []}))
 }
 
 async fn transcripts(Json(request): Json<Value>) -> Json<Value> {
-    let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
-    let streams = if request.get("workflow_id").and_then(Value::as_str) == Some(child_id.as_str()) {
-        json!([{"activity_id": 7, "attempt": 1}])
-    } else {
-        json!([])
-    };
-    Json(json!({"streams": streams}))
+    drop(request);
+    Json(json!({"streams": []}))
 }
 
 async fn transcript() -> Json<Value> {
@@ -260,12 +256,38 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
     let Ok(request) = serde_json::from_str::<Value>(&subscription) else {
         return;
     };
-    let is_transcript = request.get("transcript").is_some()
-        || request.pointer("/subscription/transcript").is_some();
-    if !is_transcript {
-        while socket.next().await.is_some() {}
+    if request.get("transcript").is_some() {
+        serve_transcript(socket, state).await;
         return;
     }
+    let workflow_id = request
+        .pointer("/per_workflow/workflow_id/uuid")
+        .and_then(Value::as_str);
+    let parent_id = WorkflowId::new(uuid::Uuid::from_u128(PARENT_ID)).to_string();
+    let child_id = WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)).to_string();
+    if workflow_id == Some(parent_id.as_str()) {
+        state.parent_attached.notify_waiters();
+        state.emit_fanout.notified().await;
+        let Some(event) = child_started() else {
+            return;
+        };
+        if !send_workflow_event(&mut socket, event).await {
+            return;
+        }
+    } else if workflow_id == Some(child_id.as_str()) {
+        let Some(started) = child_run_started() else {
+            return;
+        };
+        for event in [started, child_activity_started()] {
+            if !send_workflow_event(&mut socket, event).await {
+                return;
+            }
+        }
+    }
+    while socket.next().await.is_some() {}
+}
+
+async fn serve_transcript(mut socket: WebSocket, state: HttpFixture) {
     state.transcript_attached.notify_waiters();
     state.emit_live.notified().await;
     let Ok(frame) = serde_json::to_string(&StreamedActivityEvent::new(live_event())) else {
@@ -275,6 +297,53 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
         return;
     }
     while socket.next().await.is_some() {}
+}
+
+async fn send_workflow_event(socket: &mut WebSocket, event: Event) -> bool {
+    let Ok(encoded) = encode_streamed_event("default", None, &event) else {
+        return false;
+    };
+    let Ok(frame) = serde_json::to_string(&encoded) else {
+        return false;
+    };
+    socket.send(Message::Text(frame.into())).await.is_ok()
+}
+
+fn child_started() -> Option<Event> {
+    Some(Event::ChildWorkflowStarted {
+        envelope: event_envelope(2, PARENT_ID),
+        child_workflow_id: WorkflowId::new(uuid::Uuid::from_u128(CHILD_ID)),
+        workflow_type: "Builder".to_owned(),
+        input: Payload::from_json(&json!({})).ok()?,
+        package_version: PackageVersion::new("a".repeat(64)),
+    })
+}
+
+fn child_run_started() -> Option<Event> {
+    Some(Event::WorkflowStarted {
+        envelope: event_envelope(1, CHILD_ID),
+        workflow_type: "Builder".to_owned(),
+        input: Payload::from_json(&json!({})).ok()?,
+        run_id: RunId::new(uuid::Uuid::from_u128(CHILD_RUN)),
+        parent_run_id: Some(RunId::new(uuid::Uuid::from_u128(PARENT_RUN))),
+        package_version: PackageVersion::new("a".repeat(64)),
+    })
+}
+
+fn child_activity_started() -> Event {
+    Event::ActivityStarted {
+        envelope: event_envelope(2, CHILD_ID),
+        activity_id: ActivityId::from_sequence_position(7),
+        attempt: 1,
+    }
+}
+
+fn event_envelope(seq: u64, workflow_id: u128) -> EventEnvelope {
+    EventEnvelope {
+        seq,
+        recorded_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap_or_default(),
+        workflow_id: WorkflowId::new(uuid::Uuid::from_u128(workflow_id)),
+    }
 }
 
 fn live_event() -> ActivityEvent {

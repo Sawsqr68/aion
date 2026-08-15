@@ -35,6 +35,8 @@ pub mod payload;
 pub mod start;
 /// Event stream and subscription helpers.
 pub mod stream;
+/// Typed activity-attempt transcript subscriptions.
+pub mod transcript;
 /// Transport adapters (gRPC, WebSocket event streaming, embedded engine).
 pub mod transport;
 
@@ -45,3 +47,4 @@ pub use ops::{ListPage, PauseOutcome, ReopenOutcome, ResumeOutcome, WorkflowDesc
 pub use payload::{from_payload, to_payload};
 pub use start::{DisplayNameNotApplied, StartOptions, StartOutcome};
 pub use stream::{EventStream, ResumingEventStream, SubscribeTarget};
+pub use transcript::{TranscriptStream, TranscriptStreamItem, TranscriptTarget};

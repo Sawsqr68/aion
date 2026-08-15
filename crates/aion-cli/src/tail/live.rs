@@ -1,69 +1,46 @@
-//! Live transcript sockets plus workflow-event discovery of successor attempts.
+//! Live transcript subscriptions plus workflow-event discovery of attempts and fanout.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::num::NonZeroU64;
 
-use aion_client::Client;
-use aion_core::{ActivityEvent, ActivityId, Event};
-use anyhow::{Context, Result, anyhow};
-use futures::{SinkExt, StreamExt};
-use reqwest::header::HeaderMap;
-use serde::Deserialize;
-use serde_json::{Value, json};
+use aion_client::{Client, TranscriptStreamItem, TranscriptTarget};
+use aion_core::{ActivityId, Event};
+use anyhow::{Context, Result};
+use futures::StreamExt;
+use serde_json::Value;
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 
-use super::{Source, Target, prefix, render_event};
-
-#[derive(Debug, Deserialize)]
-struct ActivityFrame {
-    activity_event: Option<ActivityEvent>,
-    error: Option<Value>,
-}
+use super::{PendingSource, Source, Target, prefix, render_event, short_id};
 
 pub(super) async fn follow(
-    stream_client: Client,
+    client: Client,
     sources: Vec<Source>,
+    pending: Vec<PendingSource>,
     targets: Vec<Target>,
     heads: Vec<Option<u64>>,
-    namespace: &str,
-    socket_url: &str,
-    headers: HeaderMap,
 ) -> Result<Value> {
-    let (sender, mut receiver) = mpsc::channel::<Result<String>>(256);
+    let (sender, mut receiver) = mpsc::channel::<String>(256);
     for (target, after_seq) in targets
         .iter()
         .cloned()
         .zip(heads)
         .filter(|(target, _)| target.superseded_by.is_none())
     {
-        spawn_socket(
-            target,
-            namespace.to_owned(),
-            socket_url.to_owned(),
-            headers.clone(),
-            after_seq,
-            sender.clone(),
-        );
+        spawn_transcript(client.clone(), target, after_seq, sender.clone());
     }
     for source in sources {
         let current = current_attempts(&source, &targets);
-        tokio::spawn(monitor_attempts(
-            stream_client.clone(),
-            source,
-            current,
-            namespace.to_owned(),
-            socket_url.to_owned(),
-            headers.clone(),
-            sender.clone(),
-        ));
+        spawn_source_monitor(client.clone(), source, current, sender.clone());
+    }
+    for pending_source in pending {
+        spawn_pending_monitor(client.clone(), pending_source, sender.clone());
     }
     drop(sender);
 
     loop {
         tokio::select! {
             message = receiver.recv() => match message {
-                Some(Ok(line)) => println!("{line}"),
-                Some(Err(error)) => return Err(error),
+                Some(line) => println!("{line}"),
                 None => return Ok(Value::Null),
             },
             signal = tokio::signal::ctrl_c() => {
@@ -88,186 +65,316 @@ fn current_attempts(source: &Source, targets: &[Target]) -> HashMap<ActivityId, 
     current
 }
 
-async fn monitor_attempts(
+fn spawn_source_monitor(
+    client: Client,
+    source: Source,
+    current: HashMap<ActivityId, u32>,
+    sender: mpsc::Sender<String>,
+) {
+    tokio::spawn(async move {
+        monitor_source(client, source, current, sender).await;
+    });
+}
+
+async fn monitor_source(
     client: Client,
     source: Source,
     mut current: HashMap<ActivityId, u32>,
-    namespace: String,
-    socket_url: String,
-    headers: HeaderMap,
-    sender: mpsc::Sender<Result<String>>,
+    sender: mpsc::Sender<String>,
 ) {
+    let mut discovered_children = HashSet::new();
     let mut events = client.subscribe_workflow(&source.workflow_id);
     while let Some(next) = events.next().await {
         let event = match next {
             Ok(event) => event,
             Err(error) => {
-                let _ = sender
-                    .send(Err(anyhow!("child workflow event socket failed: {error}")))
-                    .await;
+                send_line(
+                    &sender,
+                    format!(
+                        "[{}] NOTICE: workflow event socket failed: {error}; new attempts will not be discovered",
+                        source.label
+                    ),
+                )
+                .await;
                 return;
             }
         };
-        if matches!(
-            &event,
-            Event::WorkflowStarted { run_id, .. } if run_id != &source.run_id
-        ) {
+        if let Event::WorkflowStarted { run_id, .. } = &event
+            && run_id != &source.run_id
+        {
+            send_line(
+                &sender,
+                format!(
+                    "[{}] NOTICE: continued as new as run {run_id}; this generation is no longer followed",
+                    source.label
+                ),
+            )
+            .await;
             return;
         }
-        let Event::ActivityStarted {
+        if source.is_parent
+            && let Event::ChildWorkflowStarted {
+                child_workflow_id,
+                workflow_type,
+                ..
+            } = &event
+            && discovered_children.insert(child_workflow_id.clone())
+        {
+            let pending = PendingSource {
+                workflow_id: child_workflow_id.clone(),
+                label: format!("{workflow_type} {}", short_id(child_workflow_id)),
+            };
+            send_line(
+                &sender,
+                format!(
+                    "[{}] child start recorded; run not started yet; following for its run",
+                    pending.label
+                ),
+            )
+            .await;
+            spawn_pending_monitor(client.clone(), pending, sender.clone());
+            continue;
+        }
+        observe_attempt(&client, &source, &mut current, event, &sender).await;
+    }
+    send_line(
+        &sender,
+        format!(
+            "[{}] NOTICE: workflow event socket closed; new attempts will not be discovered",
+            source.label
+        ),
+    )
+    .await;
+}
+
+fn spawn_pending_monitor(client: Client, pending: PendingSource, sender: mpsc::Sender<String>) {
+    tokio::spawn(async move {
+        monitor_pending(client, pending, sender).await;
+    });
+}
+
+async fn monitor_pending(client: Client, pending: PendingSource, sender: mpsc::Sender<String>) {
+    let mut events = client.subscribe_workflow_from(&pending.workflow_id, NonZeroU64::MIN);
+    let mut source = None;
+    let mut current = HashMap::new();
+    while let Some(next) = events.next().await {
+        let event = match next {
+            Ok(event) => event,
+            Err(error) => {
+                send_line(
+                    &sender,
+                    format!(
+                        "[{}] NOTICE: pending child event socket failed: {error}; its run is not followed",
+                        pending.label
+                    ),
+                )
+                .await;
+                return;
+            }
+        };
+        if let Event::WorkflowStarted { run_id, .. } = &event {
+            if let Some(active) = &source {
+                let active: &Source = active;
+                if run_id != &active.run_id {
+                    send_line(
+                        &sender,
+                        format!(
+                            "[{}] NOTICE: continued as new as run {run_id}; this generation is no longer followed",
+                            active.label
+                        ),
+                    )
+                    .await;
+                    return;
+                }
+            } else {
+                let started = Source {
+                    workflow_id: pending.workflow_id.clone(),
+                    run_id: run_id.clone(),
+                    label: pending.label.clone(),
+                    is_parent: false,
+                };
+                send_line(
+                    &sender,
+                    format!(
+                        "[{}] child run {run_id} started; following live attempts",
+                        started.label
+                    ),
+                )
+                .await;
+                source = Some(started);
+            }
+            continue;
+        }
+        if let Some(source) = &source {
+            observe_attempt(&client, source, &mut current, event, &sender).await;
+        }
+    }
+    send_line(
+        &sender,
+        format!(
+            "[{}] NOTICE: pending child event socket closed before its run could be followed",
+            pending.label
+        ),
+    )
+    .await;
+}
+
+async fn observe_attempt(
+    client: &Client,
+    source: &Source,
+    current: &mut HashMap<ActivityId, u32>,
+    event: Event,
+    sender: &mpsc::Sender<String>,
+) {
+    let Event::ActivityStarted {
+        activity_id,
+        attempt,
+        ..
+    } = event
+    else {
+        return;
+    };
+    let prior = current.get(&activity_id).copied();
+    if prior.is_some_and(|prior| prior >= attempt) {
+        return;
+    }
+    if let Some(prior) = prior {
+        let old = Target {
+            source: source.clone(),
+            activity_id: activity_id.clone(),
+            attempt: prior,
+            superseded_by: Some(attempt),
+        };
+        send_line(
+            sender,
+            format!(
+                "{} superseded; this stream is no longer working",
+                prefix(&old)
+            ),
+        )
+        .await;
+    }
+    current.insert(activity_id.clone(), attempt);
+    spawn_transcript(
+        client.clone(),
+        Target {
+            source: source.clone(),
             activity_id,
             attempt,
-            ..
-        } = event
-        else {
-            continue;
-        };
-        let prior = current.get(&activity_id).copied();
-        if prior.is_some_and(|prior| prior >= attempt) {
-            continue;
-        }
-        if let Some(prior) = prior {
-            let old = Target {
-                source: source.clone(),
-                activity_id: activity_id.clone(),
-                attempt: prior,
-                superseded_by: Some(attempt),
-            };
-            let _ = sender
-                .send(Ok(format!(
-                    "{} superseded; this stream is no longer working",
-                    prefix(&old)
-                )))
+            superseded_by: None,
+        },
+        None,
+        sender.clone(),
+    );
+}
+
+fn spawn_transcript(
+    client: Client,
+    target: Target,
+    after_seq: Option<u64>,
+    sender: mpsc::Sender<String>,
+) {
+    tokio::spawn(async move {
+        follow_transcript(client, target, after_seq, sender).await;
+    });
+}
+
+async fn follow_transcript(
+    client: Client,
+    target: Target,
+    mut after_seq: Option<u64>,
+    sender: mpsc::Sender<String>,
+) {
+    loop {
+        let subscription = client
+            .subscribe_transcript(TranscriptTarget {
+                workflow_id: target.source.workflow_id.clone(),
+                run_id: target.source.run_id.clone(),
+                activity_id: target.activity_id.clone(),
+                attempt: target.attempt,
+                after_seq,
+            })
+            .await;
+        let mut stream = match subscription {
+            Ok(stream) => stream,
+            Err(error) => {
+                send_line(
+                    &sender,
+                    format!(
+                        "{} NOTICE: transcript socket could not attach: {error}; this leg is no longer followed",
+                        prefix(&target)
+                    ),
+                )
                 .await;
+                return;
+            }
+        };
+        let mut reconnect = false;
+        while let Some(item) = stream.next().await {
+            match item {
+                Ok(TranscriptStreamItem::Event(event)) => {
+                    if let Some(store_seq) = event.store_seq {
+                        after_seq = Some(after_seq.map_or(store_seq, |seen| seen.max(store_seq)));
+                    }
+                    send_line(
+                        &sender,
+                        format!("{} {}", prefix(&target), render_event(&event)),
+                    )
+                    .await;
+                }
+                Ok(TranscriptStreamItem::Lagged { skipped }) => {
+                    send_line(
+                        &sender,
+                        format!(
+                            "{} NOTICE: transcript lagged by {skipped} live events; recovering this leg from its last durable sequence",
+                            prefix(&target)
+                        ),
+                    )
+                    .await;
+                    reconnect = true;
+                    break;
+                }
+                Err(error) => {
+                    send_line(
+                        &sender,
+                        format!(
+                            "{} NOTICE: transcript frame/socket failed: {error}; this leg is no longer followed",
+                            prefix(&target)
+                        ),
+                    )
+                    .await;
+                    return;
+                }
+            }
         }
-        current.insert(activity_id.clone(), attempt);
-        spawn_socket(
-            Target {
-                source: source.clone(),
-                activity_id,
-                attempt,
-                superseded_by: None,
-            },
-            namespace.clone(),
-            socket_url.clone(),
-            headers.clone(),
-            None,
-            sender.clone(),
+        if !reconnect {
+            send_line(
+                &sender,
+                format!(
+                    "{} NOTICE: transcript socket closed; this leg is no longer followed",
+                    prefix(&target)
+                ),
+            )
+            .await;
+            return;
+        }
+    }
+}
+
+async fn send_line(sender: &mpsc::Sender<String>, line: String) {
+    if let Err(error) = sender.send(line).await {
+        eprintln!(
+            "tail output channel closed before this operator notice could be delivered: {}",
+            error.0
         );
     }
 }
 
-fn spawn_socket(
-    target: Target,
-    namespace: String,
-    socket_url: String,
-    headers: HeaderMap,
-    after_seq: Option<u64>,
-    sender: mpsc::Sender<Result<String>>,
-) {
-    tokio::spawn(async move {
-        let result = tail_socket(
-            target,
-            &namespace,
-            &socket_url,
-            headers,
-            after_seq,
-            sender.clone(),
-        )
-        .await;
-        if let Err(error) = result {
-            let _ = sender.send(Err(error)).await;
-        }
-    });
-}
-
-async fn tail_socket(
-    target: Target,
-    namespace: &str,
-    socket_url: &str,
-    headers: HeaderMap,
-    after_seq: Option<u64>,
-    sender: mpsc::Sender<Result<String>>,
-) -> Result<()> {
-    let mut request = socket_url.into_client_request()?;
-    request.headers_mut().extend(headers);
-    let (mut socket, _) = connect_async(request).await.with_context(|| {
-        format!(
-            "failed to connect transcript socket for {}",
-            prefix(&target)
-        )
-    })?;
-    let mut transcript = json!({
-        "namespace": namespace,
-        "workflow_id": target.source.workflow_id,
-        "run_id": target.source.run_id,
-        "activity_id": target.activity_id,
-        "attempt": target.attempt,
-    });
-    if let Some(after_seq) = after_seq {
-        transcript["after_seq"] = json!(after_seq);
-    }
-    socket
-        .send(tokio_tungstenite::tungstenite::Message::Text(
-            json!({"type":"subscribe", "subscription":{"transcript":transcript}})
-                .to_string()
-                .into(),
-        ))
-        .await?;
-    while let Some(frame) = socket.next().await {
-        let frame = frame?;
-        if !frame.is_text() && !frame.is_binary() {
-            continue;
-        }
-        let decoded: ActivityFrame = serde_json::from_slice(&frame.into_data())
-            .context("invalid transcript WebSocket frame")?;
-        if let Some(error) = decoded.error {
-            return Err(anyhow!("transcript socket error: {error}"));
-        }
-        if let Some(event) = decoded.activity_event {
-            sender
-                .send(Ok(format!("{} {}", prefix(&target), render_event(&event))))
-                .await
-                .map_err(|_| anyhow!("tail output closed"))?;
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use aion_core::{ActivityEventKind, RunId, WorkflowId};
-    use aion_proto::StreamedActivityEvent;
-    use chrono::{DateTime, Utc};
+    use aion_core::{RunId, WorkflowId};
 
     use super::*;
-
-    #[test]
-    fn decodes_the_server_streamed_activity_event_frame() -> Result<()> {
-        let event = ActivityEvent {
-            workflow_id: WorkflowId::new(uuid::Uuid::from_u128(1)),
-            run_id: RunId::new(uuid::Uuid::from_u128(2)),
-            activity_id: ActivityId::from_sequence_position(3),
-            attempt: 1,
-            agent_id: uuid::Uuid::from_u128(4),
-            agent_role: "builder".to_owned(),
-            emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
-                .ok_or_else(|| anyhow!("test timestamp must be representable"))?,
-            worker_seq: 5,
-            store_seq: Some(6),
-            ephemeral: false,
-            kind: ActivityEventKind::Raw {
-                source: "decoder-red".to_owned(),
-                value: json!({"line": "live leg output"}),
-            },
-        };
-        let server_frame = serde_json::to_vec(&StreamedActivityEvent::new(event.clone()))?;
-
-        let decoded: ActivityFrame = serde_json::from_slice(&server_frame)?;
-
-        assert_eq!(decoded.activity_event, Some(event));
-        Ok(())
-    }
 
     #[test]
     fn current_attempts_uses_the_highest_attempt_per_activity() {
@@ -275,6 +382,7 @@ mod tests {
             workflow_id: WorkflowId::new(uuid::Uuid::from_u128(1)),
             run_id: RunId::new(uuid::Uuid::from_u128(2)),
             label: "leg".to_owned(),
+            is_parent: false,
         };
         let activity_id = ActivityId::from_sequence_position(7);
         let targets = [1, 2].map(|attempt| Target {

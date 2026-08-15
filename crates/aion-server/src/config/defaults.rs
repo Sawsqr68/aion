@@ -8,10 +8,13 @@
 
 use std::net::SocketAddr;
 
-pub(super) const DEFAULT_HTTP_ADDRESS: SocketAddr =
+/// Shipping HTTP/WebSocket listener used when no server override is supplied.
+pub const DEFAULT_HTTP_ADDRESS: SocketAddr =
     SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 8080);
 pub(super) const DEFAULT_GRPC_ADDRESS: SocketAddr =
     SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 50051);
+/// Maximum bounded transcript page accepted by the HTTP transcript endpoint.
+pub const MAX_TRANSCRIPT_WINDOW_LIMIT: u32 = 2_000;
 
 /// Default SS-5b failover poll interval (milliseconds) when `[store.cluster]`
 /// does not set `failover_poll_interval_ms`.

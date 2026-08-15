@@ -18,6 +18,7 @@ mod convert;
 pub mod embedded;
 /// gRPC transport over the AW-owned workflow service.
 pub mod grpc;
+pub(crate) mod transcript_ws;
 /// WebSocket event-stream transport.
 pub mod ws;
 

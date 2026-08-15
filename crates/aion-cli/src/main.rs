@@ -540,19 +540,7 @@ enum RemoteCommand {
         raw: bool,
     },
     /// Tail this run and its direct child legs as one interleaved transcript.
-    Tail {
-        /// Parent workflow identifier. Child identifiers are derived; do not supply them.
-        workflow_id: String,
-        /// Specific parent run. Defaults to the latest recorded run.
-        #[arg(long)]
-        run_id: Option<String>,
-        /// HTTP/WebSocket listener used by the derived children and transcript APIs.
-        #[arg(long, default_value = "http://127.0.0.1:8080")]
-        http_endpoint: String,
-        /// Print the retained transcript snapshot and exit instead of following live sockets.
-        #[arg(long)]
-        no_follow: bool,
-    },
+    Tail(tail::TailArgs),
     /// Time-travel over a recorded run's event-store oplog.
     ///
     /// Reads the run's existing history over the same `describe` read every
@@ -998,29 +986,7 @@ async fn execute(client: &Client, command: &RemoteCommand, cli: &Cli) -> Result<
             run_id,
             raw,
         } => describe_workflow(client, workflow_id, run_id.as_deref(), *raw).await,
-        RemoteCommand::Tail {
-            workflow_id,
-            run_id,
-            http_endpoint,
-            no_follow,
-        } => {
-            let token = deploy::resolve_token(cli.token.clone());
-            let grpc_endpoint = cli.endpoint();
-            tail::run(
-                client,
-                workflow_id,
-                run_id.as_deref(),
-                tail::TailConfig {
-                    namespace: &cli.namespace,
-                    subject: &cli.subject,
-                    token: token.as_deref(),
-                    grpc_endpoint: &grpc_endpoint,
-                    http_endpoint,
-                    follow: !no_follow,
-                },
-            )
-            .await
-        }
+        RemoteCommand::Tail(args) => tail::dispatch(client, args, cli).await,
         RemoteCommand::Inspect {
             workflow_id,
             run_id,
@@ -1326,7 +1292,7 @@ mod tests {
     use clap::{CommandFactory, Parser};
     use serde_json::{Value, json};
 
-    use crate::payload::json_payload;
+    use crate::{payload::json_payload, tail};
 
     use super::{
         Cli, ClientCommand, Command, DEFAULT_ENDPOINT, RemoteCommand, awl, normalize_endpoint,
@@ -1503,19 +1469,14 @@ mod tests {
     fn tail_accepts_parent_id_without_any_child_id() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "tail", WORKFLOW_ID, "--no-follow"])?;
 
-        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Tail {
-            workflow_id,
-            run_id,
-            http_endpoint,
-            no_follow,
-        }))) = cli.command
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Tail(args)))) = cli.command
         else {
             anyhow::bail!("expected tail command");
         };
-        assert_eq!(workflow_id, WORKFLOW_ID);
-        assert_eq!(run_id, None);
-        assert_eq!(http_endpoint, "http://127.0.0.1:8080");
-        assert!(no_follow);
+        assert_eq!(args.workflow_id, WORKFLOW_ID);
+        assert_eq!(args.run_id, None);
+        assert_eq!(args.http_endpoint, tail::default_http_endpoint());
+        assert!(args.no_follow);
         Ok(())
     }
 
@@ -1937,7 +1898,6 @@ mod tests {
             match command {
                 Command::Client(ClientCommand::Remote(
                     RemoteCommand::Describe { run_id, .. }
-                    | RemoteCommand::Tail { run_id, .. }
                     | RemoteCommand::Signal { run_id, .. }
                     | RemoteCommand::Cancel { run_id, .. }
                     | RemoteCommand::Reopen { run_id, .. }
@@ -1945,6 +1905,9 @@ mod tests {
                     | RemoteCommand::Resume { run_id, .. }
                     | RemoteCommand::Query { run_id, .. },
                 )) => assert!(run_id.is_none()),
+                Command::Client(ClientCommand::Remote(RemoteCommand::Tail(args))) => {
+                    assert!(args.run_id.is_none());
+                }
                 Command::Server(_)
                 | Command::Dev(_)
                 | Command::Awl { .. }
@@ -2016,7 +1979,7 @@ mod tests {
                         RemoteCommand::Start { .. }
                         | RemoteCommand::List { .. }
                         | RemoteCommand::Describe { .. }
-                        | RemoteCommand::Tail { .. }
+                        | RemoteCommand::Tail(_)
                         | RemoteCommand::Inspect { .. },
                     )
                     | ClientCommand::New(_)

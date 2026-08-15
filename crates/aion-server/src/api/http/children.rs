@@ -2,10 +2,33 @@
 //!
 //! This is intentionally a read projection, not a parent/child schema relation:
 //! the parent run's `ChildWorkflowStarted` events are the complete discovery seam.
+//!
+//! # Authorization decision
+//!
+//! The parent history discloses a child id and workflow type, but child-owned
+//! display names and progress are projected only after applying the same
+//! per-workflow describe gate as sibling history routes. A child that resolves
+//! to the guard's anti-leak `not_found`/`namespace_denied` result is OMITTED from
+//! the listing. This deliberately makes unauthorized and nonexistent children
+//! indistinguishable and never emits a partly disclosed row.
+//!
+//! # Read-shape decision
+//!
+//! This projection deliberately performs whole-history reads. The store has no
+//! filtered lifecycle/current-attempt projection, and adding one would cross
+//! #107's no-parent/child-schema wall or create a second source of truth. Child
+//! histories are read only for ids derived from the selected parent run and
+//! only after their per-workflow gate. K9-scale cost therefore grows with real
+//! direct fanout and recorded history size; correctness and one authoritative
+//! event projection are chosen over an arbitrary cap that would lie about
+//! status or activity. A future bounded read requires a store-level filtered
+//! history contract, not a limit invented at this HTTP route.
 
 use aion_core::{
-    ActivityId, Event, RunId, WorkflowId, display_name, run_segment, status_from_events,
+    ActivityId, Event, RunId, WorkflowId, WorkflowStatus, display_name, run_segment,
+    status_from_events,
 };
+use aion_proto::WireErrorCode;
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -15,26 +38,38 @@ use super::history::scoped_engine;
 use crate::{ServerError, ServerState};
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ChildrenRequest {
+    /// Namespace that scopes both parent and child authorization.
     namespace: String,
+    /// Parent workflow whose recorded run discovers direct children.
     workflow_id: WorkflowId,
+    /// Parent generation; omitted selects its latest recorded run.
     #[serde(default)]
     run_id: Option<RunId>,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChildrenResponse {
+    /// Authorized direct children in parent-history discovery order.
     children: Vec<ChildEntry>,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChildEntry {
+    /// Stable child workflow identity.
     workflow_id: WorkflowId,
+    /// Latest recorded child generation, or `null` before its run starts.
     run_id: Option<RunId>,
+    /// Workflow type recorded by the parent's `ChildWorkflowStarted` event.
     workflow_type: String,
+    /// Child-owned operator display name, when one is recorded.
     display_name: Option<String>,
-    status: String,
+    /// Typed child run status, or `null` when the child run has not started.
+    status: Option<WorkflowStatus>,
+    /// Currently executing activity, when one is recorded.
     current_activity_id: Option<ActivityId>,
+    /// Attempt number paired with `current_activity_id`.
     current_attempt: Option<u32>,
 }
 
@@ -84,7 +119,28 @@ pub(crate) async fn list_children(
         {
             continue;
         }
-        let child_history = engine
+        let child_wire = child_workflow_id.to_string();
+        let child_engine = match scoped_engine(
+            &state,
+            &caller,
+            &request.namespace,
+            &child_wire,
+            child_workflow_id,
+        )
+        .await
+        {
+            Ok(child_engine) => child_engine,
+            Err(error)
+                if matches!(
+                    error.0.code,
+                    WireErrorCode::NotFound | WireErrorCode::NamespaceDenied
+                ) =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let child_history = child_engine
             .store()
             .read_history(child_workflow_id)
             .await
@@ -111,11 +167,7 @@ fn project_child(workflow_id: WorkflowId, workflow_type: String, history: &[Even
         .map_or((None, None), |(activity_id, attempt)| {
             (Some(activity_id), Some(attempt))
         });
-    let status = if run_id.is_some() {
-        format!("{:?}", status_from_events(run))
-    } else {
-        "Pending".to_owned()
-    };
+    let status = run_id.as_ref().map(|_| status_from_events(run));
 
     ChildEntry {
         workflow_id,

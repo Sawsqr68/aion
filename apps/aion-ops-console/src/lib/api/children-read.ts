@@ -1,7 +1,7 @@
-import type { ActivityId, Namespace, RunId, WorkflowId } from '@/types';
+import type { ActivityId, Namespace, RunId, WorkflowId, WorkflowStatus } from '@/types';
 
 import { ApiError } from './api-error';
-import { apiErrorFromResponse, readJson } from './client-normalize';
+import { apiErrorFromResponse, readJson, requireWorkflowStatus } from './client-normalize';
 import {
   type ApiCredentials,
   buildScopedHeaders,
@@ -18,7 +18,7 @@ export type ChildLeg = {
   runId: RunId | null;
   workflowType: string;
   displayName: string | null;
-  status: string;
+  status: WorkflowStatus | null;
   currentActivityId: ActivityId | null;
   currentAttempt: number | null;
 };
@@ -73,19 +73,19 @@ function readChildLeg(value: unknown): ChildLeg {
   const displayName = nullableString(value.display_name);
   const currentActivityId = nullableNumber(value.current_activity_id);
   const currentAttempt = nullableNumber(value.current_attempt);
-  if (
-    workflowId === null ||
-    typeof value.workflow_type !== 'string' ||
-    typeof value.status !== 'string'
-  ) {
+  if (workflowId === null || typeof value.workflow_type !== 'string') {
     throw new ApiError(200, 'workflows/children child row has invalid identity or status');
+  }
+  const status = value.status === null ? null : requireWorkflowStatus(value.status);
+  if ((runId === null) !== (status === null)) {
+    throw new ApiError(200, 'workflows/children child row run_id and status disagree');
   }
   return {
     workflowId: workflowId as WorkflowId,
     runId: runId as RunId | null,
     workflowType: value.workflow_type,
     displayName,
-    status: value.status,
+    status,
     currentActivityId,
     currentAttempt,
   };
@@ -94,7 +94,7 @@ function readChildLeg(value: unknown): ChildLeg {
 function nullableString(value: unknown): string | null {
   if (value === null) return null;
   if (typeof value === 'string' && value.length > 0) return value;
-  return null;
+  throw new ApiError(200, 'workflows/children child row has an invalid string field');
 }
 
 function nullableNumber(value: unknown): number | null {

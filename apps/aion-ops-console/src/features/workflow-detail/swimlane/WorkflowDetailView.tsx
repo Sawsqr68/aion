@@ -73,7 +73,10 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
       ) : null}
       {children.isError ? (
         <p className="border-t border-border px-6 py-4 text-xs text-danger" role="alert">
-          Could not load child legs: {String(children.error)}
+          Could not load child legs:{' '}
+          {children.error instanceof Error
+            ? children.error.message
+            : 'Unknown child-leg read failure'}
         </p>
       ) : null}
     </>

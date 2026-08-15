@@ -101,6 +101,15 @@ Deploying and running an `.awl` document needs no Gleam build, no
 - `aion list [--status <status>]` and
   `aion describe <workflow-id> [--run-id <id>] [--raw]` cover visibility and
   history.
+- `aion tail <parent-workflow-id> [--run-id <id>] [--no-follow]` interleaves
+  retained and live transcripts for the parent and its direct child legs. It
+  prints leg/activity/attempt identity on every event, announces superseded or
+  continued-as-new generations, pending child starts, socket/decode failures,
+  and per-leg lag recovery instead of going quiet. Retained reads use the
+  server's published 2000-event transcript window and print a truncation notice
+  when it binds. `--http-endpoint` selects the HTTP/WebSocket listener; it
+  defaults from the server's shipping `DEFAULT_HTTP_ADDRESS` and can also be
+  set with `AION_HTTP_ENDPOINT`.
 - `aion inspect <workflow-id> [--run-id <id>] [--from <seq> --mock <json>]`
   time-travels over a recorded run's oplog, and with `--from`/`--mock`
   (required together) runs a read-only what-if re-run from a chosen event.

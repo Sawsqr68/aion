@@ -173,9 +173,10 @@ const WORKFLOW_STATUSES: readonly WorkflowStatus[] = [
   'Cancelled',
   'TimedOut',
   'ContinuedAsNew',
+  'Paused',
 ];
 
-function requireWorkflowStatus(value: unknown): WorkflowStatus {
+export function requireWorkflowStatus(value: unknown): WorkflowStatus {
   if (typeof value === 'string' && (WORKFLOW_STATUSES as readonly string[]).includes(value)) {
     return value as WorkflowStatus;
   }
