@@ -4,10 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ChildLeg } from '@/lib/api';
 import type { ActivityId, Namespace, RunId, WorkflowId } from '@/types';
 
-import {
-  LiveLegsSection,
-  type LiveLegReaders,
-} from '../components/LegsSection';
+import { type LiveLegReaders, LiveLegsSection } from '../components/LegsSection';
 
 const namespace = '244-test' as Namespace;
 const startedLeg: ChildLeg = {

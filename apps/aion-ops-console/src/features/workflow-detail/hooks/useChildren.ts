@@ -15,7 +15,9 @@ export type UseChildrenOptions = {
 };
 
 /** Pending child runs normally start immediately; 1s keeps the card live without a hot loop. */
-export function pendingChildRefetchInterval(children: readonly ChildLeg[] | undefined): number | false {
+export function pendingChildRefetchInterval(
+  children: readonly ChildLeg[] | undefined
+): number | false {
   return children?.some((child) => child.runId === null) === true ? 1_000 : false;
 }
 

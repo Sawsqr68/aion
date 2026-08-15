@@ -5,10 +5,7 @@ import { shortWorkflowId } from '@/lib/workflowIdentity';
 import type { ActivityId, Event, Namespace, RunId, WorkflowId, WorkflowStatus } from '@/types';
 
 import { TranscriptPanel } from '../../transcript/components/TranscriptPanel';
-import {
-  type LiveWorkflowEvents,
-  useLiveWorkflowEvents,
-} from '../hooks/useLiveWorkflowEvents';
+import { type LiveWorkflowEvents, useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { type AttemptNavigatorRow, deriveAttemptNavigator } from '../lib/attemptNavigator';
 import type { LifecycleOutcome } from '../types';
