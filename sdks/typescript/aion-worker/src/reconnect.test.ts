@@ -321,7 +321,7 @@ describe("reconnect", () => {
 			slept = true;
 		});
 		expect(vi.getTimerCount()).toBe(1);
-		await vi.advanceTimersByTimeAsync(25);
+		vi.advanceTimersByTime(25);
 		await sleeping;
 		expect(slept).toBe(true);
 		expect(vi.getTimerCount()).toBe(0);
