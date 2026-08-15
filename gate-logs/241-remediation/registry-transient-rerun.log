@@ -1,0 +1,76 @@
+# all-features registry transient isolated rerun
+timestamp_utc=2026-08-15T06:31:16Z
+box_load=16:31  up 2 days,  4:05, 4 users, load averages: 8.38 17.78 19.16
+   Compiling tokio v1.52.3
+   Compiling dashmap v6.2.1
+   Compiling referencing v0.46.6
+   Compiling beamr v0.18.2
+   Compiling aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store)
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-server)
+   Compiling prometheus v0.14.0
+   Compiling jsonschema v0.46.6
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling tokio-rustls v0.26.4
+   Compiling beamr v0.16.3
+   Compiling tokio-io-timeout v1.2.1
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integrations)
+   Compiling tokio-rustls v0.25.0
+   Compiling h2 v0.4.14
+   Compiling h2 v0.3.27
+   Compiling tower v0.5.3
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tower v0.4.13
+   Compiling aion-integration-norn v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-norn)
+   Compiling aion-integration-acp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-integration-acp)
+   Compiling tower-http v0.6.11
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-package)
+   Compiling aion-mcp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-mcp)
+   Compiling tower-http v0.4.4
+   Compiling hyper v0.14.32
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl)
+   Compiling aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion)
+   Compiling hyper-timeout v0.5.2
+   Compiling axum v0.8.9
+   Compiling axum v0.6.20
+   Compiling hyper-timeout v0.4.1
+   Compiling hyper-rustls v0.25.0
+   Compiling hyper-rustls v0.27.9
+   Compiling aion-toolchain v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-toolchain)
+   Compiling reqwest v0.13.4
+   Compiling tonic v0.14.6
+   Compiling tonic v0.11.0
+   Compiling tonic-prost v0.14.5
+   Compiling aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-awl-lsp)
+   Compiling haematite v0.7.0
+   Compiling haematite v0.8.1
+   Compiling libsql_replication v0.9.30
+   Compiling tonic-web v0.11.0
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto-generated)
+   Compiling libsql v0.9.30
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-proto)
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store-haematite)
+   Compiling aion-client v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-client)
+   Compiling aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-store-libsql)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-worker)
+   Compiling aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 59s
+     Running tests/generate_types_first_e2e.rs (target/debug/deps/generate_types_first_e2e-7cce2b598d6d62a5)
+
+running 1 test
+COMPILED 4 module(s) under real `gleam build` in 1 attempt(s): codegen_gate, codegen_gate_codecs, codegen_gate_io, codegen_round_trip
+test generate_compiles_round_trips_and_checks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 11.14s
+
