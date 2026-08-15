@@ -236,9 +236,38 @@ async fn tail_socket(
 
 #[cfg(test)]
 mod tests {
-    use aion_core::{RunId, WorkflowId};
+    use aion_core::{ActivityEventKind, RunId, WorkflowId};
+    use aion_proto::StreamedActivityEvent;
+    use chrono::{DateTime, Utc};
 
     use super::*;
+
+    #[test]
+    fn decodes_the_server_streamed_activity_event_frame() -> Result<()> {
+        let event = ActivityEvent {
+            workflow_id: WorkflowId::new(uuid::Uuid::from_u128(1)),
+            run_id: RunId::new(uuid::Uuid::from_u128(2)),
+            activity_id: ActivityId::from_sequence_position(3),
+            attempt: 1,
+            agent_id: uuid::Uuid::from_u128(4),
+            agent_role: "builder".to_owned(),
+            emitted_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0)
+                .ok_or_else(|| anyhow!("test timestamp must be representable"))?,
+            worker_seq: 5,
+            store_seq: Some(6),
+            ephemeral: false,
+            kind: ActivityEventKind::Raw {
+                source: "decoder-red".to_owned(),
+                value: json!({"line": "live leg output"}),
+            },
+        };
+        let server_frame = serde_json::to_vec(&StreamedActivityEvent::new(event.clone()))?;
+
+        let decoded: ActivityFrame = serde_json::from_slice(&server_frame)?;
+
+        assert_eq!(decoded.activity_event, Some(event));
+        Ok(())
+    }
 
     #[test]
     fn current_attempts_uses_the_highest_attempt_per_activity() {
