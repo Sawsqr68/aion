@@ -28,7 +28,7 @@ use aion_core::{
     ActivityId, Event, RunId, WorkflowId, WorkflowStatus, display_name, run_segment,
     status_from_events,
 };
-use aion_proto::WireErrorCode;
+use aion_proto::{WireError, WireErrorCode};
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +99,16 @@ pub(crate) async fn list_children(
             _ => None,
         })
     });
+    if let Some(run_id) = selected_run.as_ref()
+        && !parent_history.iter().any(
+            |event| matches!(event, Event::WorkflowStarted { run_id: recorded, .. } if recorded == run_id),
+        )
+    {
+        return Err(HttpWireError(WireError::not_found(format!(
+            "workflow {} run {} was not found",
+            request.workflow_id, run_id
+        ))));
+    }
     let parent_run = selected_run
         .as_ref()
         .map_or(&[][..], |run| run_segment(&parent_history, run));
