@@ -1,13 +1,22 @@
 import type { Event, RunId } from '@/types';
 
 import { LiveLegsSection } from '../components/LegsSection';
+import { LiveStepCard } from '../components/LiveStepCard';
 import { useChildren } from '../hooks/useChildren';
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { useWorkflowSelectionParams } from '../hooks/useWorkflowSelectionParams';
 import { useWorkflowSummary } from '../hooks/useWorkflowSummary';
+import type { LiveStepReader } from '../lib/live-step-port';
 import type { WorkflowDetailProps } from '../types';
 import { WorkflowDetailViewContent } from './WorkflowDetailViewContent';
+
+// FLEET-SEAM(L1): replaced at merge with createConfiguredLiveStepReader({ namespace })
+const preMergeLiveStepReader: LiveStepReader = {
+  describeLive: async () => {
+    throw new Error('FLEET-SEAM(L1) was not replaced: no live-step API reader is configured');
+  },
+};
 
 /**
  * Detail view wrapper that adds a List ⇄ Swimlane toggle on top of the history +
@@ -68,6 +77,15 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
         timeline={live.timeline}
         workflowId={workflowId}
       />
+      {namespace !== null ? (
+        <LiveStepCard
+          isTerminal={live.isTerminal}
+          namespace={namespace}
+          reader={preMergeLiveStepReader}
+          runId={runId}
+          workflowId={workflowId}
+        />
+      ) : null}
       {namespace !== null && children.data !== undefined ? (
         <LiveLegsSection legs={children.data} namespace={namespace} />
       ) : null}
