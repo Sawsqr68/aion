@@ -28,7 +28,7 @@ use std::time::Duration;
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use aion::signal::ConcreteSignalRouter;
 use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
-use aion_core::{Event, Payload, RunId, WorkflowId};
+use aion_core::{ActivityErrorKind, Event, Payload, RunId, WorkflowId};
 use aion_package::{
     BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
     ManifestVersion, Package, PackageBuilder,
@@ -267,6 +267,48 @@ fn scheduled_count(history: &[Event]) -> usize {
         .count()
 }
 
+fn started_count(history: &[Event]) -> usize {
+    history
+        .iter()
+        .filter(|event| matches!(event, Event::ActivityStarted { .. }))
+        .count()
+}
+
+/// True for the #266 supersession record recovery writes before re-dispatching
+/// an attempt a dead engine left started-but-unsettled: a non-terminal
+/// `ActivityFailed` carrying the Retryable kind and the literal supersession
+/// reason (pinned verbatim so a constant rename cannot silently change the
+/// recorded bytes).
+fn is_supersession_record(event: &Event) -> bool {
+    matches!(
+        event,
+        Event::ActivityFailed { error, .. }
+            if error.kind == ActivityErrorKind::Retryable
+                && error.message == "superseded:server-death"
+    )
+}
+
+/// `(ordinal, attempt)` per supersession record, sorted for set-level pins:
+/// the interleaving between concurrently re-dispatched members is scheduler
+/// order, but which members were superseded — and at which attempt — is
+/// deterministic once the test pins who was started before the kill.
+fn superseded_ordinals(history: &[Event]) -> Vec<(u64, u32)> {
+    let mut ordinals: Vec<(u64, u32)> = history
+        .iter()
+        .filter(|event| is_supersession_record(event))
+        .filter_map(|event| match event {
+            Event::ActivityFailed {
+                activity_id,
+                attempt,
+                ..
+            } => Some((activity_id.sequence_position(), *attempt)),
+            _ => None,
+        })
+        .collect();
+    ordinals.sort_unstable();
+    ordinals
+}
+
 /// `(ordinal, kind)` per activity terminal, in recorded order. Single awaits
 /// deliberately record in item/await order even when the completion messages
 /// arrived in the inverse order; the staged dispatcher counter proves the
@@ -294,9 +336,11 @@ fn result_json(payload: &Payload) -> Result<serde_json::Value, Box<dyn std::erro
 /// any await; the test releases their gates in INVERTED item order (c, b,
 /// a) with `b` failing terminally; the recorded terminals land in
 /// completion order while the slots come back in item order with the
-/// failure captured as a value; then the engine restarts with the fan-out
-/// settled and the run parked at the release gate, and replay resolves all
-/// three awaits purely from the recorded per-ordinal terminals.
+/// failure captured as a value; then the engine restarts with only the
+/// item-zero terminal durable, recovery records the #266 supersession
+/// `ActivityFailed` for each started-but-unsettled member before
+/// re-dispatching it, and the reopened awaits still settle in item order
+/// from the real dispatcher-authored terminals.
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn settled_fanout_inverts_completion_captures_failure_and_replays() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
@@ -316,7 +360,15 @@ async fn settled_fanout_inverts_completion_captures_failure_and_replays() -> Tes
 
     // Make only the item-order prefix durable. Members b and c remain
     // outstanding when the engine stops, which is the recovery boundary this
-    // proof is specifically intended to exercise.
+    // proof is specifically intended to exercise. Pin all three members
+    // STARTED before the kill: a started attempt with no settle is exactly
+    // what recovery must supersede (#266), so waiting here makes the two
+    // supersession records below deterministic instead of racing the
+    // dispatcher threads.
+    wait_for_history(&store, &workflow_id, "fan-out started", |events| {
+        started_count(events) == 3
+    })
+    .await?;
     gates.release("a");
     let prefix = wait_for_history(&store, &workflow_id, "item-zero terminal", |events| {
         terminal_count(events) == 1
@@ -363,8 +415,25 @@ async fn settled_fanout_inverts_completion_captures_failure_and_replays() -> Tes
         &prefix[..],
         "replay must leave the durable item-order prefix byte-identical"
     );
+    // Recovery first records the #266 supersession `ActivityFailed` for each
+    // attempt the dead engine left started-but-unsettled — exactly b and c,
+    // both pinned started before the shutdown above — then re-dispatches
+    // them. The records are non-terminal bookkeeping, so the real
+    // (dispatcher-authored) terminals still settle in item order with the
+    // failure captured as a value.
     assert_eq!(
-        terminal_ordinals(&final_history),
+        superseded_ordinals(&final_history),
+        vec![(1, 1), (2, 1)],
+        "recovery supersedes exactly the two started-but-unsettled members, \
+         each at its dangling attempt: {final_history:#?}"
+    );
+    let real_events: Vec<Event> = final_history
+        .iter()
+        .filter(|event| !is_supersession_record(event))
+        .cloned()
+        .collect();
+    assert_eq!(
+        terminal_ordinals(&real_events),
         vec![(0, "completed"), (1, "failed"), (2, "completed")],
         "reopened members must still settle in item order: {final_history:#?}"
     );

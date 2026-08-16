@@ -654,67 +654,19 @@ async fn recovery_at_depth_replays_all_three_histories_byte_identical() -> TestR
     Ok(())
 }
 
-/// (c, mid-activity variant) Kill the engine while the leaf's `leaf_work`
-/// dispatch is genuinely in flight (scheduled + started, no terminal).
-///
-/// CURRENT SEMANTICS, pinned: an in-flight activity is at-least-once. On
-/// recovery the replay resolver finds no recorded terminal for the
-/// scheduled activity (`durability/cursor.rs::resolve_activity` returns
-/// `Exhausted`), resumes live, and re-dispatches — first recording the
-/// #266 supersession `ActivityFailed{attempt: 1, Retryable,
-/// superseded:server-death}` for the attempt the dead engine left in
-/// flight, then a fresh `ActivityScheduled`/`ActivityStarted` pair for the
-/// SAME activity id (`runtime/nif_activity_dispatch.rs` records before
-/// every live dispatch). The parents parked in `child.await` replay
-/// byte-identically and respawn nothing: positional correlation holds at
-/// every level.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -> TestResult {
-    if crate::gleam_test_support::skip_if_unavailable() {
-        return Ok(());
-    }
-    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
-    let first_gate = Gate::new();
-    let first_dispatcher = LeafDispatcher::new(Some(Arc::clone(&first_gate)));
-    let first_engine = engine_over(&store, &first_dispatcher).await?;
-
-    let (l1, l1_run) = start(
-        &first_engine,
-        "level_one",
-        chain_input("job-midact", false)?,
-    )
-    .await?;
-    let (l2, l3) = chain_ids(&store, &l1).await?;
-    let pre_kill_three =
-        wait_for_history(&store, &l3, "leaf activity in flight", activity_in_flight).await?;
-    let l3_run = run_id_of(&pre_kill_three)?;
-    // The leaf is parked at the activity await (its query answers there).
-    let leaf = query_when_registered(&first_engine, &l3, &l3_run, "level_three_status").await?;
-    assert_eq!(leaf, json!("processing:job-midact"));
-    let pre_kill_one = store.read_history(&l1).await?;
-    let pre_kill_two = store.read_history(&l2).await?;
-    assert_eq!(first_dispatcher.dispatch_count(), 1);
-    // Kill with the dispatch blocked on the first gate. The gate stays held
-    // until the end of the test: the dead engine's blocking task must not
-    // settle while the recovered engine's assertions run.
-    first_engine.shutdown()?;
-
-    let second_gate = Gate::new();
-    let second_dispatcher = LeafDispatcher::new(Some(Arc::clone(&second_gate)));
-    let recovered = engine_over(&store, &second_dispatcher).await?;
-
-    // The leaf replays to the dispatch, finds no recorded terminal, and
-    // re-dispatches: the #266 supersession record for the attempt the dead
-    // engine left in flight, then exactly one fresh Scheduled/Started pair
-    // for the same activity id, appended after the byte-identical pre-kill
-    // prefix.
-    let redispatched = wait_for_history(&store, &l3, "leaf re-dispatch recorded", |events| {
-        events.len() >= pre_kill_three.len() + 3
-    })
-    .await?;
+/// Assert the #266 recovery tail on `redispatched`: the pre-kill prefix is
+/// byte-identical, followed by exactly three appended events — the
+/// supersession `ActivityFailed{attempt: 1, Retryable,
+/// superseded:server-death}` naming the attempt the dead engine left in
+/// flight, then a fresh `ActivityScheduled`/`ActivityStarted` pair reusing
+/// the same positional activity id.
+fn assert_supersession_then_redispatch(
+    redispatched: &[Event],
+    pre_kill_three: &[Event],
+) -> TestResult {
     assert_eq!(
         &redispatched[..pre_kill_three.len()],
-        &pre_kill_three[..],
+        pre_kill_three,
         "the pre-kill prefix must stay byte-identical"
     );
     assert_eq!(
@@ -773,6 +725,68 @@ async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -
         }
         other => return Err(format!("expected a re-dispatch pair, found {other:?}").into()),
     }
+    Ok(())
+}
+
+/// (c, mid-activity variant) Kill the engine while the leaf's `leaf_work`
+/// dispatch is genuinely in flight (scheduled + started, no terminal).
+///
+/// CURRENT SEMANTICS, pinned: an in-flight activity is at-least-once. On
+/// recovery the replay resolver finds no recorded terminal for the
+/// scheduled activity (`durability/cursor.rs::resolve_activity` returns
+/// `Exhausted`), resumes live, and re-dispatches — first recording the
+/// #266 supersession `ActivityFailed{attempt: 1, Retryable,
+/// superseded:server-death}` for the attempt the dead engine left in
+/// flight, then a fresh `ActivityScheduled`/`ActivityStarted` pair for the
+/// SAME activity id (`runtime/nif_activity_dispatch.rs` records before
+/// every live dispatch). The parents parked in `child.await` replay
+/// byte-identically and respawn nothing: positional correlation holds at
+/// every level.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -> TestResult {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let first_gate = Gate::new();
+    let first_dispatcher = LeafDispatcher::new(Some(Arc::clone(&first_gate)));
+    let first_engine = engine_over(&store, &first_dispatcher).await?;
+
+    let (l1, l1_run) = start(
+        &first_engine,
+        "level_one",
+        chain_input("job-midact", false)?,
+    )
+    .await?;
+    let (l2, l3) = chain_ids(&store, &l1).await?;
+    let pre_kill_three =
+        wait_for_history(&store, &l3, "leaf activity in flight", activity_in_flight).await?;
+    let l3_run = run_id_of(&pre_kill_three)?;
+    // The leaf is parked at the activity await (its query answers there).
+    let leaf = query_when_registered(&first_engine, &l3, &l3_run, "level_three_status").await?;
+    assert_eq!(leaf, json!("processing:job-midact"));
+    let pre_kill_one = store.read_history(&l1).await?;
+    let pre_kill_two = store.read_history(&l2).await?;
+    assert_eq!(first_dispatcher.dispatch_count(), 1);
+    // Kill with the dispatch blocked on the first gate. The gate stays held
+    // until the end of the test: the dead engine's blocking task must not
+    // settle while the recovered engine's assertions run.
+    first_engine.shutdown()?;
+
+    let second_gate = Gate::new();
+    let second_dispatcher = LeafDispatcher::new(Some(Arc::clone(&second_gate)));
+    let recovered = engine_over(&store, &second_dispatcher).await?;
+
+    // The leaf replays to the dispatch, finds no recorded terminal, and
+    // re-dispatches: the #266 supersession record for the attempt the dead
+    // engine left in flight, then exactly one fresh Scheduled/Started pair
+    // for the same activity id, appended after the byte-identical pre-kill
+    // prefix.
+    let redispatched = wait_for_history(&store, &l3, "leaf re-dispatch recorded", |events| {
+        events.len() >= pre_kill_three.len() + 3
+    })
+    .await?;
+    assert_supersession_then_redispatch(&redispatched, &pre_kill_three)?;
     assert_eq!(
         second_dispatcher.dispatch_count(),
         1,
