@@ -1,0 +1,3 @@
+LEG=fmt HEAD=7acd733b9f142156dd7b9a375c7d7854ab2025b7 start=2026-08-16T15:45:46Z
+load_at_start={ 20.28 17.91 24.27 }
+LEG=fmt EXIT=0 end=2026-08-16T15:45:49Z load_at_end={ 19.61 17.81 24.20 }

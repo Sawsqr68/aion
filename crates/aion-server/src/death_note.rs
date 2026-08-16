@@ -307,8 +307,8 @@ fn spawn_signal_watcher(
     let mut signals =
         signal_hook::iterator::Signals::new([SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2])
             .map_err(|source| {
-                death_note_error(format!("could not register the signal watcher: {source}"))
-            })?;
+            death_note_error(format!("could not register the signal watcher: {source}"))
+        })?;
     let handle = signals.handle();
     std::thread::Builder::new()
         .name("aion-death-note".to_owned())
@@ -336,7 +336,9 @@ fn spawn_signal_watcher(
             }
         })
         .map_err(|source| {
-            death_note_error(format!("could not spawn the signal watcher thread: {source}"))
+            death_note_error(format!(
+                "could not spawn the signal watcher thread: {source}"
+            ))
         })?;
     Ok(handle)
 }

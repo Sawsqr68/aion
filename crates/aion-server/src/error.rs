@@ -249,6 +249,7 @@ impl ServerError {
             | Self::TransportBind { .. }
             | Self::Transport { .. }
             | Self::SignalListener { .. }
+            | Self::DeathNote { .. }
             | Self::LockPoisoned { .. } => WireError::backend("server backend failure"),
             Self::ActivityCompletionRejected { .. } => {
                 WireError::backend("stale activity completion rejected")
@@ -433,6 +434,11 @@ impl ServerError {
             },
             Self::SignalListener { message, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("SignalListener"),
+                store_error_type: None,
+                reason: message,
+            },
+            Self::DeathNote { message } => ErrorTraceFields {
+                error_type: Cow::Borrowed("DeathNote"),
                 store_error_type: None,
                 reason: message,
             },
