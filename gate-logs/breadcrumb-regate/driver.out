@@ -1,0 +1,4 @@
+LEG=fmt EXIT=0
+LEG=test EXIT=0
+LEG=clippy EXIT=0
+OVERALL=0

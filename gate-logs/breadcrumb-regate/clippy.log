@@ -1,0 +1,4 @@
+LEG=clippy HEAD=afe84d147d139791cf90060730b43687a5f195cd start=17:41:02Z
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.98s
+LEG=clippy EXIT=0
