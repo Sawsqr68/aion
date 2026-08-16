@@ -1,18 +1,18 @@
-LEG=test-death-note HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:16:11Z
-load_at_start={ 6.27 7.34 10.64 }
+LEG=test-death-note HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:28:07Z
+load_at_start={ 6.81 9.14 11.22 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
   |
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `aion-server` (lib test) generated 1 warning
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.58s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 41.83s
      Running unittests src/lib.rs (target/debug/deps/aion_server-992e88e6997bc301)
 
 running 1 test
 test death_note::tests::the_death_note_records_every_observable_path_once_armed ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.38s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.33s
 
      Running tests/assistant_embed_e2e.rs (target/debug/deps/assistant_embed_e2e-aef39bd76c36fba2)
 
@@ -138,7 +138,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s
 
      Running tests/managed_worker_drain_e2e.rs (target/debug/deps/managed_worker_drain_e2e-a7219830cd9c5117)
 
@@ -216,7 +216,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.01s
 
      Running tests/run_server_outbox_e2e.rs (target/debug/deps/run_server_outbox_e2e-b1643812a03ebd65)
 
@@ -314,4 +314,4 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
 
-LEG=test-death-note EXIT=0 end=2026-08-16T16:18:47Z load_at_end={ 17.14 12.68 12.38 }
+LEG=test-death-note EXIT=0 end=2026-08-16T16:30:30Z load_at_end={ 109.83 64.61 34.36 }

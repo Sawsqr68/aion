@@ -1,6 +1,6 @@
-LEG=clippy-workspace HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:19:38Z
-load_at_start={ 32.98 17.59 14.21 }
+LEG=clippy-workspace HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:35:22Z
+load_at_start={ 14.79 37.93 31.61 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
     Checking aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 44.98s
-LEG=clippy-workspace EXIT=0 end=2026-08-16T16:20:23Z load_at_end={ 22.66 17.19 14.24 }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.22s
+LEG=clippy-workspace EXIT=0 end=2026-08-16T16:35:36Z load_at_end={ 17.56 37.41 31.54 }

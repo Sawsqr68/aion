@@ -1,5 +1,5 @@
-LEG=clippy-p-aion-server HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:20:23Z
-load_at_start={ 22.66 17.19 14.24 }
+LEG=clippy-p-aion-server HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:35:36Z
+load_at_start={ 17.56 37.41 31.54 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.62s
-LEG=clippy-p-aion-server EXIT=0 end=2026-08-16T16:21:04Z load_at_end={ 15.56 16.07 13.98 }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.61s
+LEG=clippy-p-aion-server EXIT=0 end=2026-08-16T16:35:47Z load_at_end={ 19.06 37.06 31.48 }

@@ -1,3 +1,3 @@
-LEG=fmt HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:16:08Z
-load_at_start={ 6.38 7.38 10.67 }
-LEG=fmt EXIT=0 end=2026-08-16T16:16:10Z load_at_end={ 6.27 7.34 10.64 }
+LEG=fmt HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:28:04Z
+load_at_start={ 6.81 9.14 11.22 }
+LEG=fmt EXIT=0 end=2026-08-16T16:28:07Z load_at_end={ 6.81 9.14 11.22 }
