@@ -156,6 +156,11 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // empty), then loads it — config LOAD itself stays pure and read-only.
     let loaded = crate::config::load_or_scaffold(&cli)?;
     loaded.resolution.ensure_private_home()?;
+    // Arm the death note as early as the home exists, so every later failure
+    // path — including config validation and state build — runs inside the
+    // ARMED/DISARMED bracket. Two anonymous server deaths on 2026-08-16 are
+    // why this exists; see the module docs for the exact coverage.
+    let death_note = crate::death_note::DeathNote::arm(&loaded.resolution.home)?;
     loaded.resolution.log_startup();
     let liminal_address_hint = liminal_address_hint(&loaded.resolution.source);
     let config = loaded.config;
@@ -228,6 +233,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         deploy_enabled = runtime.deploy.enabled,
         metrics_enabled = runtime.metrics.enabled,
         workspace_root = %workspace_root,
+        death_note = %death_note.path().display(),
         workflow_package_count = workflow_packages.len(),
         workflow_packages = ?workflow_packages,
         owned_shards = ?owned_shards,
@@ -323,7 +329,11 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         },
     };
 
-    Ok(outcome.exit_code())
+    let exit_code = outcome.exit_code();
+    death_note.disarm(&format!(
+        "clean run-loop exit: shutdown outcome {outcome:?}"
+    ));
+    Ok(exit_code)
 }
 
 /// Install the operator's supervision policy and converge the fleet.

@@ -73,6 +73,14 @@ pub enum ServerError {
         message: String,
     },
 
+    /// The death note — the durable record of what killed the process — could
+    /// not be armed at boot.
+    #[error("death note error: {message}")]
+    DeathNote {
+        /// Redacted, operator-facing failure message.
+        message: String,
+    },
+
     /// Namespace validation or authorization failed.
     #[error("namespace error: {message}")]
     Namespace {

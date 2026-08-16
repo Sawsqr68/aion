@@ -49,6 +49,9 @@ pub mod cluster;
 pub mod cluster_publisher;
 /// Runtime configuration loading and validation.
 pub mod config;
+/// Durable record of what killed the server process on paths that never
+/// reach the graceful-shutdown log.
+pub mod death_note;
 /// Operator deploy surface authorization.
 pub mod deploy;
 /// Local dev-server surface: trigger a run, stream it over the existing

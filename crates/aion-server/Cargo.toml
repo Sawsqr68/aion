@@ -110,6 +110,12 @@ liminal = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
+# Death-note signal watcher (see src/death_note.rs): safe registration that
+# CHAINS with tokio's own listeners through the shared signal-hook-registry,
+# already in the dependency tree via liminal-server. The fatal-fault set
+# (SIGSEGV et al.) needs async-signal-context handlers this workspace's
+# unsafe-code denial rules out; the module docs state that remainder.
+signal-hook = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Audited owned-value wrapper that decodes every native ACL entry field from one
