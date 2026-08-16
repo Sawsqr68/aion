@@ -8,9 +8,10 @@ set -u
 
 WT=/Users/tom/Developer/ablative/apps/manifold/.worktrees/m210-attach-backpressure
 LOGS=/Users/tom/Developer/ablative/stack/aion/gate-logs/m210-attach-backpressure
-mkdir -p "$LOGS" || exit 90
+mkdir -p "$LOGS" || { echo "gate setup FAILED: cannot create log directory $LOGS" >&2; exit 90; }
 
-typeset -a LEG_CODES
+typeset -a LEG_RESULTS
+typeset -A LEG_LOGS
 
 run_leg() {
   local name=$1
@@ -23,13 +24,26 @@ run_leg() {
   local code=$?
   echo "EXIT=$code" >> "$LOGS/$logfile"
   echo "$name=$code"
-  LEG_CODES+=("$code")
+  LEG_RESULTS+=("$name=$code")
+  LEG_LOGS[$name]=$logfile
 }
 
 run_leg rust-workspace gate-rust-workspace.log cargo test --workspace
 run_leg loc gate-loc.log bash "$WT/scripts/loc-gate.sh"
 
-for code in "${LEG_CODES[@]}"; do
-  (( code != 0 )) && exit 1
+typeset -a FAILED
+for pair in "${LEG_RESULTS[@]}"; do
+  (( ${pair##*=} != 0 )) && FAILED+=("$pair")
 done
-exit 0
+(( ${#FAILED[@]} == 0 )) && exit 0
+
+{
+  echo "GATE RED — ${#FAILED[@]} of ${#LEG_RESULTS[@]} legs failed:"
+  for pair in "${FAILED[@]}"; do
+    name=${pair%%=*}
+    echo "  $name exited ${pair##*=}  (full output: $LOGS/${LEG_LOGS[$name]})"
+  done
+  echo "all leg results: ${LEG_RESULTS[*]}"
+  echo "log directory: $LOGS"
+} >&2
+exit 1

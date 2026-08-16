@@ -8,9 +8,10 @@ set -u
 
 WT=/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth
 LOGS=/Users/tom/Developer/ablative/stack/aion/gate-logs/status-front
-mkdir -p "$LOGS" || exit 90
+mkdir -p "$LOGS" || { echo "gate setup FAILED: cannot create log directory $LOGS" >&2; exit 90; }
 
-typeset -a LEG_CODES
+typeset -a LEG_RESULTS
+typeset -A LEG_LOGS
 
 run_leg() {
   local name=$1
@@ -24,7 +25,8 @@ run_leg() {
   local code=$?
   echo "EXIT=$code" >> "$LOGS/$logfile"
   echo "$name=$code"
-  LEG_CODES+=("$code")
+  LEG_RESULTS+=("$name=$code")
+  LEG_LOGS[$name]=$logfile
 }
 
 per_crate_clippy() {
@@ -64,7 +66,19 @@ run_leg aion-rs gate-aion-rs.log cargo test -p aion-rs --no-fail-fast
 run_leg stores gate-stores.log cargo test -p aion-store -p aion-store-haematite -p aion-store-libsql --no-fail-fast
 run_leg full-battery gate-full-battery.log /bin/bash "$WT/scripts/battery.sh"
 
-for code in "${LEG_CODES[@]}"; do
-  (( code != 0 )) && exit 1
+typeset -a FAILED
+for pair in "${LEG_RESULTS[@]}"; do
+  (( ${pair##*=} != 0 )) && FAILED+=("$pair")
 done
-exit 0
+(( ${#FAILED[@]} == 0 )) && exit 0
+
+{
+  echo "GATE RED — ${#FAILED[@]} of ${#LEG_RESULTS[@]} legs failed:"
+  for pair in "${FAILED[@]}"; do
+    name=${pair%%=*}
+    echo "  $name exited ${pair##*=}  (full output: $LOGS/${LEG_LOGS[$name]})"
+  done
+  echo "all leg results: ${LEG_RESULTS[*]}"
+  echo "log directory: $LOGS"
+} >&2
+exit 1
