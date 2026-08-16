@@ -578,7 +578,11 @@ pub(crate) async fn set_namespace_placement(
 mod tests {
     use std::sync::Arc;
 
-    use aion_core::{WorkflowStatus, WorkflowSummary};
+    use aion::durability::{Recorder, WorkflowStartRecord};
+    use aion_core::{
+        PackageVersion, Payload, SearchAttributeSchema, SearchAttributeType, SearchAttributeValue,
+        WorkflowError, WorkflowStatus, WorkflowSummary,
+    };
     use aion_proto::{WireError, WireErrorCode};
     use aion_store::{
         NamespaceStore, WriteToken,
@@ -701,6 +705,82 @@ mod tests {
             "an unnamed run must omit the field entirely, got {}",
             summaries[0]
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn http_get_workflows_projects_terminal_history_over_stale_running_visibility()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (engine, store, visibility_store) = shared_engine().await?;
+        let mut recorder = Recorder::new(workflow_id(), Arc::clone(&store));
+        recorder
+            .record_workflow_started(
+                Utc::now(),
+                WorkflowStartRecord {
+                    workflow_type: String::from("fixture"),
+                    input: Payload::from_json(&json!({}))?,
+                    run_id: run_id(),
+                    parent_run_id: None,
+                    package_version: PackageVersion::new("a".repeat(64)),
+                },
+            )
+            .await?;
+        let mut schema = SearchAttributeSchema::new();
+        schema.register(
+            crate::namespace::NAMESPACE_ATTRIBUTE,
+            SearchAttributeType::String,
+        )?;
+        recorder
+            .record_search_attributes_updated(
+                Utc::now(),
+                std::collections::HashMap::from([(
+                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+                &schema,
+            )
+            .await?;
+        let failure = "checkout failed\n    at charge_card (checkout.ex:42)";
+        recorder
+            .record_workflow_failed(
+                Utc::now(),
+                WorkflowError {
+                    message: failure.to_owned(),
+                    details: None,
+                },
+            )
+            .await?;
+        visibility_store
+            .record_visibility(VisibilityRecord {
+                workflow_id: workflow_id(),
+                run_id: run_id(),
+                workflow_type: String::from("fixture"),
+                status: WorkflowStatus::Running,
+                start_time: Utc::now(),
+                close_time: None,
+                failed_step: None,
+                failure_reason: None,
+                search_attributes: std::collections::HashMap::from([(
+                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+            })
+            .await?;
+
+        let resolver = NamespaceResolver::from_parts(
+            NamespaceMode::SharedEngine,
+            Some(engine),
+            Arc::new(StaticWorkflowNamespaces::default()),
+            Arc::new(StaticScheduleNamespaces::default()),
+        );
+        let router = workflow_router(server_state(resolver, runtime_config()).await?);
+        let response = router
+            .oneshot(get_request("/workflows?namespace=tenant-a")?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let summaries: Vec<WorkflowSummary> = read_json(response).await?;
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].status, WorkflowStatus::Failed);
         Ok(())
     }
 
