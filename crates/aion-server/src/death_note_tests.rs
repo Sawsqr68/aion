@@ -2,7 +2,9 @@
 //! global panic hook and signal registrations are process-wide, so a single
 //! ordered test avoids cross-test interference by construction.
 #![cfg(unix)]
-#![allow(clippy::expect_used)]
+// `clippy::panic`: raising a real panic IS the subject under test — the hook
+// records it; same file-level test allowance as the failover showcases.
+#![allow(clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
 use std::sync::mpsc;
