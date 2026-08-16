@@ -1,22 +1,5 @@
-LEG=clippy-p-aion-server HEAD=c76ede2deb725dc76332fafd28d213e13033807a start=2026-08-16T16:03:58Z
-load_at_start={ 21.29 14.42 16.37 }
+LEG=clippy-p-aion-server HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:20:23Z
+load_at_start={ 22.66 17.19 14.24 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
-error: `panic` should not be present in production code
-  --> crates/aion-server/src/death_note_tests.rs:64:47
-   |
-64 |     let unwound = std::panic::catch_unwind(|| panic!("death-note test panic"));
-   |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
-   = note: requested on the command line with `-D clippy::panic`
-
-error: `panic` should not be present in production code
-  --> crates/aion-server/src/death_note_tests.rs:98:47
-   |
-98 |     let unwound = std::panic::catch_unwind(|| panic!("post-disarm panic must not be recorded"));
-   |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
-
-error: could not compile `aion-server` (lib test) due to 2 previous errors
-LEG=clippy-p-aion-server EXIT=101 end=2026-08-16T16:04:38Z load_at_end={ 16.30 13.92 16.10 }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.62s
+LEG=clippy-p-aion-server EXIT=0 end=2026-08-16T16:21:04Z load_at_end={ 15.56 16.07 13.98 }

@@ -1,18 +1,18 @@
-LEG=test-death-note HEAD=c76ede2deb725dc76332fafd28d213e13033807a start=2026-08-16T15:58:12Z
-load_at_start={ 6.00 9.38 16.91 }
+LEG=test-death-note HEAD=02390a312d196bb539d61fd25ad655817cdeee46 start=2026-08-16T16:16:11Z
+load_at_start={ 6.27 7.34 10.64 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
   |
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `aion-server` (lib test) generated 1 warning
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 09s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.58s
      Running unittests src/lib.rs (target/debug/deps/aion_server-992e88e6997bc301)
 
 running 1 test
 test death_note::tests::the_death_note_records_every_observable_path_once_armed ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.30s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.38s
 
      Running tests/assistant_embed_e2e.rs (target/debug/deps/assistant_embed_e2e-aef39bd76c36fba2)
 
@@ -314,4 +314,4 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
 
-LEG=test-death-note EXIT=0 end=2026-08-16T16:02:19Z load_at_end={ 8.96 9.18 14.90 }
+LEG=test-death-note EXIT=0 end=2026-08-16T16:18:47Z load_at_end={ 17.14 12.68 12.38 }
