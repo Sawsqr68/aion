@@ -1,3 +1,6 @@
+import { useMemo } from 'react';
+
+import { createConfiguredLiveStepReader } from '@/lib/config';
 import type { Event, RunId } from '@/types';
 
 import { LiveLegsSection } from '../components/LegsSection';
@@ -7,16 +10,8 @@ import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { useWorkflowSelectionParams } from '../hooks/useWorkflowSelectionParams';
 import { useWorkflowSummary } from '../hooks/useWorkflowSummary';
-import type { LiveStepReader } from '../lib/live-step-port';
 import type { WorkflowDetailProps } from '../types';
 import { WorkflowDetailViewContent } from './WorkflowDetailViewContent';
-
-// FLEET-SEAM(L1): replaced at merge with createConfiguredLiveStepReader({ namespace })
-const preMergeLiveStepReader: LiveStepReader = {
-  describeLive: async () => {
-    throw new Error('FLEET-SEAM(L1) was not replaced: no live-step API reader is configured');
-  },
-};
 
 /**
  * Detail view wrapper that adds a List ⇄ Swimlane toggle on top of the history +
@@ -30,6 +25,7 @@ const preMergeLiveStepReader: LiveStepReader = {
  * the durable attempt list. S0's `/workflows/:id` route renders this wrapper.
  */
 function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
+  const liveStepReader = useMemo(() => createConfiguredLiveStepReader({ namespace }), [namespace]);
   const historyQuery = useWorkflowHistory({ workflowId });
   const live = useLiveWorkflowEvents({
     enabled: historyQuery.isSuccess,
@@ -81,7 +77,7 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
         <LiveStepCard
           isTerminal={live.isTerminal}
           namespace={namespace}
-          reader={preMergeLiveStepReader}
+          reader={liveStepReader}
           runId={runId}
           workflowId={workflowId}
         />
