@@ -42,7 +42,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use aion_core::Event;
+use aion_core::{ActivityErrorKind, Event};
 use aion_package::{
     ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
     ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
@@ -443,6 +443,46 @@ fn assert_no_synthesized_terminals(history: &[Event]) {
     );
 }
 
+/// The post-RESTART settled history: the recovery re-dispatch records the
+/// #266 supersession `ActivityFailed{attempt: 1, Retryable,
+/// superseded:server-death}` for the attempt the drained server parked —
+/// and NOTHING else failure-shaped. The record is non-terminal and
+/// budget-inert: the run still completes, no `WorkflowFailed`, no terminal
+/// `ActivityFailed`.
+fn assert_only_the_supersession_record(history: &[Event]) {
+    let failures: Vec<_> = history
+        .iter()
+        .filter_map(|event| match event {
+            Event::ActivityFailed { error, attempt, .. } => Some((error, *attempt)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        failures.len(),
+        1,
+        "exactly one failure record after recovery — the supersession record: {:?}",
+        event_kinds(history)
+    );
+    let (error, attempt) = &failures[0];
+    assert_eq!(
+        error.kind,
+        ActivityErrorKind::Retryable,
+        "the supersession record is NON-terminal"
+    );
+    assert_eq!(
+        error.message, "superseded:server-death",
+        "the recorded reason is the supersession literal"
+    );
+    assert_eq!(*attempt, 1, "the record names the PARKED attempt");
+    assert!(
+        !history
+            .iter()
+            .any(|event| matches!(event, Event::WorkflowFailed { .. })),
+        "recovery must record NO WorkflowFailed: {:?}",
+        event_kinds(history)
+    );
+}
+
 /// Restart over the same store and drive the recovered run to completion: the
 /// re-dispatched activity reaches a reconnected worker at the CONTINUED
 /// attempt, completes, and the workflow completes — the recovery half of the
@@ -469,7 +509,7 @@ async fn restart_and_complete(
             .any(|event| matches!(event, Event::WorkflowCompleted { .. }))
     })
     .await?;
-    assert_no_synthesized_terminals(&settled);
+    assert_only_the_supersession_record(&settled);
     assert_eq!(
         settled
             .iter()

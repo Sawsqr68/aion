@@ -660,11 +660,14 @@ async fn recovery_at_depth_replays_all_three_histories_byte_identical() -> TestR
 /// CURRENT SEMANTICS, pinned: an in-flight activity is at-least-once. On
 /// recovery the replay resolver finds no recorded terminal for the
 /// scheduled activity (`durability/cursor.rs::resolve_activity` returns
-/// `Exhausted`), resumes live, and re-dispatches — appending a fresh
-/// `ActivityScheduled`/`ActivityStarted` pair for the SAME activity id
-/// (`runtime/nif_activity_dispatch.rs` records before every live
-/// dispatch). The parents parked in `child.await` replay byte-identically
-/// and respawn nothing: positional correlation holds at every level.
+/// `Exhausted`), resumes live, and re-dispatches — first recording the
+/// #266 supersession `ActivityFailed{attempt: 1, Retryable,
+/// superseded:server-death}` for the attempt the dead engine left in
+/// flight, then a fresh `ActivityScheduled`/`ActivityStarted` pair for the
+/// SAME activity id (`runtime/nif_activity_dispatch.rs` records before
+/// every live dispatch). The parents parked in `child.await` replay
+/// byte-identically and respawn nothing: positional correlation holds at
+/// every level.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
@@ -701,10 +704,12 @@ async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -
     let recovered = engine_over(&store, &second_dispatcher).await?;
 
     // The leaf replays to the dispatch, finds no recorded terminal, and
-    // re-dispatches: exactly one fresh Scheduled/Started pair for the same
-    // activity id, appended after the byte-identical pre-kill prefix.
+    // re-dispatches: the #266 supersession record for the attempt the dead
+    // engine left in flight, then exactly one fresh Scheduled/Started pair
+    // for the same activity id, appended after the byte-identical pre-kill
+    // prefix.
     let redispatched = wait_for_history(&store, &l3, "leaf re-dispatch recorded", |events| {
-        events.len() >= pre_kill_three.len() + 2
+        events.len() >= pre_kill_three.len() + 3
     })
     .await?;
     assert_eq!(
@@ -714,7 +719,7 @@ async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -
     );
     assert_eq!(
         redispatched.len(),
-        pre_kill_three.len() + 2,
+        pre_kill_three.len() + 3,
         "{redispatched:#?}"
     );
     let first_id = pre_kill_three
@@ -724,9 +729,29 @@ async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -
             _ => None,
         })
         .ok_or("no recorded ActivityScheduled before the kill")?;
+    match &redispatched[pre_kill_three.len()] {
+        Event::ActivityFailed {
+            activity_id,
+            error,
+            attempt,
+            ..
+        } => {
+            assert_eq!(
+                activity_id, &first_id,
+                "the supersession record names the dangling attempt's activity"
+            );
+            assert_eq!(error.kind, aion_core::ActivityErrorKind::Retryable);
+            assert_eq!(
+                error.message, "superseded:server-death",
+                "the recorded reason is the supersession literal"
+            );
+            assert_eq!(*attempt, 1, "the record names the DANGLING attempt");
+        }
+        other => return Err(format!("expected the supersession record, found {other:?}").into()),
+    }
     match (
-        &redispatched[pre_kill_three.len()],
         &redispatched[pre_kill_three.len() + 1],
+        &redispatched[pre_kill_three.len() + 2],
     ) {
         (
             Event::ActivityScheduled {
