@@ -64,3 +64,17 @@ Diagnostic HEAD `e790ada74` reproduces the named solo red in 0.05s (`fix2-solo-r
 The HTTP list serves exactly one user row because internal workflows are explicitly filtered at the user-facing boundary. The final failing assertion instead counts the unfiltered shared store, where the repository contract requires internal and user executions to coexist. Both surviving keys have authoritative histories. Consequently, a correct stale-orphan removal pass would retain both and could not make the byte-identical oracle green.
 
 Per R2's explicit stop branch, no mechanism or fixture mutation was made. The general mechanical fix remains an authoritative-key reconcile sweep plus a key-specific visibility removal seam; structural prevention is unavailable without redesigning the intentionally separate mutable projection. That fix is **not done** because this test does not plant an unaccounted key. No R4 battery-green claim is made; the mandatory test is still red. No presentation/supersession work, reason-extraction change, new refusal surface, live-server write, daemon, alternate target directory, or push was performed. Full evidence, the 4-call reconciliation census with positive control, and non-claims are in `FIX2-STOP-REPORT.md` and `fix2-writer-census.log`.
+
+## BRIEF-STATUS-FIX2-AMEND delivery addendum
+
+Amendment commit: `63141eef2518dbade920f0691f3860a0030a4205` (`test(status): scope raw-store oracle to fixture key`).
+
+The final raw-store leg of `http_list_refuses_terminal_status_without_terminal_history` now selects the fixture row by `(workflow_id, run_id)`, fails loudly if that key is absent, and asserts that row remains `Running` with no failure reason or close time. The store-read comment states the shared-store population constraint from `internal_workflow.rs`: engine-internal executions such as the schedule coordinator legitimately coexist with the fixture. The HTTP assertions and every other test remain unchanged.
+
+Diff-stat against `e53758842` is committed below; it proves no production source changed and that only the specified test file plus this delivery report moved:
+
+```text
+ crates/aion-server/src/api/http/workflows.rs  | 12 +++++++++---
+ gate-logs/status-front-run/DELIVERY-REPORT.md | 14 ++++++++++++++
+ 2 files changed, 23 insertions(+), 3 deletions(-)
+```
