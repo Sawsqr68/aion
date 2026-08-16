@@ -52,6 +52,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::{ActivityId, WorkflowId};
+
 /// Metadata stamped on every [`ClusterEvent`], mirroring [`crate::EventEnvelope`] for the cluster
 /// channel.
 #[derive(Serialize, Deserialize, ts_rs::TS, Clone, Debug, PartialEq, Eq)]
@@ -262,6 +264,68 @@ pub enum ClusterEvent {
         namespaces: Vec<String>,
         /// Why the worker left (see [`WorkerDeathReason`] wiring note).
         reason: WorkerDeathReason,
+    },
+    /// A dispatch parked on an unserved queue with **no availability
+    /// deadline** — the wait that can hold a run forever.
+    ///
+    /// Every other selection outcome has a terminal echo the operator can see:
+    /// a served dispatch completes, and a deadline-bounded park expires into a
+    /// typed `WorkerUnavailable` refusal that reaches the workflow's own
+    /// history. The unbounded park had only a WARN line and the queryable
+    /// unserved state — nothing pushed. This variant is that push (#266 T4):
+    /// the #266 boot-ordering defect stranded recovered runs in exactly this
+    /// state, and the only sign was a log nobody was reading. The status-truth
+    /// front (#264) consumes it.
+    ///
+    /// Emitted under the same transition rule as the WARN it accompanies: once
+    /// when a park episode is first classified, and again only when the
+    /// classified reason changes. Re-observations of the same reason are
+    /// silent, so a queue nobody serves does not flood the channel.
+    ///
+    /// `reason` and `policy` carry the queue-service taxonomy's canonical
+    /// spellings (e.g. `NO_LIVE_POLLERS`, `durable_pending`) as strings rather
+    /// than server-crate enums, the same leaf-crate discipline
+    /// [`Self::NamespaceCreated`] applies to `origin`.
+    DispatchParked {
+        /// Cluster-event metadata.
+        meta: ClusterEventMeta,
+        /// Namespace the dispatch belongs to.
+        namespace: String,
+        /// Task queue the dispatch is addressed to.
+        task_queue: String,
+        /// Activity type the dispatch needs served.
+        activity_type: String,
+        /// Node label the dispatch is pinned to, if any.
+        node: Option<String>,
+        /// Canonical queue-service reason spelling (`NO_QUEUE_DECLARATION` /
+        /// `NO_LIVE_POLLERS` / `POLLERS_INCOMPATIBLE` / `SATURATED`).
+        reason: String,
+        /// Canonical queue-service policy spelling (`strict` /
+        /// `durable_pending`).
+        policy: String,
+        /// Workflow whose activity is parked.
+        workflow_id: WorkflowId,
+        /// Parked activity's history ordinal.
+        activity_id: ActivityId,
+        /// How long the dispatch had been waiting when this was emitted.
+        ///
+        /// Exported to TypeScript as `number`; see the module docs for the
+        /// accepted `2^53` ceiling.
+        waited_ms: u64,
+        /// Workers connected for `(namespace, task_queue)`, whatever they
+        /// serve, at the census behind this verdict.
+        workers_in_pool: usize,
+        /// Of those, workers advertising this activity type.
+        workers_serving_activity: usize,
+        /// Of those, workers that also satisfy the dispatch's node pin.
+        compatible_workers: usize,
+        /// How long ago a compatible worker was last in service, or `None`
+        /// when none has ever been seen for this address in this server's
+        /// life.
+        ///
+        /// Exported to TypeScript as `number`; see the module docs for the
+        /// accepted `2^53` ceiling.
+        last_compatible_poller_age_ms: Option<u64>,
     },
     /// The cluster supervisor started on this node (lifecycle).
     ///

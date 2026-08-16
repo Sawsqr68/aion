@@ -1447,6 +1447,10 @@ struct WorkerSeams {
     queue_declarations: crate::worker::QueueDeclarationSource,
     queue_service_state: crate::worker::QueueServiceState,
     declared_bodies: crate::worker::DeclaredBodySource,
+    /// The boot's one cluster-event publisher, kept here so the dispatchers
+    /// built over these seams announce an unbounded park on the operator's
+    /// real-time channel (#266 T4).
+    cluster_publisher: crate::cluster_publisher::ClusterEventPublisher,
 }
 
 /// Build the worker-side seams: the connected-worker registry (WS3 topology
@@ -1486,6 +1490,7 @@ fn build_worker_seams(
         queue_declarations: crate::worker::QueueDeclarationSource::default(),
         queue_service_state: crate::worker::QueueServiceState::default(),
         declared_bodies: crate::worker::DeclaredBodySource::default(),
+        cluster_publisher: cluster_publisher.clone(),
     }
 }
 
@@ -1566,7 +1571,8 @@ fn build_bridge_dispatcher(
     .with_attempt_owners(attempt_owners.clone())
     .with_queue_service(runtime.worker.queue_service.clone())
     .with_queue_declarations(seams.queue_declarations.clone())
-    .with_queue_state(seams.queue_service_state.clone());
+    .with_queue_state(seams.queue_service_state.clone())
+    .with_cluster_publisher(seams.cluster_publisher.clone());
     (dispatcher, attempt_owners)
 }
 

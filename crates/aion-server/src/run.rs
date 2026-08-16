@@ -738,7 +738,11 @@ fn select_outbox_row_dispatch(
                     state.queue_declarations().clone(),
                     state.queue_service_state().clone(),
                     state.runtime_config().worker.queue_service.clone(),
-                );
+                )
+                // ...including the cluster publisher, so an unbounded park on
+                // this leg is announced on the operator's real-time channel
+                // exactly like the direct path (#266 T4).
+                .with_cluster_publisher(state.cluster_publisher().clone());
             // Control-Plane Phase 2 (P2-P3): attach the short-TTL placement cache
             // so an unpinned row in a `Prefer{L}` namespace prefers an L-labelled
             // worker (spilling to any live worker). The cache front-runs a per-row

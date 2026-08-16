@@ -81,6 +81,13 @@ pub struct ServiceWait<'a> {
     pub workflow_id: &'a WorkflowId,
     /// Activity ordinal recorded in history.
     pub activity_id: &'a ActivityId,
+    /// Cluster-event publisher an UNBOUNDED park announces itself on (#266
+    /// T4). `None` (isolated tests) emits nothing on the wire; like the
+    /// defaulted queue seams on the dispatchers, an unwired publisher loses
+    /// only the pushed echo — the WARN and the queryable unserved state can
+    /// never be switched off by wiring. Both production dispatchers share the
+    /// boot's one publisher here.
+    pub publisher: Option<&'a crate::cluster_publisher::ClusterEventPublisher>,
 }
 
 /// Select a worker for the address, or refuse with a typed reason.
@@ -241,6 +248,7 @@ pub fn observe_selection_miss(
     let Some(reason) = classify(declaration, &census) else {
         return Ok(None);
     };
+    let repeat = reported == Some(reason);
     mark_unserved(wait, reason, policy, census);
     report(&Report {
         wait,
@@ -249,8 +257,16 @@ pub fn observe_selection_miss(
         census,
         waited,
         deadline,
-        repeat: reported == Some(reason),
+        repeat,
     });
+    // Only the UNBOUNDED park is pushed to the cluster channel: a
+    // deadline-bounded park expires into a typed refusal that reaches the
+    // workflow's own history, while this class otherwise ends nowhere an
+    // operator is pushed to (#266 T4). Same transition rule as the WARN:
+    // first classification and reason changes emit, repeats are silent.
+    if deadline.is_none() && !repeat {
+        emit_unbounded_park(wait, reason, policy, &census, waited);
+    }
     Ok(Some(ObservedMiss { reason, census }))
 }
 
@@ -291,6 +307,43 @@ fn mark_unserved(
     }) {
         tracing::error!(%error, "failed to publish the unserved queue state");
     }
+}
+
+/// Announce one unbounded-park transition on the deployment's cluster channel.
+///
+/// The taxonomy reason and policy cross as their canonical spellings because
+/// `aion-core` must not depend on this crate's enums; every other field is the
+/// same data the WARN and the queryable state already carry. An unwired
+/// publisher (isolated tests) emits nothing — the honesty contract on
+/// [`ServiceWait::publisher`] — and a publisher with no live subscribers is
+/// the calm single-node case, not an error.
+fn emit_unbounded_park(
+    wait: &ServiceWait<'_>,
+    reason: QueueServiceReason,
+    policy: QueueServicePolicy,
+    census: &PoolCensus,
+    waited: Duration,
+) {
+    let Some(publisher) = wait.publisher else {
+        return;
+    };
+    let address = wait.address;
+    publisher.emit(|meta| aion_core::ClusterEvent::DispatchParked {
+        meta,
+        namespace: address.namespace.clone(),
+        task_queue: address.task_queue.clone(),
+        activity_type: address.activity_type.clone(),
+        node: address.node.clone(),
+        reason: reason.as_str().to_owned(),
+        policy: policy.as_str().to_owned(),
+        workflow_id: wait.workflow_id.clone(),
+        activity_id: wait.activity_id.clone(),
+        waited_ms: millis(waited),
+        workers_in_pool: census.workers_in_pool,
+        workers_serving_activity: census.workers_serving_activity,
+        compatible_workers: census.compatible_workers,
+        last_compatible_poller_age_ms: census.last_compatible_poller_age.map(millis),
+    });
 }
 
 fn clear_unserved(wait: &ServiceWait<'_>) {

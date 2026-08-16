@@ -539,6 +539,10 @@ pub struct WorkerActivityDispatcher {
     queue_declarations: QueueDeclarationSource,
     /// Live unserved-queue state a parked dispatch publishes itself into.
     queue_state: QueueServiceState,
+    /// Cluster-event publisher an unbounded park announces itself on (#266
+    /// T4). `None` (isolated tests) loses only the pushed echo; the WARN and
+    /// the queryable state above cannot be switched off by wiring.
+    cluster_publisher: Option<crate::cluster_publisher::ClusterEventPublisher>,
 }
 
 impl std::fmt::Debug for WorkerActivityDispatcher {
@@ -574,7 +578,20 @@ impl WorkerActivityDispatcher {
             queue_service: QueueServiceConfig::default(),
             queue_declarations: QueueDeclarationSource::default(),
             queue_state: QueueServiceState::default(),
+            cluster_publisher: None,
         }
+    }
+
+    /// Share the deployment-global cluster-event publisher so a dispatch
+    /// parked with no availability deadline is announced on the operator's
+    /// real-time channel, not only in the log (#266 T4).
+    #[must_use]
+    pub fn with_cluster_publisher(
+        mut self,
+        cluster_publisher: crate::cluster_publisher::ClusterEventPublisher,
+    ) -> Self {
+        self.cluster_publisher = Some(cluster_publisher);
+        self
     }
 
     /// Share the operator's R1 queue-service settings: the default policy, the
@@ -708,6 +725,7 @@ impl WorkerActivityDispatcher {
             address,
             workflow_id,
             activity_id,
+            publisher: self.cluster_publisher.as_ref(),
         };
         let mut accepting = || {
             self.ensure_accepting(

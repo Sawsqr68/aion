@@ -632,6 +632,40 @@ fn with_meta_worker_lifecycle(
             in_flight,
             ceiling,
         },
+        // Like `NamespaceCreated`, emitted directly through the publisher (the
+        // queue-service wait path) which stamps the real meta, never queued in
+        // `tick()`; re-stamped faithfully to keep the match exhaustive.
+        ClusterEvent::DispatchParked {
+            namespace,
+            task_queue,
+            activity_type,
+            node,
+            reason,
+            policy,
+            workflow_id,
+            activity_id,
+            waited_ms,
+            workers_in_pool,
+            workers_serving_activity,
+            compatible_workers,
+            last_compatible_poller_age_ms,
+            ..
+        } => ClusterEvent::DispatchParked {
+            meta,
+            namespace,
+            task_queue,
+            activity_type,
+            node,
+            reason,
+            policy,
+            workflow_id,
+            activity_id,
+            waited_ms,
+            workers_in_pool,
+            workers_serving_activity,
+            compatible_workers,
+            last_compatible_poller_age_ms,
+        },
         deployment_event @ (ClusterEvent::WorkerDeploymentPut { .. }
         | ClusterEvent::WorkerDeploymentDesiredStateChanged { .. }
         | ClusterEvent::WorkerDeploymentDeleted { .. }) => {
@@ -687,6 +721,7 @@ fn with_meta_worker_deployment(
         | ClusterEvent::NamespaceCreated { .. }
         | ClusterEvent::NamespacePlacementChanged { .. }
         | ClusterEvent::NamespaceQuotaState { .. }
+        | ClusterEvent::DispatchParked { .. }
         | ClusterEvent::PeerAdded { .. }
         | ClusterEvent::PeerConnected { .. }
         | ClusterEvent::PeerDisconnected { .. }

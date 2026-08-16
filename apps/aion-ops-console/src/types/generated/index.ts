@@ -941,7 +941,74 @@ namespaces: Array<string>,
 /**
  * Why the worker left (see [`WorkerDeathReason`] wiring note).
  */
-reason: WorkerDeathReason, } | { "type": "SupervisorStarted",
+reason: WorkerDeathReason, } | { "type": "DispatchParked",
+/**
+ * Cluster-event metadata.
+ */
+meta: ClusterEventMeta,
+/**
+ * Namespace the dispatch belongs to.
+ */
+namespace: string,
+/**
+ * Task queue the dispatch is addressed to.
+ */
+task_queue: string,
+/**
+ * Activity type the dispatch needs served.
+ */
+activity_type: string,
+/**
+ * Node label the dispatch is pinned to, if any.
+ */
+node: string | null,
+/**
+ * Canonical queue-service reason spelling (`NO_QUEUE_DECLARATION` /
+ * `NO_LIVE_POLLERS` / `POLLERS_INCOMPATIBLE` / `SATURATED`).
+ */
+reason: string,
+/**
+ * Canonical queue-service policy spelling (`strict` /
+ * `durable_pending`).
+ */
+policy: string,
+/**
+ * Workflow whose activity is parked.
+ */
+workflow_id: WorkflowId,
+/**
+ * Parked activity's history ordinal.
+ */
+activity_id: ActivityId,
+/**
+ * How long the dispatch had been waiting when this was emitted.
+ *
+ * Exported to TypeScript as `number`; see the module docs for the
+ * accepted `2^53` ceiling.
+ */
+waited_ms: number,
+/**
+ * Workers connected for `(namespace, task_queue)`, whatever they
+ * serve, at the census behind this verdict.
+ */
+workers_in_pool: number,
+/**
+ * Of those, workers advertising this activity type.
+ */
+workers_serving_activity: number,
+/**
+ * Of those, workers that also satisfy the dispatch's node pin.
+ */
+compatible_workers: number,
+/**
+ * How long ago a compatible worker was last in service, or `None`
+ * when none has ever been seen for this address in this server's
+ * life.
+ *
+ * Exported to TypeScript as `number`; see the module docs for the
+ * accepted `2^53` ceiling.
+ */
+last_compatible_poller_age_ms: number | null, } | { "type": "SupervisorStarted",
 /**
  * Cluster-event metadata.
  */

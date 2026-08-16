@@ -158,6 +158,7 @@ pub fn cluster_event_meta(event: &ClusterEvent) -> &ClusterEventMeta {
         | ClusterEvent::ShardAdoptionSkipped { meta, .. }
         | ClusterEvent::WorkerConnected { meta, .. }
         | ClusterEvent::WorkerDisconnected { meta, .. }
+        | ClusterEvent::DispatchParked { meta, .. }
         | ClusterEvent::SupervisorStarted { meta, .. }
         | ClusterEvent::SupervisorStopped { meta, .. }
         | ClusterEvent::NamespaceCreated { meta, .. }

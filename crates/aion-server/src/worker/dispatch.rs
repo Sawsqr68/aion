@@ -113,6 +113,10 @@ pub struct ActivityDispatcher {
     queue_declarations: QueueDeclarationSource,
     queue_service_state: QueueServiceState,
     queue_service_config: QueueServiceConfig,
+    /// Cluster-event publisher an unbounded park announces itself on (#266
+    /// T4). `None` (isolated tests) loses only the pushed echo; the WARN and
+    /// the queryable state above cannot be switched off by wiring.
+    cluster_publisher: Option<crate::cluster_publisher::ClusterEventPublisher>,
 }
 
 impl ActivityDispatcher {
@@ -126,7 +130,20 @@ impl ActivityDispatcher {
             queue_declarations: QueueDeclarationSource::default(),
             queue_service_state: QueueServiceState::default(),
             queue_service_config: QueueServiceConfig::default(),
+            cluster_publisher: None,
         }
+    }
+
+    /// Share the deployment-global cluster-event publisher so a dispatch
+    /// parked with no availability deadline on this leg is announced on the
+    /// operator's real-time channel, not only in the log (#266 T4).
+    #[must_use]
+    pub fn with_cluster_publisher(
+        mut self,
+        cluster_publisher: crate::cluster_publisher::ClusterEventPublisher,
+    ) -> Self {
+        self.cluster_publisher = Some(cluster_publisher);
+        self
     }
 
     /// Share the queue-service seams so a park on this path reaches the same
@@ -404,6 +421,7 @@ impl ActivityDispatcher {
             address: &address,
             workflow_id: &activity.workflow_id,
             activity_id: &activity.activity_id,
+            publisher: self.cluster_publisher.as_ref(),
         };
         let policy = self
             .queue_service_config
