@@ -61,6 +61,36 @@ pub(crate) struct StartupRecoveryContext {
     pub(crate) bootstrap_schedule_coordinator: bool,
 }
 
+/// Resolve the build-time startup-recovery decision (#266).
+///
+/// A deferred build skips the recovery steps and stows the two recovery
+/// inputs the constructed engine does not itself hold; the host runs
+/// [`super::api::Engine::run_startup_recovery`] once every seam its activity
+/// dispatcher consults is installed — recovery replay re-dispatches in-flight
+/// activities through that dispatcher the moment it runs. A normal build runs
+/// workflow and timer recovery here, exactly as it always has.
+///
+/// # Errors
+///
+/// Returns [`EngineError`] when either recovery step fails on the
+/// non-deferred path.
+pub(super) async fn resolve_startup_recovery(
+    defer: bool,
+    nif_state: &crate::runtime::EngineNifState,
+    context: StartupRecoveryContext,
+) -> Result<Option<super::startup_deferred::DeferredStartupRecovery>, EngineError> {
+    if defer {
+        return Ok(Some(super::startup_deferred::DeferredStartupRecovery {
+            recovery: context.recovery,
+            bootstrap_schedule_coordinator: context.bootstrap_schedule_coordinator,
+        }));
+    }
+    let store = Arc::clone(&context.store);
+    recover_active_workflows_on_startup(context).await?;
+    recover_timers_on_startup(nif_state, store).await?;
+    Ok(None)
+}
+
 pub(super) async fn recover_active_workflows_on_startup(
     context: StartupRecoveryContext,
 ) -> Result<(), EngineError> {

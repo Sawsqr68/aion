@@ -14,23 +14,20 @@ use crate::{
     SupervisionTree,
     activity::bridge::ActivityDispatcher,
     durability::ActiveWorkflowRecoverySeam,
-    runtime::{NifEntry, NifRegistration, install_signal_nif_bridge},
+    runtime::{NifEntry, NifRegistration},
     signal::SignalResumeHandoff,
 };
 
 use super::api::{Engine, EngineComponents};
 use super::builder_assembly::{
-    ChildBridgeAssembly, assemble_startup_catalog, claim_owned_shards,
-    install_configured_child_nif_bridge, install_engine_nif_seams,
-    maybe_spawn_visibility_reconciliation,
+    ChildBridgeAssembly, assemble_startup_catalog, claim_owned_shards, install_engine_nif_seams,
+    install_workflow_nif_bridges, maybe_spawn_visibility_reconciliation,
 };
 use super::delegated::{DelegatedSeams, EventPublisher, QueryService, SignalRouter};
 use super::seams::{
     SeamAssembly, SignalRouterFactory, assemble_delegated_seams, wrap_event_streaming,
 };
-use super::startup::{
-    StartupRecoveryContext, recover_active_workflows_on_startup, recover_timers_on_startup,
-};
+use super::startup::{StartupRecoveryContext, resolve_startup_recovery};
 
 /// Source for a workflow package collected before `build()` performs fallible
 /// loading and runtime registration.
@@ -569,48 +566,35 @@ impl EngineBuilder {
             query_service_overridden: self.seam_overrides.query_service,
         });
 
-        install_signal_nif_bridge(
-            &nif_state,
-            Arc::new(crate::runtime::SignalNifBridge::new(
-                Arc::clone(&registry),
-                Arc::clone(&runtime),
-                tokio::runtime::Handle::current(),
-                delegated.signal_router_arc(),
-            )),
-        );
-        install_configured_child_nif_bridge(&ChildBridgeAssembly {
-            nif_state: &nif_state,
-            store: &store,
-            visibility_store: &visibility_store,
-            runtime: &runtime,
-            catalog: &catalog,
-            registry: &registry,
-            supervision: &supervision,
-            signal_handoff: &signal_handoff,
-            search_attribute_schema: &search_attribute_schema,
-            watch_backoff: self.signal_delivery,
-        })?;
-
         // Startup recovery re-spawns active workflow processes, and those
         // processes begin replaying on scheduler threads immediately. Replay
         // re-executes workflow code through the engine NIFs, so every NIF
         // bridge (signal, child) must be installed before the first recovered
         // process can run, or an early replayed spawn_child/receive_signal
         // call fails with a missing-bridge error.
-        //
-        // A deferred build (#266) skips all four recovery steps here and
-        // stows the two recovery inputs the constructed engine does not
-        // itself hold; the host runs [`Engine::run_startup_recovery`] once
-        // every seam its activity dispatcher consults is installed — recovery
-        // replay re-dispatches in-flight activities through that dispatcher
-        // the moment it runs.
-        let deferred_startup_recovery = if self.defer_startup_recovery {
-            Some(super::startup_deferred::DeferredStartupRecovery {
-                recovery: self.recovery,
-                bootstrap_schedule_coordinator: self.bootstrap_schedule_coordinator,
-            })
-        } else {
-            recover_active_workflows_on_startup(StartupRecoveryContext {
+        install_workflow_nif_bridges(
+            &ChildBridgeAssembly {
+                nif_state: &nif_state,
+                store: &store,
+                visibility_store: &visibility_store,
+                runtime: &runtime,
+                catalog: &catalog,
+                registry: &registry,
+                supervision: &supervision,
+                signal_handoff: &signal_handoff,
+                search_attribute_schema: &search_attribute_schema,
+                watch_backoff: self.signal_delivery,
+            },
+            &delegated,
+        )?;
+
+        // A deferred build (#266) skips the recovery steps and stows what the
+        // host owes [`Engine::run_startup_recovery`]; see
+        // [`resolve_startup_recovery`].
+        let deferred_startup_recovery = resolve_startup_recovery(
+            self.defer_startup_recovery,
+            &nif_state,
+            StartupRecoveryContext {
                 store: Arc::clone(&store),
                 visibility_store: Arc::clone(&visibility_store),
                 runtime: Arc::clone(&runtime),
@@ -620,11 +604,9 @@ impl EngineBuilder {
                 recovery: self.recovery,
                 search_attribute_schema: Arc::clone(&search_attribute_schema),
                 bootstrap_schedule_coordinator: self.bootstrap_schedule_coordinator,
-            })
-            .await?;
-            recover_timers_on_startup(&nif_state, Arc::clone(&store)).await?;
-            None
-        };
+            },
+        )
+        .await?;
 
         let visibility_reconciliation_task = maybe_spawn_visibility_reconciliation(
             self.visibility_reconciliation_interval,

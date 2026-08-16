@@ -18,7 +18,7 @@ use crate::{
     activity::bridge::ActivityDispatcher,
     runtime::{
         ChildNifBridge, ChildNifBridgeParts, install_child_nif_bridge, install_nif_runtime_context,
-        install_query_bridge,
+        install_query_bridge, install_signal_nif_bridge,
         nif_determinism::{NifContextSource, install_nif_context_source},
     },
     signal::SignalResumeHandoff,
@@ -248,6 +248,31 @@ fn register_workflow_deadline_handler(
     .map_err(|error| EngineError::Runtime {
         reason: format!("failed to register workflow deadline handler: {error}"),
     })
+}
+
+/// Install BOTH workflow-facing NIF bridges — signal and child — from the one
+/// assembly. These are the bridges replayed workflow code calls through, so
+/// `build()` must run this before startup recovery can spawn the first
+/// recovered process (an early replayed `spawn_child`/`receive_signal` against
+/// a missing bridge fails the whole recovery).
+///
+/// # Errors
+///
+/// Returns [`EngineError`] when the child bridge installation fails.
+pub(super) fn install_workflow_nif_bridges(
+    assembly: &ChildBridgeAssembly<'_>,
+    delegated: &super::delegated::DelegatedSeams,
+) -> Result<(), EngineError> {
+    install_signal_nif_bridge(
+        assembly.nif_state,
+        Arc::new(crate::runtime::SignalNifBridge::new(
+            Arc::clone(assembly.registry),
+            Arc::clone(assembly.runtime),
+            tokio::runtime::Handle::current(),
+            delegated.signal_router_arc(),
+        )),
+    );
+    install_configured_child_nif_bridge(assembly)
 }
 
 pub(super) fn install_configured_child_nif_bridge(
