@@ -740,13 +740,18 @@ mod tests {
                 &schema,
             )
             .await?;
-        let failure = "checkout failed\n    at charge_card (checkout.ex:42)";
+        let failure = "the declared command `zsh` exited 1";
         recorder
             .record_workflow_failed(
                 Utc::now(),
                 WorkflowError {
-                    message: failure.to_owned(),
-                    details: None,
+                    message: String::from("workflow 2 returned error"),
+                    details: Some(Payload::from_json(&json!({
+                        "tag": "AwlActivityFailed",
+                        "message": format!(
+                            "activity failed (retryable): {failure}\nstacktrace (captured at raise):"
+                        ),
+                    }))?),
                 },
             )
             .await?;
@@ -785,6 +790,7 @@ mod tests {
         let summaries = body["summaries"].as_array().ok_or("summaries missing")?;
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0]["status"], "Failed");
+        assert_eq!(summaries[0]["failure_reason"], failure);
         Ok(())
     }
 
