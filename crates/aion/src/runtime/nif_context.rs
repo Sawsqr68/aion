@@ -311,7 +311,11 @@ impl NifContext {
             .map_err(Into::into)
     }
 
-    /// Records terminal activity failure through the workflow's single-writer recorder.
+    /// Records an activity failure event through the workflow's single-writer
+    /// recorder. Terminality lives in `error.kind`, not here: the workflow
+    /// thread records terminal failures on delivery, and the #266 recovery
+    /// seam records the NON-terminal supersession failure through the same
+    /// door.
     ///
     /// # Errors
     ///

@@ -202,9 +202,12 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
             String::from("default"),
         )
         .await?;
-    await_history(&store, handle.workflow_id(), "the dangling Started{1}", |h| {
-        started_attempts(h) == vec![1]
-    })
+    await_history(
+        &store,
+        handle.workflow_id(),
+        "the dangling Started{1}",
+        |h| started_attempts(h) == vec![1],
+    )
     .await?;
     engine.shutdown()?;
 
@@ -266,7 +269,9 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
             String::from("default"),
         )
         .await?;
-    let result = recovered.result(fresh.workflow_id(), fresh.run_id()).await?;
+    let result = recovered
+        .result(fresh.workflow_id(), fresh.run_id())
+        .await?;
     let payload = result.map_err(|error| format!("fresh control run failed: {error:?}"))?;
     let reply: serde_json::Value = serde_json::from_slice(payload.bytes())?;
     assert_eq!(reply, json!("steady hello, Grace"));
@@ -275,6 +280,12 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
         supersession_records(&fresh_history).is_empty(),
         "a fresh ordinal must never receive a supersession record: {fresh_history:#?}"
     );
+
+    // Wire trail: the record is a HISTORY event only — the superseded attempt
+    // is never re-delivered. Life 1 delivered attempt 1 once; life 2 delivered
+    // the recovered run's attempt 2 and then the fresh run's attempt 1.
+    assert_eq!(parked.seen_attempts(), vec![1]);
+    assert_eq!(serving.seen_attempts(), vec![2, 1]);
 
     recovered.shutdown()?;
     Ok(())
@@ -286,8 +297,8 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
 /// record. Recovery writes the supersession record for the DANGLING attempt
 /// (2) only; attempt 1 keeps exactly its one real failure.
 #[tokio::test]
-async fn an_already_failed_attempt_is_not_recorded_twice()
--> Result<(), Box<dyn std::error::Error>> {
+async fn an_already_failed_attempt_is_not_recorded_twice() -> Result<(), Box<dyn std::error::Error>>
+{
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
@@ -305,9 +316,12 @@ async fn an_already_failed_attempt_is_not_recorded_twice()
             String::from("default"),
         )
         .await?;
-    await_history(&store, handle.workflow_id(), "the dangling Started{2}", |h| {
-        started_attempts(h) == vec![1, 2]
-    })
+    await_history(
+        &store,
+        handle.workflow_id(),
+        "the dangling Started{2}",
+        |h| started_attempts(h) == vec![1, 2],
+    )
     .await?;
     engine.shutdown()?;
 
@@ -330,24 +344,27 @@ async fn an_already_failed_attempt_is_not_recorded_twice()
     );
     let records = supersession_records(&history);
     assert_eq!(
-        records.iter().map(|(_, attempt)| *attempt).collect::<Vec<_>>(),
+        records
+            .iter()
+            .map(|(_, attempt)| *attempt)
+            .collect::<Vec<_>>(),
         vec![2],
         "ONLY the dangling attempt gets a supersession record — attempt 1's \
          real failure already closed it: {history:#?}"
     );
     let attempt_1_failures = history
         .iter()
-        .filter(|event| {
-            matches!(
-                event,
-                Event::ActivityFailed { attempt: 1, .. }
-            )
-        })
+        .filter(|event| matches!(event, Event::ActivityFailed { attempt: 1, .. }))
         .count();
     assert_eq!(
         attempt_1_failures, 1,
         "attempt 1 keeps exactly its one real failure record: {history:#?}"
     );
+
+    // Wire trail: life 1 delivered attempts 1 and 2; the recovery re-dispatch
+    // delivered only attempt 3 — no superseded attempt travels again.
+    assert_eq!(script.seen_attempts(), vec![1, 2]);
+    assert_eq!(serving.seen_attempts(), vec![3]);
 
     recovered.shutdown()?;
     Ok(())
@@ -376,9 +393,12 @@ async fn the_supersession_record_is_budget_inert() -> Result<(), Box<dyn std::er
             String::from("default"),
         )
         .await?;
-    await_history(&store, handle.workflow_id(), "the dangling Started{1}", |h| {
-        started_attempts(h) == vec![1]
-    })
+    await_history(
+        &store,
+        handle.workflow_id(),
+        "the dangling Started{1}",
+        |h| started_attempts(h) == vec![1],
+    )
     .await?;
     engine.shutdown()?;
 
@@ -419,6 +439,11 @@ async fn the_supersession_record_is_budget_inert() -> Result<(), Box<dyn std::er
         seq_of_started(&history, 2).is_some(),
         "attempt 2's start is recorded: {history:#?}"
     );
+
+    // Wire trail: life 1 delivered attempt 1; life 2 delivered attempts 2 and
+    // 3 — the supersession record put nothing extra on the wire.
+    assert_eq!(parked.seen_attempts(), vec![1]);
+    assert_eq!(serving.seen_attempts(), vec![2, 3]);
 
     recovered.shutdown()?;
     Ok(())
