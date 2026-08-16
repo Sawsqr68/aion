@@ -1,6 +1,13 @@
 export { DetailPanelBody } from './components/DetailPanel';
 export { EventTimeline } from './components/EventTimeline';
+export { LiveStepCard, LiveStepContent } from './components/LiveStepCard';
 export { RenameControl } from './components/RenameControl';
+export type { UseLiveStepOptions } from './hooks/useLiveStep';
+export {
+  DEFAULT_LIVE_STEP_TAIL,
+  LIVE_STEP_POLL_INTERVAL_MS,
+  useLiveStep,
+} from './hooks/useLiveStep';
 export type { LiveWorkflowEvents, LiveWorkflowEventsOptions } from './hooks/useLiveWorkflowEvents';
 export { useLiveWorkflowEvents } from './hooks/useLiveWorkflowEvents';
 export type { RenameClient, RenameWorkflowVariables } from './hooks/useRename';
