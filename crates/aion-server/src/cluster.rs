@@ -632,9 +632,36 @@ fn with_meta_worker_lifecycle(
             in_flight,
             ceiling,
         },
-        // Like `NamespaceCreated`, emitted directly through the publisher (the
-        // queue-service wait path) which stamps the real meta, never queued in
-        // `tick()`; re-stamped faithfully to keep the match exhaustive.
+        parked_event @ ClusterEvent::DispatchParked { .. } => {
+            with_meta_dispatch_parked(parked_event, meta)
+        }
+        deployment_event @ (ClusterEvent::WorkerDeploymentPut { .. }
+        | ClusterEvent::WorkerDeploymentDesiredStateChanged { .. }
+        | ClusterEvent::WorkerDeploymentDeleted { .. }) => {
+            with_meta_worker_deployment(deployment_event, meta)
+        }
+        ClusterEvent::PeerAdded { .. }
+        | ClusterEvent::PeerConnected { .. }
+        | ClusterEvent::PeerDisconnected { .. }
+        | ClusterEvent::ShardAdopted { .. }
+        | ClusterEvent::ShardAdoptionFailed { .. }
+        | ClusterEvent::ShardAdoptionSkipped { .. } => {
+            unreachable!("peer/shard variants are re-stamped by with_meta, never delegated here")
+        }
+    }
+}
+
+/// Meta re-stamp for the `DispatchParked` variant, the widest single re-stamp
+/// (split from [`with_meta_worker_lifecycle`] so neither match outgrows a
+/// readable dispatch). Like `NamespaceCreated`, it is emitted directly through
+/// the publisher (the queue-service wait path) which stamps the real meta,
+/// never queued in `tick()` with a placeholder; re-stamped faithfully to keep
+/// the exhaustive-match discipline without a swallowing wildcard.
+fn with_meta_dispatch_parked(
+    event: ClusterEvent,
+    meta: aion_core::ClusterEventMeta,
+) -> ClusterEvent {
+    match event {
         ClusterEvent::DispatchParked {
             namespace,
             task_queue,
@@ -666,18 +693,23 @@ fn with_meta_worker_lifecycle(
             compatible_workers,
             last_compatible_poller_age_ms,
         },
-        deployment_event @ (ClusterEvent::WorkerDeploymentPut { .. }
+        ClusterEvent::WorkerConnected { .. }
+        | ClusterEvent::WorkerDisconnected { .. }
+        | ClusterEvent::SupervisorStarted { .. }
+        | ClusterEvent::SupervisorStopped { .. }
+        | ClusterEvent::NamespaceCreated { .. }
+        | ClusterEvent::NamespacePlacementChanged { .. }
+        | ClusterEvent::NamespaceQuotaState { .. }
+        | ClusterEvent::WorkerDeploymentPut { .. }
         | ClusterEvent::WorkerDeploymentDesiredStateChanged { .. }
-        | ClusterEvent::WorkerDeploymentDeleted { .. }) => {
-            with_meta_worker_deployment(deployment_event, meta)
-        }
-        ClusterEvent::PeerAdded { .. }
+        | ClusterEvent::WorkerDeploymentDeleted { .. }
+        | ClusterEvent::PeerAdded { .. }
         | ClusterEvent::PeerConnected { .. }
         | ClusterEvent::PeerDisconnected { .. }
         | ClusterEvent::ShardAdopted { .. }
         | ClusterEvent::ShardAdoptionFailed { .. }
         | ClusterEvent::ShardAdoptionSkipped { .. } => {
-            unreachable!("peer/shard variants are re-stamped by with_meta, never delegated here")
+            unreachable!("only DispatchParked is delegated here")
         }
     }
 }

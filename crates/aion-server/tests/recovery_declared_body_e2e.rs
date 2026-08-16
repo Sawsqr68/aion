@@ -1,9 +1,9 @@
 //! #266 Defect A red-first e2e: an in-flight declared-body activity adopted
 //! by startup recovery must EXECUTE, not park.
 //!
-//! The defect: `ServerState::build_with_connected_store` runs recovery replay
-//! inside `build_engine(...)` (the engine builder performs startup recovery
-//! inside `build()`), and installs the engine-backed seams — including the
+//! The defect: `ServerState::build_with_connected_store` ran recovery replay
+//! inside `EngineBuilder::build()` (the engine builder performed startup
+//! recovery itself), and installed the engine-backed seams — including the
 //! `DeclaredBodySource` the `DeclaredCommandDispatcher` consults — only after
 //! the engine exists. Every activity re-dispatched by recovery therefore
 //! consults an EMPTY body source, silently falls through to the worker path,
@@ -359,8 +359,142 @@ fn event_kinds(history: &[Event]) -> Vec<String> {
         .collect()
 }
 
-/// The #266 Defect A pin. RED under the current boot ordering (recovery
-/// replay inside `build_engine`, seams installed after): adopted
+/// Corpse-seed the fleet on the dead store: for each corpse, the probe's own
+/// recorded events up to and including `ActivityStarted` attempt 1, re-keyed
+/// to a fresh identity with that corpse's marker path swapped in. No engine is
+/// alive anywhere while this runs — fixture construction, not a second writer.
+async fn seed_corpses(
+    db_path: PathBuf,
+    probe_workflow: &WorkflowId,
+    probe_marker_text: &str,
+    corpse_markers: &[PathBuf],
+) -> Result<Vec<(WorkflowId, PathBuf)>, TestError> {
+    let mut corpses: Vec<(WorkflowId, PathBuf)> = Vec::with_capacity(corpse_markers.len());
+    let seeder = LibSqlStore::open(db_path).await?;
+    let probe_history = seeder.read_history(probe_workflow).await?;
+    for marker in corpse_markers {
+        let corpse_workflow = WorkflowId::new_v4();
+        let corpse_run = RunId::new_v4();
+        let marker_text = marker.to_string_lossy().into_owned();
+        assert_eq!(
+            probe_marker_text.len(),
+            marker_text.len(),
+            "marker paths must be equal length for the byte-exact payload swap"
+        );
+        let mut prefix = Vec::new();
+        for event in &probe_history {
+            let is_started = matches!(event, Event::ActivityStarted { .. });
+            prefix.push(rekey_event(
+                event,
+                &corpse_workflow,
+                &corpse_run,
+                probe_marker_text,
+                &marker_text,
+            )?);
+            if is_started {
+                break;
+            }
+        }
+        assert!(
+            matches!(prefix.first(), Some(Event::WorkflowStarted { .. })),
+            "the interrupted history must begin with WorkflowStarted: {:?}",
+            event_kinds(&prefix)
+        );
+        assert!(
+            matches!(prefix.last(), Some(Event::ActivityStarted { .. })),
+            "the interrupted history must end mid-dispatch, at ActivityStarted: {:?}",
+            event_kinds(&prefix)
+        );
+        assert!(
+            prefix
+                .iter()
+                .any(|event| matches!(event, Event::ActivityScheduled { .. })),
+            "the interrupted history must carry the activity's schedule: {:?}",
+            event_kinds(&prefix)
+        );
+        seeder
+            .append(WriteToken::recorder(), &corpse_workflow, &prefix, 0)
+            .await?;
+        corpses.push((corpse_workflow, marker.clone()));
+    }
+    Ok(corpses)
+}
+
+/// The claim, polled to a deadline: EVERY adopted dispatch EXECUTES — each
+/// corpse's history gains an activity completion and its run finishes. A
+/// corpse that instead ends terminally is a broken fixture or a different
+/// defect, failed fast by name; corpses still pending at the deadline are
+/// reported as the #266 park with their histories and marker state.
+async fn await_corpse_completions(
+    reader: &LibSqlStore,
+    corpses: &[(WorkflowId, PathBuf)],
+) -> Result<(), TestError> {
+    let deadline = tokio::time::Instant::now() + ADOPTION_DEADLINE;
+    let mut pending: Vec<usize> = (0..corpses.len()).collect();
+    loop {
+        let mut still_pending = Vec::new();
+        for &index in &pending {
+            let (corpse_workflow, _) = &corpses[index];
+            let history = reader.read_history(corpse_workflow).await?;
+            let completed = history
+                .iter()
+                .any(|event| matches!(event, Event::ActivityCompleted { .. }))
+                && history
+                    .iter()
+                    .any(|event| matches!(event, Event::WorkflowCompleted { .. }));
+            if completed {
+                continue;
+            }
+            // A corpse whose replay DIED is a broken fixture or a
+            // different defect — fail fast and name it rather than
+            // reporting it as the park.
+            if history.iter().any(|event| {
+                matches!(
+                    event,
+                    Event::WorkflowFailed { .. }
+                        | Event::WorkflowCancelled { .. }
+                        | Event::WorkflowTimedOut { .. }
+                )
+            }) {
+                return Err(format!(
+                    "corpse {index:03} ended terminally without executing its declared \
+                     body — replay refused the seeded history rather than adopting it: {:?}",
+                    event_kinds(&history)
+                )
+                .into());
+            }
+            still_pending.push(index);
+        }
+        pending = still_pending;
+        if pending.is_empty() {
+            break Ok(());
+        }
+        if tokio::time::Instant::now() >= deadline {
+            let mut stranded = Vec::with_capacity(pending.len());
+            for &index in &pending {
+                let (corpse_workflow, marker) = &corpses[index];
+                let history = reader.read_history(corpse_workflow).await?;
+                stranded.push(format!(
+                    "corpse {index:03}: history {:?}, marker exists: {}",
+                    event_kinds(&history),
+                    marker.is_file(),
+                ));
+            }
+            return Err(format!(
+                "{} of {CORPSE_COUNT} adopted declared-body dispatches did not execute \
+                 within {ADOPTION_DEADLINE:?}: the recovery re-dispatches parked \
+                 (#266 Defect A). Stranded: [{}]",
+                pending.len(),
+                stranded.join("; "),
+            )
+            .into());
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+/// The #266 Defect A pin. RED under the defective boot ordering (recovery
+/// replay inside `EngineBuilder::build()`, seams installed after): adopted
 /// declared-body dispatches park on queue `local` and the corpses never
 /// complete. GREEN once the seams are installed before recovery replay runs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -406,61 +540,14 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     drop(router);
     drop(state);
 
-    // Corpse-seed the fleet on the dead store: for each corpse, the probe's
-    // own recorded events up to and including `ActivityStarted` attempt 1,
-    // re-keyed to a fresh identity with that corpse's marker path swapped in.
-    // No engine is alive anywhere — this is fixture construction, not a
-    // second writer.
-    let mut corpses: Vec<(WorkflowId, PathBuf)> = Vec::with_capacity(CORPSE_COUNT);
-    {
-        let seeder = LibSqlStore::open(db_path.clone()).await?;
-        let probe_history = seeder.read_history(&probe_workflow).await?;
-        for marker in &corpse_markers {
-            let corpse_workflow = WorkflowId::new_v4();
-            let corpse_run = RunId::new_v4();
-            let marker_text = marker.to_string_lossy().into_owned();
-            assert_eq!(
-                probe_marker_text.len(),
-                marker_text.len(),
-                "marker paths must be equal length for the byte-exact payload swap"
-            );
-            let mut prefix = Vec::new();
-            for event in &probe_history {
-                let is_started = matches!(event, Event::ActivityStarted { .. });
-                prefix.push(rekey_event(
-                    event,
-                    &corpse_workflow,
-                    &corpse_run,
-                    &probe_marker_text,
-                    &marker_text,
-                )?);
-                if is_started {
-                    break;
-                }
-            }
-            assert!(
-                matches!(prefix.first(), Some(Event::WorkflowStarted { .. })),
-                "the interrupted history must begin with WorkflowStarted: {:?}",
-                event_kinds(&prefix)
-            );
-            assert!(
-                matches!(prefix.last(), Some(Event::ActivityStarted { .. })),
-                "the interrupted history must end mid-dispatch, at ActivityStarted: {:?}",
-                event_kinds(&prefix)
-            );
-            assert!(
-                prefix
-                    .iter()
-                    .any(|event| matches!(event, Event::ActivityScheduled { .. })),
-                "the interrupted history must carry the activity's schedule: {:?}",
-                event_kinds(&prefix)
-            );
-            seeder
-                .append(WriteToken::recorder(), &corpse_workflow, &prefix, 0)
-                .await?;
-            corpses.push((corpse_workflow, marker.clone()));
-        }
-    }
+    // Corpse-seed the fleet on the dead store (no engine is alive anywhere).
+    let corpses = seed_corpses(
+        db_path.clone(),
+        &probe_workflow,
+        &probe_marker_text,
+        &corpse_markers,
+    )
+    .await?;
 
     // Generation 2: the REAL defective boot path over the same database.
     // Startup recovery adopts the whole fleet; while its spawn loop is still
@@ -472,71 +559,7 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     // a completion and its run finishes; the marker files on disk are the
     // belt. A parked dispatch (the defect) produces none of these, ever.
     let reader = LibSqlStore::open(db_path).await?;
-    let verdict = async {
-        let deadline = tokio::time::Instant::now() + ADOPTION_DEADLINE;
-        let mut pending: Vec<usize> = (0..corpses.len()).collect();
-        loop {
-            let mut still_pending = Vec::new();
-            for &index in &pending {
-                let (corpse_workflow, _) = &corpses[index];
-                let history = reader.read_history(corpse_workflow).await?;
-                let completed = history
-                    .iter()
-                    .any(|event| matches!(event, Event::ActivityCompleted { .. }))
-                    && history
-                        .iter()
-                        .any(|event| matches!(event, Event::WorkflowCompleted { .. }));
-                if completed {
-                    continue;
-                }
-                // A corpse whose replay DIED is a broken fixture or a
-                // different defect — fail fast and name it rather than
-                // reporting it as the park.
-                if history.iter().any(|event| {
-                    matches!(
-                        event,
-                        Event::WorkflowFailed { .. }
-                            | Event::WorkflowCancelled { .. }
-                            | Event::WorkflowTimedOut { .. }
-                    )
-                }) {
-                    return Err(format!(
-                        "corpse {index:03} ended terminally without executing its declared \
-                         body — replay refused the seeded history rather than adopting it: {:?}",
-                        event_kinds(&history)
-                    )
-                    .into());
-                }
-                still_pending.push(index);
-            }
-            pending = still_pending;
-            if pending.is_empty() {
-                break Ok::<(), TestError>(());
-            }
-            if tokio::time::Instant::now() >= deadline {
-                let mut stranded = Vec::with_capacity(pending.len());
-                for &index in &pending {
-                    let (corpse_workflow, marker) = &corpses[index];
-                    let history = reader.read_history(corpse_workflow).await?;
-                    stranded.push(format!(
-                        "corpse {index:03}: history {:?}, marker exists: {}",
-                        event_kinds(&history),
-                        marker.is_file(),
-                    ));
-                }
-                return Err(format!(
-                    "{} of {CORPSE_COUNT} adopted declared-body dispatches did not execute \
-                     within {ADOPTION_DEADLINE:?}: the recovery re-dispatches parked \
-                     (#266 Defect A). Stranded: [{}]",
-                    pending.len(),
-                    stranded.join("; "),
-                )
-                .into());
-            }
-            tokio::time::sleep(POLL_INTERVAL).await;
-        }
-    };
-    let verdict_result = verdict.await;
+    let verdict_result = await_corpse_completions(&reader, &corpses).await;
     let settle_result = settle(&state);
     verdict_result?;
     settle_result?;

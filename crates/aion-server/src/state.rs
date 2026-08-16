@@ -273,7 +273,8 @@ impl ServerState {
             update_status,
         ) = build_decorated_dispatcher(&runtime, &seams, transcript_publisher.clone());
 
-        let engine = build_engine(EngineAssembly {
+        let engine = boot_engine(EngineAssembly {
+            seams: &seams,
             instrumented_store: &instrumented_store,
             event_broadcast_capacity,
             query_timeout,
@@ -283,17 +284,6 @@ impl ServerState {
             runtime: &runtime,
         })
         .await?;
-        let engine = Arc::new(engine);
-        install_engine_backed_seams(&seams, &engine, runtime.outbox.enabled);
-        // #266: startup recovery runs HERE — after every seam the decorated
-        // activity dispatcher consults is installed, never before. The build
-        // above deferred it; running it earlier re-dispatched adopted
-        // in-flight declared-body activities into an empty body source, and
-        // they parked forever on their own queue (the fleet e2e pins this).
-        engine
-            .run_startup_recovery()
-            .await
-            .map_err(ServerError::from)?;
         let resolver = NamespaceResolver::from_config(runtime.namespace.clone(), engine);
         let worker_supervisor =
             new_supervisor(&connected.worker_deployment_store, &cluster_publisher);
@@ -1304,8 +1294,10 @@ fn metrics_config_error(error: &MetricsError) -> ServerError {
     }
 }
 
-/// Borrowed inputs assembled into the embedded engine by [`build_engine`].
+/// Borrowed inputs assembled into the embedded engine by [`boot_engine`].
 struct EngineAssembly<'a> {
+    /// The worker seams installed onto the engine before startup recovery runs.
+    seams: &'a WorkerSeams,
     /// The metrics-instrumented store the engine writes through.
     instrumented_store: &'a Arc<InstrumentedEventStore>,
     /// Explicitly-sized broadcast channel capacity for `/events/stream`.
@@ -1346,13 +1338,16 @@ fn server_search_attribute_schema() -> Result<aion_core::SearchAttributeSchema, 
     Ok(schema)
 }
 
-/// Assemble the embedded engine from the server's runtime configuration.
+/// Assemble the embedded engine from the server's runtime configuration and
+/// bring it to serving state: build, install every engine-backed seam, then run
+/// startup recovery — in that order, enforced here by construction rather than
+/// by call-site discipline.
 ///
-/// Factored out of [`ServerState::build_with_connected_store`] to keep that
-/// method within length bounds; it carries the SS-2 wiring — the coordinator
-/// bootstrap gate fed from real ownership and the `owned_shards` hook that drives
-/// both scoping and the per-shard election before recovery.
-async fn build_engine(assembly: EngineAssembly<'_>) -> Result<aion::Engine, ServerError> {
+/// Factored out of [`ServerState::build_with_connected_store`]; it carries the
+/// SS-2 wiring — the coordinator bootstrap gate fed from real ownership and the
+/// `owned_shards` hook that drives both scoping and the per-shard election
+/// before recovery.
+async fn boot_engine(assembly: EngineAssembly<'_>) -> Result<Arc<aion::Engine>, ServerError> {
     let search_attribute_schema = server_search_attribute_schema()?;
     let runtime = assembly.runtime;
     let builder = EngineBuilder::new()
@@ -1393,7 +1388,18 @@ async fn build_engine(assembly: EngineAssembly<'_>) -> Result<aion::Engine, Serv
     } else {
         builder.owned_shards(runtime.owned_shards.iter().copied())
     };
-    builder.build().await.map_err(ServerError::from)
+    let engine = Arc::new(builder.build().await.map_err(ServerError::from)?);
+    install_engine_backed_seams(assembly.seams, &engine, runtime.outbox.enabled);
+    // #266: startup recovery runs HERE — after every seam the decorated
+    // activity dispatcher consults is installed, never before. The build
+    // above deferred it; running it earlier re-dispatched adopted
+    // in-flight declared-body activities into an empty body source, and
+    // they parked forever on their own queue (the fleet e2e pins this).
+    engine
+        .run_startup_recovery()
+        .await
+        .map_err(ServerError::from)?;
+    Ok(engine)
 }
 
 /// Validate the two engine seams the server unconditionally mounts: the event
@@ -1517,10 +1523,10 @@ fn install_queue_declarations(
 /// path — and that window is why the boot defers startup recovery (#266):
 /// deploys are durable, so a restarted server DOES have declared bodies its
 /// recovered runs depend on before this install, and recovery replay
-/// re-dispatching an adopted in-flight activity inside `build_engine` fell
-/// through the uninstalled source to a queue with no pollers and parked
-/// forever. `build_with_connected_store` therefore runs
-/// `Engine::run_startup_recovery()` only AFTER `install_engine_backed_seams`.
+/// re-dispatching an adopted in-flight activity inside `EngineBuilder::build()`
+/// fell through the uninstalled source to a queue with no pollers and parked
+/// forever. [`boot_engine`] therefore runs `Engine::run_startup_recovery()`
+/// only AFTER `install_engine_backed_seams`, enforced by construction.
 /// The one dispatch source that legitimately precedes this install is a
 /// fresh start arriving over the API — and the API is not serving yet.
 fn install_declared_bodies(

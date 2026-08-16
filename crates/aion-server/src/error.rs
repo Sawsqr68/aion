@@ -611,30 +611,14 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::ProcessExitOwnershipPoisoned { .. } => {
             simple_engine_fields("ProcessExitOwnershipPoisoned", source)
         }
-        EngineError::ProcessExitStatePoisoned { .. } => {
-            process_exit::trace("ProcessExitStatePoisoned", source)
-        }
-        EngineError::ProcessExitSubscriptionUnavailable => {
-            process_exit::trace("ProcessExitSubscriptionUnavailable", source)
-        }
-        EngineError::ProcessExitDrainerSpawn { .. } => {
-            process_exit::trace("ProcessExitDrainerSpawn", source)
-        }
-        EngineError::ProcessExitDrainerPoisoned => {
-            process_exit::trace("ProcessExitDrainerPoisoned", source)
-        }
-        EngineError::ProcessExitOutcomeMissingAfterEvent { .. } => {
-            process_exit::trace("ProcessExitOutcomeMissingAfterEvent", source)
-        }
-        EngineError::ProcessExitEventStreamDisconnected => {
-            process_exit::trace("ProcessExitEventStreamDisconnected", source)
-        }
-        EngineError::ProcessExitDrainerShutdownTimedOut { .. } => {
-            process_exit::trace("ProcessExitDrainerShutdownTimedOut", source)
-        }
-        EngineError::ProcessExitDrainerPanicked => {
-            process_exit::trace("ProcessExitDrainerPanicked", source)
-        }
+        EngineError::ProcessExitStatePoisoned { .. }
+        | EngineError::ProcessExitSubscriptionUnavailable
+        | EngineError::ProcessExitDrainerSpawn { .. }
+        | EngineError::ProcessExitDrainerPoisoned
+        | EngineError::ProcessExitOutcomeMissingAfterEvent { .. }
+        | EngineError::ProcessExitEventStreamDisconnected
+        | EngineError::ProcessExitDrainerShutdownTimedOut { .. }
+        | EngineError::ProcessExitDrainerPanicked => process_exit::drainer_trace(source),
         EngineError::ProcessExitCallbackDispatcherPoisoned
         | EngineError::ProcessExitCallbackDispatcherUnavailable
         | EngineError::ProcessExitCallbackDispatcherShutdownTimedOut { .. } => {
@@ -764,30 +748,14 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         }
         E::ProcessExitRegistryPoisoned => backend("ProcessExitRegistryPoisoned", source),
         E::ProcessExitOwnershipPoisoned { .. } => backend("ProcessExitOwnershipPoisoned", source),
-        EngineError::ProcessExitStatePoisoned { .. } => {
-            process_exit::wire("ProcessExitStatePoisoned", source)
-        }
-        EngineError::ProcessExitSubscriptionUnavailable => {
-            process_exit::wire("ProcessExitSubscriptionUnavailable", source)
-        }
-        EngineError::ProcessExitDrainerSpawn { .. } => {
-            process_exit::wire("ProcessExitDrainerSpawn", source)
-        }
-        EngineError::ProcessExitDrainerPoisoned => {
-            process_exit::wire("ProcessExitDrainerPoisoned", source)
-        }
-        EngineError::ProcessExitOutcomeMissingAfterEvent { .. } => {
-            process_exit::wire("ProcessExitOutcomeMissingAfterEvent", source)
-        }
-        EngineError::ProcessExitEventStreamDisconnected => {
-            process_exit::wire("ProcessExitEventStreamDisconnected", source)
-        }
-        EngineError::ProcessExitDrainerShutdownTimedOut { .. } => {
-            process_exit::wire("ProcessExitDrainerShutdownTimedOut", source)
-        }
-        EngineError::ProcessExitDrainerPanicked => {
-            process_exit::wire("ProcessExitDrainerPanicked", source)
-        }
+        EngineError::ProcessExitStatePoisoned { .. }
+        | EngineError::ProcessExitSubscriptionUnavailable
+        | EngineError::ProcessExitDrainerSpawn { .. }
+        | EngineError::ProcessExitDrainerPoisoned
+        | EngineError::ProcessExitOutcomeMissingAfterEvent { .. }
+        | EngineError::ProcessExitEventStreamDisconnected
+        | EngineError::ProcessExitDrainerShutdownTimedOut { .. }
+        | EngineError::ProcessExitDrainerPanicked => process_exit::drainer_wire(source),
         EngineError::ProcessExitCallbackDispatcherPoisoned
         | EngineError::ProcessExitCallbackDispatcherUnavailable
         | EngineError::ProcessExitCallbackDispatcherShutdownTimedOut { .. } => {
