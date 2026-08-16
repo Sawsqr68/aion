@@ -1,16 +1,16 @@
-=GATES= HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:28:04Z load={ 6.81 9.14 11.22 }
-=GATES= HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:28:04Z load={ 6.81 9.14 11.22 }
+=GATES= HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:09:17Z load={ 37.95 31.41 26.24 }
+=GATES= HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:09:17Z load={ 37.95 31.41 26.24 }
 LEG=fmt EXIT=0
 LEG=fmt EXIT=0
 post-fmt dirty files: 3
 post-fmt dirty files: 3
 LEG=test-death-note EXIT=0
 LEG=test-death-note EXIT=0
-LEG=test-aion-server EXIT=0
-LEG=test-aion-server EXIT=0
-LEG=clippy-workspace EXIT=0
-LEG=clippy-workspace EXIT=0
-LEG=clippy-p-aion-server EXIT=0
-LEG=clippy-p-aion-server EXIT=0
-=GATES= OVERALL=0 end=2026-08-16T16:35:47Z
-=GATES= OVERALL=0 end=2026-08-16T16:35:47Z
+LEG=test-aion-server EXIT=101
+LEG=test-aion-server EXIT=101
+LEG=clippy-workspace EXIT=101
+LEG=clippy-workspace EXIT=101
+LEG=clippy-p-aion-server EXIT=101
+LEG=clippy-p-aion-server EXIT=101
+=GATES= OVERALL=1 end=2026-08-16T17:13:02Z
+=GATES= OVERALL=1 end=2026-08-16T17:13:02Z

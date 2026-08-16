@@ -1,6 +1,83 @@
-LEG=clippy-workspace HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:35:22Z
-load_at_start={ 14.79 37.93 31.61 }
-   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
-    Checking aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.22s
-LEG=clippy-workspace EXIT=0 end=2026-08-16T16:35:36Z load_at_end={ 17.56 37.41 31.54 }
+LEG=clippy-workspace HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:12:41Z
+load_at_start={ 21.59 28.28 26.20 }
+   Compiling libc v0.2.186
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+    Checking cfg-if v1.0.4
+   Compiling serde v1.0.228
+    Checking log v0.4.32
+    Checking equivalent v1.0.2
+    Checking smallvec v1.15.1
+    Checking memchr v2.8.1
+    Checking hashbrown v0.17.1
+    Checking itoa v1.0.18
+    Checking once_cell v1.21.4
+   Compiling version_check v0.9.5
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v2.0.1
+    Checking scopeguard v1.2.0
+   Compiling parking_lot_core v0.9.12
+    Checking indexmap v2.14.0
+    Checking pin-project-lite v0.2.17
+   Compiling autocfg v1.5.1
+    Checking lock_api v0.4.14
+   Compiling zmij v1.0.21
+   Compiling serde_json v1.0.150
+    Checking rand_core v0.10.1
+   Compiling zerocopy v0.8.50
+   Compiling getrandom v0.4.2
+   Compiling num-traits v0.2.19
+    Checking core-foundation-sys v0.8.7
+    Checking errno v0.3.14
+   Compiling jobserver v0.1.34
+    Checking mio v1.2.1
+    Checking socket2 v0.6.4
+    Checking signal-hook-registry v1.4.8
+   Compiling syn v2.0.117
+   Compiling cc v1.2.63
+    Checking parking_lot v0.12.5
+    Checking bitflags v2.13.0
+    Checking allocator-api2 v0.2.21
+   Compiling thiserror v2.0.18
+   Compiling getrandom v0.3.4
+    Checking uuid v1.23.4
+    Checking tracing-core v0.1.36
+    Checking typenum v1.20.1
+    Checking iana-time-zone v0.1.65
+    Checking futures-core v0.3.32
+    Checking zeroize v1.8.2
+    Checking fnv v1.0.7
+    Checking futures-sink v0.3.32
+   Compiling anyhow v1.0.102
+   Compiling ahash v0.8.12
+   Compiling termcolor v1.4.1
+    Checking percent-encoding v2.3.2
+    Checking foldhash v0.2.0
+    Checking slab v0.4.12
+    Checking futures-channel v0.3.32
+    Checking futures-task v0.3.32
+   Compiling pkg-config v0.3.33
+    Checking hashbrown v0.16.1
+    Checking futures-io v0.3.32
+   Compiling rustix v1.1.4
+   Compiling crc32fast v1.5.0
+   Compiling synstructure v0.13.2
+   Compiling zstd-safe v7.2.4
+   Compiling heck v0.5.0
+    Checking bumpalo v3.20.3
+    Checking stable_deref_trait v1.2.1
+   Compiling serde_derive v1.0.228
+   Compiling tokio-macros v2.7.0
+   Compiling thiserror-impl v2.0.18
+   Compiling tracing-attributes v0.1.31
+   Compiling ts-rs-macros v12.0.1
+   Compiling futures-macro v0.3.32
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling zerofrom-derive v0.1.7
+error: crate `libc` required to be available in rlib format, but was not found in this form
+
+error: could not compile `zstd-sys` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+LEG=clippy-workspace EXIT=101 end=2026-08-16T17:12:54Z load_at_end={ 26.56 29.11 26.52 }

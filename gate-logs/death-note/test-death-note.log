@@ -1,18 +1,18 @@
-LEG=test-death-note HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:28:07Z
-load_at_start={ 6.81 9.14 11.22 }
+LEG=test-death-note HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:09:21Z
+load_at_start={ 37.32 31.39 26.26 }
    Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
   |
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `aion-server` (lib test) generated 1 warning
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 41.83s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 01s
      Running unittests src/lib.rs (target/debug/deps/aion_server-992e88e6997bc301)
 
 running 1 test
 test death_note::tests::the_death_note_records_every_observable_path_once_armed ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.33s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.49s
 
      Running tests/assistant_embed_e2e.rs (target/debug/deps/assistant_embed_e2e-aef39bd76c36fba2)
 
@@ -78,7 +78,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.02s
 
      Running tests/dev_ui_e2e.rs (target/debug/deps/dev_ui_e2e-7a80a7744ad1568d)
 
@@ -114,13 +114,13 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.02s
 
      Running tests/heartbeat_sweeper_e2e.rs (target/debug/deps/heartbeat_sweeper_e2e-62b553dbd282f085)
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.01s
 
      Running tests/lsub1_xnode_dispatch_e2e.rs (target/debug/deps/lsub1_xnode_dispatch_e2e-725dc74b81e2091d)
 
@@ -138,13 +138,13 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
 
      Running tests/managed_worker_drain_e2e.rs (target/debug/deps/managed_worker_drain_e2e-a7219830cd9c5117)
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.02s
 
      Running tests/mcp_surface_e2e.rs (target/debug/deps/mcp_surface_e2e-17bf18f4caa3f538)
 
@@ -162,7 +162,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s
 
      Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
 
@@ -180,19 +180,19 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s
 
      Running tests/ops_console_packaging.rs (target/debug/deps/ops_console_packaging-88604463693ed3fd)
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s
 
      Running tests/outbox_delivery_contract_e2e.rs (target/debug/deps/outbox_delivery_contract_e2e-60a68763fa59e2d4)
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.01s
 
      Running tests/outbox_transport_e2e.rs (target/debug/deps/outbox_transport_e2e-73c40de2c3d6890c)
 
@@ -216,7 +216,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; fini
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
 
      Running tests/run_server_outbox_e2e.rs (target/debug/deps/run_server_outbox_e2e-b1643812a03ebd65)
 
@@ -314,4 +314,4 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
 
-LEG=test-death-note EXIT=0 end=2026-08-16T16:30:30Z load_at_end={ 109.83 64.61 34.36 }
+LEG=test-death-note EXIT=0 end=2026-08-16T17:12:25Z load_at_end={ 18.93 28.14 26.11 }

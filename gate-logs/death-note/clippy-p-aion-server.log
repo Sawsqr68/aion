@@ -1,5 +1,46 @@
-LEG=clippy-p-aion-server HEAD=94908d3a07b99cdbfda83a64456809cdffee0dc0 start=2026-08-16T16:35:36Z
-load_at_start={ 17.56 37.41 31.54 }
-   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.61s
-LEG=clippy-p-aion-server EXIT=0 end=2026-08-16T16:35:47Z load_at_end={ 19.06 37.06 31.48 }
+LEG=clippy-p-aion-server HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:12:54Z
+load_at_start={ 26.56 29.11 26.52 }
+   Compiling libc v0.2.186
+   Compiling shlex v2.0.1
+    Checking equivalent v1.0.2
+    Checking serde v1.0.228
+    Checking tracing v0.1.44
+    Checking futures-util v0.3.32
+   Compiling generic-array v0.14.7
+   Compiling serde_json v1.0.150
+    Checking zmij v1.0.21
+   Compiling either v1.16.0
+    Checking indexmap v2.14.0
+    Checking hashbrown v0.16.1
+   Compiling httparse v1.10.1
+    Checking zerofrom v0.1.8
+   Compiling jobserver v0.1.34
+error: extern location for allocator_api2 does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/liballocator_api2-55bf7902a1bc5346.rmeta
+  --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.16.1/src/raw/alloc.rs:37:13
+   |
+37 |     pub use allocator_api2::alloc::{Allocator, Global};
+   |             ^^^^^^^^^^^^^^
+
+error: could not compile `hashbrown` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: extern location for log does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/liblog-d5b21fab13481734.rmeta
+    --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-0.1.44/src/lib.rs:1148:13
+     |
+1148 |     pub use log::*;
+     |             ^^^
+
+error: could not compile `tracing` (lib) due to 1 previous error
+error: extern location for futures_macro does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/libfutures_macro-2285231f92c55641.dylib
+ --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-util-0.3.32/src/async_await/stream_select_mod.rs:5:9
+  |
+5 | pub use futures_macro::stream_select_internal;
+  |         ^^^^^^^^^^^^^
+
+error: extern location for slab does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/libslab-e8f133ea3a2b7eac.rmeta
+  --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-util-0.3.32/src/future/future/shared.rs:12:5
+   |
+12 | use slab::Slab;
+   |     ^^^^
+
+error: could not compile `futures-util` (lib) due to 2 previous errors
+LEG=clippy-p-aion-server EXIT=101 end=2026-08-16T17:13:02Z load_at_end={ 26.31 28.99 26.50 }
