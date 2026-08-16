@@ -113,6 +113,13 @@ Read in this order, and write down what each said before forming a theory:
    | `SIGNAL SIGTERM observed` then nothing | drain started and never finished — read the main log tail    |
    | `ARMED …` and nothing after          | SIGKILL / raw exit / fatal fault — see below                   |
 
+   `BREADCRUMB` entries are not endings — they name work as it starts
+   (today: each declared action body, with action name, workflow, run,
+   activity, and attempt). Whatever the note ends with, the LAST breadcrumb
+   above it names what was in flight when the process died; the third
+   2026-08-16 death (pid 25680) died mid-declared-action and only an
+   ordinary log line said so.
+
 2. **The main log tail** — the last timestamp bounds the death; WARN/ERROR
    lines in the final minute are the face.
 3. **OS evidence** — `~/Library/Logs/DiagnosticReports/` for crash reports

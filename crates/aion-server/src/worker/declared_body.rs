@@ -302,6 +302,13 @@ impl DeclaredCommandDispatcher {
             attempt = request.attempt,
             "executing declared action body at the server"
         );
+        // All three 2026-08-16 anonymous deaths correlated with workflow
+        // execution and the third died on exactly this path; the breadcrumb
+        // makes the in-flight site a death-note fact, not a log inference.
+        crate::death_note::breadcrumb(&format!(
+            "declared-action start action={} workflow_id={} run_id={} activity_id={} attempt={}",
+            request.name, request.workflow_id, request.run_id, request.activity_id, request.attempt,
+        ));
 
         let transcript = self.transcript.clone();
         let outcome = self.tokio.block_on(async move {

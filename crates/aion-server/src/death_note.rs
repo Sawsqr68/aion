@@ -26,6 +26,12 @@
 //!   the graceful drain in [`crate::run`] owns those two, and both watchers
 //!   coexist because tokio and this module register through the same
 //!   `signal-hook-registry` chain.
+//! - **breadcrumbs**: work sites call [`breadcrumb`] as they begin a unit of
+//!   in-flight work (today: every declared action body the server executes),
+//!   so a corpse's LAST breadcrumb names what was running when the process
+//!   died. The third 2026-08-16 death (pid 25680, ~16:27Z) happened
+//!   mid-declared-action with only an ordinary INFO log line to say so; this
+//!   makes that fact a note entry the corpse reader sees first.
 //!
 //! NOT covered, stated plainly: `SIGKILL`/`SIGSTOP` (uncatchable by kernel
 //! contract); the fatal-fault signals (`SIGSEGV`/`SIGBUS`/`SIGILL`/`SIGFPE`)
@@ -54,6 +60,38 @@ static ARMED_ONCE: AtomicBool = AtomicBool::new(false);
 
 /// File name of the death note inside the Aion home's `logs/` directory.
 const NOTE_FILE_NAME: &str = "aion-server.death.log";
+
+/// The armed note's breadcrumb route. Work sites reach the note through this
+/// process-global slot because the note's other recorders (panic hook, signal
+/// watcher) are process-global by nature and [`ARMED_ONCE`] already enforces
+/// a single armed note per process. Set by [`DeathNote::arm`], cleared on
+/// disarm; [`breadcrumb`] is a silent no-op in between.
+static BREADCRUMB_SLOT: Mutex<Option<BreadcrumbWriter>> = Mutex::new(None);
+
+/// The pieces [`breadcrumb`] needs: the shared note file and the armed flag
+/// that gates every recorder off after disarm.
+struct BreadcrumbWriter {
+    note: Arc<NoteFile>,
+    armed: Arc<AtomicBool>,
+}
+
+/// Append a `BREADCRUMB` entry to the armed death note, naming work now in
+/// flight so a corpse's last breadcrumb identifies the site that never
+/// finished. A silent no-op when no note is armed (tests, tools, the CLI).
+///
+/// Every note entry is written through to disk (`sync_all`), so call this at
+/// work-start cadence — one entry per declared action body — never inside a
+/// hot loop.
+pub fn breadcrumb(entry: &str) {
+    let slot = BREADCRUMB_SLOT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if let Some(writer) = slot.as_ref() {
+        if writer.armed.load(Ordering::SeqCst) {
+            writer.note.write_entry(&format!("BREADCRUMB {entry}"));
+        }
+    }
+}
 
 /// What the signal watcher does after noting a signal whose default action
 /// terminates the process. Production re-applies the default action (the
@@ -147,6 +185,12 @@ impl DeathNote {
             build.line(),
         ));
         let armed = Arc::new(AtomicBool::new(true));
+        *BREADCRUMB_SLOT
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(BreadcrumbWriter {
+            note: Arc::clone(&note),
+            armed: Arc::clone(&armed),
+        });
         install_panic_hook(Arc::clone(&note), Arc::clone(&armed));
         #[cfg(unix)]
         let signals_handle = {
@@ -189,6 +233,9 @@ impl Drop for DeathNote {
              see any PANIC entry directly above)",
         );
         self.note.write_entry(&format!("DISARMED {reason}"));
+        *BREADCRUMB_SLOT
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
         info!(path = %self.note.path.display(), reason, "death note disarmed");
     }
 }

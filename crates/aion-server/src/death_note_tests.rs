@@ -38,6 +38,10 @@ fn wait_for_entry(path: &Path, needle: &str) -> String {
 #[test]
 fn the_death_note_records_every_observable_path_once_armed() {
     let home = tempfile::tempdir().expect("create a temporary Aion home");
+
+    // Before any note is armed, a breadcrumb is a silent no-op.
+    super::breadcrumb("pre-arm breadcrumb must never reach a note");
+
     let (fatal_tx, fatal_rx) = mpsc::channel();
     let recorder: FatalAction = Box::new(move |signal| {
         // A send failure means the receiver is gone, which only the test's
@@ -60,6 +64,14 @@ fn the_death_note_records_every_observable_path_once_armed() {
     assert!(
         matches!(second, Err(crate::ServerError::DeathNote { .. })),
         "a second arm must refuse with the DeathNote error"
+    );
+
+    // An armed note accepts breadcrumbs — and never saw the pre-arm one.
+    super::breadcrumb("declared-action start action=probe workflow_id=wf run_id=r1");
+    let content = wait_for_entry(&path, "BREADCRUMB declared-action start action=probe");
+    assert!(
+        !content.contains("pre-arm breadcrumb"),
+        "a pre-arm breadcrumb must never be written, got:\n{content}"
     );
 
     // A panic is recorded with payload and location, and is survivable.
@@ -104,5 +116,14 @@ fn the_death_note_records_every_observable_path_once_armed() {
         content.len(),
         settled_len,
         "a disarmed note must not accept panic entries, got:\n{content}"
+    );
+
+    // …and breadcrumbs are gated off the same way.
+    super::breadcrumb("post-disarm breadcrumb must not be recorded");
+    let content = note_content(&path);
+    assert_eq!(
+        content.len(),
+        settled_len,
+        "a disarmed note must not accept breadcrumb entries, got:\n{content}"
     );
 }
