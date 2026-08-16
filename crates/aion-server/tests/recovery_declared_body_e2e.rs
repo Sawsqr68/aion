@@ -55,13 +55,13 @@ use std::time::Duration;
 
 use aion_awl_package::compile_and_assemble_awl;
 use aion_core::{Event, EventEnvelope, Payload, RunId, WorkflowId};
+use aion_server::ServerState;
 use aion_server::api::http::http_router;
 use aion_server::config::{
     AuthConfig, AuthoringConfig, DeployConfig, ListenConfig, MetricsConfig, NamespaceConfig,
     NamespaceMode, OpsConsoleAssetSource, OpsConsoleConfig, RuntimeConfig, WebSocketConfig,
     WorkerConfig,
 };
-use aion_server::ServerState;
 use aion_store::{ReadableEventStore, WritableEventStore, WriteToken};
 use aion_store_libsql::LibSqlStore;
 use axum::{body, http::Request, http::StatusCode};
@@ -389,9 +389,9 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
             state.engine()?.result(&probe_workflow, &probe_run),
         )
         .await
-        .map_err(|_| {
-            "generation-1 probe run did not complete in time (fresh-path control failed)"
-        })??;
+        .map_err(
+            |_| "generation-1 probe run did not complete in time (fresh-path control failed)",
+        )??;
         probe_result.map_err(|error| format!("generation-1 probe run failed: {error:?}"))?;
         Ok::<WorkflowId, TestError>(probe_workflow)
     };

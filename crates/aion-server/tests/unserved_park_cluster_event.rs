@@ -227,7 +227,10 @@ async fn a_reason_change_mid_park_re_emits() -> Result<(), TestError> {
     let outcome = parked
         .join()
         .map_err(|_| "parked dispatch thread panicked")?;
-    assert!(outcome.is_err(), "released dispatch must resolve: {outcome:?}");
+    assert!(
+        outcome.is_err(),
+        "released dispatch must resolve: {outcome:?}"
+    );
     releaser.deregister()?;
     incompatible.deregister()?;
     Ok(())
@@ -323,7 +326,10 @@ async fn the_grpc_outbox_leg_announces_its_park() -> Result<(), TestError> {
     let outcome = tokio::time::timeout(EVENT_DEADLINE, parked)
         .await
         .map_err(|_| "released outbox-leg dispatch did not resolve")??;
-    assert!(outcome.is_err(), "released dispatch must resolve: {outcome:?}");
+    assert!(
+        outcome.is_err(),
+        "released dispatch must resolve: {outcome:?}"
+    );
     registration.deregister()?;
     Ok(())
 }
