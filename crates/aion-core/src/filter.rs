@@ -206,7 +206,9 @@ fn is_opaque_workflow_counter(message: &str) -> bool {
     message
         .strip_prefix("workflow ")
         .and_then(|rest| rest.strip_suffix(" returned error"))
-        .is_some_and(|counter| !counter.is_empty() && counter.bytes().all(|byte| byte.is_ascii_digit()))
+        .is_some_and(|counter| {
+            !counter.is_empty() && counter.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 /// Returns the activity type of the step that ended in a terminal failure in the

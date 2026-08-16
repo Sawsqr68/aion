@@ -53,13 +53,14 @@ pub async fn list(
         scoped.namespace(),
     );
 
-    let engine = scoped
-        .engine()
-        .map_err(|error| error.to_wire_error())?;
+    let engine = scoped.engine().map_err(|error| error.to_wire_error())?;
     let visibility_store = engine.visibility_store();
-    aion::lifecycle::visibility::reconcile_visibility(engine.store(), Arc::clone(&visibility_store))
-        .await
-        .map_err(|error| ServerError::from(error).to_wire_error())?;
+    aion::lifecycle::visibility::reconcile_visibility(
+        engine.store(),
+        Arc::clone(&visibility_store),
+    )
+    .await
+    .map_err(|error| ServerError::from(error).to_wire_error())?;
     let mut summaries = visibility_store
         .list_workflows(filter)
         .await
