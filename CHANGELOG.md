@@ -3,6 +3,46 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.16.0 — 2026-08-16
+
+- **A workflow's displayed status is reconciled from its full recorded history —
+  never from a stale cached row.** `POST /workflows/list` now rebuilds each row
+  from the run's complete event history before filtering and serving: a finished
+  workflow can never be shown Running, and a mid-flight workflow can never be
+  shown Failed off a divergent durable visibility row (the stored cache is
+  corrected in the same pass). Opaque terminal messages of the form
+  `workflow N returned error` are replaced by the first line of the recorded
+  structured error detail; full detail stays in event history. Both behaviours
+  are pinned by red-first regressions.
+
+- **The fleet document fans out (#240):** parallel legs in isolated worktrees
+  with a server-run merge; fan-in merges before it carries. Run 2 went green
+  end-to-end on the resumed pipeline.
+
+- **Child runs are visible while they run (#244):** the server derives child
+  legs from parent run history and resolves the current run for child
+  projection (concurrently and observably); the console folds live child leg
+  transcripts into the run page and discovers fanout from live parent events;
+  the CLI tails parent and child transcripts together, follows successor leg
+  attempts over sockets, reports tail backfill gaps truthfully, replays
+  workflow events across the tail-attach window, and scopes replay payloads to
+  the selected run. Unknown parent runs are rejected.
+
+- **An agent outcome carries a four-field contract everywhere (#205):** the
+  outcome names the conversation that produced it, and the final message is
+  carried distinctly from the outcome fields. Worker protocol stubs (Python and
+  TypeScript) regenerated to the current contract.
+
+- **A cancelled run tells its workers to stop (#233):** cancellation propagates
+  to serving workers at the wire; the last delivery arm (TransportCannotCarry)
+  is red-pinned.
+
+- **Sibling agent spawns into a live worktree are refused (#246),** as are
+  pending responder collisions on the same worker — both explicit refusals,
+  both red-first.
+
+- **A red gate says WHY, in the record (#236).**
+
 ## 0.15.0 — 2026-08-13
 
 - **A norn agent's working directory is declared — and each job can name its
