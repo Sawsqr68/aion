@@ -1,2 +1,3 @@
- M crates/aion-server/src/death_note.rs
-?? gate-logs/death-note/
+ M gate-logs/death-note/driver.log
+ M gate-logs/death-note/fmt.log
+ M gate-logs/death-note/post-fmt-status.txt
