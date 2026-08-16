@@ -5,6 +5,7 @@ export {
   createConfiguredApiClient,
   createConfiguredChildrenReader,
   createConfiguredClusterStream,
+  createConfiguredLiveStepReader,
   createConfiguredTranscriptReader,
   createConfiguredTranscriptStream,
   createConfiguredWebSocketManager,
