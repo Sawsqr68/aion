@@ -775,12 +775,16 @@ mod tests {
         );
         let router = workflow_router(server_state(resolver, runtime_config()).await?);
         let response = router
-            .oneshot(get_request("/workflows?namespace=tenant-a")?)
+            .oneshot(json_request(
+                "/workflows/list",
+                &json!({ "namespace": NAMESPACE, "filter": {} }),
+            )?)
             .await?;
         assert_eq!(response.status(), StatusCode::OK);
-        let summaries: Vec<WorkflowSummary> = read_json(response).await?;
+        let body: serde_json::Value = read_json(response).await?;
+        let summaries = body["summaries"].as_array().ok_or("summaries missing")?;
         assert_eq!(summaries.len(), 1);
-        assert_eq!(summaries[0].status, WorkflowStatus::Failed);
+        assert_eq!(summaries[0]["status"], "Failed");
         Ok(())
     }
 
