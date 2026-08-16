@@ -863,12 +863,18 @@ mod tests {
         assert_eq!(summaries[0]["status"], "Running");
         assert!(summaries[0].get("failure_reason").is_none());
 
+        // Per internal_workflow.rs's shared-store contract, the raw store also holds
+        // engine-internal executions such as the schedule coordinator.
         let corrected = visibility_store
             .list_workflows(aion_store::visibility::ListWorkflowsFilter::default())
             .await?;
-        assert_eq!(corrected.len(), 1);
-        assert_eq!(corrected[0].status, WorkflowStatus::Running);
-        assert_eq!(corrected[0].failure_reason, None);
+        let corrected_fixture = corrected
+            .iter()
+            .find(|summary| summary.workflow_id == workflow_id() && summary.run_id == run_id())
+            .ok_or("fixture visibility row missing")?;
+        assert_eq!(corrected_fixture.status, WorkflowStatus::Running);
+        assert_eq!(corrected_fixture.failure_reason, None);
+        assert_eq!(corrected_fixture.close_time, None);
         Ok(())
     }
 
