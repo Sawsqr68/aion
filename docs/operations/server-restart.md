@@ -84,6 +84,21 @@ build/install to a new path, `mv` the new file over the old name (rename is
 atomic; the running process keeps its old image), then restart per this
 procedure. Identify binaries by SHA-256, never by version string.
 
+## Cutting a release: the changelog embed
+
+The embedded changelog is a second copy of the root `CHANGELOG.md` and the
+test that guards them (`changelog_embed_matches_the_authored_document`)
+names its own remedy in the assertion message — the remedy IS the cp:
+
+```
+cp CHANGELOG.md crates/aion-server/changelog-embed/CHANGELOG.md
+```
+
+Run it in the same motion as every root-changelog edit at a release cut.
+Missed twice now (the 0.15.0 cut, then the 0.16.0 cut at f27c1faf2 —
+caught by a branch battery, fixed at main 15bb089da): each miss leaves
+main red on that test for every tree branched after it.
+
 ## When a server is found dead
 
 Read in this order, and write down what each said before forming a theory:
