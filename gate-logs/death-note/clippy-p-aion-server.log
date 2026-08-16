@@ -1,46 +1,69 @@
-LEG=clippy-p-aion-server HEAD=d9344531ad5f40014032b0d4d8de6ffe606b59df start=2026-08-16T17:12:54Z
-load_at_start={ 26.56 29.11 26.52 }
-   Compiling libc v0.2.186
-   Compiling shlex v2.0.1
-    Checking equivalent v1.0.2
-    Checking serde v1.0.228
-    Checking tracing v0.1.44
-    Checking futures-util v0.3.32
-   Compiling generic-array v0.14.7
-   Compiling serde_json v1.0.150
-    Checking zmij v1.0.21
-   Compiling either v1.16.0
-    Checking indexmap v2.14.0
-    Checking hashbrown v0.16.1
-   Compiling httparse v1.10.1
-    Checking zerofrom v0.1.8
-   Compiling jobserver v0.1.34
-error: extern location for allocator_api2 does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/liballocator_api2-55bf7902a1bc5346.rmeta
-  --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.16.1/src/raw/alloc.rs:37:13
-   |
-37 |     pub use allocator_api2::alloc::{Allocator, Global};
-   |             ^^^^^^^^^^^^^^
-
-error: could not compile `hashbrown` (lib) due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
-error: extern location for log does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/liblog-d5b21fab13481734.rmeta
-    --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/tracing-0.1.44/src/lib.rs:1148:13
-     |
-1148 |     pub use log::*;
-     |             ^^^
-
-error: could not compile `tracing` (lib) due to 1 previous error
-error: extern location for futures_macro does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/libfutures_macro-2285231f92c55641.dylib
- --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-util-0.3.32/src/async_await/stream_select_mod.rs:5:9
-  |
-5 | pub use futures_macro::stream_select_internal;
-  |         ^^^^^^^^^^^^^
-
-error: extern location for slab does not exist: /Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/target/debug/deps/libslab-e8f133ea3a2b7eac.rmeta
-  --> /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-util-0.3.32/src/future/future/shared.rs:12:5
-   |
-12 | use slab::Slab;
-   |     ^^^^
-
-error: could not compile `futures-util` (lib) due to 2 previous errors
-LEG=clippy-p-aion-server EXIT=101 end=2026-08-16T17:13:02Z load_at_end={ 26.31 28.99 26.50 }
+LEG=clippy-p-aion-server HEAD=025635cddc36d8ae4d6e3592a954b71d0e8a9273 start=2026-08-16T17:26:58Z
+load_at_start={ 28.55 23.35 24.69 }
+    Checking tokio v1.52.3
+    Checking serde_json v1.0.150
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking tungstenite v0.29.0
+    Checking serde_spanned v1.1.1
+    Checking toml_writer v1.1.1+spec-1.1.0
+   Compiling beamr v0.18.2
+   Compiling rustls v0.23.40
+    Checking clap_builder v4.6.0
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-server)
+    Checking toml v1.1.2+spec-1.1.0
+    Checking aion-core v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-core)
+    Checking referencing v0.46.6
+    Checking schemars v1.2.1
+    Checking tracing-subscriber v0.3.23
+    Checking jsonschema v0.46.6
+    Checking clap v4.6.1
+    Checking rustls-platform-verifier v0.7.0
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking beamr v0.16.3
+    Checking tokio-tungstenite v0.29.0
+    Checking tokio-io-timeout v1.2.1
+    Checking tokio-rustls v0.25.0
+    Checking tokio-rustls v0.26.4
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking h2 v0.3.27
+    Checking tower v0.4.13
+    Checking aion-mcp v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-mcp)
+    Checking tower-http v0.6.11
+    Checking tower-http v0.4.4
+    Checking hyper v0.14.32
+    Checking hyper v1.10.1
+    Checking aion-package v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-package)
+    Checking aion-store v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-store)
+    Checking aion-integrations v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-integrations)
+    Checking hyper-util v0.1.20
+    Checking hyper-timeout v0.5.2
+    Checking axum v0.8.9
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking axum v0.6.20
+    Checking hyper-timeout v0.4.1
+    Checking hyper-rustls v0.25.0
+    Checking aion-awl v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-awl)
+    Checking aion-toolchain v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-toolchain)
+    Checking aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion)
+    Checking aion-store-haematite v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-store-haematite)
+    Checking liminal-rs v0.5.0
+    Checking tonic v0.14.6
+    Checking tonic v0.11.0
+    Checking tonic-web v0.11.0
+    Checking libsql_replication v0.9.30
+    Checking tonic-prost v0.14.5
+    Checking aion-proto-generated v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-proto-generated)
+    Checking libsql v0.9.30
+    Checking aion-proto v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-proto)
+    Checking aion-awl-package v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-awl-package)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-store-libsql v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-store-libsql)
+    Checking aion-worker v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/death-note/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 56.45s
+LEG=clippy-p-aion-server EXIT=0 end=2026-08-16T17:27:55Z load_at_end={ 22.03 22.42 24.26 }
