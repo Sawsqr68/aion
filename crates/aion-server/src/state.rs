@@ -1509,8 +1509,15 @@ fn install_queue_declarations(
 /// Installed only after the engine exists, exactly like the queue-declaration
 /// reader above: the dispatcher already holds a clone of this handle. Until
 /// this runs, every lookup answers `None` and every dispatch takes the worker
-/// path — nothing is deployed before the engine exists, so no declared body
-/// can be missed.
+/// path — and that window is why the boot defers startup recovery (#266):
+/// deploys are durable, so a restarted server DOES have declared bodies its
+/// recovered runs depend on before this install, and recovery replay
+/// re-dispatching an adopted in-flight activity inside `build_engine` fell
+/// through the uninstalled source to a queue with no pollers and parked
+/// forever. `build_with_connected_store` therefore runs
+/// `Engine::run_startup_recovery()` only AFTER `install_engine_backed_seams`.
+/// The one dispatch source that legitimately precedes this install is a
+/// fresh start arriving over the API — and the API is not serving yet.
 fn install_declared_bodies(
     declared_bodies: &crate::worker::DeclaredBodySource,
     engine: &Arc<aion::Engine>,

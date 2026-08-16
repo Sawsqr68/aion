@@ -114,8 +114,19 @@ impl DeclaredBodySource {
     }
 
     /// Look up the declared body, or [`DeclaredBodyLookup::None`] when no
-    /// reader is installed yet — before the engine exists nothing has been
-    /// deployed, so there is no body a dispatch could be missing.
+    /// reader is installed yet.
+    ///
+    /// An uninstalled consult is stated at ERROR before delegating to the
+    /// worker path, never silently: a dispatch can only reach this seam from
+    /// a live run, and a live run's deploy is durable — so "nothing installed
+    /// yet" is a boot-ordering defect, not an empty catalog. This exact
+    /// silence was #266 Defect A: startup recovery replay re-dispatched
+    /// adopted in-flight declared-body activities before
+    /// `install_engine_backed_seams` filled this source, and every one fell
+    /// through here to a queue with no pollers and parked forever. The fix
+    /// (deferred startup recovery) removes the caller; this arm stays loud so
+    /// any future pre-install dispatch path names itself in the log instead
+    /// of stranding runs silently.
     #[must_use]
     pub fn body_for(
         &self,
@@ -123,9 +134,22 @@ impl DeclaredBodySource {
         action: &str,
         run: DispatchingRun<'_>,
     ) -> DeclaredBodyLookup {
-        self.inner.get().map_or(DeclaredBodyLookup::None, |source| {
-            source.body_for(task_queue, action, run)
-        })
+        self.inner.get().map_or_else(
+            || {
+                tracing::error!(
+                    operation = "declared_command_dispatch",
+                    task_queue,
+                    action,
+                    workflow_id = %run.workflow_id,
+                    run_id = %run.run_id,
+                    "declared body source consulted before it was installed; the dispatch \
+                     falls through to the worker path and will park if the queue's only \
+                     service is its declared bodies (#266 boot-ordering defect)"
+                );
+                DeclaredBodyLookup::None
+            },
+            |source| source.body_for(task_queue, action, run),
+        )
     }
 }
 
