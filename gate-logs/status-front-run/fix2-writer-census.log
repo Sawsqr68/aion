@@ -1,0 +1,32 @@
+$ git grep -n -E "(^|::)reconcile_visibility[[:space:]]*\(" -- "*.rs"
+crates/aion-server/src/api/handlers/visibility.rs:58:    aion::lifecycle::visibility::reconcile_visibility(
+crates/aion/src/engine/builder_assembly.rs:120:            if let Err(error) = crate::lifecycle::visibility::reconcile_visibility(
+crates/aion/src/engine/startup.rs:70:    crate::lifecycle::visibility::reconcile_visibility(
+crates/aion/src/engine/startup.rs:106:    crate::lifecycle::visibility::reconcile_visibility(
+
+CALL_SITE_DENOMINATOR=4
+DEFINITION_POSITIVE_CONTROL=1
+
+$ git grep -n -E "\.record_visibility[[:space:]]*\(" -- "*.rs"
+crates/aion-server/src/api/grpc/mod.rs:637:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/handlers/visibility.rs:146:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/handlers/visibility.rs:160:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/handlers/visibility.rs:225:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/visibility.rs:173:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/visibility.rs:195:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:619:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:679:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:759:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:830:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:1143:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/api/http/workflows.rs:1156:            .record_visibility(VisibilityRecord {
+crates/aion-server/src/internal_workflow.rs:103:        store.record_visibility(record("checkout", 1)).await?;
+crates/aion-server/src/internal_workflow.rs:105:            .record_visibility(record("aion.schedule_coordinator", 2))
+crates/aion/src/durability/recorder.rs:1030:        visibility.store.record_visibility(record).await?;
+crates/aion/src/durability/recorder/fan_out_tests.rs:205:        self.inner.record_visibility(record).await
+crates/aion/src/engine/builder.rs:1211:            self.inner.record_visibility(record).await
+crates/aion/src/lifecycle/deadline_tests.rs:388:        self.inner.record_visibility(record).await
+crates/aion/src/lifecycle/visibility.rs:27:    visibility_store.record_visibility(record).await?;
+crates/aion/src/lifecycle/visibility.rs:61:            visibility_store.record_visibility(record).await?;
+RECORD_VISIBILITY_CALL_SYNTAX_DENOMINATOR=20
+RECORD_VISIBILITY_DEFINITION_POSITIVE_CONTROL=8

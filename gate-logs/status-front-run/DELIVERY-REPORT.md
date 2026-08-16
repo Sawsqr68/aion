@@ -53,3 +53,14 @@ No task-specific supplied gate script was present at the named status-front path
 - The false-terminal/divergent-cache test does not precede the reconciliation fix in history.
 - No separate recovery mutation was made because the supposed F2 specimens were shown to contain terminal events beyond the truncated 500-event samples.
 - Full workspace tests and an external/supplied status-front gate script were not run; only the verification listed above is claimed.
+
+## BRIEF-STATUS-FIX2 addendum — stopped on fixture/oracle conflict
+
+Diagnostic HEAD `e790ada74` reproduces the named solo red in 0.05s (`fix2-solo-red.log`, exit 101). The printed-key run in `fix2-key-diagnostic.log` proves the two raw visibility rows are not duplicate projections of the fixture:
+
+- `(00000000-a10a-0000-0000-000000000004, 00000000-a10a-0000-0000-000000000005)` is the history-backed engine-internal `aion.schedule_coordinator` row seeded and reconciled during `shared_engine()` startup.
+- `(00000000-0000-0000-0000-000000000001, 00000000-0000-0000-0000-00000000000a)` is the fixture row. Its planted `Failed` value is corrected in place to `Running` under the same key; Recorder did not mint a divergent run identity.
+
+The HTTP list serves exactly one user row because internal workflows are explicitly filtered at the user-facing boundary. The final failing assertion instead counts the unfiltered shared store, where the repository contract requires internal and user executions to coexist. Both surviving keys have authoritative histories. Consequently, a correct stale-orphan removal pass would retain both and could not make the byte-identical oracle green.
+
+Per R2's explicit stop branch, no mechanism or fixture mutation was made. The general mechanical fix remains an authoritative-key reconcile sweep plus a key-specific visibility removal seam; structural prevention is unavailable without redesigning the intentionally separate mutable projection. That fix is **not done** because this test does not plant an unaccounted key. No R4 battery-green claim is made; the mandatory test is still red. No presentation/supersession work, reason-extraction change, new refusal surface, live-server write, daemon, alternate target directory, or push was performed. Full evidence, the 4-call reconciliation census with positive control, and non-claims are in `FIX2-STOP-REPORT.md` and `fix2-writer-census.log`.

@@ -1,0 +1,30 @@
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 09s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-023775991386570d)
+
+running 1 test
+FIX2_VISIBILITY_KEY workflow_id=00000000-a10a-0000-0000-000000000004 run_id=00000000-a10a-0000-0000-000000000005 workflow_type=aion.schedule_coordinator status=Running attributes={}
+FIX2_VISIBILITY_KEY workflow_id=00000000-0000-0000-0000-000000000001 run_id=00000000-0000-0000-0000-00000000000a workflow_type=fixture status=Running attributes={"aion.namespace": String("tenant-a")}
+
+thread 'api::http::workflows::tests::http_list_refuses_terminal_status_without_terminal_history' (35595649) panicked at crates/aion-server/src/api/http/workflows.rs:879:9:
+assertion `left == right` failed
+  left: 2
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test api::http::workflows::tests::http_list_refuses_terminal_status_without_terminal_history ... FAILED
+
+failures:
+
+failures:
+    api::http::workflows::tests::http_list_refuses_terminal_status_without_terminal_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1124 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+
+COMMAND_EXIT=101
