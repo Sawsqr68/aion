@@ -12,6 +12,7 @@ npm run build > "$LOGS/gate-build.log" 2>&1
 build_exit=$?
 echo "EXIT=$build_exit" >> "$LOGS/gate-build.log"
 
+comp_log=gate-composition.log
 node scripts/composition-test.mjs > "$LOGS/gate-composition.log" 2>&1
 comp_exit=$?
 echo "EXIT=$comp_exit" >> "$LOGS/gate-composition.log"
@@ -21,6 +22,7 @@ echo "EXIT=$comp_exit" >> "$LOGS/gate-composition.log"
 # preserved as evidence. Verified live: the untouched-tree baseline red
 # ("editor takes the focus") passed 630/630 on solo re-run.
 if [ "$comp_exit" -ne 0 ]; then
+  comp_log=gate-composition-rerun.log
   node scripts/composition-test.mjs > "$LOGS/gate-composition-rerun.log" 2>&1
   comp_exit=$?
   echo "EXIT=$comp_exit" >> "$LOGS/gate-composition-rerun.log"
@@ -53,7 +55,7 @@ done
   for pair in "${FAILED[@]}"; do
     case ${pair%%=*} in
       build) logfile=gate-build.log ;;
-      composition) logfile=gate-composition.log ;;
+      composition) logfile=$comp_log ;;
       loc) logfile=gate-loc.log ;;
       dist) logfile=gate-dist.log ;;
     esac

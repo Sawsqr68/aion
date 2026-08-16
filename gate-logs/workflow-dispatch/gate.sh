@@ -5,7 +5,14 @@
 # a summed silence is not a pass.
 REPO=/Users/tom/Developer/ablative/stack/aion
 GL=$REPO/gate-logs
-LOGS=$GL/workflow-dispatch
+LOGS=${0:A:h}
+GATE_LOG=$LOGS/gate-workflow-dispatch.log
+: > "$GATE_LOG" || { echo "gate setup FAILED: cannot create output log $GATE_LOG" >&2; exit 90; }
+setopt MULTIOS
+exec 3>&1 4>&2
+exec > "$GATE_LOG" > /dev/fd/3
+exec 2>> "$GATE_LOG" 2> /dev/fd/4
+
 fail=0
 typeset -a LEG_RESULTS
 
@@ -69,7 +76,7 @@ done
 {
   echo "GATE RED — ${#FAILED[@]} of ${#LEG_RESULTS[@]} checks failed:"
   for pair in "${FAILED[@]}"; do
-    echo "  ${pair%%=*} exited ${pair##*=}  (full output: this gate's server capture; gate directory: $LOGS)"
+    echo "  ${pair%%=*} exited ${pair##*=}  (full output: $GATE_LOG)"
   done
   echo "all check results: ${LEG_RESULTS[*]}"
   echo "log directory: $LOGS"
