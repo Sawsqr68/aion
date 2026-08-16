@@ -4,7 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivityId, Event, WorkflowId, WorkflowStatus, current_lease_terminal, status_from_events,
+    ActivityId, Event, WorkflowError, WorkflowId, WorkflowStatus, current_lease_terminal,
+    status_from_events,
 };
 
 /// Query input for listing workflow executions.
@@ -172,7 +173,40 @@ pub fn failure_projection(events: &[Event]) -> (Option<String>, Option<String>) 
     let Some(Event::WorkflowFailed { error, .. }) = current_lease_terminal(events) else {
         return (None, None);
     };
-    (failed_activity_step(events), Some(error.message.clone()))
+    (
+        failed_activity_step(events),
+        Some(project_failure_reason(error)),
+    )
+}
+
+fn project_failure_reason(error: &WorkflowError) -> String {
+    let message = if is_opaque_workflow_counter(&error.message) {
+        error
+            .details
+            .as_ref()
+            .and_then(|details| details.to_json().ok())
+            .and_then(|details| details.get("message")?.as_str().map(str::to_owned))
+            .unwrap_or_else(|| error.message.clone())
+    } else {
+        error.message.clone()
+    };
+    let first_line = message.lines().next().unwrap_or(message.as_str()).trim();
+    [
+        "activity failed (retryable): ",
+        "activity failed (terminal): ",
+        "activity failed: ",
+    ]
+    .into_iter()
+    .find_map(|prefix| first_line.strip_prefix(prefix))
+    .unwrap_or(first_line)
+    .to_owned()
+}
+
+fn is_opaque_workflow_counter(message: &str) -> bool {
+    message
+        .strip_prefix("workflow ")
+        .and_then(|rest| rest.strip_suffix(" returned error"))
+        .is_some_and(|counter| !counter.is_empty() && counter.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// Returns the activity type of the step that ended in a terminal failure in the
