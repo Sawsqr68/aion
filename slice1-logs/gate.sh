@@ -26,4 +26,11 @@ STATUS=$?
     echo "# exit:  $STATUS"
 } >> "$LOG"
 echo "$1 -> exit=$STATUS  ($LOG)"
+if [ "$STATUS" -ne 0 ]; then
+    {
+        echo "GATE RED — 1 of 1 legs failed:"
+        echo "  $1 exited $STATUS  (full output: $LOG)"
+        echo "log directory: $(dirname "$LOG")"
+    } >&2
+fi
 exit $STATUS

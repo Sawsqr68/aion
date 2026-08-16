@@ -5,10 +5,13 @@
 # a summed silence is not a pass.
 REPO=/Users/tom/Developer/ablative/stack/aion
 GL=$REPO/gate-logs
+LOGS=$GL/workflow-dispatch
 fail=0
+typeset -a LEG_RESULTS
 
 check() {
   local name=$1 rc=$2
+  LEG_RESULTS+=("$name=$rc")
   if [[ $rc -eq 0 ]]; then
     echo "PASS  $name"
   else
@@ -50,10 +53,25 @@ done
 # *.log files under gate-logs (their dirt predates this lane and never
 # stops accruing), so those paths are excluded; anything else modified
 # is a fence breach.
-cd "$REPO" || exit 91
+cd "$REPO" || { echo "gate setup FAILED: cannot enter repository $REPO" >&2; exit 91; }
 dirt=$(git -c diff.external= diff --no-ext-diff --name-only | grep -vE '^gate-logs/.*\.log$')
 [[ -z "$dirt" ]]; check "repo:unstaged-clean" $?
 [[ -n "$dirt" ]] && echo "$dirt"
 git -c diff.external= diff --no-ext-diff --cached --quiet; check "repo:staged-clean" $?
 
-exit $fail
+[[ $fail -eq 0 ]] && exit 0
+
+typeset -a FAILED
+for pair in "${LEG_RESULTS[@]}"; do
+  (( ${pair##*=} != 0 )) && FAILED+=("$pair")
+done
+
+{
+  echo "GATE RED — ${#FAILED[@]} of ${#LEG_RESULTS[@]} checks failed:"
+  for pair in "${FAILED[@]}"; do
+    echo "  ${pair%%=*} exited ${pair##*=}  (full output: this gate's server capture; gate directory: $LOGS)"
+  done
+  echo "all check results: ${LEG_RESULTS[*]}"
+  echo "log directory: $LOGS"
+} >&2
+exit 1
