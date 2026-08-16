@@ -39,6 +39,8 @@ mod seams;
 mod shutdown_gate;
 /// Startup recovery wiring used by `EngineBuilder::build()`.
 pub(crate) mod startup;
+/// Deferred startup recovery: the host-installs-seams-first seam (#266).
+mod startup_deferred;
 /// Crash-window repair sweeps run by startup recovery.
 mod startup_sweeps;
 

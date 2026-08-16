@@ -107,6 +107,7 @@ pub struct EngineBuilder {
     event_streaming_capacity: Option<NonZeroUsize>,
     query_timeout: Option<Duration>,
     seam_overrides: SeamOverrides,
+    defer_startup_recovery: bool,
 }
 
 impl Default for EngineBuilder {
@@ -148,6 +149,7 @@ impl EngineBuilder {
             event_streaming_capacity: None,
             query_timeout: None,
             seam_overrides: SeamOverrides::default(),
+            defer_startup_recovery: false,
         }
     }
 
@@ -366,6 +368,22 @@ impl EngineBuilder {
         self
     }
 
+    /// Defer the four startup-recovery steps out of `build()` (#266).
+    ///
+    /// Recovery replay re-dispatches every in-flight activity through the
+    /// configured activity dispatcher the moment it runs. A host that
+    /// decorates that dispatcher with collaborators it can only install once
+    /// the engine exists (the server's declared-body source) must therefore
+    /// build first, install its seams, and only then run recovery — by
+    /// calling [`Engine::run_startup_recovery`] exactly once. Without this
+    /// call, `build()` runs recovery itself, byte-identically to before this
+    /// seam existed, and `run_startup_recovery` refuses typed.
+    #[must_use]
+    pub fn defer_startup_recovery(mut self) -> Self {
+        self.defer_startup_recovery = true;
+        self
+    }
+
     /// Override the AT signal-routing seam.
     #[must_use]
     pub fn signal_router(mut self, signal_router: Arc<dyn SignalRouter>) -> Self {
@@ -579,19 +597,34 @@ impl EngineBuilder {
         // bridge (signal, child) must be installed before the first recovered
         // process can run, or an early replayed spawn_child/receive_signal
         // call fails with a missing-bridge error.
-        recover_active_workflows_on_startup(StartupRecoveryContext {
-            store: Arc::clone(&store),
-            visibility_store: Arc::clone(&visibility_store),
-            runtime: Arc::clone(&runtime),
-            catalog: Arc::clone(&catalog),
-            registry: Arc::clone(&registry),
-            supervision: Arc::clone(&supervision),
-            recovery: self.recovery,
-            search_attribute_schema: Arc::clone(&search_attribute_schema),
-            bootstrap_schedule_coordinator: self.bootstrap_schedule_coordinator,
-        })
-        .await?;
-        recover_timers_on_startup(&nif_state, Arc::clone(&store)).await?;
+        //
+        // A deferred build (#266) skips all four recovery steps here and
+        // stows the two recovery inputs the constructed engine does not
+        // itself hold; the host runs [`Engine::run_startup_recovery`] once
+        // every seam its activity dispatcher consults is installed — recovery
+        // replay re-dispatches in-flight activities through that dispatcher
+        // the moment it runs.
+        let deferred_startup_recovery = if self.defer_startup_recovery {
+            Some(super::startup_deferred::DeferredStartupRecovery {
+                recovery: self.recovery,
+                bootstrap_schedule_coordinator: self.bootstrap_schedule_coordinator,
+            })
+        } else {
+            recover_active_workflows_on_startup(StartupRecoveryContext {
+                store: Arc::clone(&store),
+                visibility_store: Arc::clone(&visibility_store),
+                runtime: Arc::clone(&runtime),
+                catalog: Arc::clone(&catalog),
+                registry: Arc::clone(&registry),
+                supervision: Arc::clone(&supervision),
+                recovery: self.recovery,
+                search_attribute_schema: Arc::clone(&search_attribute_schema),
+                bootstrap_schedule_coordinator: self.bootstrap_schedule_coordinator,
+            })
+            .await?;
+            recover_timers_on_startup(&nif_state, Arc::clone(&store)).await?;
+            None
+        };
 
         let visibility_reconciliation_task = maybe_spawn_visibility_reconciliation(
             self.visibility_reconciliation_interval,
@@ -599,6 +632,7 @@ impl EngineBuilder {
             &visibility_store,
         );
 
+        let deferred = deferred_startup_recovery.is_some();
         let engine = Engine::new(EngineComponents {
             store,
             visibility_store,
@@ -610,9 +644,12 @@ impl EngineBuilder {
             signal_handoff,
             search_attribute_schema,
             visibility_reconciliation_task,
+            deferred_startup_recovery,
         });
-        engine.catchup_schedule_coordinator().await?;
-        engine.recover_schedules_on_startup(Utc::now()).await?;
+        if !deferred {
+            engine.catchup_schedule_coordinator().await?;
+            engine.recover_schedules_on_startup(Utc::now()).await?;
+        }
         Ok(engine)
     }
 }

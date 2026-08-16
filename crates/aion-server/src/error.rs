@@ -590,6 +590,15 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::Gate3BifReplacementMissing { .. } => {
             simple_engine_fields("Gate3BifReplacementMissing", source)
         }
+        EngineError::StartupRecoveryNotDeferred => {
+            simple_engine_fields("StartupRecoveryNotDeferred", source)
+        }
+        EngineError::StartupRecoveryAlreadyRan => {
+            simple_engine_fields("StartupRecoveryAlreadyRan", source)
+        }
+        EngineError::StartupRecoverySlotPoisoned => {
+            simple_engine_fields("StartupRecoverySlotPoisoned", source)
+        }
         EngineError::CleanupExecutorPoisoned => {
             simple_engine_fields("CleanupExecutorPoisoned", source)
         }
@@ -744,6 +753,11 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         EngineError::Schedule { .. } => backend("Schedule", source),
         E::Runtime { .. } => backend("Runtime", source),
         E::Gate3BifReplacementMissing { .. } => backend("Gate3BifReplacementMissing", source),
+        // Boot-sequencing invariants (#266): misuse of the one-shot deferred
+        // recovery slot is a server construction bug, never a caller's fault.
+        E::StartupRecoveryNotDeferred => backend("StartupRecoveryNotDeferred", source),
+        E::StartupRecoveryAlreadyRan => backend("StartupRecoveryAlreadyRan", source),
+        E::StartupRecoverySlotPoisoned => backend("StartupRecoverySlotPoisoned", source),
         E::CleanupExecutorPoisoned => backend("CleanupExecutorPoisoned", source),
         E::CleanupExecutorShutdownTimedOut { .. } => {
             backend("CleanupExecutorShutdownTimedOut", source)

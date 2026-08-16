@@ -285,6 +285,15 @@ impl ServerState {
         .await?;
         let engine = Arc::new(engine);
         install_engine_backed_seams(&seams, &engine, runtime.outbox.enabled);
+        // #266: startup recovery runs HERE — after every seam the decorated
+        // activity dispatcher consults is installed, never before. The build
+        // above deferred it; running it earlier re-dispatched adopted
+        // in-flight declared-body activities into an empty body source, and
+        // they parked forever on their own queue (the fleet e2e pins this).
+        engine
+            .run_startup_recovery()
+            .await
+            .map_err(ServerError::from)?;
         let resolver = NamespaceResolver::from_config(runtime.namespace.clone(), engine);
         let worker_supervisor =
             new_supervisor(&connected.worker_deployment_store, &cluster_publisher);
@@ -1356,6 +1365,13 @@ async fn build_engine(assembly: EngineAssembly<'_>) -> Result<aion::Engine, Serv
         .activity_dispatcher(assembly.activity_dispatcher)
         .active_registry(assembly.active_registry)
         .production_recovery_seam()
+        // #266: recovery replay re-dispatches every in-flight activity through
+        // the dispatcher decorated above, and that dispatcher consults seams
+        // (the declared-body source foremost) that are only installed once the
+        // engine exists. Defer recovery out of `build()`;
+        // `build_with_connected_store` runs it via `run_startup_recovery`
+        // immediately after `install_engine_backed_seams`.
+        .defer_startup_recovery()
         .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
             Arc::new(ConcreteSignalRouter::new(runtime, handoff)) as Arc<dyn SignalRouter>
         })

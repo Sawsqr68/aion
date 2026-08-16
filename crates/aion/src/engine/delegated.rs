@@ -600,6 +600,7 @@ mod tests {
             signal_handoff: Arc::new(crate::signal::SignalResumeHandoff::new()),
             search_attribute_schema: Arc::new(aion_core::SearchAttributeSchema::new()),
             visibility_reconciliation_task: None,
+            deferred_startup_recovery: None,
         }))
     }
 

@@ -208,6 +208,23 @@ pub enum EngineError {
         arity: u8,
     },
 
+    /// [`crate::Engine::run_startup_recovery`] was called on an engine whose
+    /// build was not deferred — `build()` already ran startup recovery, and
+    /// running it twice would re-dispatch every in-flight activity.
+    #[error(
+        "startup recovery was not deferred: EngineBuilder::build() already ran it \
+         (call defer_startup_recovery() on the builder to take ownership of the steps)"
+    )]
+    StartupRecoveryNotDeferred,
+
+    /// [`crate::Engine::run_startup_recovery`] was called a second time.
+    #[error("startup recovery already ran: run_startup_recovery() is one-shot")]
+    StartupRecoveryAlreadyRan,
+
+    /// The deferred-startup-recovery slot lock was poisoned.
+    #[error("deferred startup recovery slot was poisoned")]
+    StartupRecoverySlotPoisoned,
+
     /// The runtime-owned cleanup executor's ownership state was poisoned.
     #[error("process cleanup executor state was poisoned")]
     CleanupExecutorPoisoned,

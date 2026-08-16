@@ -46,6 +46,11 @@ pub struct Engine {
     /// never takes this lock.
     pub(super) deploy_mutations: AsyncMutex<()>,
     visibility_reconciliation_task: Option<JoinHandle<()>>,
+    /// One-shot slot for deferred startup recovery (#266). `NotDeferred` on a
+    /// default build; `Pending` until [`Engine::run_startup_recovery`]
+    /// consumes it.
+    pub(super) deferred_startup_recovery:
+        std::sync::Mutex<super::startup_deferred::DeferredRecoverySlot>,
     /// Shared dispatch-hold set for durable pause (#204): the workflow ids whose
     /// outbox rows are held `Pending` while paused. Mutated by pause/resume/cancel
     /// and rebuilt from [`EventStore::list_paused`] at startup/adoption; read by
@@ -330,6 +335,10 @@ pub(crate) struct EngineComponents {
     pub(crate) signal_handoff: Arc<SignalResumeHandoff>,
     pub(crate) search_attribute_schema: Arc<SearchAttributeSchema>,
     pub(crate) visibility_reconciliation_task: Option<JoinHandle<()>>,
+    /// `Some` when the builder deferred startup recovery (#266): the stowed
+    /// recovery inputs [`Engine::run_startup_recovery`] consumes. `None` when
+    /// `build()` ran recovery itself, as it does by default.
+    pub(crate) deferred_startup_recovery: Option<super::startup_deferred::DeferredStartupRecovery>,
 }
 
 impl Engine {
@@ -347,6 +356,7 @@ impl Engine {
             signal_handoff,
             search_attribute_schema,
             visibility_reconciliation_task,
+            deferred_startup_recovery,
         } = components;
         let schedule_coordinator_workflow_id = schedule_coordinator_workflow_id();
         let schedule_recorder = Arc::new(AsyncMutex::new(Recorder::new(
@@ -385,6 +395,9 @@ impl Engine {
             shutdown_gate: ShutdownGate::default(),
             deploy_mutations: AsyncMutex::new(()),
             visibility_reconciliation_task,
+            deferred_startup_recovery: super::startup_deferred::DeferredRecoverySlot::from_build(
+                deferred_startup_recovery,
+            ),
             paused_runs: crate::lifecycle::PausedRuns::default(),
         }
     }
@@ -842,6 +855,7 @@ mod tests {
             signal_handoff: Arc::new(crate::signal::SignalResumeHandoff::new()),
             search_attribute_schema: Arc::new(SearchAttributeSchema::new()),
             visibility_reconciliation_task: None,
+            deferred_startup_recovery: None,
         }))
     }
 
@@ -1077,6 +1091,7 @@ mod tests {
             signal_handoff: Arc::new(crate::signal::SignalResumeHandoff::new()),
             search_attribute_schema: Arc::new(SearchAttributeSchema::new()),
             visibility_reconciliation_task: None,
+            deferred_startup_recovery: None,
         }))
     }
 
