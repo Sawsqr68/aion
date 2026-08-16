@@ -2,6 +2,7 @@ import type { ApiClientOptions } from '@/lib/api';
 import { ApiClient } from '@/lib/api';
 import { ChildrenReadClient } from '@/lib/api/children-read';
 import { AionClusterStreamManager } from '@/lib/api/cluster-stream';
+import { DescribeLiveReadClient } from '@/lib/api/describe-live-read';
 import { TranscriptReadClient } from '@/lib/api/transcript-read';
 import { AionTranscriptStreamManager, type TranscriptTarget } from '@/lib/api/transcript-stream';
 import { AionEventWebSocketManager, type SocketCredentials } from '@/lib/api/websocket';
@@ -49,6 +50,19 @@ export function createConfiguredChildrenReader(
   const config = options.config ?? getOpsConsoleConfig();
   const credentials = buildCredentials(config, options.namespace);
   return new ChildrenReadClient({
+    baseUrl: options.baseUrl ?? config.apiBaseUrl,
+    ...(credentials === undefined ? {} : { credentials }),
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  });
+}
+
+/** Build the one-call live-step reader with normal console scope. */
+export function createConfiguredLiveStepReader(
+  options: ConfiguredClientOptions = {}
+): DescribeLiveReadClient {
+  const config = options.config ?? getOpsConsoleConfig();
+  const credentials = buildCredentials(config, options.namespace);
+  return new DescribeLiveReadClient({
     baseUrl: options.baseUrl ?? config.apiBaseUrl,
     ...(credentials === undefined ? {} : { credentials }),
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),

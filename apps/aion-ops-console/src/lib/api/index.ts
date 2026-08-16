@@ -40,6 +40,8 @@ export {
   AionClusterStreamManager,
   createAionClusterStreamManager,
 } from './cluster-stream';
+export type { DescribeLiveReadOptions } from './describe-live-read';
+export { DESCRIBE_LIVE_ENDPOINT, DescribeLiveReadClient } from './describe-live-read';
 export type {
   RetainedStreamHead,
   TranscriptFetchParams,

@@ -38,6 +38,9 @@ export const AW_REST_CONTRACT = {
     // NOI-7: the mid-run intervention endpoint + the live-attempt enumeration
     // (both namespace-scoped like signal/cancel).
     workflowIntervene: '/workflows/intervene',
+    // One read answering what a run is doing now: current/open steps, ownership,
+    // progress note, bounded transcript tail, streams, and unserved dispatches.
+    workflowDescribeLive: '/workflows/describe-live',
     workflowAttempts: '/workflows/attempts',
     // Reopen a terminal (Failed/Cancelled) workflow: re-dispatches the failed
     // tail and returns the reopened run + its projected Running status.
@@ -69,6 +72,7 @@ export const AW_REST_CONTRACT = {
     workflowStart: 'POST',
     workflowSignal: 'POST',
     workflowIntervene: 'POST',
+    workflowDescribeLive: 'POST',
     workflowAttempts: 'POST',
     workflowReopen: 'POST',
     workflowRename: 'POST',

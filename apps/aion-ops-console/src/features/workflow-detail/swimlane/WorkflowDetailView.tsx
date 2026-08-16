@@ -1,6 +1,10 @@
+import { useMemo } from 'react';
+
+import { createConfiguredLiveStepReader } from '@/lib/config';
 import type { Event, RunId } from '@/types';
 
 import { LiveLegsSection } from '../components/LegsSection';
+import { LiveStepCard } from '../components/LiveStepCard';
 import { useChildren } from '../hooks/useChildren';
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
@@ -21,6 +25,7 @@ import { WorkflowDetailViewContent } from './WorkflowDetailViewContent';
  * the durable attempt list. S0's `/workflows/:id` route renders this wrapper.
  */
 function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
+  const liveStepReader = useMemo(() => createConfiguredLiveStepReader({ namespace }), [namespace]);
   const historyQuery = useWorkflowHistory({ workflowId });
   const live = useLiveWorkflowEvents({
     enabled: historyQuery.isSuccess,
@@ -68,6 +73,15 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
         timeline={live.timeline}
         workflowId={workflowId}
       />
+      {namespace !== null ? (
+        <LiveStepCard
+          isTerminal={live.isTerminal}
+          namespace={namespace}
+          reader={liveStepReader}
+          runId={runId}
+          workflowId={workflowId}
+        />
+      ) : null}
       {namespace !== null && children.data !== undefined ? (
         <LiveLegsSection legs={children.data} namespace={namespace} />
       ) : null}
