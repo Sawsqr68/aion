@@ -794,6 +794,84 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn http_list_refuses_terminal_status_without_terminal_history()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (engine, store, visibility_store) = shared_engine().await?;
+        let mut recorder = Recorder::new(workflow_id(), Arc::clone(&store));
+        recorder
+            .record_workflow_started(
+                Utc::now(),
+                WorkflowStartRecord {
+                    workflow_type: String::from("fixture"),
+                    input: Payload::from_json(&json!({}))?,
+                    run_id: run_id(),
+                    parent_run_id: None,
+                    package_version: PackageVersion::new("b".repeat(64)),
+                },
+            )
+            .await?;
+        let mut schema = SearchAttributeSchema::new();
+        schema.register(
+            crate::namespace::NAMESPACE_ATTRIBUTE,
+            SearchAttributeType::String,
+        )?;
+        recorder
+            .record_search_attributes_updated(
+                Utc::now(),
+                std::collections::HashMap::from([(
+                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+                &schema,
+            )
+            .await?;
+        visibility_store
+            .record_visibility(VisibilityRecord {
+                workflow_id: workflow_id(),
+                run_id: run_id(),
+                workflow_type: String::from("fixture"),
+                status: WorkflowStatus::Failed,
+                start_time: Utc::now(),
+                close_time: Some(Utc::now()),
+                failed_step: Some(String::from("capture_once")),
+                failure_reason: Some(String::from("side-channel failure")),
+                search_attributes: std::collections::HashMap::from([(
+                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+            })
+            .await?;
+
+        let resolver = NamespaceResolver::from_parts(
+            NamespaceMode::SharedEngine,
+            Some(engine),
+            Arc::new(StaticWorkflowNamespaces::default()),
+            Arc::new(StaticScheduleNamespaces::default()),
+        );
+        let router = workflow_router(server_state(resolver, runtime_config()).await?);
+        let response = router
+            .oneshot(json_request(
+                "/workflows/list",
+                &json!({ "namespace": NAMESPACE, "filter": {} }),
+            )?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = read_json(response).await?;
+        let summaries = body["summaries"].as_array().ok_or("summaries missing")?;
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0]["status"], "Running");
+        assert!(summaries[0].get("failure_reason").is_none());
+
+        let corrected = visibility_store
+            .list_workflows(aion_store::visibility::ListWorkflowsFilter::default())
+            .await?;
+        assert_eq!(corrected.len(), 1);
+        assert_eq!(corrected[0].status, WorkflowStatus::Running);
+        assert_eq!(corrected[0].failure_reason, None);
+        Ok(())
+    }
+
     /// #211: the rename route is mounted, scopes the namespace, and refuses a
     /// blank name as `invalid_input` — a rename records a non-empty label or
     /// nothing at all.
