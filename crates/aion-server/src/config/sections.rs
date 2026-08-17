@@ -59,11 +59,21 @@ pub enum StoreBackend {
     Haematite,
 }
 
+/// A store-selection input that named the retired libSQL backend.
+///
+/// Recorded at parse/overlay time and refused by `ServerConfig::validate`, which
+/// names the input it found and prescribes haematite. Recorded rather than
+/// refused on the spot so all four doors converge on ONE refusal with one
+/// remedy, instead of four differently-worded errors from four parsers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RetiredStoreInput {
+    /// `backend = "libsql"` in the config file's `[store]` section.
     Backend,
+    /// `url = ...` in the config file's `[store]` section.
     Url,
+    /// The `AION_STORE_URL` environment variable.
     Environment,
+    /// The `--store-url` command-line flag.
     Flag,
 }
 
@@ -151,11 +161,16 @@ pub struct StoreConfig {
 #[serde(default, deny_unknown_fields)]
 struct StoreConfigWire {
     backend: Option<String>,
+    /// Retired: recorded so `validate` can refuse it. Kept on the wire — and
+    /// NOT left to `deny_unknown_fields` — so an operator carrying a 0.15
+    /// config is told the key is retired and what replaces it, rather than
+    /// getting an unknown-field parse error that names no remedy.
     url: Option<String>,
     owned_shards: Vec<usize>,
     data_dir: Option<String>,
     shard_count: Option<usize>,
     cluster: Option<ClusterConfig>,
+    node_cache_budget: Option<haematite::NodeCacheBudget>,
 }
 
 impl<'de> Deserialize<'de> for StoreConfig {
@@ -186,6 +201,7 @@ impl<'de> Deserialize<'de> for StoreConfig {
             config.shard_count = shard_count;
         }
         config.cluster = wire.cluster;
+        config.node_cache_budget = wire.node_cache_budget;
         Ok(config)
     }
 }

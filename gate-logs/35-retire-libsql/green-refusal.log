@@ -1,0 +1,8 @@
+running 4 tests
+test config::load::tests::retired_store_url_environment_is_refused_with_remedy ... ok
+test config::load::tests::retired_store_url_flag_is_refused_with_remedy ... ok
+test config::load::tests::retired_store_url_key_is_refused_with_remedy ... ok
+test config::load::tests::retired_libsql_backend_is_refused_with_remedy ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1150 filtered out; finished in 0.01s
+

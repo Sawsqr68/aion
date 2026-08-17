@@ -36,7 +36,6 @@ pub(crate) fn overlay_vars(
                 config.store.backend = parse_store_backend(&name, &value)?;
             }
             "AION_STORE_URL" => {
-                let _ = value;
                 config.store.retired_input = Some(RetiredStoreInput::Environment);
             }
             "AION_STORE_DATA_DIR" => {

@@ -394,8 +394,7 @@ impl ServerConfig {
         if let Some(address) = cli.grpc_address {
             self.server.grpc_address = address;
         }
-        if let Some(url) = &cli.store_url {
-            let _ = url;
+        if cli.store_url.is_some() {
             self.store.retired_input = Some(RetiredStoreInput::Flag);
         }
         if let Some(threads) = cli.scheduler_threads {

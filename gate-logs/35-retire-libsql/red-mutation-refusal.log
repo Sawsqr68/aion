@@ -1,0 +1,30 @@
+
+thread 'config::load::tests::retired_store_url_flag_is_refused_with_remedy' (9668704) panicked at crates/aion-server/src/config/load.rs:1954:9:
+refusal did not name `--store-url`: configuration error: store.data_dir must not be empty when store.backend is haematite
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- config::load::tests::retired_store_url_environment_is_refused_with_remedy stdout ----
+
+thread 'config::load::tests::retired_store_url_environment_is_refused_with_remedy' (9668703) panicked at crates/aion-server/src/config/load.rs:1954:9:
+refusal did not name `AION_STORE_URL`: configuration error: store.data_dir must not be empty when store.backend is haematite
+
+---- config::load::tests::retired_libsql_backend_is_refused_with_remedy stdout ----
+
+thread 'config::load::tests::retired_libsql_backend_is_refused_with_remedy' (9668702) panicked at crates/aion-server/src/config/load.rs:1950:9:
+retired libsql input must be refused
+
+---- config::load::tests::retired_store_url_key_is_refused_with_remedy stdout ----
+
+thread 'config::load::tests::retired_store_url_key_is_refused_with_remedy' (9668705) panicked at crates/aion-server/src/config/load.rs:1950:9:
+retired libsql input must be refused
+
+
+failures:
+    config::load::tests::retired_libsql_backend_is_refused_with_remedy
+    config::load::tests::retired_store_url_environment_is_refused_with_remedy
+    config::load::tests::retired_store_url_flag_is_refused_with_remedy
+    config::load::tests::retired_store_url_key_is_refused_with_remedy
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 1150 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p aion-server --lib`

@@ -1,0 +1,2 @@
+{"type":"clippy","level":"warning","file":"crates/aion-server/src/config/load.rs","line":416,"lint":"unused_variables","message":"unused variable: `instrument_proof_unused`"}
+{"type":"clippy","level":"warning","file":"crates/aion-server/src/config/load.rs","line":416,"lint":"unused_variables","message":"unused variable: `instrument_proof_unused`"}
