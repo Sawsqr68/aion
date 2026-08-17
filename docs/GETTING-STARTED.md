@@ -859,8 +859,11 @@ retries, heartbeats, and cancellation are covered in the
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
-`aion deploy` has nothing to talk to without it; and `store.data_dir`, which
-names the durable haematite data directory. The tuning knobs all have
+`aion deploy` has nothing to talk to without it; and `store.node_cache_budget`,
+which haematite refuses to start without and which has no default anywhere —
+the byte ceiling its node caches may hold is a deployment decision. (
+`store.data_dir` is optional: omitted, it resolves under the Aion home, as
+described above.) The tuning knobs all have
 defaults and may be omitted — `runtime.query_timeout_ms` (10000),
 `websocket.event_broadcast_capacity` (256), and, once deploy is enabled, both
 size ceilings (64 MiB archive / 256 MiB inflated). They are written out here so
@@ -880,6 +883,10 @@ grpc_address = "127.0.0.1:50051"    # gRPC API + worker protocol
 [store]
 backend = "haematite"               # durable default; "memory" is development-only
 data_dir = "aion-data"              # opened when present, created on first start
+                                    # optional; defaults under the Aion home
+node_cache_budget = "unlimited"     # REQUIRED, no default: the byte ceiling the
+                                    # node caches may hold. Write a bound once you
+                                    # know your box, e.g. { bytes = 1073741824 }
 
 [runtime]
 # Reply deadline for workflow queries, in milliseconds. Optional; 10000 when omitted.

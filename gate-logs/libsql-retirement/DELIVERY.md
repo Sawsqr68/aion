@@ -42,7 +42,7 @@ The shared conformance contract remains implemented by the in-memory store and b
 
 ## Published-consumer boundary
 
-0.16 does not read libsql database files and publishes 21 crates. Consumers with 0.14/0.15 libsql data must retain a 0.15 binary to access it. No published versions are yanked.
+This build does not read libsql database files and the next cut publishes 19 crates, down from 20. 0.17.0 is the last release that carries the backend (verified: `git ls-tree v0.17.0 crates/` still contains `aion-store-libsql`), so consumers with libsql data must retain a 0.17.0 binary to access it. No published versions are yanked.
 
 ## Migration choices discovered by the green battery
 

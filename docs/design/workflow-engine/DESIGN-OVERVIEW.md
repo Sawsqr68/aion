@@ -631,24 +631,24 @@ The default implementation uses **haematite** through
 a local data directory and owns every shard. A configured `[store.cluster]`
 boot uses the same backend for quorum-replicated, multi-node operation.
 
-libSQL, through `aion-store-libsql`, is the alternative durable backend. It
-provides a zero-infrastructure local database file for development,
-single-node deployments, and embedded tools. The `EventStore` trait keeps
-either backend behind the same engine boundary.
+Haematite is the only durable backend. The in-memory store is
+development-only, and the `EventStore` trait keeps both behind the same engine
+boundary — as it does any store an embedder writes.
 
 ```rust
 use aion::EngineBuilder;
 use aion_store_haematite::HaematiteStore;
+use haematite::NodeCacheBudget;
 
-let store = HaematiteStore::create("workflows")?;
+let store = HaematiteStore::create("workflows", NodeCacheBudget::Unlimited)?;
 let engine = EngineBuilder::new().store(store).build().await?;
 ```
 
 ### Pluggable Backends
 
 ```rust
-// libSQL alternative
-let store = aion_store_libsql::LibSqlStore::open("workflows.db")?;
+// Development only — ephemeral, loses everything on stop.
+let store = aion_store::InMemoryStore::default();
 
 // Custom
 impl EventStore for MyStore { /* ... */ }

@@ -40,6 +40,7 @@ mod gleam_test_support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use aion_core::{ActivityErrorKind, Event};
@@ -58,7 +59,7 @@ use aion_server::config::{
     WorkerConfig,
 };
 use aion_server::shutdown::{self, ShutdownOutcome};
-use aion_store::ReadableEventStore;
+use aion_store::EventStore;
 use aion_store_haematite::HaematiteStore;
 use axum::body;
 use axum::http::{Request, StatusCode};
@@ -361,6 +362,36 @@ impl ServerEpoch {
             grpc_server,
         })
     }
+
+    /// Tear the epoch down so the NEXT epoch can open the same data directory.
+    ///
+    /// haematite holds an exclusive writer lock for as long as any store handle
+    /// on the directory is alive, so a restart test that merely drops the epoch
+    /// races the abort: the gRPC task still holds a `ServerState` clone, and
+    /// through it the store.
+    async fn stop(self) -> Result<(), TestError> {
+        let Self {
+            state,
+            router,
+            grpc_address: _,
+            grpc_server,
+        } = self;
+        drop(router);
+        state.shutdown()?;
+        grpc_server.abort();
+        let _ = grpc_server.await;
+        drop(state);
+
+        // A failed `HaematiteStore::open` on haematite 0.8.3 does not release the
+        // lock file it opened, so probing for release POISONS the directory —
+        // measured here at 714 consecutive failures where a single unprobed
+        // reopen succeeds. Teardown is therefore made deterministic instead of
+        // observed: shut the engine down, join the aborted server task, drop
+        // every remaining `ServerState` clone, and yield so the connection tasks
+        // holding one can finish unwinding before the next epoch opens the dir.
+        tokio::task::yield_now().await;
+        Ok(())
+    }
 }
 
 async fn start_over_http(router: &axum::Router) -> Result<aion_core::WorkflowId, TestError> {
@@ -392,8 +423,12 @@ async fn start_over_http(router: &axum::Router) -> Result<aion_core::WorkflowId,
     Ok(aion_core::WorkflowId::new(workflow_id))
 }
 
+/// Read through the LIVE EPOCH'S OWN store handle, never a second one.
+/// haematite holds an exclusive writer lock on the data directory for as long
+/// as a store is open, so opening a second `HaematiteStore` on `db_path` while
+/// the epoch is up blocks forever rather than failing.
 async fn wait_for_history<F>(
-    reader: &HaematiteStore,
+    reader: &Arc<dyn EventStore>,
     workflow_id: &aion_core::WorkflowId,
     description: &str,
     predicate: F,
@@ -506,11 +541,7 @@ async fn restart_and_complete(
     );
     worker.complete(&task, br#""recovered""#).await?;
 
-    let reader = HaematiteStore::open_or_create(
-        db_path.to_path_buf(),
-        haematite::NodeCacheBudget::Unlimited,
-    )
-    .await?;
+    let reader = epoch.state.engine()?.store();
     let settled = wait_for_history(&reader, workflow_id, "post-restart completion", |events| {
         events
             .iter()
@@ -529,8 +560,7 @@ async fn restart_and_complete(
     );
 
     drop(worker);
-    epoch.grpc_server.abort();
-    epoch.state.shutdown()?;
+    epoch.stop().await?;
     Ok(())
 }
 
@@ -558,9 +588,7 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
 
     // The kill -9 reference snapshot: the durable log at the moment the worker
     // holds the dispatch in flight (dangling scheduled/started, no outcome).
-    let reader =
-        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
-            .await?;
+    let reader = epoch.state.engine()?.store();
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()
@@ -594,8 +622,10 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
     );
     assert_no_synthesized_terminals(&post_drain);
 
-    epoch.grpc_server.abort();
-    drop(epoch);
+    // `reader` is the engine's own store handle; the writer lock is not released
+    // until every clone of it is gone, and the next epoch opens the same dir.
+    drop(reader);
+    epoch.stop().await?;
 
     restart_and_complete(&db_path, package_path, &workflow_id).await
 }
@@ -624,9 +654,7 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     let task = worker.next_task().await?;
     assert_eq!(task.activity_type, ACTIVITY_TYPE);
 
-    let reader =
-        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
-            .await?;
+    let reader = epoch.state.engine()?.store();
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()
@@ -661,8 +689,10 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     assert_no_synthesized_terminals(&post_drain);
 
     drop(worker);
-    epoch.grpc_server.abort();
-    drop(epoch);
+    // `reader` is the engine's own store handle; the writer lock is not released
+    // until every clone of it is gone, and the next epoch opens the same dir.
+    drop(reader);
+    epoch.stop().await?;
 
     restart_and_complete(&db_path, package_path, &workflow_id).await
 }

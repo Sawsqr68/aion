@@ -90,8 +90,8 @@ a startup refusal rather than a silent ignore or a fallback:
 Any one of them stops startup with a message naming the input it found and
 prescribing `backend = "haematite"` plus `store.data_dir`. This build does not
 read existing libSQL database files; there is no migration path and no
-compatibility mode. An existing libSQL database is only readable by an Aion
-0.15 or earlier binary.
+compatibility mode. **0.17.0 is the last release that can read them** — keep a
+0.17.0 binary to reach an existing libSQL database before upgrading.
 
 Tuning knobs (`runtime.query_timeout_ms`, the websocket capacities, the
 deploy ceilings, the outbox knobs, the observability bounds) default when

@@ -136,11 +136,11 @@ pub trait ReadableEventStore: Send + Sync + 'static {
     /// This is the engine-lifecycle hook behind a multi-shard deployment: the
     /// boot path tells the store which shards this node serves so recovery and
     /// enumeration see only that node's slice of the cluster's state. The
-    /// default implementation is a deliberate no-op — single-shard backends
-    /// (in-memory, haematite) own everything unconditionally, so a `None` or any
-    /// shard set leaves their behaviour byte-identical. Only a sharded backend
-    /// (haematite) overrides this to scope its enumeration. Decorators that wrap
-    /// another store must forward this call to their inner store.
+    /// default implementation is a deliberate no-op — the single-shard in-memory
+    /// backend owns everything unconditionally, so a `None` or any shard set
+    /// leaves its behaviour byte-identical. The sharded haematite backend
+    /// overrides this to scope its enumeration. Decorators that wrap another
+    /// store must forward this call to their inner store.
     fn set_owned_shards(&self, shards: Option<&[usize]>) {
         let _ = shards;
     }

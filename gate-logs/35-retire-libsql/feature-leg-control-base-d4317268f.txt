@@ -1,0 +1,20 @@
+clippy::unnecessary_filter_map	this `.filter_map(..)` can be written more simply using `.map(..)`
+clippy::unused_async	unused `async` for function with no await statements
+clippy::unused_self	unused `self` argument
+dead_code	associated items `new` and `into_parts` are never used
+dead_code	enum `AceDecision` is never used
+dead_code	enum `PingFailure` is never used
+dead_code	enum `ProbedTransport` is never used
+dead_code	field `0` is never read
+dead_code	function `darwin_user_uuid_for_test` is never used
+dead_code	function `decide_ace` is never used
+dead_code	function `harden_dir` is never used
+dead_code	function `ping_grpc_worker` is never used
+dead_code	function `user_uuid_for_test` is never used
+dead_code	function `validate_ambient_backend_ancestors` is never used
+dead_code	function `validate_extended_acl` is never used
+dead_code	methods `create_dir_all`, `backend_path`, and `harden_tree` are never used
+dead_code	methods `name` and `pid` are never used
+dead_code	struct `DataRootAncestorError` is never constructed
+unused_imports	unused import: `crate::namespace::MintCredentials`
+unused_imports	unused import: `validate_ambient_backend_ancestors`

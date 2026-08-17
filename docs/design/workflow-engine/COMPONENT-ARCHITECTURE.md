@@ -45,7 +45,6 @@ the engine internals.
 - aion-store            Event store trait + in-memory reference impl.
 - aion-store-haematite  Default durable event store. Local in single-node
                         mode; quorum-replicated under `[store.cluster]`.
-- aion-store-libsql     Alternative embedded libSQL event store.
 - aion-proto            Shared wire types (events, requests) for client/
                         worker/server. gRPC + serde.
 - aion-package          The `.aion` package format: read/write a single-file
@@ -171,14 +170,6 @@ not discovery. The virtual `shard_count` is fixed when a database is created;
 there is no reshard path.
 
 Depends on: `aion-store`, `haematite`.
-
-### `aion-store-libsql` — alternative backend
-
-`impl EventStore` over libSQL (via the `libsql` Rust SDK). It provides a local
-database file with zero external infrastructure and remains selectable as the
-lightweight alternative to the default haematite backend.
-
-Depends on: `aion-store`.
 
 ### `aion-package` — the `.aion` package format
 
@@ -340,7 +331,7 @@ their ecosystems.
 aion-store aion-proto  |   |
      ^        ^        |   |
      |        |        |   |
-aion-store-haematite  aion-store-libsql
+aion-store-haematite
               |
             aion-server  ----<gRPC/WS>----  aion-worker-*  (Python/TS/Rust)
                  |                            aion-client-*  (Python/TS/Gleam)
@@ -388,7 +379,6 @@ the ideal end state; sequencing is a separate exercise).
 6. `aion-client-*` — caller SDKs
 7. `aion-worker` + `aion-worker-*` — remote activity workers
 8. `aion-toolchain` — optional server-side compile/check/package
-9. `aion-store-libsql` — alternative embedded backend
 10. Hot code loading in beamr (Bono's 3-4 briefs) — zero-downtime upgrades
 11. `aion_flow_ex` (Elixir) — second authoring language
 

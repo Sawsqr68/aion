@@ -7,12 +7,13 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 - **Haematite is Aion's durable store.** The libsql backend, the
   `libsql-backend` and `haematite-backend` cargo features, and the
-  `aion-store-libsql` crate are retired; the next cut publishes 21 crates, not
-  22. Configurations that name `backend = "libsql"`, `store.url`,
+  `aion-store-libsql` crate are retired; the next cut publishes 19 crates, not
+  20. Configurations that name `backend = "libsql"`, `store.url`,
   `AION_STORE_BACKEND=libsql`, `AION_STORE_URL`, or `--store-url` are refused at
   startup with the haematite remedy — named, never ignored, never silently
-  migrated. This build does not read libsql database files. If you used a
-  crates.io 0.14/0.15 libsql store, keep a 0.15 binary to access that old data.
+  migrated. This build does not read libsql database files. **0.17.0 is the last
+  release that can read them**: if you ran libsql on any release up to and
+  including 0.17.0, keep a 0.17.0 binary to reach that data before upgrading.
   This subtraction closes the retired backend's #85 and #229 defect surfaces; it
   does not claim to fix the separate haematite memory defect tracked in #32.
 

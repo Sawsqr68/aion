@@ -43,7 +43,7 @@ Consequences of the ruling, as built:
   `claim_outbox_rows_scoped_excluding` (the scoped/node-affinity path the keyed
   backpressure sweep uses). Production wires backpressure unconditionally, so the
   scoped variant is load-bearing — a held row is never claimed on either path.
-  Both are overridden on libSQL and haematite; the trait defaults delegate to the
+  Both are overridden on haematite; the trait defaults delegate to the
   non-excluding claim so a never-pausing test double is unaffected.
 - **Signals to a paused-not-resident run** are durably recorded via a one-shot
   recorder (record-before-deliver preserved) and take effect on resume replay.
@@ -275,10 +275,10 @@ must not be conflated:
 - **`aion-store`:** `run_chain.rs` arms; visibility projection already keys on
   `status_from_events`, so `Paused` flows through; `list_active` unchanged
   (filters `== Running`, which excludes `Paused` for free).
-- **`aion-store-libsql`:** `append/metadata.rs` (`event_kind` + queryable flag
-  for the two events); the visibility status column already stores the projected
-  status string, so `Paused` needs no schema change (unlike reopen's two new
-  summary columns — pause adds none).
+- **`aion-store-libsql`** *(this crate was deleted in aion#35; the plan it
+  carried is recorded here as history)*: `append/metadata.rs` (`event_kind` +
+  queryable flag for the two events); the visibility status column already
+  stored the projected status string, so `Paused` needed no schema change.
 - **`aion` engine:** NEW `lifecycle/pause.rs` (the pause + resume ops; module
   named `pause` to avoid the residency `suspend`/`resume` and signal `resume`
   collisions), `durability/cursor.rs` + `resolver.rs` (exhaustive arms; `Paused`

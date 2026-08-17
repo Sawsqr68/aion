@@ -4,6 +4,16 @@ cluster: aion-store-libsql
 title: Aion Store libSQL — The Default Durable Event Store
 ---
 
+> # ⛔ SUPERSEDED — the subject of this cluster no longer exists
+>
+> The `aion-store-libsql` crate was retired in aion#35 (2026-08-17). Haematite
+> is Aion's only durable store; `backend = "libsql"`, `store.url`,
+> `AION_STORE_BACKEND=libsql`, `AION_STORE_URL`, and `--store-url` are refused
+> at startup. Every requirement, checklist item, and user story below describes
+> deleted code and is kept as the record of what was built, not as work to do
+> or a description of anything that runs. Nothing here may be scaffolded,
+> dispatched, or cited as current behaviour.
+
 # Aion Store libSQL — The Default Durable Event Store
 
 > Part of the **Aion** durable workflow engine. See

@@ -146,8 +146,9 @@ listen_address = "0.0.0.0:7233"
 grpc_address = "0.0.0.0:7234"
 
 [store]
-backend = "libsql"
-url = "file:aion.db"
+backend = "haematite"
+data_dir = "aion-data"
+node_cache_budget = "unlimited"
 
 [runtime]
 scheduler_threads = 4

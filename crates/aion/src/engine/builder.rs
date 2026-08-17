@@ -311,8 +311,9 @@ impl EngineBuilder {
     ///
     /// Not calling this leaves the store owning ALL shards — the single-node
     /// default, which is byte-identical to today's behaviour (`build()` never
-    /// touches the scoping hook). Single-shard backends (in-memory, haematite)
-    /// ignore the call regardless, since they own everything unconditionally.
+    /// touches the scoping hook). The single-shard in-memory backend ignores the
+    /// call regardless, since it owns everything unconditionally; haematite
+    /// honours it.
     #[must_use]
     pub fn owned_shards(mut self, shards: impl IntoIterator<Item = usize>) -> Self {
         self.owned_shards = Some(shards.into_iter().collect());

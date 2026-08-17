@@ -10,11 +10,13 @@ quorum/consensus-backed build is the remaining cluster wave (#146 durable member
 active-active itself landed the AA-4-x series (see MULTI-SHARD-ACTIVE-ACTIVE-DESIGN.md).
      Original status: "DRAFT, in progress. ... empirical haematite fencing spike (in progress)."
 
-> **Superseded 2026-08-17 (aion#35).** The libSQL backend named below — the
-> interim outbox host and the "backend swap" this document planned for — is
-> retired. Haematite is Aion's only durable store; the outbox lives there. The
-> libSQL sentences are kept as the record of the decision that was taken at the
-> time, not as a description of anything that still exists.
+> **Superseded 2026-08-17 (aion#35).** Every libSQL mention in this document —
+> above and below this line, including the H1 status line's "and the libsql
+> outbox" — names a backend that no longer exists. It was the interim outbox
+> host and the subject of the "backend swap" this document planned for.
+> Haematite is Aion's only durable store and the outbox lives there. Those
+> sentences are kept as the record of the decision taken at the time, not as a
+> description of anything that still runs.
 
 Grounded in the comparative review
 ([AION-DISTRIBUTION-REVIEW.md](../archive/AION-DISTRIBUTION-REVIEW.md)) and an empirical haematite

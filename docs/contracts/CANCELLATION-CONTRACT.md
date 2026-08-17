@@ -134,11 +134,11 @@ that, branch on the prefix.
   history. `WorkflowFilter` does carry a `parent` predicate, but it is
   reachable from nothing an operator can call: the HTTP list DTO drops a
   `parent` field on the floor (`crates/aion-server/src/api/http/clean_dtos.rs`,
-  `WorkflowFilterDto`), there is no proto field for it, and of the three
-  backends only libSQL implements it — by scanning every `ChildWorkflowStarted`
-  row (`crates/aion-store-libsql/src/read.rs`, `load_parent_links`). On the
-  default haematite backend and on the in-memory store the summary's `parent`
-  is always `None`, so the predicate matches nothing. **Through the API and the
+  `WorkflowFilterDto`), there is no proto field for it, and no surviving backend
+  implements it. (The only implementation was the libSQL backend's
+  `ChildWorkflowStarted` scan, deleted with that crate in aion#35.) On haematite
+  and on the in-memory store the summary's `parent` is always `None`, so the
+  predicate matches nothing. **Through the API and the
   CLI you cannot ask the system "what are this workflow's children".** This is
   why a cascade is not a small change: the linkage a cascade would need does
   not exist where a cascade would have to read it.

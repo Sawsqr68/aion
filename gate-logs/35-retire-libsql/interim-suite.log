@@ -1,0 +1,16 @@
+   Compiling aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
+   Compiling aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
+   Compiling aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
+   Compiling aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-client)
+   Compiling million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/benchmarks/million-processes)
+   Compiling aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (test "run_server_outbox_e2e") generated 1 warning
+warning: `aion-cli` (bin "aion") generated 1 warning (1 duplicate)
+warning: `aion-server` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 26s

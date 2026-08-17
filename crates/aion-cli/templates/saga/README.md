@@ -29,7 +29,7 @@ gleam build
 aion package .
 ```
 
-Start the server (terminal 1; state persists in `aion.db`):
+Start the server (terminal 1; state persists in `./aion-data`):
 
 ```sh
 aion server --config aion.toml

@@ -421,7 +421,7 @@ impl ServerConfig {
                 RetiredStoreInput::Flag => "--store-url",
             };
             return config_error(format!(
-                "found retired {found}; use backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build"
+                "found retired {found}; use backend = \"haematite\" with store.data_dir and store.node_cache_budget (all three are required — haematite refuses to start without the budget); existing libsql database files are not read by this build"
             ));
         }
         if self.server.listen_address.port() == 0 {
@@ -1952,7 +1952,7 @@ mod tests {
         assert!(message.contains("runtime.scheduler_threads"));
     }
 
-    const RETIRED_STORE_REMEDY: &str = "backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build";
+    const RETIRED_STORE_REMEDY: &str = "backend = \"haematite\" with store.data_dir and store.node_cache_budget (all three are required — haematite refuses to start without the budget); existing libsql database files are not read by this build";
 
     fn assert_retired_store_refusal(
         result: Result<ServerConfig, crate::error::ServerError>,

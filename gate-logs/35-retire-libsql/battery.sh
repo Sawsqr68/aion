@@ -106,6 +106,14 @@ cd "$OUT/../.." || exit 1
 # Standard caveat 2 — the feature sets the three legs never compile. This lane
 # deletes the `haematite-backend` feature, so both ends of the remaining
 # feature space are compiled explicitly.
+#
+# These land in their OWN findings file, not the canonical one. Both non-default
+# sets are already red at the base commit d4317268f (measured, control set in
+# feature-leg-control-base-d4317268f.txt), so folding them into findings.jsonl
+# would break the canonical "green = empty" rule for defects this lane did not
+# author. The verdict for these legs is the control DIFF, not their emptiness:
+# no finding may appear here that is absent from the control.
+: >"$OUT/feature-legs-findings.jsonl"
 for spec in \
   "aion-server:--no-default-features" \
   "aion-server:--all-features" \
@@ -137,7 +145,7 @@ do
           lint: (.message.code.code // "compile-error"),
           message: .message.message
         }
-    ' >>"$OUT/findings.jsonl"
+    ' >>"$OUT/feature-legs-findings.jsonl"
 done
 
 grep -E "^ *Summary" "$OUT/nextest.stderr" >"$OUT/nextest-summary.txt" 2>/dev/null

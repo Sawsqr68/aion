@@ -101,9 +101,9 @@ struct ServerStateInner {
     /// NOI-5b agent-observability transcript sequencer + live fan-out. Always
     /// present: the transcript channel is served on every boot. The backing
     /// [`ObservabilityStore`](aion_store::ObservabilityStore) is the durable
-    /// `O`-keyspace impl on a haematite boot and an in-memory impl on every other
-    /// backend (haematite / in-memory have no `O` keyspace), so the transcript path
-    /// is uniform across backends while only haematite persists across restart.
+    /// `O`-keyspace impl on a haematite boot and an in-memory impl on the memory
+    /// backend (which has no `O` keyspace), so the transcript path is uniform
+    /// across backends while only haematite persists across restart.
     /// Sized from `websocket.cluster_broadcast_capacity` (the same deployment-wide
     /// real-time channel capacity the cluster tail uses).
     transcript_publisher: crate::activity_publisher::ActivityEventPublisher,
@@ -1792,8 +1792,8 @@ fn transcript_bounds(runtime: &RuntimeConfig) -> crate::activity_bounds::Transcr
 /// a live-tail buffer of `capacity` and the `[observability]` retention bounds.
 ///
 /// The publisher is ALWAYS constructed (the transcript channel is served on every
-/// boot); only the durability of the backing store varies by backend. A backend
-/// with no `O` keyspace (haematite / in-memory) gets the in-memory
+/// boot); only the durability of the backing store varies by backend. The memory
+/// backend, which has no `O` keyspace, gets the in-memory
 /// [`InMemoryObservabilityStore`](aion_store::InMemoryObservabilityStore), so the
 /// live-tail + resume path behaves identically and only cross-restart durability
 /// differs — exactly the "keep the no-observability path uniform" contract.
@@ -1946,8 +1946,10 @@ impl ConnectedStore {
             outbox_store,
             namespace_store,
             worker_deployment_store,
-            // A `local` connected store is the memory / haematite / embedder path,
-            // none of which implement the durable `O` keyspace: the transcript
+            // `local` is the memory backend and the embedder's own-store path.
+            // A haematite boot never arrives here — `connect_store` routes it to
+            // `connect_haematite_store`, which sets `observability_store`. So a
+            // `local` store has no durable `O` keyspace and the transcript
             // sequencer falls back to an in-memory impl (NOI-5b).
             observability_store: None,
             bootstrap_coordinator: true,

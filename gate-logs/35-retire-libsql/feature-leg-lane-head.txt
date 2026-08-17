@@ -1,0 +1,6 @@
+clippy::unnecessary_filter_map	this `.filter_map(..)` can be written more simply using `.map(..)`
+dead_code	enum `PingFailure` is never used
+dead_code	enum `ProbedTransport` is never used
+dead_code	field `0` is never read
+dead_code	function `ping_grpc_worker` is never used
+dead_code	methods `name` and `pid` are never used
