@@ -194,6 +194,10 @@ fn failure_stand_down(
     let retry_eligible = expired || is_retryable_reason(reason);
     match policy {
         Some(policy) if retry_eligible && attempt < policy.max_attempts => None,
+        Some(policy) if retry_eligible => Some(RetryLoopTerminal::Failed(format!(
+            "exhausted: spent {attempt} of {} attempts; last refusal: {reason}",
+            policy.max_attempts
+        ))),
         _ => Some(RetryLoopTerminal::Failed(reason.to_owned())),
     }
 }
