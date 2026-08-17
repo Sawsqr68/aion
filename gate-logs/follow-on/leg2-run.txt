@@ -1,0 +1,17 @@
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+   Compiling aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-client)
+   Compiling aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.85s
+     Running tests/issue36_pause_restart_resume_e2e.rs (target/debug/deps/issue36_pause_restart_resume_e2e-d579ceac0641aaf2)
+
+running 1 test
+test a_paused_run_resumed_across_a_server_death_adopts_its_live_builder ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.29s
+

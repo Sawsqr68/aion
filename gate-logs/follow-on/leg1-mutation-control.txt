@@ -1,0 +1,42 @@
+   Compiling aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-norn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.03s
+     Running tests/cross_process_reattach_e2e.rs (target/debug/deps/cross_process_reattach_e2e-3c3387e23427a956)
+
+running 1 test
+test replacement_worker_reattaches_the_surviving_norn_session ... 
+running 1 test
+
+running 1 test
+Error: Occupied { detail: "spawn refused: live sibling pid 24337 holds this tree (workflow f10dd4f7-4305-460d-b307-9e25cfba7a4e, activity activity:1)" }
+test replacement_worker_reattaches_the_surviving_norn_session ... FAILED
+
+failures:
+
+failures:
+    replacement_worker_reattaches_the_surviving_norn_session
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+Error: "timed out waiting for the replacement worker to reattach at /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T/.tmppCDcWr/second.ready"
+FAILED
+
+failures:
+
+failures:
+    replacement_worker_reattaches_the_surviving_norn_session
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.15s
+
+error: test failed, to rerun pass `-p aion-integration-norn --test cross_process_reattach_e2e`
+[2m2026-08-17T10:34:03.860105Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m30.016889834 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mfalse [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:03.861095Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m2 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m303
+[2m2026-08-17T10:34:04.170924Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m0.000722541 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mtrue [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:04.172351Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m3 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m1308
+[2m2026-08-17T10:34:05.483305Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m0.000425875 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mtrue [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:05.483453Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m4 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m3321
+[2m2026-08-17T10:34:08.811869Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m0.001134167 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mtrue [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:08.813425Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m5 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m1458
+[2m2026-08-17T10:34:10.275258Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m0.000801958 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mtrue [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:10.275672Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m6 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m2053
+[2m2026-08-17T10:34:12.333263Z[0m [33m WARN[0m [2mnorn::provider::exec[0m[2m:[0m provider request failed [3melapsed_s[0m[2m=[0m0.000548666 [3mis_timeout[0m[2m=[0mfalse [3mis_connect[0m[2m=[0mtrue [3merror[0m[2m=[0merror sending request [3mbackend[0m[2m=[0m"chat completions"
+[2m2026-08-17T10:34:12.333675Z[0m [33m WARN[0m [2mnorn::r#loop::retry[0m[2m:[0m provider call failed; retrying after backoff [3mattempt[0m[2m=[0m7 [3mmax_attempts[0m[2m=[0mNone [3merror_class[0m[2m=[0m"connection_reset" [3merror[0m[2m=[0mconnection failed: request failed: error sending request [3mdelay_ms[0m[2m=[0m29387

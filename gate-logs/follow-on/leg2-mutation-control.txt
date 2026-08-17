@@ -1,0 +1,205 @@
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+warning: method `record_activity_adoption_offered` is never used
+   --> crates/aion/src/runtime/nif_context.rs:297:19
+    |
+ 67 | impl NifContext {
+    | --------------- method in this implementation
+...
+297 |     pub(crate) fn record_activity_adoption_offered(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-client)
+warning: `aion-rs` (lib) generated 1 warning
+   Compiling aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.21s
+     Running tests/issue36_pause_restart_resume_e2e.rs (target/debug/deps/issue36_pause_restart_resume_e2e-d579ceac0641aaf2)
+
+running 1 test
+
+thread 'a_paused_run_resumed_across_a_server_death_adopts_its_live_builder' (1002440) panicked at crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs:673:5:
+a live builder must never be recorded as superseded by server death:
+{
+  "summary": {
+    "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e",
+    "workflow_type": "issue36_resume",
+    "status": "Completed",
+    "started_at": "2026-08-17T10:46:12.423298Z",
+    "ended_at": "2026-08-17T10:46:13.919894Z",
+    "parent": null
+  },
+  "history": [
+    {
+      "type": "WorkflowStarted",
+      "data": {
+        "envelope": {
+          "seq": 1,
+          "recorded_at": "2026-08-17T10:46:12.423298Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "workflow_type": "issue36_resume",
+        "input": {
+          "question": "say adopted"
+        },
+        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "parent_run_id": null,
+        "package_version": "7b6ec5e007f4c52eb434a34f22496afd4ee2cf01e0d8656c824b5f95c6a78d9a"
+      }
+    },
+    {
+      "type": "SearchAttributesUpdated",
+      "data": {
+        "envelope": {
+          "seq": 2,
+          "recorded_at": "2026-08-17T10:46:12.423298Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e",
+        "attributes": {
+          "aion.namespace": {
+            "type": "String",
+            "data": "default"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerStarted",
+      "data": {
+        "envelope": {
+          "seq": 3,
+          "recorded_at": "2026-08-17T10:46:12.423298Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "timer_id": {
+          "Named": "deadline:c183b0b1-a438-4ca1-998d-59c4cbffe090"
+        },
+        "fire_at": "2026-08-17T11:16:12.423298Z"
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 4,
+          "recorded_at": "2026-08-17T10:46:12.514813Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "activity_id": 0,
+        "activity_type": "ask",
+        "input": {
+          "prompt": "say adopted"
+        },
+        "task_queue": "issue36_resume",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 5,
+          "recorded_at": "2026-08-17T10:46:12.514813Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "activity_id": 0,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowPaused",
+      "data": {
+        "envelope": {
+          "seq": 6,
+          "recorded_at": "2026-08-17T10:46:12.750219Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "reason": null,
+        "operator": null
+      }
+    },
+    {
+      "type": "ActivityFailed",
+      "data": {
+        "envelope": {
+          "seq": 7,
+          "recorded_at": "2026-08-17T10:46:13.507169Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "activity_id": 0,
+        "error": {
+          "kind": "Retryable",
+          "message": "superseded:server-death",
+          "details": null
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowResumed",
+      "data": {
+        "envelope": {
+          "seq": 8,
+          "recorded_at": "2026-08-17T10:46:13.658658Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "operator": null
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 9,
+          "recorded_at": "2026-08-17T10:46:13.866588Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "activity_id": 0,
+        "result": {
+          "text": "adopted",
+          "final_message": "adopted",
+          "stop_reason": "end_turn",
+          "session_id": "9a80dfb1-0117-4369-8914-7c3849e5917e-ask"
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowCompleted",
+      "data": {
+        "envelope": {
+          "seq": 10,
+          "recorded_at": "2026-08-17T10:46:13.919894Z",
+          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+        },
+        "result": {
+          "outcome": "answered",
+          "payload": {
+            "reply": "adopted",
+            "session": "9a80dfb1-0117-4369-8914-7c3849e5917e-ask"
+          }
+        }
+      }
+    }
+  ]
+}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test a_paused_run_resumed_across_a_server_death_adopts_its_live_builder ... FAILED
+
+failures:
+
+failures:
+    a_paused_run_resumed_across_a_server_death_adopts_its_live_builder
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.82s
+
+error: test failed, to rerun pass `-p aion-cli --test issue36_pause_restart_resume_e2e`
