@@ -10,7 +10,7 @@
 
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de};
 
 use crate::error::ServerError;
 
@@ -55,20 +55,24 @@ pub struct ServerSection {
 pub enum StoreBackend {
     /// In-memory store for local development.
     Memory,
-    /// libSQL durable store.
-    LibSql,
     /// haematite durable store (single-node, shardable).
     Haematite,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RetiredStoreInput {
+    Backend,
+    Url,
+    Environment,
+    Flag,
+}
+
 /// Event-store backend configuration from `[store]`.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct StoreConfig {
     /// Selected backing store implementation.
     pub backend: StoreBackend,
-    /// Backend URL/path. For libSQL this is the embedded database path; for memory it is ignored.
-    pub url: Option<String>,
+    pub(crate) retired_input: Option<RetiredStoreInput>,
     /// Static distribution-shard assignment for this node (multi-shard
     /// active-active). When empty (the default) the node owns ALL shards — the
     /// single-node default, byte-identical to today. When set, the engine boot
@@ -140,6 +144,49 @@ pub struct StoreConfig {
     ///
     /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`]: super::STORE_NODE_CACHE_BUDGET_REQUIRED
     pub node_cache_budget: Option<haematite::NodeCacheBudget>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct StoreConfigWire {
+    backend: Option<String>,
+    url: Option<String>,
+    owned_shards: Vec<usize>,
+    data_dir: Option<String>,
+    shard_count: Option<usize>,
+    cluster: Option<ClusterConfig>,
+}
+
+impl<'de> Deserialize<'de> for StoreConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = StoreConfigWire::deserialize(deserializer)?;
+        let mut config = Self::default();
+        if let Some(backend) = wire.backend.as_deref() {
+            match backend.to_ascii_lowercase().as_str() {
+                "memory" => config.backend = StoreBackend::Memory,
+                "haematite" => config.backend = StoreBackend::Haematite,
+                "libsql" => config.retired_input = Some(RetiredStoreInput::Backend),
+                _ => {
+                    return Err(de::Error::custom(
+                        "store.backend must be one of: memory, haematite",
+                    ));
+                }
+            }
+        }
+        if wire.url.is_some() && config.retired_input.is_none() {
+            config.retired_input = Some(RetiredStoreInput::Url);
+        }
+        config.owned_shards = wire.owned_shards;
+        config.data_dir = wire.data_dir;
+        if let Some(shard_count) = wire.shard_count {
+            config.shard_count = shard_count;
+        }
+        config.cluster = wire.cluster;
+        Ok(config)
+    }
 }
 
 /// Distributed-cluster membership for the haematite backend, from `[store.cluster]`.
@@ -885,10 +932,9 @@ impl Default for StoreConfig {
         Self {
             // The ablative stack is the out-of-box durable default: an empty
             // config selects the haematite backend. The merged loader fills
-            // `<AION_HOME>/data`; `memory` (ephemeral) and `libsql`
-            // (lightweight, opt-in) remain explicit operator choices.
+            // `<AION_HOME>/data`; `memory` remains an explicit dev choice.
             backend: StoreBackend::Haematite,
-            url: None,
+            retired_input: None,
             owned_shards: Vec::new(),
             data_dir: None,
             // NOT a default: `None` is "the operator has not ruled", which the

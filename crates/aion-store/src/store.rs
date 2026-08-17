@@ -137,7 +137,7 @@ pub trait ReadableEventStore: Send + Sync + 'static {
     /// boot path tells the store which shards this node serves so recovery and
     /// enumeration see only that node's slice of the cluster's state. The
     /// default implementation is a deliberate no-op — single-shard backends
-    /// (in-memory, libSQL) own everything unconditionally, so a `None` or any
+    /// (in-memory, haematite) own everything unconditionally, so a `None` or any
     /// shard set leaves their behaviour byte-identical. Only a sharded backend
     /// (haematite) overrides this to scope its enumeration. Decorators that wrap
     /// another store must forward this call to their inner store.
@@ -155,7 +155,7 @@ pub trait ReadableEventStore: Send + Sync + 'static {
     /// subsequent recovery reads see the full committed history for its shards.
     ///
     /// The default implementation is a deliberate no-op returning `Ok(())` —
-    /// single-shard / non-distributed backends (in-memory, libSQL, and the
+    /// single-shard / non-distributed backends (in-memory, haematite, and the
     /// single-node haematite mode) own everything unconditionally and elect
     /// nothing, so boot stays byte-identical. Only a DISTRIBUTED sharded backend
     /// overrides this to run the election. Decorators that wrap another store
@@ -297,7 +297,7 @@ pub trait WritableEventStore: Send + Sync + 'static {
     /// than silently dropping the outbox rows**. Dropping them would be the dangerous failure mode:
     /// the events would commit, the workflow would believe its fan-out is durably staged, and the
     /// rows would never be dispatched. A hard error forces a backend to opt in to durable-outbox
-    /// support by overriding this method (as the libSQL store does) before any caller can route a
+    /// support by overriding this method (as the haematite store does) before any caller can route a
     /// fan-out batch through it.
     ///
     /// # Errors
@@ -344,7 +344,7 @@ pub trait WritableEventStore: Send + Sync + 'static {
     /// An empty `rows` slice is `Ok(())`. A non-empty slice returns [`StoreError::Backend`] **rather
     /// than silently no-op'ing the re-arm**: a store without durable-outbox support cannot re-stage a
     /// dispatch, and silently dropping the request would strand the recovered activity. A hard error
-    /// forces a backend to opt in (as the libSQL store does) before any caller can route a re-arm
+    /// forces a backend to opt in (as the haematite store does) before any caller can route a re-arm
     /// through it.
     ///
     /// # Errors

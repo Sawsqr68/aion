@@ -969,7 +969,7 @@ async fn a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable() -
 ///
 /// The same is true of the `Paused` exclusion immediately below it: disabling
 /// that gives exit 0 across two consecutive runs. Both backends' `list_active`
-/// filter `== Running` (`memory.rs:374`, libSQL `read.rs:133`), so neither a
+/// filter `== Running` (`memory.rs:374`, haematite `read.rs:133`), so neither a
 /// terminal nor a paused run reaches the loop through any real store, and both
 /// guards sit behind a total filter. See #121 — covering them needs an
 /// adversarial `EventStore` whose `list_active` returns such a run anyway.

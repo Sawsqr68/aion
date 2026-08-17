@@ -1,0 +1,34 @@
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.97s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-0fb8c07e378e819f)
+
+running 4 tests
+
+thread 'config::load::tests::retired_store_url_flag_is_refused_with_remedy' (49728124) panicked at crates/aion-server/src/config/load.rs:1844:9:
+refusal did not name `--store-url`: configuration error: store.data_dir must not be empty when store.backend is haematite
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'config::load::tests::retired_store_url_environment_is_refused_with_remedy' (49728123) panicked at crates/aion-server/src/config/load.rs:1844:9:
+refusal did not name `AION_STORE_URL`: configuration error: store.data_dir must not be empty when store.backend is haematite
+test config::load::tests::retired_store_url_environment_is_refused_with_remedy ... FAILED
+test config::load::tests::retired_store_url_flag_is_refused_with_remedy ... FAILED
+
+thread 'config::load::tests::retired_store_url_key_is_refused_with_remedy' (49728125) panicked at crates/aion-server/src/config/load.rs:1842:14:
+retired libsql input must be refused: ServerConfig { server: ServerSection { listen_address: 127.0.0.1:8080, grpc_address: 127.0.0.1:50051, cors_allowed_origins: [] }, store: StoreConfig { backend: Haematite, retired_input: Some(Url), owned_shards: [], data_dir: Some("/Users/tom/.aion/data"), shard_count: 64, cluster: None }, runtime: RuntimeSection { scheduler_threads: 1, query_timeout_ms: Some(10000) }, drain: DrainConfig { timeout_seconds: 30 }, auth: AuthConfig { enabled: false, jwks_url: None, jwks_refresh_seconds: 300 }, metrics: MetricsConfig { enabled: true }, namespaces: NamespacesConfig { default: "default", auto_create: Open, max_in_flight_activities: 1024 }, tls: None, ops_console: OpsConsoleConfig { source: Embedded }, namespace: NamespaceConfig { mode: SharedEngine }, worker: WorkerConfig { heartbeat_window: 30s, queue_service: QueueServiceConfig { default_policy: Strict, overrides: [], service_availability_deadline: None, schedule_to_start_timeout: None } }, websocket: WebSocketConfig { outbound_buffer_bound: 32, event_broadcast_capacity: Some(256), cluster_broadcast_capacity: Some(64) }, workflow_packages: [], deploy: DeployConfig { enabled: false, max_archive_bytes: None, max_inflated_bytes: None }, authoring: AuthoringConfig { gleam_path: None, project_root: None, workspace_dir: Some("/Users/tom/.aion/authoring") }, dev: DevConfig { enabled: false }, outbox: OutboxConfig { enabled: false, poll_interval_ms: None, batch_size: None, max_attempts: None, backoff_base_ms: None, backoff_multiplier: None, backoff_max_ms: None, reconcile_interval_ms: None, reconcile_stale_after_ms: None, transport: Liminal, liminal_listen_address: None }, observability: ObservabilityConfig { max_event_bytes: 262144, max_stream_events: 20000 }, mcp: McpConfig { enabled: false, allowed_origins: [], discover_ttl_ms: None, tools_list_ttl_ms: None, task_ttl_ms: None, task_poll_interval_ms: None, await_poll_interval_ms: None }, worker_supervision: WorkerSupervisionConfig { restart_backoff_initial_ms: None, restart_backoff_max_ms: None, restart_backoff_multiplier: None, restart_window_ms: None, max_restarts_per_window: None, stop_grace_ms: None } }
+
+thread 'config::load::tests::retired_libsql_backend_is_refused_with_remedy' (49728122) panicked at crates/aion-server/src/config/load.rs:1842:14:
+retired libsql input must be refused: ServerConfig { server: ServerSection { listen_address: 127.0.0.1:8080, grpc_address: 127.0.0.1:50051, cors_allowed_origins: [] }, store: StoreConfig { backend: Haematite, retired_input: Some(Backend), owned_shards: [], data_dir: Some("/Users/tom/.aion/data"), shard_count: 64, cluster: None }, runtime: RuntimeSection { scheduler_threads: 1, query_timeout_ms: Some(10000) }, drain: DrainConfig { timeout_seconds: 30 }, auth: AuthConfig { enabled: false, jwks_url: None, jwks_refresh_seconds: 300 }, metrics: MetricsConfig { enabled: true }, namespaces: NamespacesConfig { default: "default", auto_create: Open, max_in_flight_activities: 1024 }, tls: None, ops_console: OpsConsoleConfig { source: Embedded }, namespace: NamespaceConfig { mode: SharedEngine }, worker: WorkerConfig { heartbeat_window: 30s, queue_service: QueueServiceConfig { default_policy: Strict, overrides: [], service_availability_deadline: None, schedule_to_start_timeout: None } }, websocket: WebSocketConfig { outbound_buffer_bound: 32, event_broadcast_capacity: Some(256), cluster_broadcast_capacity: Some(64) }, workflow_packages: [], deploy: DeployConfig { enabled: false, max_archive_bytes: None, max_inflated_bytes: None }, authoring: AuthoringConfig { gleam_path: None, project_root: None, workspace_dir: Some("/Users/tom/.aion/authoring") }, dev: DevConfig { enabled: false }, outbox: OutboxConfig { enabled: false, poll_interval_ms: None, batch_size: None, max_attempts: None, backoff_base_ms: None, backoff_multiplier: None, backoff_max_ms: None, reconcile_interval_ms: None, reconcile_stale_after_ms: None, transport: Liminal, liminal_listen_address: None }, observability: ObservabilityConfig { max_event_bytes: 262144, max_stream_events: 20000 }, mcp: McpConfig { enabled: false, allowed_origins: [], discover_ttl_ms: None, tools_list_ttl_ms: None, task_ttl_ms: None, task_poll_interval_ms: None, await_poll_interval_ms: None }, worker_supervision: WorkerSupervisionConfig { restart_backoff_initial_ms: None, restart_backoff_max_ms: None, restart_backoff_multiplier: None, restart_window_ms: None, max_restarts_per_window: None, stop_grace_ms: None } }
+test config::load::tests::retired_libsql_backend_is_refused_with_remedy ... FAILED
+test config::load::tests::retired_store_url_key_is_refused_with_remedy ... FAILED
+
+failures:
+
+failures:
+    config::load::tests::retired_libsql_backend_is_refused_with_remedy
+    config::load::tests::retired_store_url_environment_is_refused_with_remedy
+    config::load::tests::retired_store_url_flag_is_refused_with_remedy
+    config::load::tests::retired_store_url_key_is_refused_with_remedy
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 1128 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-server --lib`

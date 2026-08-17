@@ -5,6 +5,15 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## 0.16.0 — 2026-08-16
 
+- **Haematite is Aion's durable store.** The libsql backend, its cargo features,
+  and the `aion-store-libsql` crate are retired; the release publishes 21 crates.
+  Configurations that name `backend = "libsql"`, `store.url`, `AION_STORE_URL`,
+  or `--store-url` are refused with the haematite remedy rather than ignored or
+  migrated. This build does not read libsql database files. If you used a
+  crates.io 0.14/0.15 libsql store, keep a 0.15 binary to access that old data.
+  This subtraction closes the retired backend's #85 and #229 defect surfaces; it
+  does not claim to fix the separate haematite memory defect tracked in #32.
+
 - **A workflow's displayed status is reconciled from its full recorded history —
   never from a stale cached row.** `POST /workflows/list` now rebuilds each row
   from the run's complete event history before filtering and serving: a finished

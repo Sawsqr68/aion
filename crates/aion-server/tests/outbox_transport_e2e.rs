@@ -13,7 +13,7 @@
 //! # What this test proves, organically
 //!
 //! With a FULL `ServerState` built WITH an engine (`ServerState::build_with_store`)
-//! over a real persistent `LibSqlStore`, `outbox.enabled = true`, and the
+//! over a real persistent `HaematiteStore`, `outbox.enabled = true`, and the
 //! `collect_four` fan-out package loaded:
 //!
 //! 1. Starting the workflow over the REAL HTTP transport drives the engine's
@@ -22,7 +22,7 @@
 //!    rows) and spawns NO in-process completion task.
 //! 2. The REAL `OutboxDispatcher`, spawned over the SAME DB file the engine
 //!    writes to (mirroring `run.rs::maybe_spawn_outbox_dispatcher`, which opens
-//!    a fresh `LibSqlStore` handle on the same `store.url`), claims those
+//!    a fresh `HaematiteStore` handle on the same `store.data_dir`), claims those
 //!    pending rows and pushes an `ActivityTask` to the connected worker through
 //!    the production push `ActivityDispatcher`.
 //! 3. A REAL gRPC worker (booted over TCP loopback, as in
@@ -44,7 +44,7 @@
 //!   by `worker_grpc.rs` decoding a wire `ActivityResult` from the real gRPC
 //!   stream; the test only writes bytes to that stream.
 //! - The `OutboxDispatcher` is the REAL one, `tokio::spawn`ed, reading the same
-//!   DB the engine writes to (a second `LibSqlStore` handle on the same path,
+//!   DB the engine writes to (a second `HaematiteStore` handle on the same path,
 //!   exactly as production opens it).
 //! - The four staged outbox rows are observed transitioning `Pending` -> `Done`
 //!   by the dispatcher, and the worker is observed receiving exactly the four
@@ -80,7 +80,7 @@ use aion_server::worker::{
     WorkerOutboxDispatch,
 };
 use aion_store::{OutboxRow, OutboxStatus, OutboxStore, ReadableEventStore, WritableEventStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use axum::body;
 use axum::http::{Request, StatusCode};
 use serde_json::json;
@@ -106,7 +106,7 @@ const POLL_DEADLINE: Duration = Duration::from_secs(20);
 
 // --- fixture package (mirrors crates/aion/tests/outbox_e2e.rs) -----------------
 
-/// A unique temp directory holding both the libSQL DB file and the `.aion`
+/// A unique temp directory holding both the haematite DB file and the `.aion`
 /// archive the full build loads. Returned `TempDir` is kept alive for the test.
 fn unique_temp_dir(name: &str) -> Result<tempfile::TempDir, TestError> {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -399,7 +399,7 @@ fn count_scheduled(history: &[Event]) -> usize {
 }
 
 async fn wait_for_history<F>(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
     description: &str,
     predicate: F,
@@ -490,7 +490,7 @@ async fn start_over_http(
 /// `WorkflowCompleted` carrying the input-ordered result list, and every outbox
 /// row driven to `Done` by the dispatcher (the durable-outbox-path proof).
 async fn assert_fan_out_settled(
-    reader: &LibSqlStore,
+    reader: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
 ) -> Result<(), TestError> {
     let settled = wait_for_history(reader, workflow_id, "fan-out settled", |events| {
@@ -563,12 +563,12 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
 
-    // 1. Full ServerState WITH an engine, over a real persistent LibSqlStore,
+    // 1. Full ServerState WITH an engine, over a real persistent HaematiteStore,
     //    outbox commissioned, collect_four loaded. build_with_store installs the
     //    ServerOutboxDeliveryCallback (state.rs, gated on outbox.enabled) and
     //    wires the production WorkerActivityDispatcher into the engine — there is
     //    no in-process dispatcher stub to inject on this path.
-    let engine_store = LibSqlStore::open(db_path.clone()).await?;
+    let engine_store = HaematiteStore::open_or_create(db_path.clone()).await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
 
     // 2. Real worker gRPC service over loopback, one worker registered for the
@@ -582,11 +582,12 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     );
     let mut worker = WorkerSession::connect(grpc_address, state.worker_registry()).await?;
 
-    // 3. The REAL OutboxDispatcher, spawned over a SECOND LibSqlStore handle on
+    // 3. The REAL OutboxDispatcher, spawned over a SECOND HaematiteStore handle on
     //    the SAME DB file the engine writes to (exactly how run.rs opens the
-    //    outbox store: a fresh LibSqlStore::open on store.url). It pushes claimed
+    //    outbox store: a fresh HaematiteStore::open_or_create on store.data_dir). It pushes claimed
     //    rows to the connected worker through the production push dispatcher.
-    let outbox_store: Arc<dyn OutboxStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
+    let outbox_store: Arc<dyn OutboxStore> =
+        Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
     let push = ActivityDispatcher::new(state.worker_registry().clone())
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
@@ -598,7 +599,7 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
 
     // A read-only store handle (third handle on the same file) for asserting
     // history and outbox-row state without disturbing the engine or dispatcher.
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
 
     // 4. Start collect_four over the real HTTP transport.
     let router = http_router(state.clone())?;
@@ -696,7 +697,7 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
 /// `WorkflowFailed`, with a stranded `Claimed` outbox row for its ordinal 0 —
 /// exactly what the crashed server left behind before the zombie round.
 async fn seed_incident_state(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
 ) -> Result<(aion_core::WorkflowId, String), TestError> {
     use aion_core::{Event, EventEnvelope};
     use aion_store::WriteToken;
@@ -793,12 +794,12 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let package_path = write_package_archive(dir.path())?;
 
     // Seed the incident state before any server exists.
-    let seeder = LibSqlStore::open(db_path.clone()).await?;
+    let seeder = HaematiteStore::open_or_create(db_path.clone()).await?;
     let (workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
     // Boot the server over the same store; the terminal workflow is excluded
     // from recovery (list_active) exactly as in the incident.
-    let engine_store = LibSqlStore::open(db_path.clone()).await?;
+    let engine_store = HaematiteStore::open_or_create(db_path.clone()).await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let grpc_address = listener.local_addr()?;
@@ -810,7 +811,8 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let mut worker = WorkerSession::connect(grpc_address, state.worker_registry()).await?;
 
     // The boot sweep, exactly as run.rs wires it: BEFORE the dispatcher spawns.
-    let outbox_store: Arc<dyn OutboxStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
+    let outbox_store: Arc<dyn OutboxStore> =
+        Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
     let engine = state.engine()?;
     let settled = aion_server::worker::settle_terminal_outbox_rows(
         engine.store().as_ref(),
@@ -822,7 +824,7 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
         vec![dispatch_key.clone()],
         "the boot sweep must settle the terminal workflow's stranded row"
     );
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let row_state = reader
         .outbox_row_state(&dispatch_key)
         .await?
@@ -909,10 +911,10 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
 
-    let seeder = LibSqlStore::open(db_path.clone()).await?;
+    let seeder = HaematiteStore::open_or_create(db_path.clone()).await?;
     let (_workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
-    let engine_store = LibSqlStore::open(db_path.clone()).await?;
+    let engine_store = HaematiteStore::open_or_create(db_path.clone()).await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let grpc_address = listener.local_addr()?;
@@ -923,7 +925,8 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     );
     let mut worker = WorkerSession::connect(grpc_address, state.worker_registry()).await?;
 
-    let outbox_store: Arc<dyn OutboxStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
+    let outbox_store: Arc<dyn OutboxStore> =
+        Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
     let push = ActivityDispatcher::new(state.worker_registry().clone())
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
@@ -948,7 +951,7 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
 
     // Within a few sweeps the claim goes stale, the gate projects the
     // workflow terminal, and the row settles — never re-arms, never delivers.
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let deadline = Instant::now() + POLL_DEADLINE;
     loop {
         let row_state = reader

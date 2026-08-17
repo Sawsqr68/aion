@@ -174,8 +174,8 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     let owned_shards = config.store.owned_shards.clone();
     // Capture the outbox settings before `build` consumes `config`, so the
     // (default-off) outbox dispatcher can be wired after state is up. The
-    // dispatcher shares the engine's already-opened libSQL store (one
-    // connection) via `state.outbox_store()`, so no store settings are needed.
+    // dispatcher shares the engine's already-opened haematite store via
+    // `state.outbox_store()`, so no store settings are needed.
     let outbox_config = config.outbox.clone();
     // Control-Plane Phase 2 (P2-Q2): capture the keyed-backpressure inputs — the
     // generous platform-default ceiling and this node's owned-shard fraction —
@@ -538,10 +538,9 @@ async fn rebuild_outbox_boot_state(state: &ServerState, outbox_config: &OutboxCo
 /// default) the function returns immediately without spawning a task, so
 /// default server behaviour — and the live workflow dispatch path — is entirely
 /// unchanged. When commissioned, the dispatcher claims rows through the engine's
-/// own shared `Arc<LibSqlStore>` (one `libsql::Connection`), so its writes
-/// serialize with the engine's rather than contending across a second
-/// connection. The dispatcher shares the server's shutdown watch, so it drains
-/// on the same signal as the transports.
+/// own shared haematite leaf, so its writes serialize through the same durable
+/// store. The dispatcher shares the server's shutdown watch, so it drains on the
+/// same signal as the transports.
 ///
 /// NOTE (Phase boundary): the spawned dispatcher dispatches claimed rows and
 /// records each row's terminal outbox state (done / retry / failed). Routing the
@@ -559,15 +558,13 @@ fn maybe_spawn_outbox_dispatcher(
         return Ok(OutboxWorkerListener::default());
     }
     let dispatcher_config = resolve_outbox_config(outbox_config)?;
-    // Share the engine's already-opened store: one backing connection. The
-    // dispatcher's `claim_outbox_rows` writes then serialize against the engine's
-    // `append_with_outbox` on that single connection instead of contending across
-    // a second one. Both the libSQL and the haematite backends provide an
-    // `OutboxStore` (the haematite leaf is wired as the outbox store at boot); the
+    // Share the engine's already-opened haematite store. The
+    // dispatcher's `claim_outbox_rows` writes serialize against the engine's
+    // `append_with_outbox`; the
     // in-memory backend has no outbox table, so `outbox_store()` is `None` and
     // commissioning the dispatcher against it is a configuration error (LSUB-4-2).
     let outbox_store = state.outbox_store().ok_or_else(|| ServerError::Config {
-        message: "outbox.enabled=true requires store.backend=libsql or store.backend=haematite: \
+        message: "outbox.enabled=true requires store.backend=haematite: \
                   the durable outbox dispatcher claims rows from the store's outbox table, which \
                   the in-memory store does not provide"
             .to_owned(),
@@ -1046,7 +1043,6 @@ fn reject_tls_until_supported(state: &ServerState) -> Result<(), ServerError> {
 fn store_backend_label(backend: StoreBackend) -> &'static str {
     match backend {
         StoreBackend::Memory => "memory",
-        StoreBackend::LibSql => "libsql",
         StoreBackend::Haematite => "haematite",
     }
 }
@@ -1166,7 +1162,7 @@ mod tests {
     /// LSUB-4-2 / LSUB-4-6 (Memory-backend guard): commissioning the outbox
     /// dispatcher against the in-memory backend (which has no outbox table, so
     /// `outbox_store()` is `None`) is a configuration error, and the message names
-    /// BOTH supported backends (libsql / haematite), not just libsql.
+    /// haematite as the required durable backend.
     #[tokio::test]
     async fn outbox_enabled_on_memory_backend_is_a_config_error() {
         let state = ServerState::build_with_store(InMemoryStore::default(), runtime_config())
@@ -1188,8 +1184,8 @@ mod tests {
         );
         let message = error.to_string();
         assert!(
-            message.contains("libsql") && message.contains("haematite"),
-            "corrected message must name both supported backends, got: {message}"
+            message.contains("store.backend=haematite"),
+            "message must name the durable backend, got: {message}"
         );
     }
 
@@ -1243,24 +1239,21 @@ mod tests {
     /// LSUB-PROD (13-6): the liminal transport requires `liminal_listen_address`.
     /// Commissioning the dispatcher with `transport = liminal` but no listen
     /// address is a configuration error naming the missing knob, rather than a
-    /// panic or a silent fall-through to gRPC. Built over the libSQL backend (so
+    /// panic or a silent fall-through to gRPC. Built over haematite (so
     /// the outbox-store gate passes and the missing-address check is actually
     /// reached). (Feature-gated: the liminal arm of `build_liminal_row_dispatch`
     /// only exists with `liminal-transport` on; in a feature-off build the same
     /// selection is the missing-feature error instead, covered by the type system
     /// rather than this test.)
-    // Also gated on `libsql-backend`: it boots a real libSQL-backed `ServerState`
-    // to obtain an outbox-bearing store, and the libSQL connect path is now an
-    // opt-in feature. The listen-address guard itself is backend-agnostic.
-    #[cfg(all(feature = "liminal-transport", feature = "libsql-backend"))]
+    #[cfg(feature = "liminal-transport")]
     #[tokio::test]
     async fn liminal_transport_requires_listen_address() {
         use crate::config::{
             RuntimeSection, ServerConfig, StoreBackend, StoreConfig, WebSocketConfig,
         };
 
-        let db_path = std::env::temp_dir().join(format!(
-            "aion-lsub-prod-listen-guard-{}-{}.db",
+        let data_dir = std::env::temp_dir().join(format!(
+            "aion-lsub-prod-listen-guard-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1272,8 +1265,8 @@ mod tests {
         outbox.liminal_listen_address = None;
         let config = ServerConfig {
             store: StoreConfig {
-                backend: StoreBackend::LibSql,
-                url: Some(db_path.to_string_lossy().into_owned()),
+                backend: StoreBackend::Haematite,
+                data_dir: Some(data_dir.to_string_lossy().into_owned()),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1290,7 +1283,7 @@ mod tests {
         };
         let state = ServerState::build(config)
             .await
-            .expect("build libsql state");
+            .expect("build haematite state");
         let (_tx, rx) = tokio::sync::watch::channel(false);
 
         let error = maybe_spawn_outbox_dispatcher(
@@ -1343,10 +1336,7 @@ mod tests {
 /// executed the activities, AND the terminals were recorded in history (four
 /// `ActivityCompleted` + one `WorkflowCompleted`), which the stub's
 /// publish-and-mark-done path never achieved.
-// Also gated on `libsql-backend`: this production-boot round-trip stands up a
-// real libSQL-backed server (the durable outbox path it exercises), and the
-// libSQL connect path is now an opt-in feature.
-#[cfg(all(test, feature = "liminal-transport", feature = "libsql-backend"))]
+#[cfg(all(test, feature = "liminal-transport"))]
 mod lsub_prod_xnode_e2e {
     #![allow(clippy::expect_used)]
 
@@ -1362,7 +1352,7 @@ mod lsub_prod_xnode_e2e {
         ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
     };
     use aion_store::ReadableEventStore;
-    use aion_store_libsql::LibSqlStore;
+    use aion_store_haematite::HaematiteStore;
     use aion_worker::{ActivityRegistry, LiminalActivityWorker, WorkerConfig};
     use axum::body;
     use axum::http::{Request, StatusCode};
@@ -1495,21 +1485,21 @@ mod lsub_prod_xnode_e2e {
         Ok(path)
     }
 
-    /// A production-shaped `ServerConfig`: the libSQL backend (so the boot store
+    /// A production-shaped `ServerConfig`: the haematite backend (so the boot store
     /// path shares the leaf as the dispatcher's outbox store, exactly as
     /// `ServerState::build` does in production), `outbox.enabled`,
     /// `transport = liminal`, the reserved `liminal_listen_address`, and the
     /// `collect_four` package. Built through `ServerState::build` (not
     /// `build_with_store`), so this is the real boot store seam, not a test stand-in.
     fn server_config(
-        db_path: &std::path::Path,
+        data_dir: &std::path::Path,
         package_path: PathBuf,
         listen_address: SocketAddr,
     ) -> ServerConfig {
         ServerConfig {
             store: StoreConfig {
-                backend: StoreBackend::LibSql,
-                url: Some(db_path.to_string_lossy().into_owned()),
+                backend: StoreBackend::Haematite,
+                data_dir: Some(data_dir.to_string_lossy().into_owned()),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1651,7 +1641,7 @@ mod lsub_prod_xnode_e2e {
     }
 
     async fn wait_for_history<F>(
-        store: &LibSqlStore,
+        store: &HaematiteStore,
         workflow_id: &aion_core::WorkflowId,
         description: &str,
         predicate: F,
@@ -1731,9 +1721,9 @@ mod lsub_prod_xnode_e2e {
         let listen_address = reserve_loopback_port()?;
 
         // (A) Build a real ServerState through the production boot path
-        // (ServerState::build over a libSQL ServerConfig): outbox enabled,
+        // (ServerState::build over a haematite ServerConfig): outbox enabled,
         // transport = liminal, the listen address set, collect_four loaded. This
-        // shares the libSQL leaf as the dispatcher's outbox store (the real boot
+        // shares the haematite leaf as the dispatcher's outbox store (the real boot
         // store seam) and installs the production ServerOutboxDeliveryCallback over
         // the live engine (gated on outbox.enabled).
         let config = server_config(&db_path, package_path, listen_address);
@@ -1804,7 +1794,7 @@ mod lsub_prod_xnode_e2e {
         // was recorded through the production engine callback (record_fan_out_completion)
         // — four ActivityCompleted + one WorkflowCompleted in durable history. This
         // is the full round-trip the retired stub never achieved.
-        let reader = LibSqlStore::open(db_path.clone())
+        let reader = HaematiteStore::open_or_create(db_path.clone())
             .await
             .map_err(test_error)?;
         let settled = wait_for_history(&reader, &workflow_id, "fan-out settled", |events| {

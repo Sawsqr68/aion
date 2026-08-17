@@ -61,8 +61,8 @@ workspace's deny-level lint block verbatim, and this leg holds it to it.
 
 **Sequencing is reasoned, not decorative.** The workspace cargo legs share
 one `target/` build lock, so fanning them out would only serialise them on
-the lock while confounding their timings (and box contention is the #85
-flake trigger). Exactly one workspace-lock-holder runs per layer: step one
+the lock while confounding their timings. Exactly one workspace-lock-holder
+runs per layer: step one
 forks `fmt` (rustfmt takes no build lock), `bun`, and `clippy_workspace`;
 then `clippy_server`, `test`, `embed`, and `gates_worker` run in sequence;
 the manifest leg runs last, on green AND on red.

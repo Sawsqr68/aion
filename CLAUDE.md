@@ -17,8 +17,7 @@ The Rust crate family is the `crates/` workspace membership in the root `Cargo.t
 - **`crates/aion-awl-package`** — assembles compiled AWL workflows into `.aion` archives.
 - **`crates/aion-core`** — pure domain model: events, payloads, identifiers, `WorkflowStatus`, filters, and errors.
 - **`crates/aion-store`** — persistence contracts, the in-memory reference store, and backend conformance tests.
-- **`crates/aion-store-libsql`** — the alternative durable libSQL backend.
-- **`crates/aion-store-haematite`** — the default durable backend, with single-node and distributed modes.
+- **`crates/aion-store-haematite`** — the durable backend, with single-node and distributed modes.
 - **`crates/aion-package`** — `.aion` archive validation, content hashing, and module namespacing.
 - **`crates/aion-toolchain`** — the server-side Gleam compile, type-check, and package adapter.
 - **`crates/aion`** — the transport-agnostic engine (`aion-rs` package): lifecycle, replay, timers, signals, queries, children, and supervision.

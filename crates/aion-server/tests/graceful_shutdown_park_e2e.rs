@@ -17,7 +17,7 @@
 //!
 //! These tests drive the REAL drain coordinator
 //! (`shutdown::drain_after_first_signal`, the exact function the SIGTERM
-//! listener calls) over a full `ServerState` with an engine, a real libSQL
+//! listener calls) over a full `ServerState` with an engine, a real haematite
 //! store, a real workflow whose remote activity a real gRPC worker stream
 //! holds in flight, and prove BOTH drain paths park instead of failing:
 //!
@@ -59,7 +59,7 @@ use aion_server::config::{
 };
 use aion_server::shutdown::{self, ShutdownOutcome};
 use aion_store::ReadableEventStore;
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use axum::body;
 use axum::http::{Request, StatusCode};
 use serde_json::json;
@@ -323,7 +323,7 @@ impl WorkerSession {
 }
 
 /// One in-process server epoch: full `ServerState` (engine + recovery) over
-/// the shared libSQL file, the real worker gRPC service on loopback, and the
+/// the shared haematite file, the real worker gRPC service on loopback, and the
 /// real HTTP router.
 struct ServerEpoch {
     state: ServerState,
@@ -338,7 +338,7 @@ impl ServerEpoch {
         package_path: PathBuf,
         drain_timeout: Duration,
     ) -> Result<Self, TestError> {
-        let store = LibSqlStore::open(db_path.to_path_buf()).await?;
+        let store = HaematiteStore::open_or_create(db_path.to_path_buf()).await?;
         let state =
             ServerState::build_with_store(store, runtime_config(package_path, drain_timeout))
                 .await?;
@@ -389,7 +389,7 @@ async fn start_over_http(router: &axum::Router) -> Result<aion_core::WorkflowId,
 }
 
 async fn wait_for_history<F>(
-    reader: &LibSqlStore,
+    reader: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
     description: &str,
     predicate: F,
@@ -502,7 +502,7 @@ async fn restart_and_complete(
     );
     worker.complete(&task, br#""recovered""#).await?;
 
-    let reader = LibSqlStore::open(db_path.to_path_buf()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.to_path_buf()).await?;
     let settled = wait_for_history(&reader, workflow_id, "post-restart completion", |events| {
         events
             .iter()
@@ -550,7 +550,7 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
 
     // The kill -9 reference snapshot: the durable log at the moment the worker
     // holds the dispatch in flight (dangling scheduled/started, no outcome).
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()
@@ -614,7 +614,7 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     let task = worker.next_task().await?;
     assert_eq!(task.activity_type, ACTIVITY_TYPE);
 
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()

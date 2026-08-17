@@ -50,7 +50,7 @@ use aion_server::worker::{
     OutboxDispatcherConfig, OutboxRowDispatch, RegistryLiminalDispatch,
 };
 use aion_store::{OutboxRow, OutboxStatus, OutboxStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use aion_worker::{ActivityRegistry, LiminalActivityWorker, WorkerConfig};
 use chrono::Utc;
 use liminal_server::config::{ChannelDef, ServerConfig};
@@ -387,13 +387,13 @@ fn pending_row(sleep_ms: u64, tag: &str, ordinal: u64) -> Result<OutboxRow, Test
     })
 }
 
-async fn open_store(name: &str) -> Result<Arc<LibSqlStore>, TestError> {
+async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, TestError> {
     let nanos = Instant::now().elapsed().as_nanos();
     let path = std::env::temp_dir().join(format!(
         "aion-delivery-contract-{name}-{}-{nanos}.db",
         std::process::id()
     ));
-    LibSqlStore::open(path)
+    HaematiteStore::open_or_create(path)
         .await
         .map(Arc::new)
         .map_err(test_error)
@@ -404,7 +404,7 @@ async fn open_store(name: &str) -> Result<Arc<LibSqlStore>, TestError> {
 struct PinRig {
     server: Option<RunningServer>,
     worker: Option<WorkerThread>,
-    store: Arc<LibSqlStore>,
+    store: Arc<HaematiteStore>,
     callback: Arc<RecordingCallback>,
     ledger: Arc<ExecutionLedger>,
     shutdown: watch::Sender<bool>,

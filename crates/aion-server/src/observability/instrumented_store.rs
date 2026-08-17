@@ -269,7 +269,7 @@ impl WritableEventStore for InstrumentedEventStore {
     /// The default trait method REFUSES a non-empty `outbox_rows` slice (to stop
     /// an outbox-unaware backend silently dropping fan-out rows). Without this
     /// override the engine — which writes through this decorator — would never
-    /// reach the inner libSQL store's outbox-capable append, so a commissioned
+    /// reach the inner haematite store's outbox-capable append, so a commissioned
     /// (`outbox.enabled`) server could not stage a single fan-out member. We
     /// delegate to the inner store so its atomicity guarantee (events + rows
     /// commit together) holds, and observe the same `append` latency bucket and
@@ -540,7 +540,7 @@ mod tests {
         PackageVersion, Payload, RunId, WorkflowId,
     };
     use aion_store::{OutboxRow, WritableEventStore, WriteToken};
-    use aion_store_libsql::LibSqlStore;
+    use aion_store_haematite::HaematiteStore;
     use chrono::Utc;
 
     use super::InstrumentedEventStore;
@@ -600,7 +600,7 @@ mod tests {
         }
     }
 
-    /// Build an instrumented store over a libSQL backend in the given namespace,
+    /// Build an instrumented store over a haematite backend in the given namespace,
     /// returning the store and a clone of its metrics handle for assertions. Only
     /// the metrics-recording seam is exercised, so the inner store is never
     /// appended to in these unit tests.
@@ -608,7 +608,7 @@ mod tests {
         name: &str,
         namespace: &str,
     ) -> Result<(InstrumentedEventStore, Metrics), Box<dyn std::error::Error>> {
-        let store = Arc::new(LibSqlStore::open(unique_temp_path(name)).await?);
+        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path(name)).await?);
         let metrics = Metrics::new()?;
         let instrumented = InstrumentedEventStore::new(store, metrics.clone(), namespace);
         Ok((instrumented, metrics))
@@ -766,7 +766,7 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_fires_wake_on_successful_non_empty_stage()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(LibSqlStore::open(unique_temp_path("fires")).await?);
+        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("fires")).await?);
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")
@@ -803,7 +803,7 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_does_not_fire_wake_on_empty_slice()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(LibSqlStore::open(unique_temp_path("empty")).await?);
+        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("empty")).await?);
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")
@@ -836,7 +836,7 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_does_not_fire_wake_on_failed_append()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(LibSqlStore::open(unique_temp_path("failed")).await?);
+        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("failed")).await?);
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")

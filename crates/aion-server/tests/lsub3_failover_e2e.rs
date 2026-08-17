@@ -46,7 +46,7 @@ use aion_server::worker::{
     OutboxDispatcherConfig, OutboxRowDispatch, RegistryLiminalDispatch,
 };
 use aion_store::{OutboxRow, OutboxStatus, OutboxStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use aion_worker::{ActivityRegistry, LiminalActivityWorker, WorkerConfig};
 use chrono::Utc;
 use liminal::protocol::WorkerRegistration;
@@ -466,13 +466,13 @@ fn pending_row() -> Result<OutboxRow, TestError> {
     })
 }
 
-async fn open_store() -> Result<Arc<LibSqlStore>, TestError> {
+async fn open_store() -> Result<Arc<HaematiteStore>, TestError> {
     let nanos = Instant::now().elapsed().as_nanos();
     let path = std::env::temp_dir().join(format!(
         "aion-lsub3-failover-{}-{nanos}.db",
         std::process::id()
     ));
-    LibSqlStore::open(path)
+    HaematiteStore::open_or_create(path)
         .await
         .map(Arc::new)
         .map_err(test_error)
@@ -499,7 +499,7 @@ const fn dispatcher_config() -> OutboxDispatcherConfig {
 /// Polls the row state until it reaches `Done` or the [`FAILOVER_DEADLINE`] since
 /// `started` elapses. Returns whether the row completed within the deadline.
 async fn wait_for_done(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
     dispatch_key: &str,
     started: Instant,
 ) -> Result<bool, TestError> {

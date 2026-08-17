@@ -10,7 +10,7 @@
 //!   (the stream's current event count) coincide: both equal the number of
 //!   already-stored events, so Aion's `expected_seq` is passed straight through.
 //! * **Projections** (status, summaries, run chains) reuse the exact same
-//!   `aion-store`/`aion-core` helpers the in-memory and libSQL stores use, so a
+//!   `aion-store`/`aion-core` helpers the in-memory and haematite stores use, so a
 //!   workflow projects identically regardless of backend.
 //! * **Timers, packages, routes, and the outbox** are keyed KV records in
 //!   haematite's general keyspace (see [`keyspace`]). Each mutation is followed
@@ -273,6 +273,21 @@ impl HaematiteStore {
         })
         .map_err(|error| database_error(&error))?;
         Ok(Self::from_database(database))
+    }
+
+    /// Open an existing single-node store, or create it when the data directory
+    /// does not exist yet.
+    ///
+    /// This is the constructor used by backend-agnostic integration fixtures:
+    /// their first generation creates the durable store and later generations
+    /// cold-open the same bytes.
+    pub async fn open_or_create(data_dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
+        let data_dir = data_dir.into();
+        if data_dir.exists() {
+            Self::open(&data_dir)
+        } else {
+            Self::create(data_dir)
+        }
     }
 
     /// Open an existing single-node store rooted at `data_dir`.
@@ -1136,7 +1151,7 @@ fn decode_package(bytes: &[u8]) -> Result<PackageRecord, StoreError> {
 }
 
 /// On-disk form of one outbox row. Mirrors [`OutboxRow`] with the status token
-/// and instant rendered as text, matching the libSQL encoding semantics.
+/// and instant rendered as text, matching the haematite encoding semantics.
 #[derive(Serialize, Deserialize)]
 struct StoredOutboxRow {
     dispatch_key: String,
@@ -1372,7 +1387,7 @@ fn append_blocking(
 
     // Enforce the expected-head guard FIRST, before contiguity: a stale append
     // (e.g. expected_seq=0 against a head of 1) must surface as SequenceConflict,
-    // matching the libSQL/in-memory stores, even if the supplied events are not
+    // matching the haematite/in-memory stores, even if the supplied events are not
     // contiguous with the caller's stale expectation.
     let head = stream_head(store, workflow_id)?;
     if head != expected_seq {
@@ -1382,7 +1397,7 @@ fn append_blocking(
         });
     }
 
-    // Validate Aion's contiguity contract before any write (matches libSQL/in-memory).
+    // Validate Aion's contiguity contract before any write (matches haematite/in-memory).
     for (next_seq, event) in (expected_seq + 1..).zip(events.iter()) {
         if event.seq() != next_seq {
             return Err(StoreError::Backend(format!(
@@ -2004,7 +2019,7 @@ impl OutboxStore for HaematiteStore {
             .into_iter()
             .filter(|row| row.status == OutboxStatus::Pending && row.visible_after <= now)
             .collect();
-            // Match the libSQL claim order: visible_after ASC, dispatch_key ASC.
+            // Match the haematite claim order: visible_after ASC, dispatch_key ASC.
             claimable.sort_by(|left, right| {
                 left.visible_after
                     .cmp(&right.visible_after)
@@ -2122,7 +2137,7 @@ impl OutboxStore for HaematiteStore {
                     && claim_scope.admits(row)
             })
             .collect();
-            // Match the libSQL claim order: visible_after ASC, dispatch_key ASC.
+            // Match the haematite claim order: visible_after ASC, dispatch_key ASC.
             claimable.sort_by(|left, right| {
                 left.visible_after
                     .cmp(&right.visible_after)
@@ -2278,7 +2293,7 @@ impl OutboxStore for HaematiteStore {
                 .collect::<std::collections::HashSet<_>>()
                 .into_iter()
                 .collect();
-            // Deterministic textual order, matching the libSQL enumeration.
+            // Deterministic textual order, matching the haematite enumeration.
             workflow_ids.sort_by_key(ToString::to_string);
             Ok(workflow_ids)
         })
@@ -2621,6 +2636,17 @@ impl OutboxStore for HaematiteStore {
     }
 }
 
+/// Out-of-band snapshot of one outbox row's mutable lifecycle bookkeeping.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutboxRowState {
+    /// Current lifecycle state.
+    pub status: OutboxStatus,
+    /// Dispatch attempt count.
+    pub attempt: u32,
+    /// Earliest instant at which the row becomes claimable again.
+    pub visible_after: DateTime<Utc>,
+}
+
 /// Whether `status` is the dispatched-but-not-terminal (in-flight) set: `Pending` OR `Claimed`
 /// (CP2-Q1.5). Terminal states (`Done`, `Failed`, `Cancelled`) are not in-flight.
 fn is_inflight(status: OutboxStatus) -> bool {
@@ -2628,15 +2654,74 @@ fn is_inflight(status: OutboxStatus) -> bool {
 }
 
 impl HaematiteStore {
+    /// Read back one outbox row's mutable lifecycle state, or `None` when absent.
+    pub async fn outbox_row_state(
+        &self,
+        dispatch_key: &str,
+    ) -> Result<Option<OutboxRowState>, StoreError> {
+        let dispatch_key = dispatch_key.to_owned();
+        self.blocking(move |store| {
+            let database = store.database();
+            let (workflow_text, _ordinal) = dispatch_key.rsplit_once(':').ok_or_else(|| {
+                StoreError::Backend(format!(
+                    "outbox dispatch_key missing ':' separator: {dispatch_key}"
+                ))
+            })?;
+            let workflow_id = parse_workflow_id(workflow_text)?;
+            let route_key = keyspace::event_stream_key(&workflow_id);
+            let key = keyspace::outbox_key(&dispatch_key);
+            let Some(existing) = database
+                .get_routed(&route_key, &key)
+                .map_err(|error| database_error(&error))?
+            else {
+                return Ok(None);
+            };
+            let row = decode_outbox(&existing)?;
+            Ok(Some(OutboxRowState {
+                status: row.status,
+                attempt: row.attempt,
+                visible_after: row.visible_after,
+            }))
+        })
+        .await
+    }
+
+    /// Rewrite an existing outbox row as claimed at `claimed_at`.
+    ///
+    /// This narrow fixture seam lets integration tests exercise the production
+    /// stale-claim reconciler without reaching through haematite's private
+    /// keyspace encoding. It refuses an absent dispatch key.
+    pub async fn set_outbox_claimed_at(
+        &self,
+        dispatch_key: &str,
+        claimed_at: DateTime<Utc>,
+    ) -> Result<(), StoreError> {
+        let key = dispatch_key.to_owned();
+        self.transition_outbox(dispatch_key, move |current| match current {
+            Some(row) => (
+                Some(OutboxRow {
+                    status: OutboxStatus::Claimed,
+                    claimed_at: Some(claimed_at),
+                    ..row
+                }),
+                Ok(()),
+            ),
+            None => (
+                None,
+                Err(StoreError::Backend(format!(
+                    "outbox row not found for dispatch key {key}"
+                ))),
+            ),
+        })
+        .await?
+    }
+
     /// Read back the durable status of the outbox row at `dispatch_key`, or
     /// `None` when no such row exists.
     ///
-    /// This is an out-of-band inspection helper symmetric with
-    /// [`LibSqlStore::outbox_row_state`](aion_store_libsql::LibSqlStore::outbox_row_state):
-    /// the [`OutboxStore`] dispatch contract keys terminal transitions off
-    /// `dispatch_key` and never needs to read a row back, so this is used by tests
-    /// and by operators auditing dead-lettered (`failed`) or drained (`done`)
-    /// rows. The row is co-located on its workflow's shard, so the lookup derives
+    /// The [`OutboxStore`] dispatch contract keys terminal transitions off
+    /// `dispatch_key` and never needs to read a row back. The row is co-located on
+    /// its workflow's shard, so the lookup derives
     /// the route key from the `dispatch_key`'s workflow-id prefix exactly as
     /// [`Self::transition_outbox`] does and reads the locally-applied replica.
     ///
@@ -3837,7 +3922,7 @@ mod tests {
     -> Result<(), StoreError> {
         // CP2-Q2: the CLAIMED-only count is the keyed-backpressure headroom input. It counts only
         // concurrently-executing (Claimed) rows and EXCLUDES the Pending backlog, so a tenant with a
-        // large backlog never wedges itself against its own count. Parity with the libSQL backend.
+        // large backlog never wedges itself against its own count. Parity with the haematite backend.
         let store = store("count-claimed")?;
         let past = Utc::now() - Duration::hours(1);
         let future = Utc::now() + Duration::days(3650);
@@ -3877,7 +3962,7 @@ mod tests {
     -> Result<(), StoreError> {
         // CP2-Q2 perf: the single bucketed scan must yield byte-identical counts to N scalar
         // per-namespace scans over the same owned-shard set — same Claimed-only predicate, one
-        // entry per requested namespace (absent maps to 0). Parity with the libSQL backend.
+        // entry per requested namespace (absent maps to 0). Parity with the haematite backend.
         let store = store("count-claimed-bucketed")?;
         let past = Utc::now() - Duration::hours(1);
         let future = Utc::now() + Duration::days(3650);
@@ -3929,7 +4014,7 @@ mod tests {
     {
         // CP2-Q2: the round-robin probe returns exactly the distinct (namespace, task_queue, node)
         // routes with a claimable Pending row, and nothing for a future-fenced route. Parity with
-        // the libSQL backend.
+        // the haematite backend.
         let store = store("pending-routes")?;
         let past = Utc::now() - Duration::hours(1);
         let future = Utc::now() + Duration::days(3650);

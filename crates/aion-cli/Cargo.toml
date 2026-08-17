@@ -70,12 +70,7 @@ aion-integration-acp = { version = "0.17.0", path = "../aion-integration-acp", o
 # the composition root regardless.
 aion-integrations = { version = "0.17.0", path = "../aion-integrations" }
 aion-package = { version = "0.17.0", path = "../aion-package" }
-# `default-features = false` is what makes the documented slim opt-out real. The
-# CLI's own `default` re-selects `haematite-backend` and `liminal-transport` (the
-# exact pair aion-server defaults to), so a stock build is unchanged; without it,
-# aion-server's defaults were unconditional and
-# `--no-default-features --features libsql-backend` still linked haematite, the
-# liminal transport, and their beamr distributions.
+# The CLI controls optional transports, while haematite is linked by the server in every build.
 aion-server = { version = "0.17.0", path = "../aion-server", default-features = false }
 # The instant authoring loop (`aion dev`) reuses the toolchain's external
 # `gleam build` shell-out (build_project) instead of reinventing it. The
@@ -128,24 +123,14 @@ tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
 tokio-stream = { workspace = true, features = ["net"] }
 
 [features]
-# The ablative stack is the out-of-box default for the `aion` binary, mirroring
-# aion-server: a stock `cargo build -p aion-cli` links the haematite event-store
-# backend and the liminal transport, so `backend = "haematite"` is selectable
-# without a special flag and the runtime default backend is haematite. The slim
-# opt-out is `--no-default-features --features libsql-backend`.
+# Haematite is linked in every CLI build; optional integrations and transport
+# remain feature-selected.
 default = ["haematite-backend", "liminal-transport", "norn", "acp"]
+# Compatibility feature name; the embedded server links haematite unconditionally.
+haematite-backend = ["aion-server/haematite-backend"]
 # Forwarded to the embedded server. Off by default, matching the feature set
 # the standalone `aion-server` binary shipped with.
 auth = ["aion-server/auth"]
-# Forwarded to the embedded server: compiles the libSQL event-store backend so
-# `store.backend = libsql` is selectable. The lightweight opt-out path; pair it
-# with `--no-default-features` to build a slim `aion` without haematite/liminal.
-libsql-backend = ["aion-server/libsql-backend"]
-# Forwarded to the embedded server: compiles the haematite event-store backend
-# (single-node or distributed `[store.cluster]`) and, for a distributed boot,
-# the SS-5b cluster supervisor that auto-recovers a dead peer's shards. With it
-# on, `store.backend = haematite` is selectable at runtime.
-haematite-backend = ["aion-server/haematite-backend"]
 # Forwarded to the embedded server: compiles the liminal push transport so a
 # deployed `aion server` can HOST the cross-node outbox worker listener
 # (`outbox.transport = liminal` + `outbox.liminal_listen_address`). Remote

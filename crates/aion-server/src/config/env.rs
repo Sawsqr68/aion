@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 use crate::{
-    config::{ServerConfig, StoreBackend, config_error},
+    config::{ServerConfig, StoreBackend, config_error, sections::RetiredStoreInput},
     error::ServerError,
 };
 
@@ -36,22 +36,8 @@ pub(crate) fn overlay_vars(
                 config.store.backend = parse_store_backend(&name, &value)?;
             }
             "AION_STORE_URL" => {
-                if value.is_empty() {
-                    return config_error("AION_STORE_URL must not be empty");
-                }
-                config.store.url = Some(value);
-                // AION_STORE_URL names an embedded libSQL database file, so it is
-                // an explicit libSQL selection: coerce the implicit durable
-                // defaults (memory, or the new haematite default) to libsql. The
-                // haematite backend ignores store.url, so a URL is only meaningful
-                // as a libSQL choice. See `apply_cli_overrides` for the matching
-                // `--store-url` path.
-                if matches!(
-                    config.store.backend,
-                    StoreBackend::Memory | StoreBackend::Haematite
-                ) {
-                    config.store.backend = StoreBackend::LibSql;
-                }
+                let _ = value;
+                config.store.retired_input = Some(RetiredStoreInput::Environment);
             }
             "AION_STORE_DATA_DIR" => {
                 if value.is_empty() {
@@ -302,9 +288,8 @@ fn parse_socket_addr(name: &str, value: &str) -> Result<SocketAddr, ServerError>
 fn parse_store_backend(name: &str, value: &str) -> Result<StoreBackend, ServerError> {
     match value.to_ascii_lowercase().as_str() {
         "memory" => Ok(StoreBackend::Memory),
-        "libsql" => Ok(StoreBackend::LibSql),
         "haematite" => Ok(StoreBackend::Haematite),
-        _ => config_error(format!("{name} must be one of: memory, libsql, haematite")),
+        _ => config_error(format!("{name} must be one of: memory, haematite")),
     }
 }
 

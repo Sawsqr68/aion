@@ -63,7 +63,7 @@ use aion_server::config::{
     WorkerConfig,
 };
 use aion_store::{ReadableEventStore, WritableEventStore, WriteToken};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use axum::{body, http::Request, http::StatusCode};
 use serde_json::json;
 use tower::ServiceExt;
@@ -161,10 +161,10 @@ fn runtime_config() -> RuntimeConfig {
     }
 }
 
-/// One in-process server generation over the shared libSQL file, built
+/// One in-process server generation over the shared haematite file, built
 /// through the REAL full-boot constructor — the path under test.
 async fn server_over(db_path: PathBuf) -> Result<(ServerState, axum::Router), TestError> {
-    let store = LibSqlStore::open(db_path).await?;
+    let store = HaematiteStore::open_or_create(db_path).await?;
     let state = ServerState::build_with_store(store, runtime_config()).await?;
     let router = http_router(state.clone())?;
     Ok((state, router))
@@ -370,7 +370,7 @@ async fn seed_corpses(
     corpse_markers: &[PathBuf],
 ) -> Result<Vec<(WorkflowId, PathBuf)>, TestError> {
     let mut corpses: Vec<(WorkflowId, PathBuf)> = Vec::with_capacity(corpse_markers.len());
-    let seeder = LibSqlStore::open(db_path).await?;
+    let seeder = HaematiteStore::open_or_create(db_path).await?;
     let probe_history = seeder.read_history(probe_workflow).await?;
     for marker in corpse_markers {
         let corpse_workflow = WorkflowId::new_v4();
@@ -426,7 +426,7 @@ async fn seed_corpses(
 /// defect, failed fast by name; corpses still pending at the deadline are
 /// reported as the #266 park with their histories and marker state.
 async fn await_corpse_completions(
-    reader: &LibSqlStore,
+    reader: &HaematiteStore,
     corpses: &[(WorkflowId, PathBuf)],
 ) -> Result<(), TestError> {
     let deadline = tokio::time::Instant::now() + ADOPTION_DEADLINE;
@@ -558,7 +558,7 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     // The claim: EVERY adopted dispatch EXECUTES. Each corpse's history gains
     // a completion and its run finishes; the marker files on disk are the
     // belt. A parked dispatch (the defect) produces none of these, ever.
-    let reader = LibSqlStore::open(db_path).await?;
+    let reader = HaematiteStore::open_or_create(db_path).await?;
     let verdict_result = await_corpse_completions(&reader, &corpses).await;
     let settle_result = settle(&state);
     verdict_result?;

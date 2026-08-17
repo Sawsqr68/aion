@@ -19,7 +19,6 @@
       "tracing-subscriber": "0.3",
       "sha2": "0.11",
       "zip": "8.6",
-      "libsql": "0.9",
       "tonic": "0.14",
       "tonic-build": "0.14",
       "prost": "0.14",
@@ -48,15 +47,6 @@
       "description": "The EventStore persistence contract, StoreError, the InMemoryStore reference implementation, and the shared behavioural conformance suite. Leaf crate (depends only on aion-core).",
       "internal_deps": ["aion-core"],
       "external_deps": ["serde", "async-trait", "thiserror", "chrono", "tokio"]
-    },
-    {
-      "id": "aion-store-libsql",
-      "kind": "rust-lib",
-      "path": "crates/aion-store-libsql",
-      "cluster": "aion-store-libsql",
-      "description": "The default durable EventStore over libSQL. Embedded local file plus embedded-replica sync for the distributed path. Runs the aion-store conformance suite.",
-      "internal_deps": ["aion-core", "aion-store"],
-      "external_deps": ["libsql", "serde", "thiserror", "async-trait", "chrono", "tokio"]
     },
     {
       "id": "aion-package",
@@ -92,7 +82,7 @@
       "path": "crates/aion-server",
       "cluster": "aion-server",
       "description": "The standalone deployable. Wraps the transport-agnostic engine with HTTP/gRPC APIs, WebSocket event streaming, the remote-worker protocol endpoint, multi-tenancy, and dashboard hosting.",
-      "internal_deps": ["aion-core", "aion-store", "aion-store-libsql", "aion-package", "aion", "aion-proto"],
+      "internal_deps": ["aion-core", "aion-store", "aion-store-haematite", "aion-package", "aion", "aion-proto"],
       "external_deps": ["tokio", "axum", "tonic", "prost", "tower", "serde", "serde_json", "thiserror", "anyhow", "tracing", "tracing-subscriber", "futures"]
     },
     {

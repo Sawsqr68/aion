@@ -18,11 +18,6 @@ workspace = true
 [dependencies]
 aion = { package = "aion-rs", version = "0.17.0", path = "../aion" }
 aion-proto = { version = "0.17.0", path = "../aion-proto", features = ["generated"] }
-# libSQL durable backend. Now OPTIONAL: the ablative stack (haematite + liminal)
-# is the default, so a stock build no longer links libSQL. Enabled only by the
-# `libsql-backend` feature, which lights up the `backend = libsql` arm for a
-# lightweight/embedded opt-out build.
-aion-store-libsql = { version = "0.17.0", path = "../aion-store-libsql", optional = true }
 aion-store = { version = "0.17.0", path = "../aion-store" }
 # The transcript serving boundary reconstructs the compacted provider envelopes
 # the harness adapters persist, so the neutral integration SDK — which owns that
@@ -30,16 +25,11 @@ aion-store = { version = "0.17.0", path = "../aion-store" }
 # provides the `AgentHarness`/`AgentSession` seam the NOI-6 intervention e2e
 # drives an in-proc fake session through.
 aion-integrations = { version = "0.17.0", path = "../aion-integrations" }
-# Single-node haematite event-store backend. OPTIONAL, enabled by the
-# `haematite-backend` feature, which lights up the `backend = haematite` arm.
-aion-store-haematite = { version = "0.17.0", path = "../aion-store-haematite", optional = true }
-# NON-optional, deliberately: `store.node_cache_budget` is typed as haematite's
-# own `NodeCacheBudget` and is parsed through haematite's own serde repr, so
-# there is exactly one parser for that value. The config SURFACE must not vary
-# by feature — `deny_unknown_fields` would otherwise make a config file that a
-# default build accepts a hard parse error in a `--no-default-features
-# --features libsql-backend` build, which is a worse trade than linking the
-# type. The backend itself stays behind `haematite-backend`.
+# Haematite is the server's durable store in every build.
+aion-store-haematite = { version = "0.17.0", path = "../aion-store-haematite" }
+# `store.node_cache_budget` is typed as haematite's own `NodeCacheBudget` and is
+# parsed through haematite's own serde repr, so there is exactly one parser for
+# that value.
 haematite = { workspace = true }
 aion-package = { version = "0.17.0", path = "../aion-package" }
 # The declared-command executor (`aion_worker::shell`): the server runs an
@@ -144,12 +134,6 @@ exacl = "0.13.0"
 users = { version = "0.11.0", default-features = false }
 
 [dev-dependencies]
-# The libSQL backend is now optional in the production graph (behind
-# `libsql-backend`), but several integration tests (the LSUB-PROD cross-node
-# round-trip, the libSQL outbox e2e) construct a `LibSqlStore` directly. Listing
-# it here keeps it available for ALL `cargo test` builds without forcing the
-# production default to link it.
-aion-store-libsql = { version = "0.17.0", path = "../aion-store-libsql" }
 # The LSUB-1 cross-node dispatch e2e drives a REAL aion-worker over the liminal
 # push transport, so the test build enables the worker's `liminal-transport`
 # feature. A default (non-test) build never pulls this; the worker feature is OFF
@@ -165,7 +149,6 @@ fs4 = { workspace = true }
 # worker (`register_activity_with_contract`), which derives its wire schema from
 # the concrete serde types — so the test's activity types need `JsonSchema`.
 schemars = { workspace = true }
-libsql = { workspace = true }
 reqwest = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true, features = ["net"] }
@@ -178,32 +161,21 @@ zip = { workspace = true }
 aion-store = { version = "0.17.0", path = "../aion-store", features = ["test-support"] }
 
 [features]
-# The ablative stack is the out-of-box default: a stock `aion-server` build links
-# the haematite event-store backend and the liminal cross-node transport, and the
-# runtime default backend is haematite (with `outbox.transport = liminal` selected
-# whenever the transport is compiled). `libsql-backend` is the lightweight opt-out
-# (`--no-default-features --features libsql-backend`); `haematite-backend` and
-# `liminal-transport` remain named features so a slim build can opt out of either.
+# Haematite is linked in every server build; only optional transports remain
+# feature-selected.
 default = ["haematite-backend", "liminal-transport"]
 auth = ["dep:jsonwebtoken", "dep:reqwest"]
-# Selectable libSQL event-store backend. Now an explicit OPT-IN (it was a
-# non-optional dep before): with it on, `store.backend = libsql` constructs an
-# embedded `LibSqlStore` over `store.url`. A default build does not link it.
-libsql-backend = ["dep:aion-store-libsql"]
+# Compatibility name for tests/examples; haematite is linked unconditionally.
+haematite-backend = []
 # Cross-node outbox dispatch over liminal (#13-0 spike). With it on,
 # `outbox.transport = liminal` selects the liminal dispatch + completion path.
 liminal-transport = ["dep:liminal-sdk", "dep:liminal-server", "dep:liminal"]
-# Selectable haematite event-store backend. With it on, `store.backend =
-# haematite` constructs a single-node HaematiteStore rooted at `store.data_dir`
-# with `store.shard_count` shards.
-haematite-backend = ["dep:aion-store-haematite"]
 
 # The runnable multi-node failover demo: boots an in-process haematite cluster,
 # kills the shard owner, and watches the SS-5b supervisor auto-recover the
 # workflow. Requires the haematite backend (and `gleam` on PATH at runtime).
 [[example]]
 name = "failover_demo"
-required-features = ["haematite-backend"]
 
 # The runnable LSUB-5 capstone demo: boots an in-process haematite cluster + a
 # real liminal worker, kills the fan-out shard owner MID-DISPATCH, and narrates
@@ -211,4 +183,4 @@ required-features = ["haematite-backend"]
 # completion. Requires both the haematite backend and the liminal transport.
 [[example]]
 name = "lsub5_xnode_failover_demo"
-required-features = ["haematite-backend", "liminal-transport"]
+required-features = ["liminal-transport"]

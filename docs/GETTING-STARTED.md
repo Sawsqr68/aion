@@ -859,8 +859,8 @@ retries, heartbeats, and cancellation are covered in the
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
-`aion deploy` has nothing to talk to without it; and `store.url`, which is
-required once you select the libSQL backend. The tuning knobs all have
+`aion deploy` has nothing to talk to without it; and `store.data_dir`, which
+names the durable haematite data directory. The tuning knobs all have
 defaults and may be omitted — `runtime.query_timeout_ms` (10000),
 `websocket.event_broadcast_capacity` (256), and, once deploy is enabled, both
 size ceilings (64 MiB archive / 256 MiB inflated). They are written out here so
@@ -878,8 +878,8 @@ listen_address = "127.0.0.1:8080"   # HTTP/JSON API + ops console
 grpc_address = "127.0.0.1:50051"    # gRPC API + worker protocol
 
 [store]
-backend = "libsql"                  # durable; "memory" loses state on stop
-url = "aion.db"                     # embedded libSQL file, created on start
+backend = "haematite"               # durable default; "memory" is development-only
+data_dir = "aion-data"              # opened when present, created on first start
 
 [runtime]
 # Reply deadline for workflow queries, in milliseconds. Optional; 10000 when omitted.

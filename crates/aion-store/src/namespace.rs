@@ -13,7 +13,7 @@
 //!
 //! This module defines the foundation only: the [`NamespaceRecord`] shape, its
 //! opaque-byte codec, and the [`NamespaceStore`] trait. The store backends
-//! (in-memory / libSQL local-only, haematite quorum-replicated) implement the
+//! (in-memory / haematite local-only, haematite quorum-replicated) implement the
 //! trait in later slices; the store treats the record as opaque truth and only
 //! decodes it to satisfy `list`.
 

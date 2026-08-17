@@ -2,7 +2,7 @@
 //! happy path + out-of-order + duplicate dedup).
 //!
 //! These tests drive the **real** engine running a **real** `collect_all`
-//! fan-out workflow over a **real** persistent `LibSqlStore` (which has the
+//! fan-out workflow over a **real** persistent `HaematiteStore` (which has the
 //! durable `outbox` table) with `outbox.enabled` ON, and prove the cutover:
 //!
 //! - `dispatch_unscheduled` records fresh fan-out members through
@@ -41,7 +41,7 @@ use aion_package::{
     ManifestVersion, Package, PackageBuilder,
 };
 use aion_store::{EventStore, OutboxRow, OutboxStatus, OutboxStore, ReadableEventStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use serde_json::json;
 
 const OUTBOX_MODULE: &str = "aion_outbox_fixture";
@@ -112,7 +112,7 @@ fn fixture_package(entry_function: &str) -> Result<Package, Box<dyn std::error::
     )?)
 }
 
-/// A unique temp-file path so each test gets its own libSQL database.
+/// A unique temp-file path so each test gets its own haematite database.
 fn unique_temp_path(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nanos = SystemTime::now()
@@ -124,11 +124,11 @@ fn unique_temp_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("aion-outbox-e2e-{name}-{pid}-{nanos}-{unique}.db"))
 }
 
-/// Build an engine over `store` (a real `LibSqlStore`) with the outbox fixture
+/// Build an engine over `store` (a real `HaematiteStore`) with the outbox fixture
 /// loaded at `entry`, `outbox.enabled` ON, and the in-process dispatcher wired
 /// to the [`StubDispatcher`] stub (which must never fire).
 async fn engine_over(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
     entry: &str,
     fired: &Arc<AtomicBool>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
@@ -166,7 +166,7 @@ async fn start_fixture_workflow(
 }
 
 async fn wait_for_history<F>(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
     workflow_id: &WorkflowId,
     description: &str,
     predicate: F,
@@ -294,10 +294,16 @@ async fn started_and_suspended_at(
     name: &str,
     entry: &str,
 ) -> Result<
-    (Arc<LibSqlStore>, Engine, WorkflowId, RunId, Arc<AtomicBool>),
+    (
+        Arc<HaematiteStore>,
+        Engine,
+        WorkflowId,
+        RunId,
+        Arc<AtomicBool>,
+    ),
     Box<dyn std::error::Error>,
 > {
-    let store = Arc::new(LibSqlStore::open(unique_temp_path(name)).await?);
+    let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path(name)).await?);
     let fired = Arc::new(AtomicBool::new(false));
     let engine = engine_over(&store, entry, &fired).await?;
     let (workflow_id, run_id) = start_fixture_workflow(&engine).await?;
@@ -342,7 +348,13 @@ async fn started_and_suspended_at(
 async fn started_and_suspended(
     name: &str,
 ) -> Result<
-    (Arc<LibSqlStore>, Engine, WorkflowId, RunId, Arc<AtomicBool>),
+    (
+        Arc<HaematiteStore>,
+        Engine,
+        WorkflowId,
+        RunId,
+        Arc<AtomicBool>,
+    ),
     Box<dyn std::error::Error>,
 > {
     started_and_suspended_at(name, "collect_four").await
@@ -352,7 +364,7 @@ async fn started_and_suspended(
 /// were `Pending`, so the returned count is itself proof of how many pending
 /// rows existed.
 async fn claim_all_pending(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
 ) -> Result<Vec<OutboxRow>, Box<dyn std::error::Error>> {
     Ok(store.claim_outbox_rows(64).await?)
 }
@@ -360,7 +372,7 @@ async fn claim_all_pending(
 /// Poll until every `ordinal` in `ordinals` has its outbox row back at
 /// `Pending` (the state the crash-recovery re-arm restores), or time out.
 async fn wait_for_rows_pending(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
     workflow_id: &WorkflowId,
     ordinals: &[u64],
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -401,7 +413,7 @@ async fn wait_for_rows_pending(
 /// claim returns nothing (a `Done` row is not claimable — so without the
 /// recovery re-arm the LOST ordinals are stranded forever).
 async fn assert_lost_rows_stranded(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
     workflow_id: &WorkflowId,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pre_crash = store.read_history(workflow_id).await?;
@@ -446,7 +458,7 @@ async fn assert_lost_rows_stranded(
 /// Assert the post-recovery settled state: exactly `FAN_OUT` terminals, one per
 /// ordinal (no duplicate across the crash), and exactly one `WorkflowCompleted`.
 async fn assert_settled_no_duplicates(
-    store: &Arc<LibSqlStore>,
+    store: &Arc<HaematiteStore>,
     workflow_id: &WorkflowId,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let settled = wait_for_history(store, workflow_id, "fan-out settled", |events| {
@@ -778,7 +790,7 @@ async fn outbox_duplicate_completion_records_exactly_one_terminal() -> TestResul
 /// Faithfulness anchors:
 /// - the LOST rows reach `Done`-without-terminal BEFORE the crash (step 5),
 ///   so the test genuinely exercises re-arm rescuing a stranded row;
-/// - the restart is a real second engine over the same `Arc<LibSqlStore>` that
+/// - the restart is a real second engine over the same `Arc<HaematiteStore>` that
 ///   recovers/replays the run (modeled on `concurrency_e2e.rs`
 ///   `restart_replay_and_finish`), not a re-`start_workflow` or recorder poke;
 /// - recovery must re-arm via the outbox, NOT drive the in-process dispatcher

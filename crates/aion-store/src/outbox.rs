@@ -2,7 +2,7 @@
 //!
 //! The outbox is a transactional staging table written in the same atomic batch as the
 //! workflow-history events that schedule fan-out activities (see
-//! [`crate::WritableEventStore::append`] and the libSQL `append_with_outbox` path). A separate,
+//! [`crate::WritableEventStore::append`] and the haematite `append_with_outbox` path). A separate,
 //! non-replayed dispatcher claims pending rows, dispatches them to connected workers, and marks
 //! them done or schedules a retry. This module declares only the storage contract; the dispatcher
 //! and Recorder wiring live outside the store crate.
@@ -419,7 +419,7 @@ pub trait OutboxStore: Send + Sync + 'static {
     ///
     /// The default implementation ignores `held` and delegates to
     /// [`OutboxStore::claim_outbox_rows`]: a test-double store that never pauses
-    /// is unaffected. The bundled durable backends (libSQL, haematite) override
+    /// is unaffected. The bundled durable backends (haematite, haematite) override
     /// it to apply the exclusion inside the same atomic, single-writer claim so a
     /// held row is never claimed even under concurrent sweeps.
     ///
@@ -472,7 +472,7 @@ pub trait OutboxStore: Send + Sync + 'static {
     ///
     /// The default implementation ignores `held` and delegates to
     /// [`OutboxStore::claim_outbox_rows_scoped`]: a test-double store that never pauses
-    /// is unaffected. The bundled durable backends (libSQL, haematite) override it to
+    /// is unaffected. The bundled durable backends (haematite, haematite) override it to
     /// apply the exclusion inside the same atomic, single-writer claim.
     ///
     /// # Errors

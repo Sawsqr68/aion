@@ -6,11 +6,8 @@
 //! HTTP/gRPC transports) without adding public test APIs or manually spawning an
 //! `OutboxDispatcher`.
 //!
-//! The libSQL store is now an opt-in backend (`libsql-backend`); this end-to-end
-//! boots a real server over `store.backend = libsql`, so it compiles and runs
-//! only under that feature. Run it with
-//! `cargo test -p aion-server --features libsql-backend`.
-#![cfg(feature = "libsql-backend")]
+//! The end-to-end boots a real server over the durable haematite backend and
+//! cold-opens the same data directory for independent assertions.
 
 #[path = "run_server_outbox_support/helpers.rs"]
 mod helpers;
@@ -23,8 +20,8 @@ use std::process::ExitCode;
 use aion_core::Event;
 use aion_server::config::CliOverrides;
 use aion_store::{OutboxRow, OutboxStatus, ReadableEventStore};
-use aion_store_libsql::LibSqlStore;
-use chrono::{SecondsFormat, Utc};
+use aion_store_haematite::HaematiteStore;
+use chrono::Utc;
 use helpers::{
     FAN_OUT, TestError, assert_fan_out_settled, assert_task_set, count_completed,
     count_completed_for, count_kind, run_server_harness, run_server_harness_with_reconciliation,
@@ -39,7 +36,7 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
     let (server, http, grpc) = run_server_harness(dir.path(), &db_path, &package_path).await?;
-    let reader = LibSqlStore::open(db_path).await?;
+    let reader = HaematiteStore::open_or_create(db_path).await?;
 
     let (workflow_id, run_id) = start_over_http(http).await?;
     wait_for_history(&reader, &workflow_id, "fan-out scheduled", |events| {
@@ -110,7 +107,7 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
     let (server1, http1, grpc1) = run_server_harness(dir.path(), &db_path, &package_path).await?;
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let mut worker1 = WorkerSession::connect(grpc1).await?;
 
     let (workflow_id, run_id) = start_over_http(http1).await?;
@@ -184,7 +181,7 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
         Some((50, 100)),
     )
     .await?;
-    let reader = LibSqlStore::open(db_path.clone()).await?;
+    let reader = HaematiteStore::open_or_create(db_path.clone()).await?;
     let mut worker = WorkerSession::connect(grpc).await?;
 
     let (workflow_id, run_id) = start_over_http(http).await?;
@@ -295,21 +292,16 @@ async fn complete_original_late(
 }
 
 async fn force_rows_to_stale_claimed(
-    db_path: &std::path::Path,
+    data_dir: &std::path::Path,
     workflow_id: &aion_core::WorkflowId,
     ordinals: &[u64],
 ) -> Result<(), TestError> {
-    let database = libsql::Builder::new_local(db_path).build().await?;
-    let connection = database.connect()?;
-    let claimed_at =
-        (Utc::now() - chrono::Duration::seconds(60)).to_rfc3339_opts(SecondsFormat::Nanos, true);
+    let store = HaematiteStore::open(data_dir)?;
+    let claimed_at = Utc::now() - chrono::Duration::seconds(60);
     for ordinal in ordinals {
         let dispatch_key = OutboxRow::dispatch_key_for(workflow_id, *ordinal);
-        connection
-            .execute(
-                "UPDATE outbox SET status = 'claimed', claimed_at = ?2 WHERE dispatch_key = ?1",
-                libsql::params![dispatch_key, claimed_at.clone()],
-            )
+        store
+            .set_outbox_claimed_at(&dispatch_key, claimed_at)
             .await?;
     }
     Ok(())

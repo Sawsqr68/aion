@@ -11,7 +11,7 @@ use aion_package::{
 };
 use aion_proto::generated;
 use aion_store::{OutboxRow, OutboxStatus, ReadableEventStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use serde_json::json;
 
 pub const NAMESPACE: &str = "default";
@@ -285,7 +285,7 @@ pub fn count_completed_for(history: &[Event], ordinal: u64) -> usize {
 }
 
 pub async fn wait_for_history<F>(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
     description: &str,
     predicate: F,
@@ -309,7 +309,7 @@ where
 }
 
 pub async fn wait_for_rows<F>(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
     ordinals: &[u64],
     description: &str,
@@ -334,7 +334,7 @@ where
 }
 
 async fn row_statuses(
-    store: &LibSqlStore,
+    store: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
     ordinals: &[u64],
 ) -> Result<Vec<OutboxStatus>, TestError> {
@@ -375,7 +375,7 @@ pub fn assert_task_set(
 }
 
 pub async fn assert_fan_out_settled(
-    reader: &LibSqlStore,
+    reader: &HaematiteStore,
     workflow_id: &aion_core::WorkflowId,
 ) -> Result<Vec<Event>, TestError> {
     let history = wait_for_history(reader, workflow_id, "fan-out settled", |events| {
@@ -469,8 +469,8 @@ listen_address = "{http}"
 grpc_address = "{grpc}"
 
 [store]
-backend = "libsql"
-url = {db}
+backend = "haematite"
+data_dir = {db}
 
 [runtime]
 scheduler_threads = 1

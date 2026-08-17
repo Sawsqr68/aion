@@ -36,7 +36,7 @@ use super::{
     OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, QUERY_TIMEOUT_REQUIRED, RuntimeConfig,
     RuntimeSection, ServerSection, StoreBackend, StoreConfig, TlsConfig, WebSocketConfig,
     WorkerConfig, WorkerSupervisionConfig, aion_home, config_error, env, file, home,
-    resolution::fill_home_defaults,
+    resolution::fill_home_defaults, sections::RetiredStoreInput,
 };
 
 /// Complete merged server configuration.
@@ -395,19 +395,8 @@ impl ServerConfig {
             self.server.grpc_address = address;
         }
         if let Some(url) = &cli.store_url {
-            self.store.url = Some(url.clone());
-            // `--store-url` names an embedded libSQL database file, so it is an
-            // explicit libSQL selection: coerce the implicit durable defaults
-            // (memory, or the new haematite default) to libsql. An operator who
-            // explicitly set `backend = "libsql"` already lands here too. The
-            // haematite backend ignores `store.url`, so the only way `--store-url`
-            // is meaningful is as a libSQL choice.
-            if matches!(
-                self.store.backend,
-                StoreBackend::Memory | StoreBackend::Haematite
-            ) {
-                self.store.backend = StoreBackend::LibSql;
-            }
+            let _ = url;
+            self.store.retired_input = Some(RetiredStoreInput::Flag);
         }
         if let Some(threads) = cli.scheduler_threads {
             self.runtime.scheduler_threads = threads;
@@ -424,6 +413,17 @@ impl ServerConfig {
     }
 
     fn validate(&self) -> Result<(), ServerError> {
+        if let Some(input) = self.store.retired_input {
+            let found = match input {
+                RetiredStoreInput::Backend => "backend = \"libsql\"",
+                RetiredStoreInput::Url => "store.url",
+                RetiredStoreInput::Environment => "AION_STORE_URL",
+                RetiredStoreInput::Flag => "--store-url",
+            };
+            return config_error(format!(
+                "found retired {found}; use backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build"
+            ));
+        }
         if self.server.listen_address.port() == 0 {
             return config_error("server.listen_address must use an explicit non-zero port");
         }
@@ -445,16 +445,6 @@ impl ServerConfig {
         }
         if self.namespaces.default.is_empty() {
             return config_error("namespaces.default must not be empty");
-        }
-        if matches!(self.store.backend, StoreBackend::LibSql)
-            && self.store.url.as_deref().is_none_or(str::is_empty)
-        {
-            return config_error("store.url must not be empty when store.backend is libsql");
-        }
-        if let Some(url) = &self.store.url {
-            if url.is_empty() {
-                return config_error("store.url must not be empty");
-            }
         }
         if matches!(self.store.backend, StoreBackend::Haematite) {
             if self.store.data_dir.as_deref().is_none_or(str::is_empty) {
@@ -728,8 +718,8 @@ mod tests {
                 grpc_address = "127.0.0.1:15051"
 
                 [store]
-                backend = "libsql"
-                url = "aion.db"
+                backend = "haematite"
+                data_dir = "aion-data"
 
                 [runtime]
                 scheduler_threads = 2
@@ -756,8 +746,8 @@ mod tests {
             "#,
         )?;
 
-        assert_eq!(config.store.backend, StoreBackend::LibSql);
-        assert_eq!(config.store.url.as_deref(), Some("aion.db"));
+        assert_eq!(config.store.backend, StoreBackend::Haematite);
+        assert_eq!(config.store.data_dir.as_deref(), Some("aion-data"));
         assert_eq!(config.runtime.scheduler_threads, 2);
         assert_eq!(config.runtime.query_timeout_ms, Some(10_000));
         assert_eq!(config.namespaces.default, "production");
@@ -1962,12 +1952,19 @@ mod tests {
         assert!(message.contains("runtime.scheduler_threads"));
     }
 
-    const RETIRED_STORE_REMEDY: &str =
-        "backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build";
+    const RETIRED_STORE_REMEDY: &str = "backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build";
 
-    fn assert_retired_store_refusal(result: Result<ServerConfig, crate::error::ServerError>, found: &str) {
-        let message = result.expect_err("retired libsql input must be refused").to_string();
-        assert!(message.contains(found), "refusal did not name `{found}`: {message}");
+    fn assert_retired_store_refusal(
+        result: Result<ServerConfig, crate::error::ServerError>,
+        found: &str,
+    ) {
+        let message = result
+            .expect_err("retired libsql input must be refused")
+            .to_string();
+        assert!(
+            message.contains(found),
+            "refusal did not name `{found}`: {message}"
+        );
         assert!(
             message.contains(RETIRED_STORE_REMEDY),
             "refusal omitted the operator remedy: {message}"
@@ -2038,36 +2035,6 @@ mod tests {
     }
 
     #[test]
-    fn cli_overrides_win_over_loaded_values() -> Result<(), Box<dyn std::error::Error>> {
-        let mut config = ServerConfig::from_slice(
-            br#"
-                [store]
-                backend = "libsql"
-                url = "file.db"
-
-                [runtime]
-                query_timeout_ms = 10000
-
-                [websocket]
-                event_broadcast_capacity = 64
-                cluster_broadcast_capacity = 64
-            "#,
-        )?;
-        let cli = CliOverrides {
-            store_url: Some("cli.db".to_owned()),
-            scheduler_threads: Some(3),
-            ..CliOverrides::default()
-        };
-
-        config.apply_cli_overrides(&cli);
-        config.validate()?;
-
-        assert_eq!(config.store.url.as_deref(), Some("cli.db"));
-        assert_eq!(config.runtime.scheduler_threads, 3);
-        Ok(())
-    }
-
-    #[test]
     fn default_config_defaults() -> Result<(), Box<dyn std::error::Error>> {
         let mut config = ServerConfig::default();
 
@@ -2079,7 +2046,6 @@ mod tests {
         // (boot scan_prefix materializes all shards; commit then fsyncs per
         // shard and blows the actor timeout). See StoreConfig::default().
         assert_eq!(config.store.shard_count, 64);
-        assert_eq!(config.store.url, None);
         assert_eq!(config.server.grpc_address.to_string(), "127.0.0.1:50051");
         assert_eq!(config.server.listen_address.to_string(), "127.0.0.1:8080");
         assert_eq!(config.namespaces.default, "default");
@@ -2446,7 +2412,6 @@ mod tests {
         config.validate()?;
 
         assert_eq!(config.store.backend, StoreBackend::Memory);
-        assert_eq!(config.store.url, None);
         assert_eq!(
             config.workflow_packages,
             vec![std::path::PathBuf::from("hello-world.aion")]

@@ -43,7 +43,7 @@ use aion_server::worker::{
     OutboxRowDispatch, RegistryLiminalDispatch,
 };
 use aion_store::{ClaimScope, OutboxRow, OutboxStatus, OutboxStore};
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use aion_worker::{ActivityRegistry, LiminalActivityWorker, WorkerConfig};
 use chrono::Utc;
 use liminal_server::config::{ChannelDef, ServerConfig};
@@ -350,14 +350,14 @@ fn pending_row(
     })
 }
 
-/// Opens a fresh on-disk libsql outbox store for the test.
-async fn open_store(name: &str) -> Result<Arc<LibSqlStore>, TestError> {
+/// Opens a fresh on-disk haematite outbox store for the test.
+async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, TestError> {
     let nanos = Instant::now().elapsed().as_nanos();
     let path = std::env::temp_dir().join(format!(
         "aion-lsub1-{name}-{}-{nanos}.db",
         std::process::id()
     ));
-    LibSqlStore::open(path)
+    HaematiteStore::open_or_create(path)
         .await
         .map(Arc::new)
         .map_err(test_error)

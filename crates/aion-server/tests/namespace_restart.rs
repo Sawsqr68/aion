@@ -11,7 +11,7 @@
 //!   `NamespaceDenied`.
 //!
 //! "Restart" rebuilds the store handle, engine, resolver, and guard from
-//! scratch over the same libSQL file, so the ownership projection is genuinely
+//! scratch over the same haematite file, so the ownership projection is genuinely
 //! re-derived from persisted events — no in-memory state crosses the boundary.
 
 use std::collections::HashMap;
@@ -41,7 +41,7 @@ use aion_server::{
     CallerIdentity, NAMESPACE_ATTRIBUTE, NamespaceGuard, NamespaceResolver, TASK_QUEUE_ATTRIBUTE,
 };
 use aion_store::EventStore;
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use serde_json::json;
 
 type TestError = Box<dyn std::error::Error>;
@@ -69,7 +69,8 @@ struct Server {
 
 impl Server {
     async fn over(db_path: &Path, packages: Vec<Package>) -> Result<Self, TestError> {
-        let store: Arc<dyn EventStore> = Arc::new(LibSqlStore::open(db_path.to_path_buf()).await?);
+        let store: Arc<dyn EventStore> =
+            Arc::new(HaematiteStore::open_or_create(db_path.to_path_buf()).await?);
         let mut schema = SearchAttributeSchema::new();
         schema.register(NAMESPACE_ATTRIBUTE, SearchAttributeType::String)?;
         schema.register(TASK_QUEUE_ATTRIBUTE, SearchAttributeType::String)?;

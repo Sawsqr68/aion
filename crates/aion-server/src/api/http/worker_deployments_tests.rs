@@ -128,7 +128,8 @@ async fn poisoned_row_does_not_break_cluster_snapshot() -> TestResult {
 async fn http_put_survives_a_second_server_state_over_the_same_store() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("worker-deployments.db");
-    let first_store = Arc::new(aion_store_libsql::LibSqlStore::open(path.clone()).await?);
+    let first_store =
+        Arc::new(aion_store_haematite::HaematiteStore::open_or_create(path.clone()).await?);
     let first_state = state_with_leaf(first_store.clone());
     let first_router = workflow_router(first_state.clone());
 
@@ -150,7 +151,7 @@ async fn http_put_survives_a_second_server_state_over_the_same_store() -> TestRe
     drop(first_state);
     drop(first_store);
 
-    let second_store = Arc::new(aion_store_libsql::LibSqlStore::open(path).await?);
+    let second_store = Arc::new(aion_store_haematite::HaematiteStore::open_or_create(path).await?);
     let second_state = state_with_leaf(second_store);
     let response = workflow_router(second_state)
         .oneshot(json_request(

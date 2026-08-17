@@ -3,7 +3,7 @@
 //! [`HaematiteStore`] persists Aion workflow history, durable timers, deployed
 //! packages, package routes, and the durable outbox on top of a single-node
 //! [`haematite::Database`], satisfying the same `aion_store::EventStore` contract
-//! the in-memory and libSQL stores satisfy. See [`store`] for the design and the
+//! the in-memory and haematite stores satisfy. See [`store`] for the design and the
 //! event/KV key-encoding scheme.
 //!
 //! [`HaematiteStore`] runs in one of two modes. In **single-node** mode

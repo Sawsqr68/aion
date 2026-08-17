@@ -376,10 +376,6 @@ fn ready_report(
             Some(data_dir) => format!("data: {data_dir}"),
             None => "data: haematite store (directory resolved by the server)".to_owned(),
         },
-        StoreBackend::LibSql => match store.url.as_deref() {
-            Some(store_url) => format!("data: {store_url} (libSQL)"),
-            None => "data: libSQL store (path resolved by the server)".to_owned(),
-        },
         StoreBackend::Memory => "data: in-memory — state does not survive a stop".to_owned(),
     };
     format!(
@@ -516,11 +512,6 @@ mod tests {
         assert!(report.contains("console: http://127.0.0.1:8080/\n"));
         assert!(report.contains("log: /tmp/aion-home/server.log\n"));
         assert!(report.contains("server process id: 42 (stop it with: kill 42)\n"));
-
-        store.backend = StoreBackend::LibSql;
-        store.url = Some("aion.db".to_owned());
-        let report = ready_report(&store, "config: X", "u", log_path, 1);
-        assert!(report.contains("data: aion.db (libSQL)\n"));
 
         store.backend = StoreBackend::Memory;
         let report = ready_report(&store, "config: X", "u", log_path, 1);

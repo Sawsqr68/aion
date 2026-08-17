@@ -1,7 +1,7 @@
 //! Deploy-durability restart e2e over the public HTTP transport: a package
 //! deployed at runtime through `POST /deploy/packages` must survive a full
 //! server restart (fresh store handle, engine, resolver, router over the
-//! same libSQL file) WITHOUT `--workflow-package`, so a mid-flight run
+//! same haematite file) WITHOUT `--workflow-package`, so a mid-flight run
 //! recovers, its remaining signal lands over the API, and it completes.
 //!
 //! This is the server-level proof of the P0 fix: before package persistence,
@@ -33,7 +33,7 @@ use aion_server::config::{
 };
 use aion_server::{NamespaceResolver, ServerState};
 use aion_store::EventStore;
-use aion_store_libsql::LibSqlStore;
+use aion_store_haematite::HaematiteStore;
 use axum::{body, http::Request, http::StatusCode, response::Response};
 use serde_json::json;
 use tower::ServiceExt;
@@ -289,7 +289,8 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
         .to_string();
 
     // Epoch 1: empty server; the deploy API is the only package source.
-    let store: Arc<dyn EventStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
+    let store: Arc<dyn EventStore> =
+        Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
     let (engine, router) = server_over(store).await?;
     let response = router
         .clone()
@@ -308,7 +309,7 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
 
     // Epoch 2: fresh store handle, engine, resolver, router over the same
     // database. No workflow packages are supplied.
-    let store: Arc<dyn EventStore> = Arc::new(LibSqlStore::open(db_path).await?);
+    let store: Arc<dyn EventStore> = Arc::new(HaematiteStore::open_or_create(db_path).await?);
     let (engine, router) = server_over(store).await?;
 
     // The deployed version reloaded from the store and is route-active.
@@ -352,7 +353,8 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
 /// persistence path, not permissive routing.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn empty_store_restart_reloads_nothing() -> Result<(), TestError> {
-    let store: Arc<dyn EventStore> = Arc::new(LibSqlStore::open(unique_db_path()).await?);
+    let store: Arc<dyn EventStore> =
+        Arc::new(HaematiteStore::open_or_create(unique_db_path()).await?);
     let (engine, router) = server_over(store).await?;
 
     let response = router

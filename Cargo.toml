@@ -6,7 +6,6 @@ members = [
     "crates/aion-awl-package",
     "crates/aion-core",
     "crates/aion-store",
-    "crates/aion-store-libsql",
     "crates/aion-store-haematite",
     "crates/aion-package",
     "crates/aion-toolchain",
@@ -73,7 +72,6 @@ toml_edit = "0.23"
 rand_chacha = "0.10.0"
 rand_core = "0.10.1"
 zip = "8.6"
-libsql = "0.9"
 tonic = "0.14"
 tonic-build = "0.14"
 prost = "0.14"

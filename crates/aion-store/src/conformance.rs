@@ -64,7 +64,7 @@ where
 
 /// Runs the workflow-terminal outbox settlement suite (#253) for a store that
 /// carries BOTH the [`crate::OutboxStore`] surface and the
-/// [`crate::WritableEventStore`] writer seam (the libSQL and haematite
+/// [`crate::WritableEventStore`] writer seam (the haematite and haematite
 /// backends). Generic over the concrete store because no single trait object
 /// spans both surfaces.
 ///

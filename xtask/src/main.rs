@@ -308,7 +308,6 @@ const PLATFORM_CRATES: &[&str] = &[
     "aion-proto-generated",
     "aion-store",
     "aion-store-haematite",
-    "aion-store-libsql",
     "aion-client",
     "aion-rs", // the `aion` facade crate (package name `aion-rs`, dir `crates/aion`).
 ];

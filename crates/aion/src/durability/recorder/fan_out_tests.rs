@@ -2,7 +2,7 @@
 //! `N×(ActivityScheduled+ActivityStarted)` events + `N` outbox rows write.
 //!
 //! These tests exercise the Recorder against an outbox-aware test store double
-//! ([`OutboxTestStore`]) that mirrors the libSQL atomicity contract: events and outbox rows for one
+//! ([`OutboxTestStore`]) that mirrors the haematite atomicity contract: events and outbox rows for one
 //! `append_with_outbox` call either both commit or neither does. The double can be armed to fail the
 //! atomic append so the test can assert the all-or-nothing guarantee without a real database.
 

@@ -165,8 +165,7 @@ The whole-system design lives in
 |---|---|
 | `aion-core` | Domain model: events, payloads, identifiers, status, errors |
 | `aion-store` | The `EventStore` contract + in-memory reference + conformance suite |
-| `aion-store-haematite` | Default durable store; single-node or distributed with `[store.cluster]` |
-| `aion-store-libsql` | Alternative durable store over libSQL |
+| `aion-store-haematite` | Durable store; single-node or distributed with `[store.cluster]` |
 | `aion-package` | The `.aion` package format, content-hash versioning |
 | `aion-toolchain` | Server-side Gleam authoring toolchain: spawns the external `gleam` binary to compile and type-check submitted source, then packages a verified `.aion`. Embeds no compiler |
 | `aion-awl` | AWL parser, checker, formatter, schema derivation, and compiler |

@@ -61,20 +61,6 @@ const WORKER_DEPLOYMENT_REGIONS: &[SourceRegion] = &[
         anchor: None,
     },
     SourceRegion {
-        name: "aion-store-libsql worker-deployment backend",
-        source: include_str!("../../aion-store-libsql/src/worker_deployment.rs"),
-        start: None,
-        end: None,
-        anchor: None,
-    },
-    SourceRegion {
-        name: "aion-store-libsql worker-deployment delegation",
-        source: include_str!("../../aion-store-libsql/src/store.rs"),
-        start: Some("impl WorkerDeploymentStore for LibSqlStore"),
-        end: Some("impl WritableEventStore for LibSqlStore"),
-        anchor: Some("put_worker_deployment"),
-    },
-    SourceRegion {
         name: "aion-store-haematite worker-deployment backend",
         source: include_str!("../../aion-store-haematite/src/store.rs"),
         start: Some("pub async fn write_raw_worker_deployment"),

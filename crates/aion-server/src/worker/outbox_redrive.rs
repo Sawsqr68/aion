@@ -40,7 +40,7 @@
 //! **The judgment marker is ATOMIC and it is the control.** `failure_delivered` is never read
 //! here and acted on there: the store's `redrive_outbox_row` applies `status = 'failed'` and (in
 //! eligible mode) `failure_delivered = 0` as guards INSIDE the same transition that performs the
-//! write — one `IMMEDIATE` transaction on libSQL, one read-modify-write whose refusal writes
+//! write — one `IMMEDIATE` transaction on haematite, one read-modify-write whose refusal writes
 //! nothing on haematite. A concurrent dead-letter, re-arm, or second redrive cannot interleave
 //! between the test and the write, and the `was_judged` an override reports comes from the
 //! store's own pre-state rather than from anything this module observed earlier.

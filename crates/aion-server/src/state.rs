@@ -6,8 +6,6 @@ use aion::{
     ActivityDispatcher, EngineBuilder, RuntimeHandle, SignalRouter, signal::ConcreteSignalRouter,
 };
 use aion_store::{EventStore, NamespaceStore, OutboxStore, WorkerDeploymentStore};
-#[cfg(feature = "libsql-backend")]
-use aion_store_libsql::LibSqlStore;
 
 use crate::dev_ui::{ActivityMockRegistry, DevMockingDispatcher};
 
@@ -70,16 +68,15 @@ struct ServerStateInner {
     /// Shared per-run activity-mock registry. Present only when the dev surface
     /// is commissioned; the engine's dispatcher consults this exact instance.
     activity_mock_registry: Option<ActivityMockRegistry>,
-    /// The leaf libSQL store cast as an [`OutboxStore`], shared with the engine's
-    /// `EventStore` so the outbox dispatcher writes through the same single
-    /// `libsql::Connection`. `None` for the in-memory backend (no outbox table).
+    /// The durable store cast as an [`OutboxStore`]. `None` for the in-memory
+    /// backend, which intentionally has no outbox.
     outbox_store: Option<Arc<dyn OutboxStore>>,
     /// The durable namespace registry, captured from the SAME concrete leaf
     /// backend as the engine's `EventStore` BEFORE that leaf is wrapped in the
     /// decorator chain (`PublishingEventStore` → `InstrumentedEventStore`),
     /// which do not implement [`NamespaceStore`]. The haematite backend supplies
-    /// the quorum-replicated implementation; the libSQL and in-memory backends
-    /// supply a local-only one. Always present so the control-plane mint
+    /// the quorum-replicated implementation; the in-memory backend supplies a
+    /// local-only one. Always present so the control-plane mint
     /// (Phase 1 S5) and `GET /namespaces` (S7) can reach a real store on every
     /// boot. Mirrors the `cluster_store` retention pattern.
     namespace_store: Arc<dyn NamespaceStore>,
@@ -105,7 +102,7 @@ struct ServerStateInner {
     /// present: the transcript channel is served on every boot. The backing
     /// [`ObservabilityStore`](aion_store::ObservabilityStore) is the durable
     /// `O`-keyspace impl on a haematite boot and an in-memory impl on every other
-    /// backend (libSQL / in-memory have no `O` keyspace), so the transcript path
+    /// backend (haematite / in-memory have no `O` keyspace), so the transcript path
     /// is uniform across backends while only haematite persists across restart.
     /// Sized from `websocket.cluster_broadcast_capacity` (the same deployment-wide
     /// real-time channel capacity the cluster tail uses).
@@ -1011,9 +1008,9 @@ impl ServerState {
     }
 
     /// Borrow the outbox store the dispatcher claims rows from, when the durable
-    /// (libSQL) backend is in use. This is the SAME leaf `Arc<LibSqlStore>` the
+    /// (haematite) backend is in use. This is the SAME leaf `Arc<HaematiteStore>` the
     /// engine writes through, so the dispatcher shares its single
-    /// `libsql::Connection` rather than opening a second contending one. Returns
+    /// `haematite::Connection` rather than opening a second contending one. Returns
     /// [`None`] for the in-memory backend, which has no outbox table.
     #[must_use]
     pub fn outbox_store(&self) -> Option<Arc<dyn OutboxStore>> {
@@ -1023,7 +1020,7 @@ impl ServerState {
     /// Borrow the durable namespace registry shared by the control plane.
     ///
     /// This is the SAME concrete leaf backend the engine writes events through
-    /// (haematite quorum-replicated, or libSQL / in-memory local-only),
+    /// (haematite quorum-replicated, or haematite / in-memory local-only),
     /// captured as a [`NamespaceStore`] before the decorator chain wrapped it.
     /// Always present on every boot, so the mint-on-register path (Phase 1 S5)
     /// and `GET /namespaces` (S7) can reach a real registry regardless of
@@ -1848,7 +1845,7 @@ fn transcript_bounds(runtime: &RuntimeConfig) -> crate::activity_bounds::Transcr
 ///
 /// The publisher is ALWAYS constructed (the transcript channel is served on every
 /// boot); only the durability of the backing store varies by backend. A backend
-/// with no `O` keyspace (libSQL / in-memory) gets the in-memory
+/// with no `O` keyspace (haematite / in-memory) gets the in-memory
 /// [`InMemoryObservabilityStore`](aion_store::InMemoryObservabilityStore), so the
 /// live-tail + resume path behaves identically and only cross-restart durability
 /// differs — exactly the "keep the no-observability path uniform" contract.
@@ -1941,7 +1938,7 @@ fn build_namespace_routing(
 /// A connected durable store plus the lifecycle pieces the boot path needs.
 ///
 /// `outbox_store` is the SAME leaf store cast as an [`OutboxStore`] for backends
-/// with a durable outbox table (libSQL, haematite); the in-memory backend yields
+/// with a durable outbox table (haematite, haematite); the in-memory backend yields
 /// `None`. `bootstrap_coordinator` gates the schedule-coordinator seed on real
 /// ownership (SS-2 / AA-4-4): `true` for every non-distributed boot (single-node
 /// owns the coordinator's shard), and for a distributed node only when it owns
@@ -1954,7 +1951,7 @@ struct ConnectedStore {
     /// [`NamespaceStore`] before the decorator chain wraps it (the decorators
     /// are `NamespaceStore`-unaware). The control plane mints and lists through
     /// this handle. Every backend populates it: haematite supplies the
-    /// quorum-replicated implementation, libSQL and in-memory the local-only
+    /// quorum-replicated implementation, haematite and in-memory the local-only
     /// one.
     namespace_store: Arc<dyn NamespaceStore>,
     /// Same concrete leaf captured as the deployment-store contract.
@@ -1962,7 +1959,7 @@ struct ConnectedStore {
     /// NOI-5b: the SAME concrete leaf store captured as an
     /// [`ObservabilityStore`](aion_store::ObservabilityStore) when the backend
     /// implements the durable `O` keyspace (haematite). `None` for backends with
-    /// no `O` keyspace (libSQL / in-memory), where the transcript sequencer runs
+    /// no `O` keyspace (haematite / in-memory), where the transcript sequencer runs
     /// over an in-memory impl instead. Captured before the leaf is wrapped in the
     /// (`ObservabilityStore`-unaware) decorator chain, exactly like
     /// `namespace_store`.
@@ -2009,7 +2006,7 @@ impl ConnectedStore {
             outbox_store,
             namespace_store,
             worker_deployment_store,
-            // A `local` connected store is the memory / libSQL / embedder path,
+            // A `local` connected store is the memory / haematite / embedder path,
             // none of which implement the durable `O` keyspace: the transcript
             // sequencer falls back to an in-memory impl (NOI-5b).
             observability_store: None,
@@ -2041,15 +2038,8 @@ impl ConnectedStore {
     }
 }
 
-/// Connect the durable store, yielding the engine's [`EventStore`] handle and,
-/// for the libSQL backend, the SAME leaf store cast as an [`OutboxStore`].
-///
-/// Both handles are clones of one `Arc<LibSqlStore>`, which holds a single
-/// `libsql::Connection`. Sharing that connection with the outbox dispatcher
-/// serializes the engine's `append_with_outbox` and the dispatcher's
-/// `claim_outbox_rows` writes, so the two never contend across separate
-/// connections and never raise `SQLITE_BUSY`. The in-memory backend has no
-/// outbox table, so it yields `None`.
+/// Connect the selected store. Haematite supplies both durable events and the
+/// durable outbox; the in-memory development backend has no outbox.
 async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerError> {
     match config.backend {
         StoreBackend::Memory => {
@@ -2065,17 +2055,6 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
                 worker_deployment_store,
             ))
         }
-        StoreBackend::LibSql => {
-            #[cfg(feature = "libsql-backend")]
-            {
-                connect_libsql_store(config).await
-            }
-            #[cfg(not(feature = "libsql-backend"))]
-            {
-                let _ = config;
-                connect_libsql_store_unavailable()
-            }
-        }
         StoreBackend::Haematite => {
             #[cfg(feature = "haematite-backend")]
             {
@@ -2088,54 +2067,6 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
             }
         }
     }
-}
-
-/// Connect the libSQL backend, opening the embedded database at `store.url` and
-/// sharing the SAME leaf `Arc<LibSqlStore>` (one `libsql::Connection`) as both the
-/// engine's [`EventStore`] and the dispatcher's [`OutboxStore`].
-#[cfg(feature = "libsql-backend")]
-async fn connect_libsql_store(config: StoreConfig) -> Result<ConnectedStore, ServerError> {
-    let Some(url) = config.url else {
-        return Err(ServerError::Config {
-            message: "store.url must not be empty when store.backend is libsql".to_owned(),
-        });
-    };
-    let store = LibSqlStore::open(url.clone())
-        .await
-        .map_err(ServerError::from)?;
-    store
-        .validate_event_compatibility()
-        .await
-        .map_err(|error| match error {
-            aion_store::StoreError::Serialization(_) => ServerError::Config {
-                message: format!(
-                    "Database schema mismatch — delete {url} and restart, or run migrations."
-                ),
-            },
-            other => ServerError::from(other),
-        })?;
-    let leaf = Arc::new(store);
-    let event_store: Arc<dyn EventStore> = leaf.clone();
-    let namespace_store: Arc<dyn NamespaceStore> = leaf.clone();
-    let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = leaf.clone();
-    let outbox_store: Arc<dyn OutboxStore> = leaf;
-    Ok(ConnectedStore::local(
-        event_store,
-        Some(outbox_store),
-        namespace_store,
-        worker_deployment_store,
-    ))
-}
-
-/// Reject `backend = libsql` cleanly when the optional `libsql-backend` feature
-/// is not compiled in, so a default (ablative-stack) build gives a precise
-/// operator error instead of a silent fallthrough.
-#[cfg(not(feature = "libsql-backend"))]
-fn connect_libsql_store_unavailable() -> Result<ConnectedStore, ServerError> {
-    Err(ServerError::Config {
-        message: "store.backend = libsql requires the aion-server `libsql-backend` feature"
-            .to_owned(),
-    })
 }
 
 /// Connect the haematite backend, opening the on-disk database if `store.data_dir`
@@ -2152,7 +2083,7 @@ fn connect_libsql_store_unavailable() -> Result<ConnectedStore, ServerError> {
 ///
 /// The SAME leaf `Arc<HaematiteStore>` is shared as both the engine's
 /// [`EventStore`] and the dispatcher's [`OutboxStore`] (one inner haematite
-/// database), mirroring the libSQL backend.
+/// database), mirroring the haematite backend.
 ///
 /// [`HaematiteStore::open`]: aion_store_haematite::HaematiteStore::open
 /// [`create_with_shard_count`]: aion_store_haematite::HaematiteStore::create_with_shard_count
@@ -2790,12 +2721,12 @@ mod tests {
         // both the engine EventStore and the dispatcher OutboxStore.
         let connected = super::connect_store(StoreConfig {
             backend: StoreBackend::Haematite,
-            url: None,
             owned_shards: Vec::new(),
             data_dir: Some(data_dir.path().to_string_lossy().into_owned()),
             shard_count: 1,
             cluster: None,
             node_cache_budget: Some(test_node_cache_budget()?),
+            ..StoreConfig::default()
         })
         .await?;
         let event_store = connected.event_store;
@@ -3273,12 +3204,12 @@ mod tests {
         // and `outbox.enabled` over memory is rejected at dispatcher commission.
         let connected = super::connect_store(StoreConfig {
             backend: StoreBackend::Memory,
-            url: None,
             owned_shards: Vec::new(),
             data_dir: None,
             shard_count: 1,
             cluster: None,
             node_cache_budget: None,
+            ..StoreConfig::default()
         })
         .await?;
         assert!(
@@ -3365,44 +3296,6 @@ mod tests {
             recorded.get("node_cache_budget"),
             Some(&serde_json::json!({ "bytes": ONE_GIB })),
             "the operator's budget must be the one haematite created the database with"
-        );
-        Ok(())
-    }
-
-    // The libSQL connect path is now an opt-in backend (`libsql-backend`), so this
-    // libSQL-specific outbox-sharing assertion compiles and runs only under that
-    // feature. The memory case is covered above, unconditionally.
-    #[cfg(feature = "libsql-backend")]
-    #[tokio::test]
-    async fn connect_store_shares_outbox_store_only_for_libsql()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use crate::config::{StoreBackend, StoreConfig};
-
-        // LibSql backend: the leaf Arc<LibSqlStore> is shared as BOTH the engine's
-        // EventStore and the dispatcher's OutboxStore (one libsql::Connection), so
-        // the dispatcher reuses the engine's connection rather than opening a
-        // second contending one (the inc-8 contention fix).
-        let path = std::env::temp_dir().join(format!(
-            "aion-connect-store-{}-{}.db",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|elapsed| elapsed.as_nanos())
-                .unwrap_or_default()
-        ));
-        let connected = super::connect_store(StoreConfig {
-            backend: StoreBackend::LibSql,
-            url: Some(path.to_string_lossy().into_owned()),
-            owned_shards: Vec::new(),
-            data_dir: None,
-            shard_count: 1,
-            cluster: None,
-            node_cache_budget: None,
-        })
-        .await?;
-        assert!(
-            connected.outbox_store.is_some(),
-            "the libSQL backend shares its leaf store as the dispatcher's outbox store"
         );
         Ok(())
     }

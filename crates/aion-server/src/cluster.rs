@@ -898,7 +898,7 @@ mod tests {
         use aion::{EngineBuilder, RuntimeHandle, SignalRouter};
         use aion_core::{Event, EventEnvelope};
         use aion_store::{OutboxRow, OutboxStatus, OutboxStore, WritableEventStore, WriteToken};
-        use aion_store_libsql::LibSqlStore;
+        use aion_store_haematite::HaematiteStore;
 
         let db_path = std::env::temp_dir().join(format!(
             "aion-adopter-settle-{}-{}.db",
@@ -908,7 +908,7 @@ mod tests {
 
         // Seed the incident state: a terminal (Failed) workflow owning one
         // stranded Claimed outbox row.
-        let seeder = LibSqlStore::open(db_path.clone()).await?;
+        let seeder = HaematiteStore::open_or_create(db_path.clone()).await?;
         let workflow_id = aion_core::WorkflowId::new_v4();
         let envelope = |seq: u64| EventEnvelope {
             seq,
@@ -950,7 +950,9 @@ mod tests {
 
         let engine = Arc::new(
             EngineBuilder::new()
-                .store_arc(Arc::new(LibSqlStore::open(db_path.clone()).await?))
+                .store_arc(Arc::new(
+                    HaematiteStore::open_or_create(db_path.clone()).await?,
+                ))
                 .in_memory_visibility()
                 .scheduler_threads(1)
                 .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
@@ -961,7 +963,7 @@ mod tests {
                 .await?,
         );
         let outbox_store: Arc<dyn OutboxStore> =
-            Arc::new(LibSqlStore::open(db_path.clone()).await?);
+            Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
         let adopter =
             OutboxSettlingAdopter::new(Arc::clone(&engine), Some(Arc::clone(&outbox_store)));
 

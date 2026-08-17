@@ -1,7 +1,7 @@
 //! Single-node `HaematiteStore` `EventStore` conformance coverage.
 //!
 //! Gates the haematite-backed store against the exact same behavioural suite the
-//! in-memory and libSQL stores run (`aion_store::conformance`). Each scenario
+//! in-memory and haematite stores run (`aion_store::conformance`). Each scenario
 //! gets a fresh temp-directory database.
 
 use std::sync::Arc;

@@ -779,7 +779,7 @@ mod tests {
 
     use aion_core::{ContentType, Payload, RunId, WorkflowId};
     use aion_store::{OutboxRow, OutboxStatus, OutboxStore};
-    use aion_store_libsql::LibSqlStore;
+    use aion_store_haematite::HaematiteStore;
     use async_trait::async_trait;
     use chrono::Utc;
 
@@ -808,8 +808,8 @@ mod tests {
 
     /// One shared store handle drives both the dispatcher and the test
     /// assertions, so they observe the same rows without a second connection.
-    async fn open_store(name: &str) -> Result<Arc<LibSqlStore>, ServerError> {
-        LibSqlStore::open(unique_temp_path(name))
+    async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, ServerError> {
+        HaematiteStore::open_or_create(unique_temp_path(name))
             .await
             .map(Arc::new)
             .map_err(ServerError::from)
@@ -1282,7 +1282,7 @@ mod tests {
     /// Drive a dispatcher's `run` loop until a row reaches `Done` or the deadline
     /// elapses; returns whether it reached `Done` in time.
     async fn wait_for_done(
-        store: &LibSqlStore,
+        store: &HaematiteStore,
         dispatch_key: &str,
         deadline: std::time::Instant,
     ) -> Result<bool, ServerError> {
@@ -1887,7 +1887,7 @@ mod tests {
         Ok(())
     }
 
-    async fn count_pending(store: &LibSqlStore, namespace: &str) -> Result<u64, ServerError> {
+    async fn count_pending(store: &HaematiteStore, namespace: &str) -> Result<u64, ServerError> {
         // Pending = in-flight − claimed (both durable, namespace-scoped).
         let inflight = store.count_inflight_outbox_rows(namespace).await?;
         let claimed = store.count_claimed_outbox_rows(namespace).await?;
