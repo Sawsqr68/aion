@@ -69,40 +69,45 @@ pub(super) struct TerminalIntent {
     /// - **`close_time`** is `terminal_recorded_at`, which is this value by
     ///   design: the run really did finish then. That is the point of carrying
     ///   it, not a side effect.
-    /// - **The determinism clock.** 🔴 An earlier revision of this comment
-    ///   argued the clock was safe because `workflow.now` "advances only in
-    ///   `Replay::step`, on commands resolved against recorded history". **That
-    ///   reason was false and is retracted.** `Replay::step` is the *designed*
-    ///   clock and it does behave that way — but production `workflow.now` does
-    ///   not go through it. `nif_determinism::now_from_context` reads
-    ///   `NifContext::last_recorded_at`, which is assigned
-    ///   `history.last().map(|event| *event.recorded_at())`: **the tail of the
-    ///   run segment.** Two implementations of one rule, and the survey checked
-    ///   the one production does not use.
+    /// - **The determinism clock.** Two earlier revisions of this bullet are
+    ///   retracted, and the history matters more than the answer.
     ///
-    ///   Re-derived against the mechanism production actually uses, the
-    ///   conclusion does hold — but for a different reason, and the reason is
-    ///   what matters here. Under a tail read, a reused `exit_time` is
-    ///   reachable as `workflow.now` only if workflow code executes while its
-    ///   terminal is the LAST event of the run segment. Nothing is live for a
-    ///   run while it is terminal, and the one path back to execution is
-    ///   `reopen`, which appends `WorkflowReopened` — and any re-arm
-    ///   `TimerStarted` — at `Utc::now()` **before** `respawn_and_register`
-    ///   (`lifecycle/reopen.rs`). So the tail a respawned process's first NIF
-    ///   context reads is always stamped later than the terminal it superseded.
+    ///   The FIRST argued the clock was safe because `workflow.now` "advances
+    ///   only in `Replay::step`, on commands resolved against recorded
+    ///   history". False: `Replay::step` was the *designed* clock, and
+    ///   production `workflow.now` did not go through it. The survey had
+    ///   checked the implementation production does not use.
+    ///
+    ///   The SECOND re-derived the same conclusion against what production did
+    ///   use — `nif_determinism::now_from_context` reading
+    ///   `NifContext::last_recorded_at`, i.e. `history.last()`, the run
+    ///   segment's TAIL — and argued a reused `exit_time` was unreachable
+    ///   because nothing executes while its own terminal is the tail, and the
+    ///   one path back (`reopen`) appends later-stamped events first. That
+    ///   reasoning was sound about the tail read, but the tail read was itself
+    ///   the defect (aion#1: on a resumed run the tail is the run's own
+    ///   future), and it has been removed. The bullet was written knowing it
+    ///   would not survive the fix, and it has not.
+    ///
+    ///   Re-derived against the mechanism production uses NOW, the conclusion
+    ///   holds for a stronger and simpler reason. `workflow.now` is the replay
+    ///   POSITION ([`crate::runtime::nif_context::NifContext::workflow_now`]):
+    ///   it is seeded from the run's own `WorkflowStarted` and advances ONLY to
+    ///   the `recorded_at` of an outcome the workflow has CONSUMED — a
+    ///   resolution the resolver returned, or an event a seam recorded and
+    ///   returned in the same step. A workflow terminal is neither: the
+    ///   resolver rejects every workflow-terminal event as a history-shape
+    ///   fault rather than resolving it as a recorded command outcome, and no
+    ///   `observe_recorded_at` seam records one. So a reused `exit_time` is not
+    ///   a value the position cell can ever hold, on any path, live or
+    ///   replayed — the reopen ordering argument is no longer load-bearing.
     ///
     ///   Two further checks, since a reused `exit_time` is non-monotonic by
     ///   construction: `HistoryCursor` orders on `seq`, not `recorded_at`, so a
     ///   backwards timestamp cannot make a history unreplayable; and the
-    ///   resolver rejects every workflow-terminal event as a history-shape
-    ///   fault rather than resolving it as a recorded command outcome.
-    ///
-    ///   🔴 This conclusion is now load-bearing on the tail read, which is
-    ///   itself a determinism-boundary defect (invariant 2: on replay the tail
-    ///   is the run's own future) and is tracked separately. **When that is
-    ///   fixed, re-derive this bullet against the new mechanism — the reasoning
-    ///   above does not survive the change, and assuming it does is the exact
-    ///   mistake the retracted bullet made.**
+    ///   position cell advances by `fetch_max` over a floor of the run's own
+    ///   `WorkflowStarted`, so even a backwards `recorded_at` reaching it could
+    ///   not move workflow-visible time backwards.
     ///
     /// No consumer was found that treats `recorded_at` as append order. That is
     /// a survey of today's callers, not a guarantee about future ones — anything

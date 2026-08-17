@@ -1,10 +1,11 @@
 //! `WorkflowHandle` process id, type, version, status, residency, and completion metadata.
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicI64, AtomicU64};
 
 use aion_core::{Payload, RunId, WorkflowError, WorkflowId, WorkflowStatus};
 use aion_package::ContentHash;
+use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, watch};
 
 use crate::durability::Recorder;
@@ -117,6 +118,14 @@ pub struct WorkflowHandleParts {
     pub completion: CompletionNotifier,
 }
 
+/// Sentinel for a run whose workflow-visible `now` has not advanced past the
+/// run's own `WorkflowStarted` yet.
+///
+/// Every value the cell ever holds is a `DateTime<Utc>::timestamp_millis()`, so
+/// `i64::MIN` is unreachable as a real timestamp and is dominated by the
+/// start-seeded floor the reader applies.
+const WORKFLOW_NOW_UNSET: i64 = i64::MIN;
+
 /// Live workflow process metadata cached in the active-execution registry.
 ///
 /// The handle stores only the runtime process identifier value, not a runtime
@@ -135,6 +144,7 @@ pub struct WorkflowHandle {
     residency: Residency,
     recorder: Arc<Mutex<Recorder>>,
     completion: CompletionNotifier,
+    workflow_now_millis: Arc<AtomicI64>,
     deterministic_nif_sequence: Arc<AtomicU64>,
     activity_ordinal_sequence: Arc<AtomicU64>,
     timer_ordinal_sequence: Arc<AtomicU64>,
@@ -158,12 +168,61 @@ impl WorkflowHandle {
             residency: parts.residency,
             recorder: Arc::new(Mutex::new(parts.recorder)),
             completion: parts.completion,
+            workflow_now_millis: Arc::new(AtomicI64::new(WORKFLOW_NOW_UNSET)),
             deterministic_nif_sequence: Arc::new(AtomicU64::new(0)),
             activity_ordinal_sequence: Arc::new(AtomicU64::new(0)),
             timer_ordinal_sequence: Arc::new(AtomicU64::new(0)),
             child_ordinal_sequence: Arc::new(AtomicU64::new(0)),
             signal_receive_counts: Arc::new(dashmap::DashMap::new()),
             signal_send_counts: Arc::new(dashmap::DashMap::new()),
+        }
+    }
+
+    /// Advance workflow-visible `now` to a recorded event's timestamp.
+    ///
+    /// This is the ONLY way workflow-visible time moves. The value is always a
+    /// `recorded_at` the workflow has just CONSUMED — a resolution returned to
+    /// workflow code, or an event this run recorded and returned in the same
+    /// step. Wall clock never reaches here, and neither does an asynchronous
+    /// arrival the run has not consumed (aion#1, determinism invariant 2).
+    ///
+    /// The advance is monotonic (`fetch_max`): concurrent NIF calls on one run
+    /// can never move the position backwards, and an advance that repeats a
+    /// value already applied is a no-op. Because the cell is a maximum, the
+    /// ORDER in which one workflow step applies several consumed timestamps
+    /// does not affect the result — only the SET of consumed timestamps does,
+    /// which is exactly the set replay reconstructs.
+    ///
+    /// Run-scoped exactly like the ordinal counters above: a re-spawned run
+    /// (crash recovery, continue-as-new) gets a fresh handle whose cell starts
+    /// unset, and its replayed code re-derives the same positions from the same
+    /// recorded history.
+    ///
+    /// Millisecond resolution is deliberate and is the whole of the contract:
+    /// `workflow.now()` has always served millisecond timestamps, so the store
+    /// must already round-trip `recorded_at` to at least that resolution for
+    /// replay to reproduce a live run. Truncating here keeps the live advance
+    /// (from an in-memory `Utc::now()`) and the replayed advance (from the
+    /// persisted event) exactly equal instead of differing below the
+    /// workflow-visible resolution.
+    pub fn advance_workflow_now(&self, recorded_at: DateTime<Utc>) {
+        self.workflow_now_millis.fetch_max(
+            recorded_at.timestamp_millis(),
+            std::sync::atomic::Ordering::SeqCst,
+        );
+    }
+
+    /// Workflow-visible `now` in epoch milliseconds, or `None` while the run
+    /// has consumed nothing and the reader must fall back to the run's
+    /// `WorkflowStarted` (see [`Self::advance_workflow_now`]).
+    #[must_use]
+    pub fn workflow_now_millis(&self) -> Option<i64> {
+        match self
+            .workflow_now_millis
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            WORKFLOW_NOW_UNSET => None,
+            millis => Some(millis),
         }
     }
 

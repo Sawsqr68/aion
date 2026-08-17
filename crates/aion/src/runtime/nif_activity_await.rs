@@ -122,9 +122,10 @@ pub(super) fn await_activity_step(
             super::nif_activity_retry::latest_recorded_attempt(context.history(), activity_id)
                 .unwrap_or(FIRST_DELIVERY_ATTEMPT)
                 .max(FIRST_DELIVERY_ATTEMPT);
+        let recorded_at = chrono::Utc::now();
         context
             .record_activity_failed(
-                chrono::Utc::now(),
+                recorded_at,
                 activity_id.clone(),
                 activity_error(message.clone()),
                 attempt,
@@ -132,6 +133,11 @@ pub(super) fn await_activity_step(
             .map_err(|error| EngineError::Runtime {
                 reason: error.error_reason(),
             })?;
+        // Live half of the OBSERVED await seam: this terminal `ActivityFailed`
+        // is returned to workflow code in this same step, and it is what a
+        // replayed await resolves at this position, so both worlds advance to
+        // the same `recorded_at`.
+        context.observe_recorded_at(recorded_at);
         return Ok(ActivityAwaitStep::Failed(message));
     }
     Ok(ActivityAwaitStep::Suspend)
@@ -146,8 +152,14 @@ fn recorded_resolution_for(
         Payload::from_json(&serde_json::Value::Null).map_err(|error| EngineError::Runtime {
             reason: format!("await_activity_result replay input: {error}"),
         })?;
+    // OBSERVED seam. This is where the activity's recorded terminal is handed
+    // to workflow code, so workflow-visible now advances to that terminal's
+    // `recorded_at`. Live parity: the live pass below records the same terminal
+    // (`take_runtime_completion`, and the scope-expiry failure) and advances to
+    // the same `recorded_at` it hands the recorder, so the replayed pass lands
+    // on the identical value at this identical code position.
     match context
-        .resolve_command(Command::RunActivity {
+        .resolve_command_observed(Command::RunActivity {
             key: CorrelationKey::Activity(ordinal),
             activity_type: "await_activity_result".to_owned(),
             input,
@@ -184,11 +196,16 @@ fn take_runtime_completion(
         // paths that never retry (outbox re-delivery, in-VM) retain nothing and
         // resolve to the first delivery exactly as before.
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
+        let recorded_at = chrono::Utc::now();
         context
-            .record_activity_completed(chrono::Utc::now(), activity_id, payload.clone(), attempt)
+            .record_activity_completed(recorded_at, activity_id, payload.clone(), attempt)
             .map_err(|error| EngineError::Runtime {
                 reason: error.error_reason(),
             })?;
+        // Live half of the OBSERVED await seam (see `recorded_resolution_for`):
+        // the completion is returned to workflow code in this same step and is
+        // exactly what a replayed await resolves at this position.
+        context.observe_recorded_at(recorded_at);
         return Ok(Some(ActivityAwaitStep::Completed(payload.bytes().to_vec())));
     }
     if let Some((error, attempt)) = runtime.take_activity_error(context.pid(), ordinal)? {
@@ -196,9 +213,10 @@ fn take_runtime_completion(
         // reason verbatim and the final attempt count on the recorded
         // terminal `ActivityFailed`.
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
+        let recorded_at = chrono::Utc::now();
         context
             .record_activity_failed(
-                chrono::Utc::now(),
+                recorded_at,
                 activity_id,
                 activity_error(error.message.clone()),
                 attempt,
@@ -206,6 +224,9 @@ fn take_runtime_completion(
             .map_err(|record_error| EngineError::Runtime {
                 reason: record_error.error_reason(),
             })?;
+        // Live half of the OBSERVED await seam: the terminal failure is
+        // returned to workflow code in this same step.
+        context.observe_recorded_at(recorded_at);
         return Ok(Some(ActivityAwaitStep::Failed(error.message)));
     }
     Ok(None)

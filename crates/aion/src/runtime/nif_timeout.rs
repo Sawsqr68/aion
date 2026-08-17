@@ -212,8 +212,15 @@ fn arm_scope(state: &EngineNifState, args: &[Term], pid: u64) -> Result<(Term, u
     let now = recorded_now(&context);
     let timer_id = TimerId::anonymous(context.next_timer_ordinal());
     let fire_at = add_duration(now, duration).map_err(|error| error.to_string())?;
+    // UNOBSERVED seam. Arming the scope hands workflow code the wrapped
+    // closure, not the race's outcome; the outcome is delivered at
+    // `resume_with_timeout`, which derives it by scanning recorded history in
+    // BOTH worlds and moves no position either. Recorded resolution here can
+    // reach the deadline's `TimerFired` — an event the live arm had not
+    // recorded when it ran the same closure — so advancing here would be a
+    // replay-only position change (aion#1).
     let replay_timed_out = match context
-        .resolve_command(timer_command(timer_id.clone(), fire_at))
+        .resolve_command_unobserved(timer_command(timer_id.clone(), fire_at))
         .map_err(|error| error.to_string())?
     {
         ResolveOutcome::Recorded(Resolution::TimerFired) => Some(true),

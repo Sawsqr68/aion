@@ -94,8 +94,13 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
         input: input.clone(),
     };
 
+    // OBSERVED seam. The recorded `ChildWorkflowStarted` IS the answer this
+    // call returns to workflow code — the child's identity, recorded
+    // nondeterminism replayed from history. Live parity: the live branch
+    // records that same event and advances to the same `recorded_at` before
+    // returning the same id.
     match nif
-        .resolve_command(command)
+        .resolve_command_observed(command)
         .map_err(|error| context_error(&error))?
     {
         ResolveOutcome::Recorded(Resolution::ChildStarted(child_id)) => {
@@ -115,6 +120,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
             // drawn once here, durably recorded before any observable use,
             // returned from history on every replay.
             let child_workflow_id = WorkflowId::new_v4();
+            let recorded_at = Utc::now();
             nif.block_on_recorder(|recorder| {
                 let child_workflow_id = child_workflow_id.clone();
                 let workflow_type = workflow_type.clone();
@@ -123,7 +129,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                 Box::pin(async move {
                     recorder
                         .record_child_workflow_started(
-                            Utc::now(),
+                            recorded_at,
                             child_workflow_id,
                             workflow_type,
                             input,
@@ -133,6 +139,9 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                 })
             })
             .map_err(|error| context_error(&error))?;
+            // Live half of the OBSERVED spawn seam: this is the event a
+            // replayed spawn resolves at this position.
+            nif.observe_recorded_at(recorded_at);
 
             // From the durable record on, the start is an engine-internal
             // obligation, never a workflow-visible outcome (F3): replay
@@ -324,8 +333,14 @@ fn await_child_step(
     let command = Command::AwaitChild {
         child_workflow_id: child_workflow_id.clone(),
     };
+    // OBSERVED seam. The child's recorded terminal is the result this await
+    // returns to workflow code. Live parity is exact because both worlds reach
+    // it through THIS resolution: the child watcher records the terminal into
+    // the parent's history and wakes it, and this native never records a child
+    // terminal itself, so the woken live pass and a replayed pass consume the
+    // same event. A terminal no await has consumed moves nothing.
     match nif
-        .resolve_command(command)
+        .resolve_command_observed(command)
         .map_err(|error| context_error(&error))?
     {
         // D4 envelope: child success and child failure are both `{ok, _}`

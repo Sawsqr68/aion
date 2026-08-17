@@ -327,8 +327,15 @@ fn dispatch_activity_with_context(
     let activity_id = ActivityId::from_sequence_position(ordinal);
     let correlation = correlation_id(ordinal);
     let namespace = context.workflow_handle().namespace().to_owned();
+    // UNOBSERVED seam. The dispatch hands workflow code a correlation id, not
+    // the activity's outcome — the outcome is delivered by
+    // `await_activity_result`, which is the OBSERVED seam. Recorded resolution
+    // here reaches the activity's TERMINAL, which the live path has not reached
+    // at this position (it has only just recorded `ActivityScheduled`), so
+    // advancing workflow-visible now here would make a replayed run serve a
+    // timestamp its live original could not have served (aion#1).
     match context
-        .resolve_command(Command::RunActivity {
+        .resolve_command_unobserved(Command::RunActivity {
             key,
             activity_type: call.name.clone(),
             input: input_payload.clone(),

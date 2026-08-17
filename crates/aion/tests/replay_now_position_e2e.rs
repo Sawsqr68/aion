@@ -152,7 +152,12 @@ async fn replayed_sleep_reports_the_recorded_span_not_zero_elapsed()
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let workflow_id = WorkflowId::new_v4();
     let run_id = RunId::new_v4();
-    let history = slept_and_woke_history(&workflow_id, &run_id, &package_version, Payload::from_json(&json!({ "fixture": "input" }))?)?;
+    let history = slept_and_woke_history(
+        &workflow_id,
+        &run_id,
+        &package_version,
+        Payload::from_json(&json!({ "fixture": "input" }))?,
+    )?;
     store
         .append(WriteToken::recorder(), &workflow_id, &history, 0)
         .await?;

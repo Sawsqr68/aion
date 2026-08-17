@@ -212,8 +212,18 @@ fn parse_i64_arg(term: Term, label: &str) -> Result<i64, String> {
         .map_err(|_| format!("{label}: argument is not a valid i64"))
 }
 
+/// Workflow-visible `now`: the recorded timestamp of the replay POSITION this
+/// run occupies, in epoch milliseconds.
+///
+/// It answered `history.last()` — the run segment's TAIL — before aion#1. On a
+/// resumed run the tail is the wake event, which is the run's own future at
+/// every position replayed code occupies before it consumes the sleep, so every
+/// `now()` of a recovered run returned the same wake timestamp and any
+/// self-measured elapsed span collapsed to zero. The position now comes from
+/// [`NifContext::workflow_now`], which advances only on outcomes the workflow
+/// has actually consumed.
 fn now_from_context(ctx: &mut ProcessContext, context: &NifContext) -> Term {
-    let Some(recorded_at) = context.last_recorded_at() else {
+    let Some(recorded_at) = context.workflow_now() else {
         return error_term(ctx, "now: workflow history is empty");
     };
     ok_term_or_nil(ctx, &recorded_at.timestamp_millis().to_string())
@@ -633,7 +643,7 @@ mod tests {
         )?);
         let mut context = context_with_history(&runtime, 62, workflow_id, run_id(), &history)?;
 
-        context.resolve_command(sleep_command())?;
+        context.resolve_command_observed(sleep_command())?;
 
         let mut ctx = ProcessContext::new();
         let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
@@ -687,8 +697,7 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new()?;
         let workflow_id = workflow_id();
         let history = resumed_run_history(&workflow_id)?;
-        let fixture =
-            context_fixture_with_history(&runtime, 64, workflow_id, run_id(), &history)?;
+        let fixture = context_fixture_with_history(&runtime, 64, workflow_id, run_id(), &history)?;
         let state = Arc::new(EngineNifState::default());
         install_nif_context_source(
             &state,
@@ -710,7 +719,7 @@ mod tests {
             Some(Arc::clone(&fixture.store)),
             crate::runtime::SignalDeliveryConfig::default(),
         )?;
-        sleep_context.resolve_command(sleep_command())?;
+        sleep_context.resolve_command_observed(sleep_command())?;
 
         let ended = now_through_nif(64, state)?.parse::<i64>()?;
 
@@ -781,24 +790,32 @@ mod tests {
             payload("activity-result")?,
             1,
         )?;
+        // The OBSERVED await seam's live half: `await_activity_result` advances
+        // to the terminal it just recorded and returns it to workflow code.
+        live.context.observe_recorded_at(completed_at_time);
         live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
 
         // REPLAY: a fresh handle over the history live just produced.
         let replay_history = runtime.block_on(live.store.read_history(&workflow_id))?;
-        let replay = context_fixture_with_history(
-            &runtime,
-            72,
-            workflow_id,
-            run_id(),
-            &replay_history,
-        )?;
+        let replay =
+            context_fixture_with_history(&runtime, 72, workflow_id, run_id(), &replay_history)?;
+        // Production builds a FRESH context per NIF call over the one shared
+        // handle; the dispatch and the await are two calls, so they are two
+        // resolvers over the same history.
         let mut replay_context = replay.context;
         let mut replay_now = Vec::new();
         replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
-        replay_context.resolve_command(command.clone())?;
+        replay_context.resolve_command_unobserved(command.clone())?;
         replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
-        replay_context.resolve_command(command)?;
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+        let mut await_context = NifContext::new_with_history_store(
+            72,
+            replay.registry.as_ref(),
+            runtime.handle().clone(),
+            Some(Arc::clone(&replay.store)),
+            crate::runtime::SignalDeliveryConfig::default(),
+        )?;
+        await_context.resolve_command_observed(command)?;
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &await_context))?.1);
 
         assert_eq!(
             live_now, replay_now,
@@ -850,13 +867,19 @@ mod tests {
 
         // Both engines are live at once; each call resolves only against the
         // state carried by its own runtime, never the other's.
+        //
+        // 🔴 Re-cast for aion#1: this asserted the SECOND engine's history TAIL
+        // (`1700000999456`) — the tail read that was the defect. The two runs
+        // are still told apart by their answers, now by their own run starts:
+        // the runs are seeded with distinct `WorkflowStarted` timestamps, so
+        // cross-engine leakage still fails here.
         let mut ctx = ProcessContext::new();
         ctx.set_pid(Some(52));
         ctx.set_nif_private_data(Some(second_state));
         let result = now_impl(&[], &mut ctx).map_err(|_| "now should return Ok at beamr level")?;
         let (tag, value) = decode_result_tuple(result)?;
         assert_eq!(tag, "ok");
-        assert_eq!(value, "1700000999456");
+        assert_eq!(value, "1700000500000");
 
         let mut first_ctx = ProcessContext::new();
         first_ctx.set_pid(Some(51));

@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use aion_core::{ActivityError, ActivityId, Payload, RunId, WorkflowId};
 use aion_store::EventStore;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
 
 use crate::EngineError;
 use crate::durability::{
     Command, DurabilityError, FanOutCompletionResult, FanOutItem, FanOutOutcome, HistoryCursor,
-    Recorder, ResolveOutcome, Resolver,
+    Recorder, ResolveOutcome, ResolvedCommand, Resolver,
 };
 use crate::registry::{Registry, WorkflowHandle};
 
@@ -61,7 +61,9 @@ pub struct NifContext {
     recorder: Arc<Mutex<Recorder>>,
     tokio_handle: Handle,
     resolver: Resolver,
-    last_recorded_at: Option<DateTime<Utc>>,
+    /// `recorded_at` of this run segment's `WorkflowStarted` — the floor
+    /// workflow-visible time starts from before the run consumes anything.
+    run_started_at: Option<DateTime<Utc>>,
 }
 
 impl NifContext {
@@ -115,7 +117,13 @@ impl NifContext {
         // Correlation identities (ordinals, signal occurrence indices) are
         // run-scoped; resolve only against this run's history segment.
         let history = crate::durability::current_run_segment(history, handle.run_id())?;
-        let last_recorded_at = history.last().map(|event| *event.recorded_at());
+        // The run's OWN start, never the tail. `current_run_segment` slices
+        // from this run's `WorkflowStarted`, so the first event is it. Reading
+        // the tail here was aion#1: on a resumed run the tail is the wake event
+        // — the run's own future at every replay position before it is
+        // consumed — so `workflow.now()` answered the same wake timestamp at
+        // every position and self-measured elapsed time collapsed to zero.
+        let run_started_at = history.first().map(|event| *event.recorded_at());
         let cursor = HistoryCursor::new(history)?;
         let resolver = Resolver::new(workflow_id, cursor);
 
@@ -124,7 +132,7 @@ impl NifContext {
             recorder,
             tokio_handle,
             resolver,
-            last_recorded_at,
+            run_started_at,
         })
     }
 
@@ -213,10 +221,59 @@ impl NifContext {
         self.handle.pid()
     }
 
-    /// Returns the recorded timestamp of the last event in the resolved history.
+    /// Workflow-visible `now`: the recorded timestamp of the replay POSITION
+    /// this run currently occupies.
+    ///
+    /// The position is the run's `WorkflowStarted` until the run consumes a
+    /// recorded outcome, and thereafter the `recorded_at` of the last outcome
+    /// it consumed ([`WorkflowHandle::advance_workflow_now`]). It is a pure
+    /// function of recorded history plus what this execution has consumed, so
+    /// a replayed run serves exactly the sequence its live original served
+    /// (determinism invariant 2).
+    ///
+    /// The run start is a floor, not merely a seed: `recorded_at` is not
+    /// guaranteed monotonic with sequence (a reused terminal exit instant can
+    /// be stamped earlier than the event that follows it —
+    /// `lifecycle::completion_retry`), so the maximum of the two is taken
+    /// rather than the cell alone.
+    ///
+    /// `None` only when this run segment has no recorded events at all, which
+    /// `current_run_segment` already rejects; callers keep their loud error for
+    /// it rather than substituting a clock.
     #[must_use]
-    pub const fn last_recorded_at(&self) -> Option<DateTime<Utc>> {
-        self.last_recorded_at
+    pub fn workflow_now(&self) -> Option<DateTime<Utc>> {
+        let run_started_at = self.run_started_at?;
+        let Some(millis) = self.handle.workflow_now_millis() else {
+            return Some(run_started_at);
+        };
+        if millis <= run_started_at.timestamp_millis() {
+            return Some(run_started_at);
+        }
+        let Some(position) = Utc.timestamp_millis_opt(millis).single() else {
+            // Unreachable: every value in the cell came from a
+            // `DateTime<Utc>::timestamp_millis()` and round-trips. Report it
+            // rather than swallowing it, and answer the run start — the one
+            // value that is always a valid position.
+            tracing::error!(
+                workflow_id = %self.handle.workflow_id(),
+                run_id = %self.handle.run_id(),
+                millis,
+                "workflow-visible now cell holds an unrepresentable timestamp; \
+                 answering the run start"
+            );
+            return Some(run_started_at);
+        };
+        Some(position)
+    }
+
+    /// Advance workflow-visible `now` to a recorded event this run has just
+    /// CONSUMED — an outcome returned to workflow code in this same step.
+    ///
+    /// Every call site owes a replay-parity argument: the value live serves
+    /// after this seam must equal the value a replayed execution serves at the
+    /// same code position. See [`WorkflowHandle::advance_workflow_now`].
+    pub fn observe_recorded_at(&self, recorded_at: DateTime<Utc>) {
+        self.handle.advance_workflow_now(recorded_at);
     }
 
     /// Returns and advances the workflow-local deterministic NIF call sequence.
@@ -485,27 +542,89 @@ impl NifContext {
         aion_core::start_time_task_queue(self.history())
     }
 
-    /// Resolves a workflow command against recorded history before any live side effect runs.
+    /// Resolves a workflow command whose recorded outcome IS returned to
+    /// workflow code at this seam, advancing workflow-visible `now` to the
+    /// recorded event consumed.
+    ///
+    /// This is the replay half of the position contract: it advances exactly
+    /// where [`crate::durability::Replay::step`] advances — on a recorded
+    /// resolution, and on a resume-live handoff that still consumed a
+    /// command-issued event. The live half is each seam's own
+    /// [`Self::observe_recorded_at`] at the moment it records the outcome it
+    /// is about to return.
+    ///
+    /// Use this ONLY where the resolution is handed to workflow code here. A
+    /// seam that merely asks "is this command already recorded?" and returns
+    /// something else (an activity dispatch returning a correlation id, a
+    /// timer start returning a handle) must use
+    /// [`Self::resolve_command_unobserved`]: recorded resolution reaches the
+    /// command's TERMINAL, which the live path has not reached at that
+    /// position and cannot reproduce.
     ///
     /// # Errors
     ///
     /// Returns [`NifContextError::Durability`] when replay detects non-determinism or malformed
     /// command history.
-    pub fn resolve_command(&mut self, command: Command) -> Result<ResolveOutcome, NifContextError> {
-        // This resolver was built fresh for one NIF call, with its cursor at
-        // the top of history; commands consumed by earlier calls in the same
-        // live execution sit before the one being resolved. Skip to this
-        // command's correlation key so sequential workflow steps never
-        // re-read earlier recorded results. AwaitChild has no positional
-        // key — its replay identity is the awaited child workflow id — so it
-        // skips to that child's recorded terminal outcome instead.
+    pub fn resolve_command_observed(
+        &mut self,
+        command: Command,
+    ) -> Result<ResolveOutcome, NifContextError> {
+        self.position_resolver_for(&command);
+        match self.resolver.resolve_with_consumed(command)? {
+            ResolvedCommand::Recorded {
+                resolution,
+                recorded_at,
+            } => {
+                self.observe_recorded_at(recorded_at);
+                Ok(ResolveOutcome::Recorded(resolution))
+            }
+            ResolvedCommand::ResumeLive { recorded_at } => {
+                if let Some(recorded_at) = recorded_at {
+                    self.observe_recorded_at(recorded_at);
+                }
+                Ok(ResolveOutcome::ResumeLive)
+            }
+        }
+    }
+
+    /// Resolves a workflow command WITHOUT moving workflow-visible `now`.
+    ///
+    /// For seams that consult recorded history to decide whether a live side
+    /// effect must run, and hand workflow code something other than the
+    /// recorded outcome (a correlation id, a timer handle, a scope decision).
+    /// The recorded resolution at such a seam is the command's terminal, which
+    /// sits in the run's FUTURE relative to the position live code occupies
+    /// there — advancing to it would make replay serve a timestamp the live
+    /// run could not have served (aion#1, the per-seam parity rule).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NifContextError::Durability`] when replay detects non-determinism or malformed
+    /// command history.
+    pub fn resolve_command_unobserved(
+        &mut self,
+        command: Command,
+    ) -> Result<ResolveOutcome, NifContextError> {
+        self.position_resolver_for(&command);
+        self.resolver.resolve(command).map_err(Into::into)
+    }
+
+    /// Position this call's fresh resolver at `command`'s correlation key.
+    ///
+    /// This resolver was built fresh for one NIF call, with its cursor at
+    /// the top of history; commands consumed by earlier calls in the same
+    /// live execution sit before the one being resolved. Skip to this
+    /// command's correlation key so sequential workflow steps never
+    /// re-read earlier recorded results. `AwaitChild` has no positional
+    /// key — its replay identity is the awaited child workflow id — so it
+    /// skips to that child's recorded terminal outcome instead.
+    fn position_resolver_for(&mut self, command: &Command) {
         if let Some(key) = command.key() {
             self.resolver.fast_forward_to(key);
-        } else if let Command::AwaitChild { child_workflow_id } = &command {
+        } else if let Command::AwaitChild { child_workflow_id } = command {
             self.resolver
                 .fast_forward_to_child_terminal(child_workflow_id);
         }
-        self.resolver.resolve(command).map_err(Into::into)
     }
 }
 
@@ -888,7 +1007,7 @@ mod tests {
 
         assert_eq!(context.workflow_id(), handle.workflow_id());
         assert_eq!(
-            context.resolve_command(Command::RunActivity {
+            context.resolve_command_observed(Command::RunActivity {
                 key: CorrelationKey::Activity(0),
                 activity_type: "activity".to_owned(),
                 input: payload("activity-input")?,
@@ -969,7 +1088,7 @@ mod tests {
         )?;
 
         assert_eq!(
-            context.resolve_command(Command::AwaitChild {
+            context.resolve_command_observed(Command::AwaitChild {
                 child_workflow_id: child_workflow_id.clone(),
             })?,
             ResolveOutcome::Recorded(Resolution::ChildCompleted(payload("child-result")?))
@@ -996,7 +1115,7 @@ mod tests {
         )?;
 
         assert_eq!(
-            context.resolve_command(Command::AwaitChild { child_workflow_id })?,
+            context.resolve_command_observed(Command::AwaitChild { child_workflow_id })?,
             ResolveOutcome::ResumeLive
         );
         Ok(())

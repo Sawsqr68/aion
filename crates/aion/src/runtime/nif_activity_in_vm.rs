@@ -150,8 +150,11 @@ fn dispatch_in_vm_with_context(
     let key = CorrelationKey::Activity(ordinal);
     let activity_id = ActivityId::from_sequence_position(ordinal);
     let correlation = correlation_id(ordinal);
+    // UNOBSERVED seam, for the same reason as the remote wire
+    // (`nif_activity_dispatch`): this returns a correlation id, and the
+    // activity's outcome is delivered by the OBSERVED `await_activity_result`.
     match context
-        .resolve_command(Command::RunActivity {
+        .resolve_command_unobserved(Command::RunActivity {
             key,
             activity_type: name.clone(),
             input: input_payload.clone(),

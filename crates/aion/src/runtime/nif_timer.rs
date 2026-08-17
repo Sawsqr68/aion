@@ -73,7 +73,16 @@ pub(super) fn sleep_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term
             let timer_id = TimerId::anonymous(context.next_timer_ordinal());
             (timer_id, add_duration(now, duration)?)
         };
-        match context.resolve_command(timer_command(timer_id.clone(), fire_at))? {
+        // OBSERVED seam. `sleep` blocks until the timer's recorded terminal
+        // settles it, so the terminal IS what this call returns to workflow
+        // code. Live parity is exact because both worlds reach that answer
+        // through THIS resolution: the timer service records `TimerFired` and
+        // wakes the process, and the woken pass resolves the recorded terminal
+        // here just as a replayed pass does. The first live pass resolves
+        // `ResumeLive` (nothing recorded), records `TimerStarted`, and parks
+        // without returning to workflow code, so it is not an observable
+        // position.
+        match context.resolve_command_observed(timer_command(timer_id.clone(), fire_at))? {
             ResolveOutcome::Recorded(Resolution::TimerFired) => {
                 state.pending_awaits.remove(&pid);
                 Ok(ok_result("fired"))
@@ -174,7 +183,13 @@ pub(super) fn start_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
         let duration = decode_duration_arg("start_timer duration", args[1])?;
         let recorded_now = recorded_now(&context);
         let fire_at = add_duration(recorded_now, duration)?;
-        match context.resolve_command(timer_command(timer_id.clone(), fire_at))? {
+        // UNOBSERVED seam. `start_timer` arms a timer and returns its handle
+        // immediately; it never waits for the terminal. Recorded resolution can
+        // reach `TimerFired`, an event the live path had not recorded when it
+        // returned this same handle, so advancing here would be a
+        // replay-only position change (aion#1). The terminal becomes visible
+        // where it is awaited.
+        match context.resolve_command_unobserved(timer_command(timer_id.clone(), fire_at))? {
             ResolveOutcome::Recorded(Resolution::TimerStarted | Resolution::TimerFired) => {
                 Ok(ok_result(timer_ref(&timer_id)))
             }
@@ -194,7 +209,13 @@ pub(super) fn cancel_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
     timer_call("cancel_timer", 1, args, ctx, |state, mut context, args| {
         let timer_id = decode_timer_id_arg("cancel_timer timer_id", args[0])?;
         let recorded_now = recorded_now(&context);
-        match context.resolve_command(timer_command(timer_id.clone(), recorded_now))? {
+        // UNOBSERVED seam. The live path issues the cancel through the timer
+        // service, which arbitrates fire-versus-cancel and owns the terminal's
+        // `recorded_at`; this NIF never learns that timestamp and so cannot
+        // advance to it. Advancing only on the replay side would be a
+        // replay-only position change, so neither side advances and the two
+        // agree (aion#1).
+        match context.resolve_command_unobserved(timer_command(timer_id.clone(), recorded_now))? {
             ResolveOutcome::Recorded(Resolution::TimerCancelled | Resolution::TimerFired) => {
                 Ok(ok_result("cancelled"))
             }
@@ -337,11 +358,18 @@ pub(super) fn timer_command(timer_id: TimerId, fire_at: DateTime<Utc>) -> Comman
     }
 }
 
-/// Deterministic workflow-visible "now": the timestamp of the last event in
-/// the run segment the calling context resolved against.
+/// Deterministic workflow-visible "now": the replay POSITION this run occupies
+/// — the same value `workflow.now()` serves ([`NifContext::workflow_now`]).
+///
+/// This is the base a timer's `fire_at` is computed from and the `recorded_at`
+/// a `TimerStarted` is stamped with, so it must be a pure function of recorded
+/// history and what this run has consumed. It read the run segment's TAIL
+/// before aion#1, which made both values depend on unconsumed asynchronous
+/// arrivals and, on a resumed run, on the wake event replayed code had not
+/// reached.
 pub(super) fn recorded_now(context: &NifContext) -> DateTime<Utc> {
     context
-        .last_recorded_at()
+        .workflow_now()
         .unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
 }
 

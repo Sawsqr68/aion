@@ -325,7 +325,16 @@ fn receive_signal_impl(
         },
     };
 
-    match context.resolve_command(command).map_err(signal_error)? {
+    // OBSERVED seam. The recorded `SignalReceived` is the payload this call
+    // returns to workflow code. Live parity is exact because both worlds reach
+    // it through THIS resolution: the router records the arrival durably before
+    // waking the process, and this native never records an arrival itself, so
+    // the woken live pass and a replayed pass consume the same event. An
+    // arrival no receive has consumed moves nothing.
+    match context
+        .resolve_command_observed(command)
+        .map_err(signal_error)?
+    {
         ResolveOutcome::Recorded(Resolution::SignalDelivered(payload)) => {
             // F1b: an arrival recorded after the expired deadline's
             // `TimerFired` was never observed live — take the timeout
@@ -414,7 +423,14 @@ fn send_signal_impl(
         delivery: delivery.clone(),
     };
 
-    match context.resolve_command(command).map_err(signal_error)? {
+    // OBSERVED seam. A replayed send resolves the recorded `SignalSent` and
+    // returns "delivered" from it, so workflow-visible now advances to that
+    // event; the live branch below records the same event and advances to the
+    // same `recorded_at` before returning the same answer.
+    match context
+        .resolve_command_observed(command)
+        .map_err(signal_error)?
+    {
         ResolveOutcome::Recorded(Resolution::SignalSent) => {
             context.mark_signal_send_completed(name);
             Ok("delivered".to_owned())
@@ -430,12 +446,13 @@ fn send_signal_impl(
                     delivery.payload.clone(),
                 ))
                 .map_err(|error: EngineError| error.to_string())?;
+            let recorded_at = Utc::now();
             context
                 .block_on_recorder(|recorder| {
                     Box::pin(async move {
                         recorder
                             .record_signal_sent(
-                                Utc::now(),
+                                recorded_at,
                                 delivery.target_workflow_id,
                                 delivery.name,
                                 delivery.payload,
@@ -444,6 +461,9 @@ fn send_signal_impl(
                     })
                 })
                 .map_err(signal_error)?;
+            // Live half of the OBSERVED send seam: this is the event a replayed
+            // send resolves at this position.
+            context.observe_recorded_at(recorded_at);
             context.mark_signal_send_completed(name);
             Ok("delivered".to_owned())
         }

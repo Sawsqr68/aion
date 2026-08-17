@@ -23,7 +23,7 @@ pub(super) fn settle_all(
 ) -> Result<CollectStep, CollectError> {
     let mut states = Vec::with_capacity(usize::try_from(count).unwrap_or(0));
     for ordinal in base_ordinal..base_ordinal + count {
-        let recorded = match recorded_terminal(context.history(), ordinal)? {
+        let recorded = match observed_terminal(context, ordinal)? {
             Some(recorded) => recorded,
             None => take_and_record(deps, context, pid, ordinal)?,
         };
@@ -102,7 +102,7 @@ pub(super) fn settle_race(
         // Take in ordinal order: of a batch sitting in the maps on one
         // wake, the lowest ordinal becomes the recorded winner.
         for ordinal in base_ordinal..base_ordinal + count {
-            if recorded_terminal(history, ordinal)?.is_some() {
+            if observed_terminal(context, ordinal)?.is_some() {
                 // A recorded Cancelled never revives into a winner.
                 continue;
             }
@@ -125,7 +125,7 @@ pub(super) fn settle_race(
                 continue;
             }
             drop_runtime_entries(deps, pid, ordinal)?;
-            if recorded_terminal(history, ordinal)?.is_none() {
+            if observed_terminal(context, ordinal)?.is_none() {
                 record_cancelled(context, ordinal)?;
             }
         }
@@ -142,7 +142,7 @@ pub(super) fn settle_race(
     if super::nif_timeout::expired_scope_deadline(state, pid, history).is_some() {
         for ordinal in base_ordinal..base_ordinal + count {
             drop_runtime_entries(deps, pid, ordinal)?;
-            if recorded_terminal(history, ordinal)?.is_none() {
+            if observed_terminal(context, ordinal)?.is_none() {
                 record_cancelled(context, ordinal)?;
             }
         }
@@ -153,7 +153,7 @@ pub(super) fn settle_race(
     // run was aborted by scope expiry before anything settled.
     let mut all_cancelled = true;
     for ordinal in base_ordinal..base_ordinal + count {
-        if recorded_terminal(history, ordinal)? != Some(OrdinalState::Cancelled) {
+        if observed_terminal(context, ordinal)? != Some(OrdinalState::Cancelled) {
             all_cancelled = false;
             break;
         }
@@ -196,12 +196,16 @@ fn take_and_record(
     // returned OrdinalState is the same either way — the terminal for this
     // ordinal is in history whether this call Recorded it or found it Dropped.
     let outbox_enabled = deps.runtime.outbox_enabled();
+    // Live half of the OBSERVED settlement sweep (see `observed_terminal`):
+    // whichever branch records this member's terminal, workflow-visible now
+    // advances to the SAME `recorded_at` a replayed sweep reads back for it.
+    let recorded_at = Utc::now();
     if let Some((payload, attempt)) = deps.runtime.take_activity_result(pid, ordinal)? {
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
         if outbox_enabled {
             let result = context
                 .record_fan_out_completion(
-                    Utc::now(),
+                    recorded_at,
                     ordinal,
                     FanOutOutcome::Completed {
                         result: payload.clone(),
@@ -212,9 +216,10 @@ fn take_and_record(
             log_unexpected_drop(result, ordinal);
         } else {
             context
-                .record_activity_completed(Utc::now(), activity_id, payload.clone(), attempt)
+                .record_activity_completed(recorded_at, activity_id, payload.clone(), attempt)
                 .map_err(|error| error.error_reason())?;
         }
+        context.observe_recorded_at(recorded_at);
         return Ok(OrdinalState::Completed(payload_text(&payload)?));
     }
     if let Some((error, attempt)) = deps.runtime.take_activity_error(pid, ordinal)? {
@@ -222,7 +227,7 @@ fn take_and_record(
         if outbox_enabled {
             let result = context
                 .record_fan_out_completion(
-                    Utc::now(),
+                    recorded_at,
                     ordinal,
                     FanOutOutcome::Failed {
                         error: terminal_error(&error.message),
@@ -234,13 +239,14 @@ fn take_and_record(
         } else {
             context
                 .record_activity_failed(
-                    Utc::now(),
+                    recorded_at,
                     activity_id,
                     terminal_error(&error.message),
                     attempt,
                 )
                 .map_err(|inner| inner.error_reason())?;
         }
+        context.observe_recorded_at(recorded_at);
         return Ok(OrdinalState::Failed(error.message));
     }
     Ok(OrdinalState::Pending)
@@ -261,11 +267,19 @@ fn log_unexpected_drop(result: FanOutCompletionResult, ordinal: u64) {
     }
 }
 
+/// Record one fan-out member's `ActivityCancelled` and settle its outbox row.
+///
+/// Live half of the OBSERVED settlement sweep: the cancellation set IS part of
+/// the settled answer, and a replayed sweep reads these same events back
+/// through [`observed_terminal`], so both worlds advance over the same set.
 fn record_cancelled(context: &NifContext, ordinal: u64) -> Result<(), String> {
+    let recorded_at = Utc::now();
     context
         // NOI-0: the cancelled fan-out ordinal was dispatched once at `FIRST_DELIVERY_ATTEMPT`.
-        .record_activity_cancelled_and_settle_outbox(Utc::now(), ordinal, FIRST_DELIVERY_ATTEMPT)
-        .map_err(|error| error.error_reason())
+        .record_activity_cancelled_and_settle_outbox(recorded_at, ordinal, FIRST_DELIVERY_ATTEMPT)
+        .map_err(|error| error.error_reason())?;
+    context.observe_recorded_at(recorded_at);
+    Ok(())
 }
 
 /// Drop both retained runtime-map entries for an ordinal (D5 hygiene at
@@ -276,33 +290,77 @@ fn drop_runtime_entries(deps: &CollectDeps, pid: u64, ordinal: u64) -> Result<()
     Ok(())
 }
 
+/// The recorded terminal EVENT for `ordinal` in this run's segment, if any.
+///
+/// First match wins, exactly as the settlement sweep has always read it; the
+/// event itself is returned so the sweep can advance workflow-visible now to
+/// the position the read establishes.
+fn recorded_terminal_event(history: &[Event], ordinal: u64) -> Option<&Event> {
+    let target = ActivityId::from_sequence_position(ordinal);
+    history.iter().find(|event| {
+        matches!(
+            event,
+            Event::ActivityCompleted { activity_id, .. }
+                | Event::ActivityFailed { activity_id, .. }
+                | Event::ActivityCancelled { activity_id, .. }
+            if *activity_id == target
+        )
+    })
+}
+
+fn terminal_state(event: &Event) -> Result<Option<OrdinalState>, String> {
+    Ok(match event {
+        Event::ActivityCompleted { result, .. } => {
+            Some(OrdinalState::Completed(payload_text(result)?))
+        }
+        Event::ActivityFailed { error, .. } => Some(OrdinalState::Failed(error.message.clone())),
+        Event::ActivityCancelled { .. } => Some(OrdinalState::Cancelled),
+        _ => None,
+    })
+}
+
 /// The recorded terminal for `ordinal` in this run's segment, if any.
+///
+/// Read-only: used by the DISPATCH staging seam, which must not move
+/// workflow-visible now (see [`observed_terminal`] for the settlement read).
 pub(super) fn recorded_terminal(
     history: &[Event],
     ordinal: u64,
 ) -> Result<Option<OrdinalState>, String> {
-    let target = ActivityId::from_sequence_position(ordinal);
-    for event in history {
-        match event {
-            Event::ActivityCompleted {
-                activity_id,
-                result,
-                ..
-            } if *activity_id == target => {
-                return Ok(Some(OrdinalState::Completed(payload_text(result)?)));
-            }
-            Event::ActivityFailed {
-                activity_id, error, ..
-            } if *activity_id == target => {
-                return Ok(Some(OrdinalState::Failed(error.message.clone())));
-            }
-            Event::ActivityCancelled { activity_id, .. } if *activity_id == target => {
-                return Ok(Some(OrdinalState::Cancelled));
-            }
-            _ => {}
-        }
+    match recorded_terminal_event(history, ordinal) {
+        Some(event) => terminal_state(event),
+        None => Ok(None),
     }
-    Ok(None)
+}
+
+/// [`recorded_terminal`], plus the workflow-visible-now advance that read
+/// implies (aion#1).
+///
+/// OBSERVED seam. A fan-out settlement is a total function of the per-ordinal
+/// recorded terminal SET, and that set is what this sweep reads: every terminal
+/// it reads here, and every terminal it records in this pass
+/// ([`take_and_record`], [`record_cancelled`]), is part of the answer handed to
+/// workflow code when the collect settles.
+///
+/// Live and replay agree because the SET agrees, not because the order does:
+/// the advance is a monotonic maximum ([`NifContext::observe_recorded_at`]), so
+/// a live pass that reads some terminals from its snapshot and records the rest
+/// itself lands on the same maximum as a replayed pass that reads all of them
+/// from history. Passes that do not settle never return to workflow code, so
+/// their partial advances are not observable positions; and a live pass can
+/// only ever have advanced over a SUBSET of what the settling pass sees.
+///
+/// The parity is exactly as strong as the settlement decision's own
+/// determinism — the same snapshot, the same first-match scan, on both sides —
+/// and no stronger; it introduces no new source of divergence.
+fn observed_terminal(context: &NifContext, ordinal: u64) -> Result<Option<OrdinalState>, String> {
+    match recorded_terminal_event(context.history(), ordinal) {
+        Some(event) => {
+            context.observe_recorded_at(*event.recorded_at());
+            terminal_state(event)
+        }
+        None => Ok(None),
+    }
 }
 
 /// The earliest-seq recorded non-cancelled terminal in the fan-out range.
