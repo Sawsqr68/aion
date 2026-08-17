@@ -1962,6 +1962,81 @@ mod tests {
         assert!(message.contains("runtime.scheduler_threads"));
     }
 
+    const RETIRED_STORE_REMEDY: &str =
+        "backend = \"haematite\" and store.data_dir; existing libsql database files are not read by this build";
+
+    fn assert_retired_store_refusal(result: Result<ServerConfig, crate::error::ServerError>, found: &str) {
+        let message = result.expect_err("retired libsql input must be refused").to_string();
+        assert!(message.contains(found), "refusal did not name `{found}`: {message}");
+        assert!(
+            message.contains(RETIRED_STORE_REMEDY),
+            "refusal omitted the operator remedy: {message}"
+        );
+    }
+
+    #[test]
+    fn retired_libsql_backend_is_refused_with_remedy() {
+        assert_retired_store_refusal(
+            ServerConfig::from_slice(
+                br#"
+                    [store]
+                    backend = "libsql"
+                "#,
+            ),
+            "backend = \"libsql\"",
+        );
+    }
+
+    #[test]
+    fn retired_store_url_key_is_refused_with_remedy() {
+        assert_retired_store_refusal(
+            ServerConfig::from_slice(
+                br#"
+                    [store]
+                    backend = "haematite"
+                    url = "old.db"
+                "#,
+            ),
+            "store.url",
+        );
+    }
+
+    #[test]
+    fn retired_store_url_environment_is_refused_with_remedy() {
+        let mut config = ServerConfig::default();
+        let result = super::env::overlay_vars(
+            &mut config,
+            [("AION_STORE_URL".to_owned(), "old.db".to_owned())],
+        )
+        .and_then(|()| config.validate().map(|()| config));
+        assert_retired_store_refusal(result, "AION_STORE_URL");
+    }
+
+    #[test]
+    fn retired_store_url_flag_is_refused_with_remedy() {
+        let mut config = ServerConfig::default();
+        config.apply_cli_overrides(&CliOverrides {
+            store_url: Some("old.db".to_owned()),
+            ..CliOverrides::default()
+        });
+        let result = config.validate().map(|()| config);
+        assert_retired_store_refusal(result, "--store-url");
+    }
+
+    #[test]
+    fn haematite_store_config_remains_accepted() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br#"
+                [store]
+                backend = "haematite"
+                data_dir = "aion-data"
+            "#,
+        )?;
+        assert_eq!(config.store.backend, StoreBackend::Haematite);
+        assert_eq!(config.store.data_dir.as_deref(), Some("aion-data"));
+        Ok(())
+    }
+
     #[test]
     fn cli_overrides_win_over_loaded_values() -> Result<(), Box<dyn std::error::Error>> {
         let mut config = ServerConfig::from_slice(

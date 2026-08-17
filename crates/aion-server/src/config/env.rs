@@ -14,7 +14,14 @@ use crate::{
 /// Returns [`ServerError::Config`] when an environment variable cannot be parsed into the target
 /// typed field.
 pub fn overlay(config: &mut ServerConfig) -> Result<(), ServerError> {
-    for (name, value) in std::env::vars() {
+    overlay_vars(config, std::env::vars())
+}
+
+pub(crate) fn overlay_vars(
+    config: &mut ServerConfig,
+    vars: impl IntoIterator<Item = (String, String)>,
+) -> Result<(), ServerError> {
+    for (name, value) in vars {
         match name.as_str() {
             "AION_SERVER_LISTEN_ADDRESS" => {
                 config.server.listen_address = parse_socket_addr(&name, &value)?;
