@@ -344,4 +344,6 @@ async fn a_notification_is_never_captured_as_the_result() -> TestResult {
 
 // --- response_into_payload: the stop-envelope branches ---
 
+/// What one LLM turn costs to persist, measured on the pump.
+mod envelope_compaction;
 mod outcomes;

@@ -1,0 +1,40 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.40s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_norn-e949ba50a5f0bd22)
+
+running 4 tests
+test session::tests::envelope_compaction::compaction_leaves_the_worker_sequence_and_identity_untouched ... ok
+test session::tests::envelope_compaction::the_frames_after_a_turns_first_are_persisted_as_deltas ... FAILED
+test session::tests::envelope_compaction::one_turn_costs_about_one_envelope_not_three ... FAILED
+test session::tests::envelope_compaction::one_turn_persists_its_instructions_block_exactly_once ... FAILED
+
+failures:
+
+---- session::tests::envelope_compaction::the_frames_after_a_turns_first_are_persisted_as_deltas stdout ----
+
+thread 'session::tests::envelope_compaction::the_frames_after_a_turns_first_are_persisted_as_deltas' (1155197) panicked at crates/aion-integration-norn/src/session/tests/envelope_compaction.rs:161:5:
+assertion `left == right` failed: the base is persisted whole and the other two frames as deltas against it
+  left: 0
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- session::tests::envelope_compaction::one_turn_costs_about_one_envelope_not_three stdout ----
+
+thread 'session::tests::envelope_compaction::one_turn_costs_about_one_envelope_not_three' (1155195) panicked at crates/aion-integration-norn/src/session/tests/envelope_compaction.rs:141:5:
+a turn is one envelope plus its deltas: 30498 B against a 10143 B first frame (three full copies would be about 30429 B)
+
+---- session::tests::envelope_compaction::one_turn_persists_its_instructions_block_exactly_once stdout ----
+
+thread 'session::tests::envelope_compaction::one_turn_persists_its_instructions_block_exactly_once' (1155196) panicked at crates/aion-integration-norn/src/session/tests/envelope_compaction.rs:122:5:
+assertion `left == right` failed: the turn-invariant instructions block belongs in ONE persisted frame per turn, not in every lifecycle frame of it
+  left: 3
+ right: 1
+
+
+failures:
+    session::tests::envelope_compaction::one_turn_costs_about_one_envelope_not_three
+    session::tests::envelope_compaction::one_turn_persists_its_instructions_block_exactly_once
+    session::tests::envelope_compaction::the_frames_after_a_turns_first_are_persisted_as_deltas
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-integration-norn --lib`
