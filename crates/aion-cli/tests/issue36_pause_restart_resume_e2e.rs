@@ -469,6 +469,298 @@ fn process_is_live(pid: u32) -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
+/// The status a describe payload reports, if it carries one.
+fn status_of(description: &serde_json::Value) -> Option<&str> {
+    description
+        .get("summary")
+        .and_then(|summary| summary.get("status"))
+        .and_then(serde_json::Value::as_str)
+}
+
+/// The isolated estate one face of the incident runs inside.
+///
+/// Held together so every step addresses the SAME home, ports, document and
+/// agent tree — the isolation is a property of this value, not of each call
+/// remembering to pass the right path.
+struct Isolation {
+    /// The run's directory. Held so it outlives every child that works in it.
+    work: tempfile::TempDir,
+    /// The server's `AION_HOME`, and therefore its durable store.
+    server_home: PathBuf,
+    /// The agent's `HOME`, and therefore where its sessions persist.
+    agent_home: PathBuf,
+    /// The tree the agent stands in, and where the spawn gate's marker lands.
+    agent_tree: PathBuf,
+    /// The gRPC address every client command is aimed at.
+    endpoint: String,
+    /// The liminal worker channel the agent worker dials.
+    liminal_address: String,
+    /// The HTTP port the liveness probe reads.
+    http_port: u16,
+    /// The real agent executable under test.
+    norn_binary: PathBuf,
+    /// The worker document, as an argument.
+    document_argument: String,
+    /// The provider holding the agent mid-call.
+    provider: GatedProvider,
+}
+
+impl Isolation {
+    /// Create the directories, reserve the ports, and write the config and the
+    /// worker document. Nothing is started yet.
+    fn provision(norn_binary: PathBuf) -> Result<Self, TestError> {
+        let work = tempfile::TempDir::new_in(env!("CARGO_TARGET_TMPDIR"))?;
+        let root = work.path().to_path_buf();
+        let server_home = root.join("server-home");
+        let agent_home = root.join("agent-home");
+        let agent_tree = root.join("agent-tree");
+        for directory in [&server_home, &agent_home, &agent_tree] {
+            std::fs::create_dir_all(directory)?;
+        }
+
+        let http_port = reserve_port()?;
+        let grpc_port = reserve_port()?;
+        let liminal_port = reserve_port()?;
+        std::fs::write(
+            root.join("aion.toml"),
+            server_config(http_port, grpc_port, liminal_port),
+        )?;
+
+        let provider = GatedProvider::start()?;
+        let document = root.join("issue36.awl");
+        std::fs::write(
+            &document,
+            worker_document(&norn_binary, &agent_tree, &provider.base_url),
+        )?;
+
+        Ok(Self {
+            work,
+            server_home,
+            agent_home,
+            agent_tree,
+            endpoint: format!("127.0.0.1:{grpc_port}"),
+            liminal_address: format!("127.0.0.1:{liminal_port}"),
+            http_port,
+            norn_binary,
+            document_argument: document.to_string_lossy().into_owned(),
+            provider,
+        })
+    }
+
+    /// This run's directory.
+    fn root(&self) -> &Path {
+        self.work.path()
+    }
+
+    /// Run one `aion` client command against this run's server.
+    fn cli(&self, args: &[&str]) -> Result<serde_json::Value, String> {
+        let mut full = vec!["--endpoint", self.endpoint.as_str()];
+        full.extend_from_slice(args);
+        aion_json(self.root(), &self.server_home, &full)
+    }
+
+    /// Boot a server generation, logging to `log_name` in the run directory.
+    fn boot(&self, log_name: &str) -> Result<ChildGuard, TestError> {
+        boot_server(
+            self.root(),
+            &self.server_home,
+            self.http_port,
+            &self.root().join(log_name),
+        )
+    }
+
+    /// Start the agent worker: this run's document, this run's liminal address,
+    /// and the agent's own isolated environment.
+    fn spawn_worker(&self) -> Result<ChildGuard, TestError> {
+        let child = Command::new(env!("CARGO_BIN_EXE_aion"))
+            .args([
+                "worker",
+                "agent",
+                &self.document_argument,
+                "--liminal-address",
+                &self.liminal_address,
+                "--identity",
+                "issue36-agent-worker",
+            ])
+            .current_dir(self.root())
+            .env("AION_HOME", &self.server_home)
+            .env("HOME", &self.agent_home)
+            .env("XDG_CONFIG_HOME", self.agent_home.join(".config"))
+            .env("XDG_DATA_HOME", self.agent_home.join(".local/share"))
+            .env(KEY_ENV, "unused-mock-key")
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(std::fs::File::create(
+                self.root().join("worker.log"),
+            )?))
+            .stderr(Stdio::from(std::fs::File::create(
+                self.root().join("worker.err.log"),
+            )?))
+            .spawn()?;
+        Ok(ChildGuard::new(child, "agent worker"))
+    }
+
+    /// Every persisted agent session in this run's agent home.
+    fn sessions(&self) -> Result<Vec<SessionIdentity>, TestError> {
+        listed_sessions(&self.norn_binary, &self.agent_tree, &self.agent_home)
+    }
+
+    /// Poll `describe` until the run reports `status`.
+    fn wait_for_status(
+        &self,
+        workflow_id: &str,
+        status: &str,
+        what: &str,
+    ) -> Result<(), TestError> {
+        wait_for(PHASE_DEADLINE, what, || {
+            Ok(self
+                .cli(&["describe", workflow_id])
+                .ok()
+                .filter(|description| status_of(description) == Some(status))
+                .map(|_| ()))
+        })
+    }
+}
+
+/// What the live builder looks like once it is holding the tree mid-call.
+struct LiveBuilder {
+    /// The run the builder belongs to.
+    workflow_id: String,
+    /// The session id pinned by the harness template.
+    session: String,
+    /// The agent process the spawn marker names.
+    pid: u32,
+    /// When the agent OPENED its session — the pre-capture half of the
+    /// continuity proof.
+    opened_at: String,
+}
+
+/// Start the run and wait until its agent is verifiably live: registered,
+/// dispatched, and held by the provider mid-call.
+///
+/// The engine fails an activity terminally when NO worker serves its type, so
+/// the run cannot start before the worker registers. The START is retried, not
+/// the run: a run that died for want of a worker is not this test's subject.
+fn start_under_a_live_builder(
+    isolation: &Isolation,
+    server: &mut ChildGuard,
+    worker: &mut ChildGuard,
+) -> Result<LiveBuilder, TestError> {
+    let workflow_id = wait_for(
+        REGISTER_DEADLINE,
+        "the worker to register and a run to start",
+        || {
+            worker.require_alive()?;
+            server.require_alive()?;
+            match isolation.cli(&[
+                "start",
+                WORKFLOW_TYPE,
+                "--input",
+                "{\"question\":\"say adopted\"}",
+            ]) {
+                Ok(value) => Ok(value
+                    .get("workflow_id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)),
+                Err(refusal) if refusal.contains("no connected worker") => Ok(None),
+                Err(refusal) => Err(refusal.into()),
+            }
+        },
+    )?;
+    let session = format!("{workflow_id}-{ACTIVITY_TYPE}");
+
+    wait_for(PHASE_DEADLINE, "the agent to reach the provider", || {
+        worker.require_alive()?;
+        Ok((isolation.provider.accepted() >= 1).then_some(()))
+    })?;
+
+    let pid = marker_pid(&isolation.agent_tree)?;
+    let opened = isolation.sessions()?;
+    let [(opened_id, opened_at)] = opened.as_slice() else {
+        return Err(
+            format!("the live builder must have opened exactly one session: {opened:?}").into(),
+        );
+    };
+    assert_eq!(
+        opened_id, &session,
+        "the builder's session must be the pinned one"
+    );
+    Ok(LiveBuilder {
+        workflow_id,
+        session,
+        pid,
+        opened_at: opened_at.clone(),
+    })
+}
+
+/// Everything #36 demands of the durable record after the crossing.
+fn assert_the_adopted_record(
+    description: &serde_json::Value,
+    builder: &LiveBuilder,
+    face: &str,
+) -> Result<(), TestError> {
+    let rendered = serde_json::to_string_pretty(description)?;
+    assert_eq!(
+        status_of(description),
+        Some("Completed"),
+        "the {face} run must complete, not die against its own builder:\n{rendered}"
+    );
+    assert!(
+        !rendered.contains(SERVER_DEATH_REASON),
+        "a live builder must never be recorded as superseded by server death:\n{rendered}"
+    );
+    assert_eq!(
+        count_events(description, "ActivityAdoptionOffered"),
+        1,
+        "recovery must record exactly one adoption offer for the dangling attempt:\n{rendered}"
+    );
+    assert_eq!(
+        count_events(description, "ActivityCompleted"),
+        1,
+        "the adopted execution must settle exactly once:\n{rendered}"
+    );
+    // The attempt that settles is the RETAINED one. A false supersession would
+    // spend attempt 1 and land the completion on a successor, so this number is
+    // the difference between adopting the live builder and replacing it.
+    assert_eq!(
+        history(description)
+            .iter()
+            .filter(|event| {
+                event.get("type").and_then(serde_json::Value::as_str) == Some("ActivityCompleted")
+            })
+            .filter_map(|event| event
+                .get("data")
+                .and_then(|data| data.get("attempt"))
+                .and_then(serde_json::Value::as_u64))
+            .collect::<Vec<_>>(),
+        vec![1],
+        "the dangling attempt itself must complete, not a successor:\n{rendered}"
+    );
+    assert!(
+        rendered.contains(&builder.session),
+        "the run's own record must carry the pinned session id {session}:\n{rendered}",
+        session = builder.session
+    );
+    Ok(())
+}
+
+/// Stop the worker so it drains its own agent, then make sure the agent is
+/// really gone before the run directory is dropped.
+fn drain(worker: &ChildGuard, builder: &LiveBuilder) -> Result<(), TestError> {
+    let _terminated = Command::new("/bin/kill")
+        .args(["-TERM", &worker.id().to_string()])
+        .output()?;
+    let deadline = Instant::now() + EXIT_DEADLINE;
+    while Instant::now() < deadline && process_is_live(builder.pid) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if process_is_live(builder.pid) {
+        let _killed = Command::new("/bin/kill")
+            .args(["-KILL", &builder.pid.to_string()])
+            .output()?;
+    }
+    Ok(())
+}
+
 /// #36's Paused face, verbatim: pause → server death → restart → resume.
 ///
 /// This is the incident as it was recorded — the run was Paused at boot, which
@@ -506,266 +798,74 @@ fn incident_across_a_server_death(paused: bool) -> Result<(), TestError> {
         return Ok(());
     };
 
-    // Everything this run touches lives under the workspace target dir: the
-    // server home and store, the agent's home, and the agent's working tree.
-    let work = tempfile::TempDir::new_in(env!("CARGO_TARGET_TMPDIR"))?;
-    let root = work.path();
-    let server_home = root.join("server-home");
-    let agent_home = root.join("agent-home");
-    let agent_tree = root.join("agent-tree");
-    for directory in [&server_home, &agent_home, &agent_tree] {
-        std::fs::create_dir_all(directory)?;
-    }
-
-    let http_port = reserve_port()?;
-    let grpc_port = reserve_port()?;
-    let liminal_port = reserve_port()?;
-    let endpoint = format!("127.0.0.1:{grpc_port}");
-    let liminal_address = format!("127.0.0.1:{liminal_port}");
-    std::fs::write(
-        root.join("aion.toml"),
-        server_config(http_port, grpc_port, liminal_port),
-    )?;
-
-    let provider = GatedProvider::start()?;
-    let document = root.join("issue36.awl");
-    std::fs::write(
-        &document,
-        worker_document(&norn_binary, &agent_tree, &provider.base_url),
-    )?;
-    let document_argument = document.to_string_lossy().into_owned();
+    let isolation = Isolation::provision(norn_binary)?;
 
     // ---- The first server generation: the one the incident's builder was
     // dispatched from.
-    let mut server = boot_server(root, &server_home, http_port, &root.join("server-1.log"))?;
-    aion_json(
-        root,
-        &server_home,
-        &["--endpoint", &endpoint, "deploy", &document_argument],
-    )
-    .map_err(TestError::from)?;
-
-    let mut worker = ChildGuard::new(
-        Command::new(env!("CARGO_BIN_EXE_aion"))
-            .args([
-                "worker",
-                "agent",
-                &document_argument,
-                "--liminal-address",
-                &liminal_address,
-                "--identity",
-                "issue36-agent-worker",
-            ])
-            .current_dir(root)
-            .env("AION_HOME", &server_home)
-            .env("HOME", &agent_home)
-            .env("XDG_CONFIG_HOME", agent_home.join(".config"))
-            .env("XDG_DATA_HOME", agent_home.join(".local/share"))
-            .env(KEY_ENV, "unused-mock-key")
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(std::fs::File::create(root.join("worker.log"))?))
-            .stderr(Stdio::from(std::fs::File::create(
-                root.join("worker.err.log"),
-            )?))
-            .spawn()?,
-        "agent worker",
-    );
-
-    // The engine fails an activity terminally when NO worker serves its type,
-    // so the run cannot start before the worker registers. Retry the START, not
-    // the run: a run that died for want of a worker is not this test's subject.
-    let workflow_id = wait_for(
-        REGISTER_DEADLINE,
-        "the worker to register and a run to start",
-        || {
-            worker.require_alive()?;
-            server.require_alive()?;
-            match aion_json(
-                root,
-                &server_home,
-                &[
-                    "--endpoint",
-                    &endpoint,
-                    "start",
-                    WORKFLOW_TYPE,
-                    "--input",
-                    "{\"question\":\"say adopted\"}",
-                ],
-            ) {
-                Ok(value) => Ok(value
-                    .get("workflow_id")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)),
-                Err(refusal) if refusal.contains("no connected worker") => Ok(None),
-                Err(refusal) => Err(refusal.into()),
-            }
-        },
-    )?;
-    let expected_session = format!("{workflow_id}-{ACTIVITY_TYPE}");
-
-    // The builder is LIVE: it reached the provider and is being held there.
-    wait_for(PHASE_DEADLINE, "the agent to reach the provider", || {
-        worker.require_alive()?;
-        Ok((provider.accepted() >= 1).then_some(()))
-    })?;
-    let builder_pid = marker_pid(&agent_tree)?;
-    // The pre-capture half of the continuity proof, taken while the builder is
-    // demonstrably mid-call.
-    let opened = listed_sessions(&norn_binary, &agent_tree, &agent_home)?;
-    let [(opened_id, opened_at)] = opened.as_slice() else {
-        return Err(
-            format!("the live builder must have opened exactly one session: {opened:?}").into(),
-        );
-    };
-    assert_eq!(
-        opened_id, &expected_session,
-        "the builder's session must be the pinned one"
-    );
-    let opened_at = opened_at.clone();
+    let mut server = isolation.boot("server-1.log")?;
+    isolation
+        .cli(&["deploy", &isolation.document_argument])
+        .map_err(TestError::from)?;
+    let mut worker = isolation.spawn_worker()?;
+    let builder = start_under_a_live_builder(&isolation, &mut server, &mut worker)?;
 
     // ---- The incident, step by step. The Paused face crosses the boot as a
     // paused history (the one recovery never examined); the Running face
     // crosses it Running, and is recovered with no operator action at all.
     if paused {
-        aion_json(
-            root,
-            &server_home,
-            &["--endpoint", &endpoint, "pause", &workflow_id],
-        )
-        .map_err(TestError::from)?;
+        isolation
+            .cli(&["pause", &builder.workflow_id])
+            .map_err(TestError::from)?;
     }
-    let crossing_status = if paused { "Paused" } else { "Running" };
-    wait_for(
-        PHASE_DEADLINE,
+    isolation.wait_for_status(
+        &builder.workflow_id,
+        if paused { "Paused" } else { "Running" },
         "the run to read back the status it must cross the boot with",
-        || {
-            Ok(aion_json(
-                root,
-                &server_home,
-                &["--endpoint", &endpoint, "describe", &workflow_id],
-            )
-            .ok()
-            .filter(|description| {
-                description
-                    .get("summary")
-                    .and_then(|summary| summary.get("status"))
-                    .and_then(serde_json::Value::as_str)
-                    == Some(crossing_status)
-            })
-            .map(|_| ()))
-        },
     )?;
 
     server.kill9()?;
     assert!(
-        process_is_live(builder_pid),
+        process_is_live(builder.pid),
         "fixture control: the builder must outlive the server that dispatched it"
     );
 
-    let mut restarted = boot_server(root, &server_home, http_port, &root.join("server-2.log"))?;
+    let mut restarted = isolation.boot("server-2.log")?;
     if paused {
-        aion_json(
-            root,
-            &server_home,
-            &["--endpoint", &endpoint, "resume", &workflow_id],
-        )
-        .map_err(TestError::from)?;
+        isolation
+            .cli(&["resume", &builder.workflow_id])
+            .map_err(TestError::from)?;
     }
 
     // The held call is what kept the builder alive across all of that. Let it
     // answer: the run must now finish through the session it already had.
-    provider.release();
+    isolation.provider.release();
     let description = wait_for(
         PHASE_DEADLINE,
         "the recovered run to reach a terminal",
         || {
             worker.require_alive()?;
             restarted.require_alive()?;
-            Ok(aion_json(
-                root,
-                &server_home,
-                &["--endpoint", &endpoint, "describe", &workflow_id],
-            )
-            .ok()
-            .filter(|description| {
-                matches!(
-                    description
-                        .get("summary")
-                        .and_then(|summary| summary.get("status"))
-                        .and_then(serde_json::Value::as_str),
-                    Some("Completed" | "Failed" | "Cancelled" | "TimedOut")
-                )
-            }))
+            Ok(isolation
+                .cli(&["describe", &builder.workflow_id])
+                .ok()
+                .filter(|description| {
+                    matches!(
+                        status_of(description),
+                        Some("Completed" | "Failed" | "Cancelled" | "TimedOut")
+                    )
+                }))
         },
     )?;
 
-    // ---- What #36 demands of the record.
-    let rendered = serde_json::to_string_pretty(&description)?;
-    assert_eq!(
-        description
-            .get("summary")
-            .and_then(|summary| summary.get("status"))
-            .and_then(serde_json::Value::as_str),
-        Some("Completed"),
-        "the {face} run must complete, not die against its own builder:\n{rendered}"
-    );
-    assert!(
-        !rendered.contains(SERVER_DEATH_REASON),
-        "a live builder must never be recorded as superseded by server death:\n{rendered}"
-    );
-    assert_eq!(
-        count_events(&description, "ActivityAdoptionOffered"),
-        1,
-        "recovery must record exactly one adoption offer for the dangling attempt:\n{rendered}"
-    );
-    assert_eq!(
-        count_events(&description, "ActivityCompleted"),
-        1,
-        "the adopted execution must settle exactly once:\n{rendered}"
-    );
-    // The attempt that settles is the RETAINED one. A false supersession would
-    // spend attempt 1 and land the completion on a successor, so this number is
-    // the difference between adopting the live builder and replacing it.
-    assert_eq!(
-        history(&description)
-            .iter()
-            .filter(|event| {
-                event.get("type").and_then(serde_json::Value::as_str) == Some("ActivityCompleted")
-            })
-            .filter_map(|event| event
-                .get("data")
-                .and_then(|data| data.get("attempt"))
-                .and_then(serde_json::Value::as_u64))
-            .collect::<Vec<_>>(),
-        vec![1],
-        "the dangling attempt itself must complete, not a successor:\n{rendered}"
-    );
-    assert!(
-        rendered.contains(&expected_session),
-        "the run's own record must carry the pinned session id {expected_session}:\n{rendered}"
-    );
+    assert_the_adopted_record(&description, &builder, face)?;
 
     // ---- And of the agent: ONE session, opened before the death, still the
-    // same session after the resume.
-    let sessions = listed_sessions(&norn_binary, &agent_tree, &agent_home)?;
+    // same session afterwards.
     assert_eq!(
-        sessions,
-        vec![(expected_session.clone(), opened_at)],
+        isolation.sessions()?,
+        vec![(builder.session.clone(), builder.opened_at.clone())],
         "the {face} run must continue the session its live builder opened, and open no other"
     );
 
-    // Teardown: the worker drains its own agent, and both guards reap.
-    let _terminated = Command::new("/bin/kill")
-        .args(["-TERM", &worker.id().to_string()])
-        .status()?;
-    let deadline = Instant::now() + EXIT_DEADLINE;
-    while Instant::now() < deadline && process_is_live(builder_pid) {
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    if process_is_live(builder_pid) {
-        let _killed = Command::new("/bin/kill")
-            .args(["-KILL", &builder_pid.to_string()])
-            .status()?;
-    }
-    Ok(())
+    drain(&worker, &builder)
 }

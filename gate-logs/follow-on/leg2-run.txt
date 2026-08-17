@@ -1,5 +1,18 @@
-   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+   Compiling aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+   Compiling aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-package)
+   Compiling aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store)
+   Compiling aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integrations)
+   Compiling aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto)
+   Compiling aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-acp)
+   Compiling aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-norn)
+   Compiling aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-haematite)
+   Compiling aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl)
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+   Compiling aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-toolchain)
+   Compiling aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-worker)
+   Compiling aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-lsp)
    Compiling aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-client)
    Compiling aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-cli)
 warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
@@ -7,12 +20,12 @@ warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dw
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `aion-cli` (bin "aion") generated 1 warning
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.58s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.00s
      Running tests/issue36_pause_restart_resume_e2e.rs (target/debug/deps/issue36_pause_restart_resume_e2e-d579ceac0641aaf2)
 
 running 2 tests
 test a_paused_run_resumed_across_a_server_death_adopts_its_live_builder ... ok
 test a_running_run_recovered_across_a_server_death_adopts_its_live_builder ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.10s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.52s
 
