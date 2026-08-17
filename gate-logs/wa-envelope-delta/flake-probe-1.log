@@ -1,0 +1,136 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling serde_core v1.0.228
+   Compiling libc v0.2.186
+   Compiling smallvec v1.15.1
+   Compiling getrandom v0.3.4
+   Compiling serde_json v1.0.150
+   Compiling either v1.16.0
+   Compiling rustix v1.1.4
+   Compiling memchr v2.8.1
+   Compiling crypto-common v0.1.7
+   Compiling regalloc2 v0.15.1
+   Compiling icu_normalizer v2.2.0
+   Compiling itertools v0.12.1
+   Compiling nom v7.1.3
+   Compiling prost-derive v0.12.6
+   Compiling cranelift-codegen v0.131.2
+   Compiling cexpr v0.6.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling cipher v0.4.4
+   Compiling cbc v0.1.2
+   Compiling parking_lot_core v0.9.12
+   Compiling errno v0.3.14
+   Compiling socket2 v0.6.4
+   Compiling mio v1.2.1
+   Compiling getrandom v0.4.2
+   Compiling getrandom v0.2.17
+   Compiling signal-hook-registry v1.4.8
+   Compiling rand_core v0.6.4
+   Compiling socket2 v0.5.10
+   Compiling jobserver v0.1.34
+   Compiling parking_lot v0.12.5
+   Compiling rustix v0.38.44
+   Compiling rand_chacha v0.3.1
+   Compiling cc v1.2.63
+   Compiling clang-sys v1.8.1
+   Compiling mach2 v0.4.3
+   Compiling cpufeatures v0.3.0
+   Compiling wasmtime-internal-jit-icache-coherence v44.0.2
+   Compiling rand v0.8.6
+   Compiling rand v0.10.2
+   Compiling region v3.0.2
+   Compiling num_cpus v1.17.0
+   Compiling sha2 v0.11.0
+   Compiling aes v0.9.1
+   Compiling sha1 v0.11.0
+   Compiling which v4.4.2
+   Compiling cmake v0.1.58
+   Compiling security-framework-sys v2.17.0
+   Compiling lzma-rust2 v0.16.4
+   Compiling core-foundation v0.9.4
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling ring v0.17.14
+   Compiling blake3 v1.8.5
+   Compiling libsql-sqlite3-parser v0.13.0
+   Compiling serde v1.0.228
+   Compiling uuid v1.23.4
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling security-framework v2.11.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling cpufeatures v0.2.17
+   Compiling bytes v1.11.1
+   Compiling ahash v0.8.12
+   Compiling hashbrown v0.14.5
+   Compiling chrono v0.4.45
+   Compiling tokio v1.52.3
+   Compiling http v0.2.12
+   Compiling bindgen v0.66.1
+   Compiling dashmap v6.2.1
+   Compiling prost v0.12.6
+   Compiling fluent-uri v0.4.1
+   Compiling rustls v0.22.4
+   Compiling http-body v0.4.6
+   Compiling hashlink v0.8.4
+   Compiling ts-rs v12.0.1
+   Compiling axum-core v0.3.4
+   Compiling email_address v0.2.9
+   Compiling rustls-native-certs v0.7.3
+   Compiling referencing v0.46.6
+   Compiling aes v0.8.4
+   Compiling aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-core)
+   Compiling rustls-webpki v0.102.8
+   Compiling jsonschema v0.46.6
+   Compiling libsql-hrana v0.9.30
+   Compiling tokio-util v0.7.18
+   Compiling tokio-io-timeout v1.2.1
+   Compiling libsql-ffi v0.9.30
+   Compiling tokio-stream v0.1.18
+   Compiling h2 v0.3.27
+   Compiling tower v0.4.13
+   Compiling cranelift-native v0.131.2
+   Compiling cranelift-module v0.131.2
+   Compiling cranelift-frontend v0.131.2
+   Compiling cranelift-jit v0.131.2
+   Compiling tokio-rustls v0.25.0
+   Compiling bincode v1.3.3
+   Compiling tempfile v3.27.0
+   Compiling tower-http v0.4.4
+   Compiling saffron v0.1.0
+   Compiling tracing-serde v0.2.0
+   Compiling fs4 v1.1.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store)
+   Compiling zstd-safe v7.2.4
+   Compiling hyper v0.14.32
+   Compiling zstd v0.13.3
+   Compiling beamr v0.18.2
+   Compiling beamr v0.16.3
+   Compiling zip v8.6.0
+   Compiling libsql-rusqlite v0.9.30
+   Compiling aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-package)
+   Compiling libsql-sys v0.9.30
+   Compiling axum v0.6.20
+   Compiling hyper-timeout v0.4.1
+   Compiling hyper-rustls v0.25.0
+   Compiling tonic v0.11.0
+   Compiling libsql_replication v0.9.30
+   Compiling tonic-web v0.11.0
+   Compiling aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl)
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion)
+   Compiling libsql v0.9.30
+   Compiling haematite v0.8.1
+   Compiling aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl-package)
+   Compiling aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store-libsql)
+   Compiling aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 48s
+────────────
+ Nextest run ID f164f864-6722-4e7d-8996-edb8599b0a95 with nextest profile: default
+    Starting 1 test across 1 binary (28 tests skipped)
+        SLOW [> 60.000s] (───) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+        SLOW [>120.000s] (───) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+        PASS [ 160.065s] (1/1) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+────────────
+     Summary [ 160.097s] 1 test run: 1 passed (1 slow), 28 skipped

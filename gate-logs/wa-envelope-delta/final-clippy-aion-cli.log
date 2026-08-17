@@ -1,0 +1,56 @@
+    Checking serde_json v1.0.150
+    Checking aws-lc-sys v0.41.0
+    Checking hyper-util v0.1.20
+    Checking tower v0.5.3
+    Checking axum-core v0.5.6
+   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-proto-generated)
+    Checking security-framework-sys v2.17.0
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-server)
+    Checking security-framework v3.7.0
+    Checking aws-lc-rs v1.17.0
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-core)
+    Checking referencing v0.46.6
+    Checking beamr v0.16.3
+    Checking beamr v0.18.2
+    Checking jsonschema v0.46.6
+    Checking schemars v1.2.1
+    Checking tower-http v0.6.11
+    Checking rustls-webpki v0.103.13
+    Checking tracing-subscriber v0.3.23
+    Checking lsp-types v0.97.0
+    Checking serde_with v3.21.0
+    Checking rustls v0.23.40
+    Checking hyper-timeout v0.5.2
+    Checking lsp-server v0.8.0
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-mcp)
+    Checking agent-client-protocol-schema v1.5.0
+    Checking tokio-rustls v0.26.4
+    Checking tungstenite v0.29.0
+    Checking rustls-platform-verifier v0.7.0
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking tokio-tungstenite v0.29.0
+    Checking axum v0.8.9
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-package)
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integrations)
+    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integration-norn)
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking tonic v0.14.6
+    Checking aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integration-acp)
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion)
+    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-toolchain)
+    Checking liminal-rs v0.5.0
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store-haematite)
+    Checking tonic-prost v0.14.5
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-proto)
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl-lsp)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-worker)
+    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-client)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 47.37s

@@ -1,0 +1,61 @@
+    Checking tokio v1.52.3
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-core)
+   Compiling beamr v0.18.2
+   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-proto-generated)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-server)
+    Checking aion-darwin-acl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-darwin-acl)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/xtask)
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking beamr v0.16.3
+    Checking tokio-rustls v0.26.4
+    Checking tokio-io-timeout v1.2.1
+    Checking tokio-rustls v0.25.0
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-package)
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integrations)
+    Checking tokio-tungstenite v0.29.0
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking h2 v0.3.27
+    Checking tower v0.4.13
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-mcp)
+    Checking tower-http v0.4.4
+    Checking tower-http v0.6.11
+    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integration-acp)
+    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-toolchain)
+    Checking aion-integration-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-integration-cli)
+    Checking hyper v0.14.32
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking axum v0.8.9
+    Checking hyper-timeout v0.5.2
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking hyper-timeout v0.4.1
+    Checking axum v0.6.20
+    Checking hyper-rustls v0.25.0
+    Checking haematite v0.8.1
+    Checking haematite v0.7.0
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion)
+    Checking liminal-rs v0.5.0
+    Checking tonic v0.11.0
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store-haematite)
+    Checking tonic v0.14.6
+    Checking tonic-web v0.11.0
+    Checking libsql_replication v0.9.30
+    Checking tonic-prost v0.14.5
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-awl-lsp)
+    Checking libsql v0.9.30
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-proto)
+    Checking aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-store-libsql)
+    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/benchmarks/million-processes)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-worker)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 23s

@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.36s
+────────────
+ Nextest run ID b31c23e8-0170-4f08-9dd0-57a7e8c49b6d with nextest profile: default
+    Starting 1 test across 1 binary (28 tests skipped)
+        SLOW [> 60.000s] (───) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+        PASS [  80.998s] (1/1) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+────────────
+     Summary [  80.999s] 1 test run: 1 passed (1 slow), 28 skipped
