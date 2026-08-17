@@ -1,0 +1,4 @@
+{"type":"clippy","level":"warning","file":"crates/aion/tests/concurrency_e2e.rs","line":1195,"column":9,"lint":"unused_variables","message":"unused variable: `battery_instrument_unused_plant`"}
+{"type":"clippy","level":"error","file":"crates/aion/tests/concurrency_e2e.rs","line":1195,"column":9,"lint":"unused_variables","message":"unused variable: `battery_instrument_unused_plant`"}
+{"type":"clippy","level":"error","file":"crates/aion/tests/concurrency_e2e.rs","line":1196,"column":5,"lint":"clippy::assertions_on_constants","message":"this assertion is always `false`"}
+{"type":"nextest","test":"aion-rs::concurrency_e2e$battery_instrument_control_planted_failure","stdout":"\nthread 'battery_instrument_control_planted_failure' (6845040) panicked at crates/aion/tests/concurrency_e2e.rs:1196:5:\nplanted failure proving the nextest leg emits\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n","message":"test failed"}

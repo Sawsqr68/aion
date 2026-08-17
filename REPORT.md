@@ -281,3 +281,189 @@ lane's charter-mandated red reproduction, left deliberately red and undisposed
 because section 3 reserves its resolution to the steward.** It is disclosed
 here rather than silenced: no `#[ignore]`, no `#[allow]`, no skip, no weakened
 assertion.
+
+---
+
+# Round 2 — the dispositioned fix (appended 2026-08-18)
+
+The steward ratified the stop and ruled
+(`gate-logs/42-fork-ordering/DISPOSITION.md`, on main as **"docs(42): steward's
+disposition — the harness normalizes, the engine keeps its freedom"**,
+`660b71c02`). Everything above stands unamended; this section records what was
+built on top of it. Branch rebased onto that ruling — nothing of round 1 had
+landed, so the three round-1 commits sit on top of it unchanged in content.
+
+## Leg 1 — the harness normalizes; the engine is untouched
+
+**Not one line of engine source changed.** The freedom the differential was
+asserting away is declined-by-design and measured load-bearing, both
+established in round 1 and both accepted by the ruling.
+
+### Scope statement
+
+`crates/aion/tests/common/terminal_order.rs` sorts each **maximal run of
+DIRECTLY ADJACENT activity terminals** by activity ordinal, then re-stamps that
+run's own recorded sequence numbers onto it in that order. Terminals are
+exactly `ActivityCompleted`, `ActivityFailed`, `ActivityCancelled`. The sort is
+stable, so several attempts for one ordinal keep their causal order.
+
+Everything else is a **boundary**: it never moves and it splits the run on both
+sides. So no terminal ever crosses a `sched` anchor, an `ActivityStarted`, a
+signal, a child terminal, a workflow lifecycle event, or an
+`ActivityAdvisoryExhausted` — which carries an activity id but is explicitly
+not a terminal, and is therefore a boundary like any other. A terminal recorded
+before its own anchor stays before its own anchor.
+
+The re-stamping matters and is part of the scope: `trail_norm` does not
+normalize `envelope.seq`, so reordering without re-stamping would merely move
+the divergence from the payload to the sequence number. Within one run of
+concurrent terminals, "which member got which seq" is the same freedom as
+"which member landed first".
+
+Applied in `awl_bc4_differential/driver.rs` **before** `trail_norm`.
+`trail_norm.rs` itself is untouched, so `serde_pin`'s guarantees about the six
+identity literals are undisturbed.
+
+**Condition 1 did not fight the fixtures.** The whole differential is green at
+the definition as written — 36 passed, 0 failed, including
+`covered::covered_set_is_byte_identical`. Nothing was widened.
+
+### The red controls (condition 2), and their receipts
+
+Seven tests in `awl_bc4_differential/terminal_order_controls.rs`, each asserted
+**through the normalized comparison** — `canonical_terminal_order` then
+`trail_norm::normalized_trail`, the same two functions in the same order
+`driver.rs` uses.
+
+| control | shape | verdict |
+|---|---|---|
+| (a) | a result's bytes bound to the wrong ordinal | stays RED |
+| (b) | a missing event, and an extra one (both directions) | stays RED |
+| (c) | a terminal recorded before its own `sched` anchor | stays RED |
+| (d) | a terminal moved across a non-terminal boundary (a signal) | stays RED |
+| (e) | reordered `sched` anchors | stays RED |
+| + | settle order ALONE compares equal | GREEN |
+| + | a trail with no adjacent terminal pair is returned byte-identical | GREEN |
+
+The positive arm is not decoration: without it, all five red controls would be
+satisfied by a normalizer that does nothing at all.
+
+**(e) is not one of the disposition's four.** Mutation-testing the four found
+the gap and (e) closes it. The mutation receipts, each run against the real
+controls:
+
+| mutation | what it does | caught by |
+|---|---|---|
+| M1 | drop the adjacency requirement — sort all terminals globally | **(d)** |
+| M2 | widen the terminal set to include `ActivityScheduled` | *not caught* — see below |
+| M3 | global sort by `(ordinal, kind-rank)`, anchors not re-stamped | **(d)** |
+| M4 | M3 **plus** re-stamping seq on anchors — the fully-consistent over-eager canonicalizer | **(c), (d) and (e)** |
+
+M2 is disclosed as not-caught, and it is not a hazard: `with_seq` rebuilds only
+the three terminal variants, so a moved anchor keeps its own recorded seq and
+the divergence surfaces there instead. M4 is the shape that genuinely could
+hide a command-stream defect, and all three scope controls fire on it — which
+is what proves the run-splitting rule is real rather than decorative.
+
+Controls (a) and (b) are unfakeable by **any** permutation whatsoever: the two
+trails differ in the multiset of `(ordinal, payload)` pairs, or in length, and
+no reordering changes a multiset.
+
+### Condition 4 — the recast
+
+`a_parallel_layer_records_one_trail_whichever_member_settles_first` is no
+longer a deliberate red. It now asserts the invariant over two runs that
+genuinely settled in opposite orders:
+
+1. **both settle orders actually occurred** — `[0,1]` and `[1,0]` asserted
+   explicitly, so the equality below can never pass vacuously if the gate seam
+   stops imposing an order;
+2. the `sched` anchors are identical — the command stream never moves;
+3. every ordinal binds the same result in both runs;
+4. the canonically ordered, identity-normalized trails are **equal**.
+
+Proven to actually exercise the normalizer: stubbing
+`canonical_terminal_order` to the identity function reddens it at assertion 4.
+The inverted-replay control arm
+(`a_layer_settled_in_inverted_order_replays_each_result_onto_its_own_member`)
+is **untouched**, exactly as the condition requires.
+
+### Condition 3 — Decision 11 amended at the design level
+
+Not silently in test code:
+
+- `awl_bc4_differential/report.rs` — the "Decision 11 is law" doc now states
+  the real contract: a divergence in a **promised** property is never
+  normalized away, and concurrent-terminal position is not one.
+- `awl_bc4_differential.rs` — the module doc's "their trails can only diverge
+  on backend behavior" corrected.
+- `docs/design/aion-authoring/awl/BC-4-DIFFERENTIAL-BRIEF.md` — both the
+  decision-11 statement and the deliverable-2 premise, the latter naming why
+  the premise was sound at 70 fixtures and stopped being sound at 105.
+- `docs/design/aion-authoring/awl/AWL-BC-BUILD-PLAN.md` — row BC-4's
+  decision-11 parenthetical.
+- `docs/design/aion-authoring/FINDING-BC4-DIFFERENTIAL-NONDETERMINISM-2026-08-06.md`
+  — dispositioned in place, **Filed → Resolved**, with its original park reason
+  preserved verbatim rather than reworded. That park held twelve days and cost
+  five red batteries; the finding had read the mechanism correctly on the first
+  pass.
+
+No JSON sources back this brief (it is authored markdown under
+`docs/design/aion-authoring/awl/`), so there was nothing to re-render.
+
+### Condition 5
+
+`EXCLUDED_OUT_OF_ORACLE` did not grow. `covered.rs` is **byte-identical to
+main** — verified with `git diff origin/main -- crates/aion/tests/awl_bc4_differential/covered.rs`,
+which is empty.
+
+## Leg 2 — the worker_shell pid-file race (board row #45)
+
+Red first, and the red is the mechanism rather than a hunt for the window.
+`an_existing_but_empty_pid_file_is_not_readiness` plants the create-vs-write
+window deliberately — an empty file that exists from the start, filled 150 ms
+later by a writer standing in for the spawned shell — and asks the waiter for
+the pid. Against the existing waiter it fails **3/3** with the battery's own
+error verbatim, `Error: ParseIntError { kind: Empty }`.
+
+To keep the red and the fix measured through **identical test text**,
+`wait_for_pid_file` + `read_pid` were first folded into one `wait_for_pid` seam
+with behaviour unchanged; only then did the behaviour change. The mutation sits
+on the fix's path.
+
+The fix is at the waiter, as directed: `wait_for_pid` polls until the contents
+**parse** and returns the pid it parsed, so there is no second window between a
+check and a read. `try_read_pid` collapses absent, unwritten and
+not-yet-whole to `None` on purpose — all three mean keep waiting — and the
+deadline now quotes the bytes it actually read, so a future occurrence names
+itself instead of surfacing as a bare `ParseIntError`.
+
+Zone respected: `crates/aion-cli` worker_shell only.
+
+## Battery of record — round 2
+
+Detail and completion evidence in `gate-logs/42-fork-ordering/BATTERY.md`.
+
+- Instrument re-proven red **at the final tree** before the run of record: all
+  three legs emitted against a plant, and notably the ONLY nextest finding was
+  the plant itself. Plant reverted.
+- **Verdict: EMPTY extraction from all three legs** — check clean, clippy
+  clean, nextest clean. This is the pass condition under the standard.
+- Completion proof at the same tree, per-leg stderr kept:
+  `Summary [ 224.812s] 5145 tests run: 5145 passed (6 slow), 0 skipped`.
+- The two passes **agree** this round. Round 1's disagreement was the
+  worker_shell race, and it is gone: that test passed on the contended run.
+
+## Round-2 non-claims
+
+- The canonical order is scoped to what the ruling permits and **no more**. It
+  is not a general "sort the history" and it is provably inert on any trail
+  with no two terminals adjacent.
+- The differential's five historical sightings are **not** re-measured here.
+  What is measured is that the mechanism behind them is now normalized away and
+  that five distinct literal defect shapes still survive that normalization.
+- M2 is disclosed above as a mutation the controls do not catch, with the
+  reason it is nonetheless not a hazard. That reason is a property of
+  `with_seq`, not of the controls.
+- Board rows #42 and #45 need their evidence attached at collection; that is a
+  landing step, not something this branch can assert of itself.

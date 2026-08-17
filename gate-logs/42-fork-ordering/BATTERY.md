@@ -124,3 +124,78 @@ flake. The contended run is the informative one here; the verbatim run's
   five solo greens already existed. Nothing here re-measures it.
 - `.aion-held-execution.json` is gitignored and untracked; verified with
   `git ls-files`.
+
+---
+
+# Round 2 — battery of record for the dispositioned fix
+
+**Tree:** `0cb59e1a2` ("fix(45): readiness for a pid file is a parseable pid,
+never mere existence"), on top of the steward's disposition `660b71c02`.
+**Script:** unchanged — `gate-logs/42-fork-ordering/battery.sh`, the standard's
+fenced block verbatim. `NORN_BIN=/Users/tom/.cargo/bin/norn` set on every run.
+
+## Instrument re-proven red at the FINAL tree
+
+An empty extraction is the pass condition this round, so the instrument's
+ability to be non-empty was re-established at this tree rather than relied on
+from round 1. Plant: an unused variable plus an always-false assert appended to
+`crates/aion/tests/concurrency_e2e.rs`. All three legs emitted
+(`battery-redproof2.jsonl`):
+
+```
+{"type":"clippy","level":"warning","lint":"unused_variables"}                    <- check leg
+{"type":"clippy","level":"error","lint":"unused_variables"}                      <- clippy leg
+{"type":"clippy","level":"error","lint":"clippy::assertions_on_constants"}
+{"type":"nextest","test":"aion-rs::concurrency_e2e$battery_instrument_control_planted_failure"}
+```
+
+Worth noting on its own: the ONLY nextest finding under the plant was the plant
+itself, which previewed the clean run below. Plant reverted with
+`git checkout --`; tree clean before the run of record.
+
+## Verdict — the verbatim run
+
+`gate-logs/42-fork-ordering/battery-final2.jsonl` is **EMPTY**. Zero lines from
+the check leg, zero from clippy (`-D warnings`, `--all-targets`,
+`--keep-going`), zero from nextest (`--no-fail-fast`). Under the standard,
+green is an empty extraction.
+
+No `#[allow]`, no `#[expect]`, no `#[ignore]`, no skip, no weakened assertion,
+no widened exclusion anywhere in the lane. No fmt gate; `cargo fmt` was run.
+
+## Completion proof
+
+Same tree, same three commands, same jq, per-leg stderr kept
+(`proof2-check.stderr`, `proof2-clippy.stderr`, `proof2-nextest.stderr`,
+`proof2-findings.jsonl`):
+
+```
+Summary [ 224.812s] 5145 tests run: 5145 passed (6 slow), 0 skipped
+```
+
+`proof2-findings.jsonl` is also empty, so the two passes agree.
+
+5145 = the base tree's 5135, plus this lane's 10 new tests (the two #42 trail
+tests, the seven terminal-order controls, and leg 2's planted-race test).
+
+**The caveat on `proof2-legs.log` from round 1 still applies:** its `rc=` lines
+are `jq`'s exit status, not cargo's, because the script is `/bin/sh` and has no
+`PIPESTATUS`. They are not a verdict. The Summary line is the completion
+evidence; the (empty) finding lines are the verdict.
+
+## The round-1 disagreement is resolved
+
+Round 1's two passes disagreed by one test:
+`aion-cli worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group`
+failed only on the contended pass with `ParseIntError { kind: Empty }`. Leg 2
+fixed it at the waiter, and this round it passed on BOTH passes, including the
+contended one — `0 failed, 0 skipped`, with no `1 leaky` either.
+
+## Round-2 non-claims
+
+- An empty extraction says the three legs found nothing. It does not say the
+  five historical differential sightings were re-measured; they were not.
+- One green battery is not a measurement of flake. The relevant evidence that
+  the parallel-layer mechanism is handled is the seven controls plus the recast
+  pin, all of which fail deliberately under mutation — not this run's emptiness.
+- `.aion-held-execution.json` remains gitignored and untracked.
