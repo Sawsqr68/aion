@@ -8,8 +8,8 @@
 //! resolve the shard owner and either proceed locally, forward to the owner
 //! (R-3), or return the typed retryable `NotOwner` so the caller re-resolves.
 //!
-//! This module is behind the `haematite-backend` feature and only ever does
-//! anything for a distributed (`[store.cluster]`) boot. With no cluster store on
+//! This module only ever does anything for a distributed (`[store.cluster]`)
+//! boot. With no cluster store on
 //! [`crate::ServerState`] every entry point short-circuits to "proceed locally",
 //! so the default single-node path is byte-identical — the fence is never even
 //! reachable there.
@@ -25,25 +25,17 @@
 //! - **R-3:** a `RequestForwarder` trait + gRPC forwarder that relays a non-local
 //!   request to the owner instead of rejecting it.
 
-#[cfg(feature = "haematite-backend")]
 mod directory;
-#[cfg(feature = "haematite-backend")]
 mod edge;
-#[cfg(feature = "haematite-backend")]
 mod forwarder;
-#[cfg(feature = "haematite-backend")]
 mod relay;
 
-#[cfg(feature = "haematite-backend")]
 pub use directory::{DirectoryPeer, NodeRef, OwnerView, ShardDirectory, StaticShardDirectory};
-#[cfg(feature = "haematite-backend")]
 pub use edge::{
     RemintOutcome, RouteDecision, SteerDecision, route_mutation, route_start, route_start_steered,
 };
-#[cfg(feature = "haematite-backend")]
 pub use forwarder::{
     FORWARD_HOPS_METADATA, ForwardReply, ForwardRequest, GrpcRequestForwarder, MAX_FORWARD_HOPS,
     RequestForwarder, current_hops,
 };
-#[cfg(feature = "haematite-backend")]
 pub use relay::{not_owner_wire, owner_refusal};

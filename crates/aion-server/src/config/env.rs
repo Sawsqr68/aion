@@ -187,13 +187,15 @@ fn parse_node_cache_budget(
         node_cache_budget: haematite::NodeCacheBudget,
     }
 
-    let document: Document = toml::from_str(&format!("node_cache_budget = {value}"))
-        .map_err(|error| ServerError::Config {
-            message: format!(
-                "{name} must be a node cache budget written exactly as it would be in \
+    let document: Document =
+        toml::from_str(&format!("node_cache_budget = {value}")).map_err(|error| {
+            ServerError::Config {
+                message: format!(
+                    "{name} must be a node cache budget written exactly as it would be in \
                  config.toml — `{{ bytes = <positive integer> }}` or `\"unlimited\"` — got \
                  `{value}`: {error}"
-            ),
+                ),
+            }
         })?;
     Ok(document.node_cache_budget)
 }
@@ -350,8 +352,8 @@ mod tests {
     /// in BOTH of haematite's spellings — the env override and the config file
     /// are one spelling, decided by one parser (haematite's).
     #[test]
-    fn the_env_override_accepts_both_haematite_spellings()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn the_env_override_accepts_both_haematite_spellings() -> Result<(), Box<dyn std::error::Error>>
+    {
         let name = "AION_STORE_NODE_CACHE_BUDGET";
         assert_eq!(
             parse_node_cache_budget(name, "{ bytes = 1073741824 }")?,

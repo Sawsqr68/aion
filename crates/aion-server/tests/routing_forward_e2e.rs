@@ -6,10 +6,6 @@
 //! forward-hop header, and relays the owner's reply/error verbatim. This is the
 //! gRPC half of the forward path that a 2-node cluster exercises, without
 //! needing haematite distribution stood up.
-//!
-//! Behind `--features haematite-backend` (the forwarder lives there).
-
-#![cfg(feature = "haematite-backend")]
 
 use std::sync::Arc;
 use std::time::Duration;

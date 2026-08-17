@@ -20,11 +20,8 @@
 //! survivor's directory now resolves the shard to the adopter — then confirms
 //! `route_mutation` forwards there rather than returning the gap-#2 `NotOwner`.
 //!
-//! Behind `--features haematite-backend` (the directory lives there). Plain
-//! `#[test]`: haematite's distribution coordinator blocks and refuses to run from
+//! Plain `#[test]`: haematite's distribution coordinator blocks and refuses to run from
 //! a thread with an entered tokio runtime, exactly as `distributed_failover.rs`.
-
-#![cfg(feature = "haematite-backend")]
 
 use std::error::Error;
 use std::net::SocketAddr;

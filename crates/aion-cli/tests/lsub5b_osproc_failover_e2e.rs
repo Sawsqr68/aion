@@ -4,7 +4,7 @@
 //!
 //! ## What this proves (runs green; OS-process, no in-process shortcuts)
 //!
-//! 1. A REAL `aion` binary, built with `--features haematite-backend,liminal-transport`,
+//! 1. A REAL `aion` binary, built with `--features liminal-transport`,
 //!    boots a deployed `aion server` OS process configured with
 //!    `outbox.enabled`, `outbox.transport = liminal`, and a concrete
 //!    `outbox.liminal_listen_address`. The deployed binary genuinely HOSTS the
@@ -43,11 +43,11 @@
 //! Runtime-gated, never `#[ignore]`d (slow, spawns processes): run explicitly with
 //! ```text
 //! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
-//!   --features haematite-backend,liminal-transport \
+//!   --features liminal-transport \
 //!   --test lsub5b_osproc_failover_e2e -- --nocapture
 //! ```
 
-#![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
+#![cfg(all(unix, feature = "liminal-transport"))]
 
 use std::path::Path;
 use std::process::Command;

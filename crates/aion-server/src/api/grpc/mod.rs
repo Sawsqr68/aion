@@ -11,7 +11,6 @@ mod mint_resolve;
 /// The pure-delegation RPC bodies (no routing, no forwarding, no cfg arms).
 mod plain_rpcs;
 /// Cluster request routing/resolution (steered start + forward-or-local).
-#[cfg(feature = "haematite-backend")]
 mod routing_resolve;
 /// Wire-error-to-tonic-Status mapping.
 mod status;
@@ -24,7 +23,6 @@ use tonic::{Request, Response, Status};
 
 use crate::namespace::MintCredentials;
 use crate::{CallerIdentity, ServerState, api::handlers};
-#[cfg(feature = "haematite-backend")]
 use convert::decode_workflow_id;
 use convert::{
     decode_cancel_request, decode_pause_request, decode_query_request, decode_rename_request,
@@ -32,7 +30,6 @@ use convert::{
     encode_cancel_response, encode_pause_response, encode_query_response, encode_rename_response,
     encode_reopen_response, encode_resume_response, encode_signal_response, encode_start_response,
 };
-#[cfg(feature = "haematite-backend")]
 use routing_resolve::{RouteResolution, StartResolution};
 
 /// Cloneable tonic implementation for workflow management.
@@ -77,7 +74,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         // non-clustered boots (and own-all scope), so the engine mints as usual —
         // default path unchanged. Without the cluster backend there is no
         // steering or placement at all.
-        #[cfg(feature = "haematite-backend")]
         {
             let (metadata, _ext, inner) = request.into_parts();
             let placement = match self.resolve_start(&inner, &metadata).await {
@@ -108,24 +104,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
             .map_err(status_from_wire_error)?;
             return Ok(Response::new(encode_start_response(response)));
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let placement: Option<aion_core::WorkflowId> = None;
-            // Minted-on-use safety net (Phase 1 S6): mint/gate the authorized
-            // namespace before the engine start, sharing the SAME policy the
-            // worker-registration seam applies.
-            let minter = self.state.namespace_minter();
-            let response = handlers::start_with_placement(
-                self.state.namespace_guard(),
-                &caller,
-                decode_start_request(request.into_inner()),
-                placement,
-                Some(&minter),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_start_response(response)))
-        }
     }
 
     async fn signal(
@@ -133,7 +111,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::SignalRequest>,
     ) -> Result<Response<generated::SignalResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -165,17 +142,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::signal(
-                self.state.namespace_guard(),
-                &caller,
-                decode_signal_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_signal_response(response)))
-        }
     }
 
     async fn query(
@@ -183,7 +149,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::QueryRequest>,
     ) -> Result<Response<generated::QueryResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -211,17 +176,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::query(
-                self.state.namespace_guard(),
-                &caller,
-                decode_query_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_query_response(response)))
-        }
     }
 
     async fn cancel(
@@ -229,7 +183,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::CancelRequest>,
     ) -> Result<Response<generated::CancelResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -262,18 +215,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::cancel(
-                &self.state,
-                self.state.namespace_guard(),
-                &caller,
-                decode_cancel_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_cancel_response(response)))
-        }
     }
 
     async fn reopen(
@@ -281,7 +222,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::ReopenRequest>,
     ) -> Result<Response<generated::ReopenResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -313,17 +253,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::reopen(
-                self.state.namespace_guard(),
-                &caller,
-                decode_reopen_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_reopen_response(response)))
-        }
     }
 
     async fn pause(
@@ -331,7 +260,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::PauseRequest>,
     ) -> Result<Response<generated::PauseResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -359,17 +287,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::pause(
-                self.state.namespace_guard(),
-                &caller,
-                decode_pause_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_pause_response(response)))
-        }
     }
 
     async fn resume(
@@ -377,7 +294,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::ResumeRequest>,
     ) -> Result<Response<generated::ResumeResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -409,17 +325,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
             }
         }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::resume(
-                self.state.namespace_guard(),
-                &caller,
-                decode_resume_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_resume_response(response)))
-        }
     }
 
     async fn rename(
@@ -427,7 +332,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::RenameRequest>,
     ) -> Result<Response<generated::RenameResponse>, Status> {
         let caller = self.caller(&request).await?;
-        #[cfg(feature = "haematite-backend")]
         {
             use crate::routing::{ForwardReply, ForwardRequest};
             let (metadata, _ext, inner) = request.into_parts();
@@ -458,17 +362,6 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                     return Ok(Response::new(encode_rename_response(response)));
                 }
             }
-        }
-        #[cfg(not(feature = "haematite-backend"))]
-        {
-            let response = handlers::rename(
-                self.state.namespace_guard(),
-                &caller,
-                decode_rename_request(request.into_inner()),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            Ok(Response::new(encode_rename_response(response)))
         }
     }
 

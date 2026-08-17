@@ -221,7 +221,6 @@ pub(super) fn decode_rename_request(value: generated::RenameRequest) -> ProtoRen
 /// (`api/http/routing.rs`). Lives here with every other proto/generated
 /// conversion rather than beside its one caller, so the two directions of the
 /// same message cannot drift apart.
-#[cfg(feature = "haematite-backend")]
 pub(crate) fn encode_rename_request(value: ProtoRenameRequest) -> generated::RenameRequest {
     generated::RenameRequest {
         namespace: value.namespace,
@@ -232,7 +231,6 @@ pub(crate) fn encode_rename_request(value: ProtoRenameRequest) -> generated::Ren
 }
 
 /// Decode a shard owner's rename reply for relay back to an HTTP caller (#211).
-#[cfg(feature = "haematite-backend")]
 pub(crate) fn decode_rename_response(value: generated::RenameResponse) -> ProtoRenameResponse {
     ProtoRenameResponse {
         run_id: value.run_id.map(decode_run_id),

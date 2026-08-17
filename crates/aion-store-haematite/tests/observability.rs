@@ -75,7 +75,10 @@ fn key(attempt: u32) -> ActivityStreamKey {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn append_read_head_round_trip() -> Result<(), StoreError> {
-    let store = HaematiteStore::create(unique_temp_dir("obs-round-trip"), haematite::NodeCacheBudget::Unlimited)?;
+    let store = HaematiteStore::create(
+        unique_temp_dir("obs-round-trip"),
+        haematite::NodeCacheBudget::Unlimited,
+    )?;
     assert_eq!(store.activity_head(&key(0)).await?, 0);
     assert_eq!(store.append_activity_event(0, &event(0, 1, "a")).await?, 0);
     assert_eq!(store.append_activity_event(1, &event(0, 2, "b")).await?, 1);
@@ -97,7 +100,10 @@ async fn append_read_head_round_trip() -> Result<(), StoreError> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn stale_expected_seq_conflicts_and_writes_nothing() -> Result<(), StoreError> {
-    let store = HaematiteStore::create(unique_temp_dir("obs-conflict"), haematite::NodeCacheBudget::Unlimited)?;
+    let store = HaematiteStore::create(
+        unique_temp_dir("obs-conflict"),
+        haematite::NodeCacheBudget::Unlimited,
+    )?;
     store.append_activity_event(0, &event(0, 1, "a")).await?;
     // Re-appending at the already-consumed seq 0 conflicts against head 1 — the
     // exact signal the server sequencer re-reads-head-and-retries on.
@@ -116,7 +122,10 @@ async fn stale_expected_seq_conflicts_and_writes_nothing() -> Result<(), StoreEr
 
 #[tokio::test(flavor = "multi_thread")]
 async fn attempts_are_disjoint_streams() -> Result<(), StoreError> {
-    let store = HaematiteStore::create(unique_temp_dir("obs-attempts"), haematite::NodeCacheBudget::Unlimited)?;
+    let store = HaematiteStore::create(
+        unique_temp_dir("obs-attempts"),
+        haematite::NodeCacheBudget::Unlimited,
+    )?;
     store
         .append_activity_event(0, &event(0, 1, "attempt-0"))
         .await?;

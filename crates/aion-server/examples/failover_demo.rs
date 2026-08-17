@@ -9,7 +9,7 @@
 //! ## Run it
 //!
 //! ```text
-//! cargo run -p aion-server --example failover_demo --features haematite-backend
+//! cargo run -p aion-server --example failover_demo
 //! ```
 //!
 //! (`gleam` must be on PATH — the `hello-world` workflow is rebuilt from source.)
@@ -26,7 +26,6 @@
 //! `peer_connected` liveness signal flips for real. The ONE thing it is not is a
 //! separate OS process per node; see the report for why (the `aion` binary's
 //! activities run over the remote-worker protocol, out of scope for this demo).
-#![cfg(feature = "haematite-backend")]
 
 use std::error::Error;
 use std::net::SocketAddr;

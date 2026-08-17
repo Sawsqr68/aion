@@ -28,8 +28,7 @@
 //!
 //! ## Scope
 //!
-//! Behind the `haematite-backend` feature and only ever constructed for a
-//! distributed (`[store.cluster]`) boot. A single-node / non-clustered server
+//! Only ever constructed for a distributed (`[store.cluster]`) boot. A single-node / non-clustered server
 //! never spawns it, so default behaviour is unchanged.
 
 use std::collections::BTreeMap;
@@ -61,7 +60,6 @@ pub trait PeerLiveness: Send + Sync + 'static {
     fn read_shard_owner(&self, shard: usize) -> Option<String>;
 }
 
-#[cfg(feature = "haematite-backend")]
 impl PeerLiveness for aion_store_haematite::HaematiteStore {
     fn peer_connected(&self, peer_name: &str) -> bool {
         Self::peer_connected(self, peer_name)
@@ -908,7 +906,10 @@ mod tests {
 
         // Seed the incident state: a terminal (Failed) workflow owning one
         // stranded Claimed outbox row.
-        let seeder = Arc::new(HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?);
+        let seeder = Arc::new(
+            HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+                .await?,
+        );
         let workflow_id = aion_core::WorkflowId::new_v4();
         let envelope = |seq: u64| EventEnvelope {
             seq,

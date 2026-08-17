@@ -6,8 +6,8 @@
 //! copy and the SAME hop stamp (loop prevention) as every other forwarded
 //! request — no second transport, no second set of rules.
 //!
-//! Compiled only under `feature = "haematite-backend"`: without the distributed
-//! backend there is no cluster to forward to.
+//! Dormant without a `[store.cluster]` section: with no cluster there is
+//! nothing to forward to.
 
 use std::net::SocketAddr;
 use std::sync::Arc;

@@ -52,7 +52,6 @@ mod outbox;
 mod payload;
 mod queues;
 mod router;
-#[cfg(feature = "haematite-backend")]
 mod routing;
 mod schedules;
 mod transcripts;

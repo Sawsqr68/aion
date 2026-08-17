@@ -105,7 +105,6 @@ pub(crate) async fn cancel_workflow(
 ///
 /// The name LABELS an id-addressed run; this endpoint never resolves a
 /// workflow by name.
-#[cfg(feature = "haematite-backend")]
 pub(crate) async fn rename_workflow(
     State(state): State<ServerState>,
     HttpCaller(caller): HttpCaller,
@@ -119,25 +118,6 @@ pub(crate) async fn rename_workflow(
     {
         return RenameWorkflowResponse::try_from(forwarded).map(Json);
     }
-    serve_rename_locally(&state, &caller, request).await
-}
-
-/// Records a new operator-facing display name for a run (#211).
-///
-/// No cluster backend is linked in this build: there is no shard map and no
-/// owner but this node, so there is nothing to route and the request is served
-/// here. The clustered build takes the request headers as well, to carry the
-/// caller's credentials onto a forward.
-///
-/// The name LABELS an id-addressed run; this endpoint never resolves a
-/// workflow by name.
-#[cfg(not(feature = "haematite-backend"))]
-pub(crate) async fn rename_workflow(
-    State(state): State<ServerState>,
-    HttpCaller(caller): HttpCaller,
-    Json(request): Json<RenameWorkflowRequest>,
-) -> Result<Json<RenameWorkflowResponse>, HttpWireError> {
-    let request = request.try_into().map_err(HttpWireError)?;
     serve_rename_locally(&state, &caller, request).await
 }
 

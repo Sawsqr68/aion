@@ -164,7 +164,8 @@ fn runtime_config() -> RuntimeConfig {
 /// One in-process server generation over the shared haematite file, built
 /// through the REAL full-boot constructor — the path under test.
 async fn server_over(db_path: PathBuf) -> Result<(ServerState, axum::Router), TestError> {
-    let store = HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let store =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let state = ServerState::build_with_store(store, runtime_config()).await?;
     let router = http_router(state.clone())?;
     Ok((state, router))
@@ -370,7 +371,8 @@ async fn seed_corpses(
     corpse_markers: &[PathBuf],
 ) -> Result<Vec<(WorkflowId, PathBuf)>, TestError> {
     let mut corpses: Vec<(WorkflowId, PathBuf)> = Vec::with_capacity(corpse_markers.len());
-    let seeder = HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let seeder =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let probe_history = seeder.read_history(probe_workflow).await?;
     for marker in corpse_markers {
         let corpse_workflow = WorkflowId::new_v4();
@@ -558,7 +560,8 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     // The claim: EVERY adopted dispatch EXECUTES. Each corpse's history gains
     // a completion and its run finishes; the marker files on disk are the
     // belt. A parked dispatch (the defect) produces none of these, ever.
-    let reader = HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let verdict_result = await_corpse_completions(&reader, &corpses).await;
     let settle_result = settle(&state);
     verdict_result?;

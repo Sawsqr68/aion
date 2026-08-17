@@ -161,26 +161,24 @@ zip = { workspace = true }
 aion-store = { version = "0.17.0", path = "../aion-store", features = ["test-support"] }
 
 [features]
-# Haematite is linked in every server build; only optional transports remain
-# feature-selected.
-default = ["haematite-backend", "liminal-transport"]
+# Haematite is linked in every server build; only optional transports and the
+# auth surface remain feature-selected.
+default = ["liminal-transport"]
 auth = ["dep:jsonwebtoken", "dep:reqwest"]
-# Compatibility name for tests/examples; haematite is linked unconditionally.
-haematite-backend = []
 # Cross-node outbox dispatch over liminal (#13-0 spike). With it on,
 # `outbox.transport = liminal` selects the liminal dispatch + completion path.
 liminal-transport = ["dep:liminal-sdk", "dep:liminal-server", "dep:liminal"]
 
 # The runnable multi-node failover demo: boots an in-process haematite cluster,
 # kills the shard owner, and watches the SS-5b supervisor auto-recover the
-# workflow. Requires the haematite backend (and `gleam` on PATH at runtime).
+# workflow. Requires `gleam` on PATH at runtime.
 [[example]]
 name = "failover_demo"
 
 # The runnable LSUB-5 capstone demo: boots an in-process haematite cluster + a
 # real liminal worker, kills the fan-out shard owner MID-DISPATCH, and narrates
 # the survivor adopting the shard and re-driving the fan-out to an exactly-once
-# completion. Requires both the haematite backend and the liminal transport.
+# completion. Requires the liminal transport.
 [[example]]
 name = "lsub5_xnode_failover_demo"
 required-features = ["liminal-transport"]

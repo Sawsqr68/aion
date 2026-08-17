@@ -20,10 +20,6 @@
 //!   never be a policy bypass;
 //! - a mint naming no namespaces, or an unspecified provenance, is refused as
 //!   invalid input rather than guessed at.
-//!
-//! Behind `--features haematite-backend` (the forwarder lives there).
-
-#![cfg(feature = "haematite-backend")]
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

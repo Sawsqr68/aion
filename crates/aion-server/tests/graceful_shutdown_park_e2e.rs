@@ -338,7 +338,11 @@ impl ServerEpoch {
         package_path: PathBuf,
         drain_timeout: Duration,
     ) -> Result<Self, TestError> {
-        let store = HaematiteStore::open_or_create(db_path.to_path_buf(), haematite::NodeCacheBudget::Unlimited).await?;
+        let store = HaematiteStore::open_or_create(
+            db_path.to_path_buf(),
+            haematite::NodeCacheBudget::Unlimited,
+        )
+        .await?;
         let state =
             ServerState::build_with_store(store, runtime_config(package_path, drain_timeout))
                 .await?;
@@ -502,7 +506,11 @@ async fn restart_and_complete(
     );
     worker.complete(&task, br#""recovered""#).await?;
 
-    let reader = HaematiteStore::open_or_create(db_path.to_path_buf(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader = HaematiteStore::open_or_create(
+        db_path.to_path_buf(),
+        haematite::NodeCacheBudget::Unlimited,
+    )
+    .await?;
     let settled = wait_for_history(&reader, workflow_id, "post-restart completion", |events| {
         events
             .iter()
@@ -550,7 +558,9 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
 
     // The kill -9 reference snapshot: the durable log at the moment the worker
     // holds the dispatch in flight (dangling scheduled/started, no outcome).
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()
@@ -614,7 +624,9 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     let task = worker.next_task().await?;
     assert_eq!(task.activity_type, ACTIVITY_TYPE);
 
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let snapshot = wait_for_history(&reader, &workflow_id, "in-flight trail", |events| {
         events
             .iter()

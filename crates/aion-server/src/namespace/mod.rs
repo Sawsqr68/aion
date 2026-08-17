@@ -3,7 +3,6 @@
 /// Namespace guard rules for workflow operations and subscriptions.
 pub mod guard;
 /// The production gRPC mint forwarder.
-#[cfg(feature = "haematite-backend")]
 pub mod mint_forward;
 /// Transport-agnostic minted-on-use namespace hook (Control-Plane Phase 1).
 pub mod minter;
@@ -17,7 +16,6 @@ pub mod schedule_source;
 pub use guard::{
     NamespaceGuard, NamespaceOperation, ScheduleTarget, SubscriptionScope, WorkflowTarget,
 };
-#[cfg(feature = "haematite-backend")]
 pub use mint_forward::GrpcMintForwarder;
 pub use minter::NamespaceMinter;
 pub use resolver::{

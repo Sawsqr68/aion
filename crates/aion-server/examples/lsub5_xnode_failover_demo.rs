@@ -10,7 +10,7 @@
 //!
 //! ```text
 //! cargo run -p aion-server --example lsub5_xnode_failover_demo \
-//!     --features haematite-backend,liminal-transport
+//!     --features liminal-transport
 //! ```
 //!
 //! ## Honest about what it is
@@ -27,7 +27,7 @@
 //! the real adopt + replay + re-arm + re-dispatch. The owner stages its fan-out
 //! through the SAME `record_fan_out_dispatch` cutover the live engine's collect
 //! NIF calls, so the chain under test is exercised faithfully end to end.
-#![cfg(all(feature = "haematite-backend", feature = "liminal-transport"))]
+#![cfg(feature = "liminal-transport")]
 
 use std::error::Error;
 use std::net::SocketAddr;

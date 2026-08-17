@@ -186,7 +186,6 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // Capture the SS-5b failover supervisor knobs before `build` consumes config.
     // Only a distributed haematite boot carries a `[store.cluster]` section; this
     // is `None` for every single-node boot, so no supervisor is ever spawned.
-    #[cfg(feature = "haematite-backend")]
     let cluster_config = config.store.cluster.clone();
     // Capture the managed-worker supervision policy before `build` consumes
     // `config`. Resolution already happened during config validation, so this
@@ -261,10 +260,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // which runs before this point — so each node only ever claims rows on the
     // shards it owns. Compute the flag here where the (feature-gated) cluster
     // section is in scope; pass it to the gate so the boot banner records the mode.
-    #[cfg(feature = "haematite-backend")]
     let outbox_clustered = cluster_config.is_some();
-    #[cfg(not(feature = "haematite-backend"))]
-    let outbox_clustered = false;
     // Dormant by default: only when `outbox.enabled` is set does the
     // non-replayed outbox dispatcher task start. With the flag off (the
     // default) nothing here runs and server behaviour is unchanged.
@@ -286,7 +282,6 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // supervisor — automatic failover detection. A single-node boot spawns
     // nothing here (the method returns `false`), so default behaviour is
     // unchanged.
-    #[cfg(feature = "haematite-backend")]
     maybe_spawn_cluster_supervisor(&state, cluster_config.as_ref(), &shutdown_rx)?;
     // #176: the worker heartbeat expiry sweeper is ALWAYS commissioned —
     // dead-worker detection is a liveness correctness property, not an opt-in
@@ -670,7 +665,6 @@ fn maybe_spawn_outbox_dispatcher(
 /// retained concrete store and live engine. With no `[store.cluster]` section —
 /// or with no peer declaring `owned_shards` — nothing is spawned and behaviour
 /// is unchanged.
-#[cfg(feature = "haematite-backend")]
 fn maybe_spawn_cluster_supervisor(
     state: &ServerState,
     cluster_config: Option<&crate::config::ClusterConfig>,

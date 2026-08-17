@@ -125,9 +125,7 @@ tokio-stream = { workspace = true, features = ["net"] }
 [features]
 # Haematite is linked in every CLI build; optional integrations and transport
 # remain feature-selected.
-default = ["haematite-backend", "liminal-transport", "norn", "acp"]
-# Compatibility feature name; the embedded server links haematite unconditionally.
-haematite-backend = ["aion-server/haematite-backend"]
+default = ["liminal-transport", "norn", "acp"]
 # Forwarded to the embedded server. Off by default, matching the feature set
 # the standalone `aion-server` binary shipped with.
 auth = ["aion-server/auth"]
@@ -147,8 +145,8 @@ auth = ["aion-server/auth"]
 liminal-transport = ["aion-server/liminal-transport", "aion-worker/liminal-transport"]
 # Composes the first-party Norn adapter (`aion-integration-norn`) into the `aion`
 # binary so the shipped default product drives Norn agents OUT-OF-BOX — the same
-# "our complete experience is the default" thread as `haematite-backend` /
-# `liminal-transport`. ON by default: a stock `cargo build -p aion-cli` links the
+# "our complete experience is the default" thread as `liminal-transport`.
+# ON by default: a stock `cargo build -p aion-cli` links the
 # Norn harness at the composition root. `--no-default-features` drops it and the
 # platform LIBRARY crates build with ZERO Norn code (the §3A.4 invariant). The
 # worker drives the harness through the neutral `AgentHarness` trait; this feature
@@ -157,7 +155,7 @@ norn = ["dep:aion-integration-norn"]
 # Composes the first-party ACP adapter (`aion-integration-acp`) into the `aion` binary,
 # so the shipped default product can serve ANY agent that speaks the Agent Client
 # Protocol out-of-box — the same "our complete experience is the default" thread as
-# `haematite-backend` / `liminal-transport` / `norn`. ON by default.
+# `liminal-transport` / `norn`. ON by default.
 #
 # With both `norn` and `acp` compiled in, a worker document's `harness` section names
 # which one it wants with `kind acp` / `kind norn`: two adapters means there is

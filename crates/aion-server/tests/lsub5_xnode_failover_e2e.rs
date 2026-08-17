@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! cargo test -p aion-server \
-//!     --features haematite-backend,liminal-transport \
+//!     --features liminal-transport \
 //!     --test lsub5_xnode_failover_e2e -- --nocapture
 //! ```
 //!
@@ -62,7 +62,7 @@
 //! recovery); the witness workflow on shard 1 is unaffected. The activity MAY
 //! execute more than once (at-least-once redelivery), but the terminal count per
 //! ordinal is exactly one — the completion dedup absorbed the redelivery.
-#![cfg(all(feature = "haematite-backend", feature = "liminal-transport"))]
+#![cfg(feature = "liminal-transport")]
 
 use std::collections::HashMap;
 use std::error::Error;

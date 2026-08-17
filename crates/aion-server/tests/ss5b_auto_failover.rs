@@ -18,10 +18,9 @@
 //! Run it with:
 //!
 //! ```text
-//! cargo test -p aion-server --features haematite-backend \
+//! cargo test -p aion-server \
 //!     --test ss5b_auto_failover -- --nocapture
 //! ```
-#![cfg(feature = "haematite-backend")]
 
 #[path = "test_support/gleam.rs"]
 mod gleam_test_support;

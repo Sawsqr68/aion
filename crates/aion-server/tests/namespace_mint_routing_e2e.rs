@@ -37,10 +37,6 @@
 //! `ss3_directory_failover_e2e.rs`. The async mint is driven through an explicit
 //! `block_on` AFTER the cluster is stood up; the durable upsert itself hops to
 //! `spawn_blocking` internally, so it is safe under the runtime.
-//!
-//! Behind `--features haematite-backend`.
-
-#![cfg(feature = "haematite-backend")]
 
 use std::error::Error;
 use std::net::SocketAddr;

@@ -2,9 +2,7 @@
 //!
 //! These tests exercise the operator-facing config surface (`backend =
 //! haematite`) and the production boot path that constructs `HaematiteStore`.
-//! They are compiled only under the optional `haematite-backend` feature; a
-//! default build neither links the backend nor runs these tests.
-#![cfg(feature = "haematite-backend")]
+//! Haematite is the server's store in every build, so these run unconditionally.
 
 use aion_server::config::{ServerConfig, StoreBackend};
 use aion_server::state::ServerState;

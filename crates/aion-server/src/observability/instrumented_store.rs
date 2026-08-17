@@ -608,7 +608,13 @@ mod tests {
         name: &str,
         namespace: &str,
     ) -> Result<(InstrumentedEventStore, Metrics), Box<dyn std::error::Error>> {
-        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path(name), haematite::NodeCacheBudget::Unlimited).await?);
+        let store = Arc::new(
+            HaematiteStore::open_or_create(
+                unique_temp_path(name),
+                haematite::NodeCacheBudget::Unlimited,
+            )
+            .await?,
+        );
         let metrics = Metrics::new()?;
         let instrumented = InstrumentedEventStore::new(store, metrics.clone(), namespace);
         Ok((instrumented, metrics))
@@ -766,7 +772,13 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_fires_wake_on_successful_non_empty_stage()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("fires"), haematite::NodeCacheBudget::Unlimited).await?);
+        let store = Arc::new(
+            HaematiteStore::open_or_create(
+                unique_temp_path("fires"),
+                haematite::NodeCacheBudget::Unlimited,
+            )
+            .await?,
+        );
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")
@@ -803,7 +815,13 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_does_not_fire_wake_on_empty_slice()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("empty"), haematite::NodeCacheBudget::Unlimited).await?);
+        let store = Arc::new(
+            HaematiteStore::open_or_create(
+                unique_temp_path("empty"),
+                haematite::NodeCacheBudget::Unlimited,
+            )
+            .await?,
+        );
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")
@@ -836,7 +854,13 @@ mod tests {
     #[tokio::test]
     async fn append_with_outbox_does_not_fire_wake_on_failed_append()
     -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path("failed"), haematite::NodeCacheBudget::Unlimited).await?);
+        let store = Arc::new(
+            HaematiteStore::open_or_create(
+                unique_temp_path("failed"),
+                haematite::NodeCacheBudget::Unlimited,
+            )
+            .await?,
+        );
         let metrics = Metrics::new()?;
         let wake = Arc::new(tokio::sync::Notify::new());
         let instrumented = InstrumentedEventStore::new(store, metrics, "default")

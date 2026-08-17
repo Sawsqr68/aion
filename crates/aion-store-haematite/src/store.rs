@@ -3757,7 +3757,8 @@ mod tests {
     /// without any test ever turning into a cache-eviction test by accident. It
     /// is emphatically NOT a default: production callers state their own.
     fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, StoreError> {
-        haematite::NodeCacheBudget::bytes(1 << 30).map_err(|error| StoreError::Backend(error.to_string()))
+        haematite::NodeCacheBudget::bytes(1 << 30)
+            .map_err(|error| StoreError::Backend(error.to_string()))
     }
 
     fn store(name: &str) -> Result<HaematiteStore, StoreError> {
@@ -4580,7 +4581,11 @@ mod tests {
     /// (any id is already local); a subset scope yields an id on an owned shard.
     #[test]
     fn remint_for_owned_shard_respects_scope() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("remint"), 4, test_node_cache_budget()?)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("remint"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         // Own-all: nothing to remint toward.
         assert!(store.remint_for_owned_shard(64).is_none());
 
@@ -4599,7 +4604,11 @@ mod tests {
     /// an id whose durable shard is exactly that target.
     #[test]
     fn mint_for_shard_lands_on_the_routing_key_shard() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("steered"), 4, test_node_cache_budget()?)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("steered"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         let target = store.shard_for_routing_key("tenant-7/order-42");
         // Stable: hashing the same key again yields the same shard.
         assert_eq!(target, store.shard_for_routing_key("tenant-7/order-42"));
@@ -4619,7 +4628,11 @@ mod tests {
     /// everything unconditionally).
     #[test]
     fn single_node_fence_seam_is_a_noop() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("noop"), 4, test_node_cache_budget()?)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("noop"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         // Owns everything: scope is None and stays None through extend.
         assert_eq!(store.owned_shards(), None, "single-node owns all shards");
         store.acquire_owned_shard(2)?; // no election, Ok

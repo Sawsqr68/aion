@@ -41,7 +41,6 @@ pub mod build_identity;
 pub mod changelog;
 /// SS-5b automatic multi-node failover detection (cluster supervisor). Only
 /// meaningful for a distributed haematite boot, so gated behind the backend.
-#[cfg(feature = "haematite-backend")]
 pub mod cluster;
 /// WS3 cluster topology/ownership broadcast publisher (not backend-gated: the
 /// ops console's cluster channel is served on every boot, showing calm state with

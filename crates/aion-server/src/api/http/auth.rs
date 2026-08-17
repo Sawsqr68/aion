@@ -69,7 +69,6 @@ impl FromRequestParts<ServerState> for WsCaller {
 /// constant fails there. A forwarded request that carried a different notion of
 /// "the caller's credentials" than the one this server authorizes with would
 /// refuse on the owner for reasons the caller could not see.
-#[cfg(any(test, feature = "haematite-backend"))]
 const CREDENTIAL_HEADERS: [&str; 4] = [
     "authorization",
     "x-aion-namespaces",
@@ -92,7 +91,6 @@ const CREDENTIAL_HEADERS: [&str; 4] = [
 /// represented as gRPC metadata. Dropping it instead would forward an
 /// unauthenticated request and surface as an unexplained refusal from the
 /// owner.
-#[cfg(feature = "haematite-backend")]
 pub(crate) fn caller_credentials_metadata(
     headers: &HeaderMap,
 ) -> Result<tonic::metadata::MetadataMap, aion_proto::WireError> {
@@ -110,7 +108,6 @@ pub(crate) fn caller_credentials_metadata(
     Ok(metadata)
 }
 
-#[cfg(feature = "haematite-backend")]
 fn credential_header_rejected(name: &str) -> aion_proto::WireError {
     aion_proto::WireError::invalid_input(format!(
         "the `{name}` header is not a valid credential value and cannot be carried to the \
@@ -835,7 +832,6 @@ mod tests {
     /// The forward-hop counter is the one that matters: inheriting it from an
     /// inbound HTTP request would let a caller start a forward chain at the cap
     /// and be told `NotOwner` for a workflow this node cannot serve.
-    #[cfg(feature = "haematite-backend")]
     #[test]
     fn only_credential_headers_are_carried_to_a_shard_owner()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -870,7 +866,6 @@ mod tests {
 
     /// An absent credential is absent, not empty: nothing is invented for a
     /// caller that sent nothing.
-    #[cfg(feature = "haematite-backend")]
     #[test]
     fn absent_credentials_are_not_invented() -> Result<(), Box<dyn std::error::Error>> {
         let mut headers = HeaderMap::new();

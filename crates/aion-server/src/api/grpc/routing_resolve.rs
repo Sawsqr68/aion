@@ -1,6 +1,6 @@
 //! Cluster request routing/resolution for the workflow gRPC service (R-1..R-4):
 //! steered-start placement and signal/query/cancel/reopen forward-or-local
-//! decisions. Compiled only under `feature = "haematite-backend"`.
+//! decisions.
 //!
 //! Peeled out of `grpc/mod.rs` (AO-007 500-code-line split); the methods stay
 //! private on `WorkflowGrpcService` via a second `impl` block.

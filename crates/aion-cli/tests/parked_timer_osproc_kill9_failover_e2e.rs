@@ -93,11 +93,11 @@
 //! Runtime-gated, never `#[ignore]`d (slow: spawns a 3-node `aion server` cluster + a hard-kill failover):
 //! ```text
 //! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
-//!   --features haematite-backend,liminal-transport \
+//!   --features liminal-transport \
 //!   --test parked_timer_osproc_kill9_failover_e2e -- --nocapture
 //! ```
 
-#![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
+#![cfg(all(unix, feature = "liminal-transport"))]
 
 #[path = "common/costly_gate.rs"]
 mod costly_gate;

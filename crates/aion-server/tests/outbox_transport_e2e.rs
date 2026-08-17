@@ -568,7 +568,9 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     //    ServerOutboxDeliveryCallback (state.rs, gated on outbox.enabled) and
     //    wires the production WorkerActivityDispatcher into the engine — there is
     //    no in-process dispatcher stub to inject on this path.
-    let engine_store = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let engine_store =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
 
     // 2. Real worker gRPC service over loopback, one worker registered for the
@@ -586,8 +588,10 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     //    the SAME DB file the engine writes to (exactly how run.rs opens the
     //    outbox store: a fresh HaematiteStore::open_or_create on store.data_dir). It pushes claimed
     //    rows to the connected worker through the production push dispatcher.
-    let outbox_store: Arc<dyn OutboxStore> =
-        Arc::new(HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?);
+    let outbox_store: Arc<dyn OutboxStore> = Arc::new(
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?,
+    );
     let push = ActivityDispatcher::new(state.worker_registry().clone())
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
@@ -599,7 +603,9 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
 
     // A read-only store handle (third handle on the same file) for asserting
     // history and outbox-row state without disturbing the engine or dispatcher.
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
 
     // 4. Start collect_four over the real HTTP transport.
     let router = http_router(state.clone())?;
@@ -794,12 +800,16 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let package_path = write_package_archive(dir.path())?;
 
     // Seed the incident state before any server exists.
-    let seeder = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let seeder =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let (workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
     // Boot the server over the same store; the terminal workflow is excluded
     // from recovery (list_active) exactly as in the incident.
-    let engine_store = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let engine_store =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let grpc_address = listener.local_addr()?;
@@ -811,8 +821,10 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let mut worker = WorkerSession::connect(grpc_address, state.worker_registry()).await?;
 
     // The boot sweep, exactly as run.rs wires it: BEFORE the dispatcher spawns.
-    let outbox_store: Arc<dyn OutboxStore> =
-        Arc::new(HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?);
+    let outbox_store: Arc<dyn OutboxStore> = Arc::new(
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?,
+    );
     let engine = state.engine()?;
     let settled = aion_server::worker::settle_terminal_outbox_rows(
         engine.store().as_ref(),
@@ -824,7 +836,9 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
         vec![dispatch_key.clone()],
         "the boot sweep must settle the terminal workflow's stranded row"
     );
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let row_state = reader
         .outbox_row_state(&dispatch_key)
         .await?
@@ -911,10 +925,14 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
 
-    let seeder = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let seeder =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let (_workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
-    let engine_store = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let engine_store =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let state = ServerState::build_with_store(engine_store, runtime_config(package_path)).await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let grpc_address = listener.local_addr()?;
@@ -925,8 +943,10 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     );
     let mut worker = WorkerSession::connect(grpc_address, state.worker_registry()).await?;
 
-    let outbox_store: Arc<dyn OutboxStore> =
-        Arc::new(HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?);
+    let outbox_store: Arc<dyn OutboxStore> = Arc::new(
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?,
+    );
     let push = ActivityDispatcher::new(state.worker_registry().clone())
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
@@ -951,7 +971,9 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
 
     // Within a few sweeps the claim goes stale, the gate projects the
     // workflow terminal, and the row settles — never re-arms, never delivers.
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let deadline = Instant::now() + POLL_DEADLINE;
     loop {
         let row_state = reader

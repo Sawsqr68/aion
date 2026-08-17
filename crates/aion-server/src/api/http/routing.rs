@@ -15,8 +15,8 @@
 //! answer — its REFUSALS included, relayed verbatim rather than flattened into
 //! a wrong-owner retry hint the console would spin on forever.
 //!
-//! Compiled only under `feature = "haematite-backend"`: without the distributed
-//! backend there are no shards, no directory, and no owner but this node.
+//! Dormant without a `[store.cluster]` section: there are then no shards, no
+//! directory, and no owner but this node.
 
 use std::net::SocketAddr;
 

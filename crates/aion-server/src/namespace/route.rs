@@ -29,8 +29,7 @@
 //! Each is a narrow trait rather than a concrete type, so this module compiles
 //! and is testable without the distributed backend; the production
 //! implementations (haematite's store, the R-2 `StaticShardDirectory`, the R-3
-//! gRPC forwarder) are adapted at the bottom of this file behind
-//! `feature = "haematite-backend"`.
+//! gRPC forwarder) are adapted at the bottom of this file.
 //!
 //! ## What the route preserves
 //!
@@ -289,7 +288,6 @@ impl NamespaceRouting {
 
 /// The production namespace-shard resolver: the distributed haematite store
 /// hashes the registry key itself.
-#[cfg(feature = "haematite-backend")]
 impl NamespaceShardResolver for aion_store_haematite::HaematiteStore {
     fn shard_for_namespace(&self, name: &str) -> usize {
         Self::shard_for_namespace(self, name)
@@ -300,7 +298,6 @@ impl NamespaceShardResolver for aion_store_haematite::HaematiteStore {
 /// quorum-replicated shard-owner overlay and peer-liveness gate — the SAME
 /// resolver the request-routing edge consults, so the mint and a signal for the
 /// same shard can never disagree about who owns it.
-#[cfg(feature = "haematite-backend")]
 impl MintShardOwners for crate::routing::StaticShardDirectory {
     fn owner_of(&self, shard: usize) -> MintOwner {
         use crate::routing::{OwnerView, ShardDirectory};

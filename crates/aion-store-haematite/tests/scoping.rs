@@ -181,8 +181,12 @@ async fn stage_workflow(
 /// stay cluster-wide and are unaffected.
 #[tokio::test(flavor = "multi_thread")]
 async fn enumeration_scopes_to_owned_shards() {
-    let store =
-        HaematiteStore::create_with_shard_count(unique_dir("scope"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited).expect("create");
+    let store = HaematiteStore::create_with_shard_count(
+        unique_dir("scope"),
+        SHARD_COUNT,
+        haematite::NodeCacheBudget::Unlimited,
+    )
+    .expect("create");
     let database = store.event_store().database();
 
     // Stage the workflows and group each by the shard its event stream routes to,
@@ -384,8 +388,12 @@ async fn enumeration_scopes_to_owned_shards() {
 /// does not interact with the scoped test's state.
 #[tokio::test(flavor = "multi_thread")]
 async fn default_claim_spans_all_shards() {
-    let store = HaematiteStore::create_with_shard_count(unique_dir("claim-all"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited)
-        .expect("create");
+    let store = HaematiteStore::create_with_shard_count(
+        unique_dir("claim-all"),
+        SHARD_COUNT,
+        haematite::NodeCacheBudget::Unlimited,
+    )
+    .expect("create");
     let database = store.event_store().database();
 
     let mut all_dispatch: BTreeSet<String> = BTreeSet::new();
@@ -423,8 +431,12 @@ async fn default_claim_spans_all_shards() {
 /// production claim path applies, with no distribution machinery required.
 #[tokio::test(flavor = "multi_thread")]
 async fn active_active_each_row_claimed_by_exactly_one_owner() {
-    let store = HaematiteStore::create_with_shard_count(unique_dir("active-active"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited)
-        .expect("create");
+    let store = HaematiteStore::create_with_shard_count(
+        unique_dir("active-active"),
+        SHARD_COUNT,
+        haematite::NodeCacheBudget::Unlimited,
+    )
+    .expect("create");
     let database = store.event_store().database();
 
     // Stage spanning workflows and record, per dispatch_key, which shard owns it.

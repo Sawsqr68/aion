@@ -147,26 +147,21 @@ struct ServerStateInner {
     /// for the server's lifetime so a cluster node keeps answering peers'
     /// replication/election traffic. `None` for non-distributed boots. Dropping
     /// the state stops the responder.
-    #[cfg(feature = "haematite-backend")]
     cluster_responder: Option<aion_store_haematite::ClusterResponder>,
     /// The concrete distributed haematite store the SS-5b supervisor polls for
     /// peer liveness. `None` for every non-distributed boot.
-    #[cfg(feature = "haematite-backend")]
     cluster_store: Option<Arc<aion_store_haematite::HaematiteStore>>,
     /// The peers the SS-5b supervisor watches (each with the shards this node
     /// adopts on its death). Empty for non-distributed boots.
-    #[cfg(feature = "haematite-backend")]
     watched_peers: Vec<crate::cluster::WatchedPeer>,
     /// The request-routing shard directory (R-2), built over the cluster store +
     /// static peer config. `None` for every non-distributed boot, so the routing
     /// edge falls back to the bare R-1 ownership check (and the default path is a
     /// no-op).
-    #[cfg(feature = "haematite-backend")]
     shard_directory: Option<Arc<crate::routing::StaticShardDirectory>>,
     /// The request forwarder (R-3): relays a non-local signal/query/cancel to the
     /// shard owner's gRPC address. `None` for non-distributed boots. The trait
     /// object makes the liminal forwarder a one-line swap when 13-L0/L1 land (R-6).
-    #[cfg(feature = "haematite-backend")]
     request_forwarder: Option<Arc<dyn crate::routing::RequestForwarder>>,
     #[cfg(feature = "auth")]
     jwks_cache: Option<JwksCache>,
@@ -228,16 +223,12 @@ impl ServerState {
         let cluster_self_node = connected.cluster_self_node();
         let outbox_store = connected.outbox_store;
         let bootstrap_coordinator = connected.bootstrap_coordinator;
-        #[cfg(feature = "haematite-backend")]
         let cluster_responder = connected.cluster_responder;
-        #[cfg(feature = "haematite-backend")]
         let cluster_store = connected.cluster_store;
-        #[cfg(feature = "haematite-backend")]
         let watched_peers = connected.watched_peers;
         // Build the R-2 directory + R-3 forwarder over the (live, failover-aware)
         // cluster store and static peer config. Both present only for a
         // distributed boot; `None` otherwise leaves the routing edge a no-op.
-        #[cfg(feature = "haematite-backend")]
         let RoutingState {
             shard_directory,
             request_forwarder,
@@ -253,8 +244,6 @@ impl ServerState {
         let (metrics, outbox_wake, instrumented_store) =
             build_instrumented_store(&runtime, connected.event_store)?;
         let exported_metrics = runtime.metrics.enabled.then_some(metrics.clone());
-        #[cfg(not(feature = "haematite-backend"))]
-        let mint_routing: Option<crate::namespace::NamespaceRouting> = None;
         let seams = build_worker_seams(
             &runtime,
             &cluster_publisher,
@@ -311,15 +300,10 @@ impl ServerState {
                 update_status,
                 workspace_root,
                 cluster_self_node,
-                #[cfg(feature = "haematite-backend")]
                 cluster_responder,
-                #[cfg(feature = "haematite-backend")]
                 cluster_store,
-                #[cfg(feature = "haematite-backend")]
                 watched_peers,
-                #[cfg(feature = "haematite-backend")]
                 shard_directory,
-                #[cfg(feature = "haematite-backend")]
                 request_forwarder,
                 #[cfg(feature = "auth")]
                 jwks_cache,
@@ -439,15 +423,10 @@ impl ServerState {
                 // value — it exists so `workspace_root()` is always readable.
                 workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_store: None,
-                #[cfg(feature = "haematite-backend")]
                 watched_peers: Vec::new(),
-                #[cfg(feature = "haematite-backend")]
                 shard_directory: None,
-                #[cfg(feature = "haematite-backend")]
                 request_forwarder: None,
                 #[cfg(feature = "auth")]
                 jwks_cache: None,
@@ -538,15 +517,10 @@ impl ServerState {
                 // value — it exists so `workspace_root()` is always readable.
                 workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_store: None,
-                #[cfg(feature = "haematite-backend")]
                 watched_peers: Vec::new(),
-                #[cfg(feature = "haematite-backend")]
                 shard_directory: None,
-                #[cfg(feature = "haematite-backend")]
                 request_forwarder: None,
                 jwks_cache: Some(jwks_cache),
             }),
@@ -634,15 +608,10 @@ impl ServerState {
                 // value — it exists so `workspace_root()` is always readable.
                 workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_store: None,
-                #[cfg(feature = "haematite-backend")]
                 watched_peers: Vec::new(),
-                #[cfg(feature = "haematite-backend")]
                 shard_directory: None,
-                #[cfg(feature = "haematite-backend")]
                 request_forwarder: None,
                 jwks_cache: Some(jwks_cache),
             }),
@@ -725,15 +694,10 @@ impl ServerState {
                 // value — it exists so `workspace_root()` is always readable.
                 workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
-                #[cfg(feature = "haematite-backend")]
                 cluster_store: None,
-                #[cfg(feature = "haematite-backend")]
                 watched_peers: Vec::new(),
-                #[cfg(feature = "haematite-backend")]
                 shard_directory: None,
-                #[cfg(feature = "haematite-backend")]
                 request_forwarder: None,
                 #[cfg(feature = "auth")]
                 jwks_cache: None,
@@ -1085,7 +1049,6 @@ impl ServerState {
     /// dials it). Those three are populated together by `build_routing_state` on
     /// a `[store.cluster]` boot and are all `None` otherwise, so a partial
     /// context can never arise — but each is checked rather than assumed.
-    #[cfg(feature = "haematite-backend")]
     #[must_use]
     pub fn namespace_routing(&self) -> Option<crate::namespace::NamespaceRouting> {
         build_namespace_routing(
@@ -1093,13 +1056,6 @@ impl ServerState {
             self.shard_directory(),
             self.request_forwarder(),
         )
-    }
-
-    /// No cluster backend compiled in: nothing to route a mint to.
-    #[cfg(not(feature = "haematite-backend"))]
-    #[must_use]
-    pub const fn namespace_routing(&self) -> Option<crate::namespace::NamespaceRouting> {
-        None
     }
 
     /// Clone the advisory outbox wake (LSUB-2) shared with the engine's stage
@@ -1117,7 +1073,6 @@ impl ServerState {
     /// `true` when boot constructed the distributed backend (a `[store.cluster]`
     /// section was present) and is holding its inbound-write responder alive;
     /// `false` for every single-node / non-haematite boot.
-    #[cfg(feature = "haematite-backend")]
     #[must_use]
     pub fn is_clustered(&self) -> bool {
         self.inner.cluster_responder.is_some()
@@ -1127,7 +1082,6 @@ impl ServerState {
     /// for shard ownership (`shard_for_workflow` / `owns_workflow_shard`) and
     /// unsteered-start remint. `None` for every single-node / non-clustered boot,
     /// so the routing pre-step is a no-op and the default path is unchanged.
-    #[cfg(feature = "haematite-backend")]
     #[must_use]
     pub fn cluster_store(&self) -> Option<&Arc<aion_store_haematite::HaematiteStore>> {
         self.inner.cluster_store.as_ref()
@@ -1136,7 +1090,6 @@ impl ServerState {
     /// The request-routing shard directory (R-2) the edge consults to resolve a
     /// non-owned shard's owner. `None` for single-node / non-clustered boots, so
     /// the edge falls back to the bare R-1 ownership check.
-    #[cfg(feature = "haematite-backend")]
     #[must_use]
     pub fn shard_directory(&self) -> Option<&Arc<crate::routing::StaticShardDirectory>> {
         self.inner.shard_directory.as_ref()
@@ -1144,7 +1097,6 @@ impl ServerState {
 
     /// The R-3 request forwarder used to relay a non-local signal/query/cancel to
     /// the shard owner. `None` for single-node / non-clustered boots.
-    #[cfg(feature = "haematite-backend")]
     #[must_use]
     pub fn request_forwarder(&self) -> Option<&Arc<dyn crate::routing::RequestForwarder>> {
         self.inner.request_forwarder.as_ref()
@@ -1231,7 +1183,6 @@ impl ServerState {
     /// # Errors
     ///
     /// Returns [`ServerError`] when the engine handle cannot be resolved.
-    #[cfg(feature = "haematite-backend")]
     pub fn spawn_cluster_supervisor(
         &self,
         config: crate::cluster::SupervisorConfig,
@@ -1795,15 +1746,12 @@ fn build_real_time_publishers(
 /// Returns [`ServerError::Config`] carrying
 /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`](crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED)
 /// when `store.node_cache_budget` is unset.
-#[cfg(feature = "haematite-backend")]
 fn required_node_cache_budget(
     config: &StoreConfig,
 ) -> Result<haematite::NodeCacheBudget, ServerError> {
-    config
-        .node_cache_budget
-        .ok_or_else(|| ServerError::Config {
-            message: crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED.to_owned(),
-        })
+    config.node_cache_budget.ok_or_else(|| ServerError::Config {
+        message: crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED.to_owned(),
+    })
 }
 
 fn required_transcript_batch_policy(
@@ -1862,7 +1810,6 @@ fn build_transcript_publisher(
 }
 
 /// The request-routing pieces built from the cluster store + peer config.
-#[cfg(feature = "haematite-backend")]
 struct RoutingState {
     shard_directory: Option<Arc<crate::routing::StaticShardDirectory>>,
     request_forwarder: Option<Arc<dyn crate::routing::RequestForwarder>>,
@@ -1876,7 +1823,6 @@ struct RoutingState {
 /// Build the R-2 shard directory and R-3 request forwarder over the cluster
 /// store and static peer config, or all-`None` when this is not a distributed
 /// boot (no cluster store) so the routing edge is a no-op (default path).
-#[cfg(feature = "haematite-backend")]
 fn build_routing_state(
     cluster_store: Option<&Arc<aion_store_haematite::HaematiteStore>>,
     directory_peers: Vec<crate::routing::DirectoryPeer>,
@@ -1917,7 +1863,6 @@ fn build_routing_state(
 /// Each handle is checked rather than assumed present: `build_routing_state`
 /// populates them together, but a partial context would silently route mints to
 /// nowhere.
-#[cfg(feature = "haematite-backend")]
 fn build_namespace_routing(
     cluster_store: Option<&Arc<aion_store_haematite::HaematiteStore>>,
     shard_directory: Option<&Arc<crate::routing::StaticShardDirectory>>,
@@ -1965,26 +1910,21 @@ struct ConnectedStore {
     /// `namespace_store`.
     observability_store: Option<Arc<dyn aion_store::ObservabilityStore>>,
     bootstrap_coordinator: bool,
-    #[cfg(feature = "haematite-backend")]
     cluster_responder: Option<aion_store_haematite::ClusterResponder>,
     /// The concrete distributed haematite store (the SAME leaf as `event_store`),
     /// retained for the SS-5b cluster supervisor's peer-liveness polling. `None`
     /// for every non-distributed boot.
-    #[cfg(feature = "haematite-backend")]
     cluster_store: Option<Arc<aion_store_haematite::HaematiteStore>>,
     /// The peers the SS-5b supervisor watches, each with the shards this node
     /// adopts on its death. Empty for non-distributed boots.
-    #[cfg(feature = "haematite-backend")]
     watched_peers: Vec<crate::cluster::WatchedPeer>,
     /// The static shard-directory peer entries (name + declared shards + gRPC
     /// forward address) used to build the request-routing directory (R-2). Empty
     /// for non-distributed boots.
-    #[cfg(feature = "haematite-backend")]
     directory_peers: Vec<crate::routing::DirectoryPeer>,
     /// This node's own distribution name (cluster `node_id`), so the SS-3
     /// directory can resolve a shard-owner record naming THIS node to `Local`.
     /// `None` for non-distributed boots.
-    #[cfg(feature = "haematite-backend")]
     self_node_id: Option<String>,
 }
 
@@ -2011,30 +1951,18 @@ impl ConnectedStore {
             // sequencer falls back to an in-memory impl (NOI-5b).
             observability_store: None,
             bootstrap_coordinator: true,
-            #[cfg(feature = "haematite-backend")]
             cluster_responder: None,
-            #[cfg(feature = "haematite-backend")]
             cluster_store: None,
-            #[cfg(feature = "haematite-backend")]
             watched_peers: Vec::new(),
-            #[cfg(feature = "haematite-backend")]
             directory_peers: Vec::new(),
-            #[cfg(feature = "haematite-backend")]
             self_node_id: None,
         }
     }
 
     /// Capture this node's self-identity for the cluster snapshot before the
     /// distributed boot moves it into routing state.
-    #[cfg(feature = "haematite-backend")]
     fn cluster_self_node(&self) -> Option<String> {
         self.self_node_id.clone()
-    }
-
-    /// Non-distributed connected stores have no cluster self-identity.
-    #[cfg(not(feature = "haematite-backend"))]
-    const fn cluster_self_node(&self) -> Option<String> {
-        None
     }
 }
 
@@ -2055,17 +1983,7 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
                 worker_deployment_store,
             ))
         }
-        StoreBackend::Haematite => {
-            #[cfg(feature = "haematite-backend")]
-            {
-                connect_haematite_store(config).await
-            }
-            #[cfg(not(feature = "haematite-backend"))]
-            {
-                let _ = config;
-                connect_haematite_store_unavailable()
-            }
-        }
+        StoreBackend::Haematite => connect_haematite_store(config).await,
     }
 }
 
@@ -2088,7 +2006,6 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
 /// [`HaematiteStore::open`]: aion_store_haematite::HaematiteStore::open
 /// [`create_with_shard_count`]: aion_store_haematite::HaematiteStore::create_with_shard_count
 /// [`HaematiteStore::open_or_create_distributed`]: aion_store_haematite::HaematiteStore::open_or_create_distributed
-#[cfg(feature = "haematite-backend")]
 async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, ServerError> {
     // Required HERE, at the only seam that consumes it: haematite is the only
     // backend with a node cache, so a `memory` or `libsql` deployment is never
@@ -2143,14 +2060,13 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
     // Construction (and, for the distributed path, the off-runtime endpoint bind)
     // must not stall the async runtime, so run it on the blocking pool. The
     // distributed constructor itself steps onto a bare thread for the bind.
-    let (store, responder) =
-        tokio::task::spawn_blocking(move || {
-            build_haematite_store(&data_dir, shard_count, cluster, node_cache_budget)
-        })
-        .await
-            .map_err(|error| ServerError::Config {
-                message: format!("haematite store initialization task failed: {error}"),
-            })??;
+    let (store, responder) = tokio::task::spawn_blocking(move || {
+        build_haematite_store(&data_dir, shard_count, cluster, node_cache_budget)
+    })
+    .await
+    .map_err(|error| ServerError::Config {
+        message: format!("haematite store initialization task failed: {error}"),
+    })??;
 
     // Gate the coordinator bootstrap on real ownership: a distributed node that
     // does NOT own the coordinator's shard must not seed/fence it (AA-4-4). A
@@ -2213,7 +2129,6 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
 /// Every shard is still eagerly materialized and the capability retained, but on
 /// those targets neither action confines later pathname I/O. A descriptor-relative
 /// Haematite constructor and backend I/O remain the long-term fix.
-#[cfg(feature = "haematite-backend")]
 fn build_haematite_store(
     data_dir: &str,
     shard_count: usize,
@@ -2229,7 +2144,6 @@ fn build_haematite_store(
     build_haematite_store_with_hook(data_dir, shard_count, cluster, node_cache_budget, || Ok(()))
 }
 
-#[cfg(feature = "haematite-backend")]
 fn build_haematite_store_with_hook(
     data_dir: &str,
     shard_count: usize,
@@ -2303,12 +2217,8 @@ fn build_haematite_store_with_hook(
         let store = if backend_path.join("config.json").exists() {
             HaematiteStore::open(&backend_path).map_err(ServerError::from)?
         } else {
-            HaematiteStore::create_with_shard_count(
-                &backend_path,
-                shard_count,
-                node_cache_budget,
-            )
-            .map_err(ServerError::from)?
+            HaematiteStore::create_with_shard_count(&backend_path, shard_count, node_cache_budget)
+                .map_err(ServerError::from)?
         };
         store.materialize_all_shards().map_err(ServerError::from)?;
         private_root
@@ -2329,14 +2239,13 @@ fn build_haematite_store_with_hook(
             .collect(),
         timeout: HAEMATITE_CLUSTER_OP_TIMEOUT,
     };
-    let (store, responder) =
-        HaematiteStore::open_or_create_distributed(
-            &backend_path,
-            shard_count,
-            boot,
-            node_cache_budget,
-        )
-        .map_err(ServerError::from)?;
+    let (store, responder) = HaematiteStore::open_or_create_distributed(
+        &backend_path,
+        shard_count,
+        boot,
+        node_cache_budget,
+    )
+    .map_err(ServerError::from)?;
     store.materialize_all_shards().map_err(ServerError::from)?;
     private_root
         .harden_tree()
@@ -2345,7 +2254,6 @@ fn build_haematite_store_with_hook(
     Ok((store, Some(responder)))
 }
 
-#[cfg(feature = "haematite-backend")]
 fn private_store_mode_error(data_dir: &str, error: &std::io::Error) -> ServerError {
     ServerError::Config {
         message: format!(
@@ -2355,19 +2263,7 @@ fn private_store_mode_error(data_dir: &str, error: &std::io::Error) -> ServerErr
 }
 
 /// Per-operation quorum/election timeout for the distributed haematite backend.
-#[cfg(feature = "haematite-backend")]
 const HAEMATITE_CLUSTER_OP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// Reject `backend = haematite` cleanly when the optional `haematite-backend`
-/// feature is not compiled in, so a default build gives a precise operator
-/// error instead of a silent fallthrough.
-#[cfg(not(feature = "haematite-backend"))]
-fn connect_haematite_store_unavailable() -> Result<ConnectedStore, ServerError> {
-    Err(ServerError::Config {
-        message: "store.backend = haematite requires the aion-server `haematite-backend` feature"
-            .to_owned(),
-    })
-}
 
 /// The NOI-6 intervention transport used when no push transport is compiled in.
 ///
@@ -2705,7 +2601,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "haematite-backend")]
     #[tokio::test(flavor = "multi_thread")]
     async fn connect_store_haematite_round_trips_through_event_store()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2778,12 +2673,11 @@ mod tests {
     /// Roomy enough that no fixture here can reach it, so these stay boot-path
     /// and data-root tests rather than accidental cache-eviction tests. It is a
     /// TEST value, not a default: production reads the operator's ruling.
-    #[cfg(feature = "haematite-backend")]
     fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, Box<dyn std::error::Error>> {
         Ok(haematite::NodeCacheBudget::bytes(1 << 30)?)
     }
 
-    #[cfg(all(feature = "haematite-backend", unix))]
+    #[cfg(unix)]
     #[test]
     fn haematite_root_swap_before_first_backend_touch_cannot_redirect_writes()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2798,8 +2692,12 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) =
-            super::build_haematite_store_with_hook(configured, 4, None, test_node_cache_budget()?, || {
+        let (store, responder) = super::build_haematite_store_with_hook(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            || {
                 // The server has acquired and hardened `configured_root`, but
                 // Haematite has not opened or created anything. Replace the
                 // ambient name with an attacker-controlled symlink at exactly
@@ -2807,7 +2705,8 @@ mod tests {
                 std::fs::rename(&configured_root, &held_root)?;
                 symlink(&outside, &configured_root)?;
                 Ok(())
-            })?;
+            },
+        )?;
         assert!(responder.is_none());
 
         let outside_entries = std::fs::read_dir(&outside)?.collect::<Result<Vec<_>, _>>()?;
@@ -2832,10 +2731,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(
-        feature = "haematite-backend",
-        any(target_os = "linux", target_os = "android")
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[tokio::test]
     async fn proc_fd_backend_path_survives_a_post_startup_root_swap()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2854,7 +2750,8 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) =
+            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         std::fs::rename(&configured_root, &held_root)?;
         symlink(&capture, &configured_root)?;
@@ -2891,11 +2788,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(
-        feature = "haematite-backend",
-        unix,
-        not(any(target_os = "linux", target_os = "android"))
-    ))]
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     #[test]
     fn path_ambient_haematite_refuses_group_or_world_writable_ancestors()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2915,7 +2808,9 @@ mod tests {
                 .to_str()
                 .ok_or("temporary data path was not UTF-8")?;
 
-            let Err(error) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?) else {
+            let Err(error) =
+                super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)
+            else {
                 return Err(format!("mode {mode:04o} ancestor was accepted").into());
             };
             let message = error.to_string();
@@ -2945,7 +2840,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "haematite-backend", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
     fn path_ambient_haematite_refuses_mutating_allow_acl_ancestor()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3001,7 +2896,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "haematite-backend", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
     fn path_ambient_haematite_accepts_the_euid_uuid_allow_ace()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3046,7 +2941,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "haematite-backend", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
     fn path_ambient_haematite_refuses_a_non_euid_user_uuid_allow_ace()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3103,7 +2998,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "haematite-backend", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
     fn path_ambient_haematite_accepts_a_deny_only_acl_ancestor()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3139,7 +3034,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "haematite-backend", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
     fn path_ambient_haematite_accepts_the_stock_home_acl_chain()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3158,18 +3053,15 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) =
+            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         drop(store);
         Ok(())
     }
 
-    #[cfg(all(
-        feature = "haematite-backend",
-        unix,
-        not(any(target_os = "linux", target_os = "android"))
-    ))]
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     #[test]
     fn path_ambient_haematite_accepts_an_owner_controlled_chain()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3185,7 +3077,8 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) =
+            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         for shard in 0..4 {
@@ -3224,7 +3117,6 @@ mod tests {
     /// explicit-no-default guard `observability.max_batch_events` uses, applied
     /// where the value is used (haematite is the only backend that has a node
     /// cache, so this is the seam that consumes the ruling).
-    #[cfg(feature = "haematite-backend")]
     #[tokio::test]
     async fn haematite_boot_refuses_without_a_node_cache_budget()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -3265,7 +3157,6 @@ mod tests {
     /// [`haematite::DatabaseConfig`] — observed where haematite records it, in
     /// the created database's own `config.json`, so the assertion cannot pass by
     /// a value that stopped short of `Database::create`.
-    #[cfg(feature = "haematite-backend")]
     #[tokio::test]
     async fn configured_node_cache_budget_reaches_the_created_database()
     -> Result<(), Box<dyn std::error::Error>> {

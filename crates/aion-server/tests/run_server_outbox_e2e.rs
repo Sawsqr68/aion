@@ -36,7 +36,8 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
     let (server, http, grpc) = run_server_harness(dir.path(), &db_path, &package_path).await?;
-    let reader = HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
 
     let (workflow_id, run_id) = start_over_http(http).await?;
     wait_for_history(&reader, &workflow_id, "fan-out scheduled", |events| {
@@ -107,7 +108,9 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path())?;
     let (server1, http1, grpc1) = run_server_harness(dir.path(), &db_path, &package_path).await?;
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let mut worker1 = WorkerSession::connect(grpc1).await?;
 
     let (workflow_id, run_id) = start_over_http(http1).await?;
@@ -181,7 +184,9 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
         Some((50, 100)),
     )
     .await?;
-    let reader = HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let mut worker = WorkerSession::connect(grpc).await?;
 
     let (workflow_id, run_id) = start_over_http(http).await?;

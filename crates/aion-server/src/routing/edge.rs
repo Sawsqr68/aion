@@ -329,7 +329,11 @@ mod tests {
     /// is already local, so there is nothing to remint toward.
     #[test]
     fn start_with_own_all_scope_uses_engine_mint() -> TestResult {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("ownall"), 4, test_node_cache_budget()?)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("ownall"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         // No set_owned_shards call → owned_shards() == None == owns all.
         assert_eq!(route_start(Some(&store)), RemintOutcome::EngineMint);
         Ok(())

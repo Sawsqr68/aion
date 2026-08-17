@@ -16,9 +16,12 @@ fn store(
     // cache-eviction tests. Not a default — production states its own.
     let node_cache_budget = haematite::NodeCacheBudget::bytes(1 << 30)
         .map_err(|error| format!("test node cache budget rejected: {error}"))?;
-    let store =
-        HaematiteStore::create_with_shard_count(dir.path().join("db"), shard_count, node_cache_budget)
-            .map_err(|error: StoreError| format!("store create failed: {error}"))?;
+    let store = HaematiteStore::create_with_shard_count(
+        dir.path().join("db"),
+        shard_count,
+        node_cache_budget,
+    )
+    .map_err(|error: StoreError| format!("store create failed: {error}"))?;
     Ok((store, dir))
 }
 

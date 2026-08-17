@@ -72,11 +72,11 @@
 //! Runtime-gated, never `#[ignore]`d (slow, spawns 4 OS processes + a 3-node cluster):
 //! ```text
 //! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
-//!   --features haematite-backend,liminal-transport \
+//!   --features liminal-transport \
 //!   --test lsub5b_osproc_kill9_failover_e2e -- --nocapture
 //! ```
 
-#![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
+#![cfg(all(unix, feature = "liminal-transport"))]
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
