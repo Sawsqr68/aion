@@ -282,17 +282,26 @@ impl HaematiteStore {
     /// their first generation creates the durable store and later generations
     /// cold-open the same bytes.
     ///
+    /// `node_cache_budget` is REQUIRED and has no default here for the same
+    /// reason it has none on [`create`](HaematiteStore::create): the byte
+    /// ceiling is the caller's deployment decision. It is consumed only on the
+    /// creating generation — an existing database carries the budget it was
+    /// created with.
+    ///
     /// # Errors
     ///
     /// Returns [`StoreError::Backend`] when haematite cannot create or open the
     /// database, or when the blocking constructor task cannot be joined.
-    pub async fn open_or_create(data_dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
+    pub async fn open_or_create(
+        data_dir: impl Into<PathBuf>,
+        node_cache_budget: NodeCacheBudget,
+    ) -> Result<Self, StoreError> {
         let data_dir = data_dir.into();
         tokio::task::spawn_blocking(move || {
             if data_dir.exists() {
                 Self::open(&data_dir)
             } else {
-                Self::create(data_dir)
+                Self::create(data_dir, node_cache_budget)
             }
         })
         .await

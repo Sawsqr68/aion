@@ -908,7 +908,7 @@ mod tests {
 
         // Seed the incident state: a terminal (Failed) workflow owning one
         // stranded Claimed outbox row.
-        let seeder = Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
+        let seeder = Arc::new(HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited).await?);
         let workflow_id = aion_core::WorkflowId::new_v4();
         let envelope = |seq: u64| EventEnvelope {
             seq,

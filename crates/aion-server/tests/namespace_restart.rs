@@ -70,7 +70,7 @@ struct Server {
 impl Server {
     async fn over(db_path: &Path, packages: Vec<Package>) -> Result<Self, TestError> {
         let store: Arc<dyn EventStore> =
-            Arc::new(HaematiteStore::open_or_create(db_path.to_path_buf()).await?);
+            Arc::new(HaematiteStore::open_or_create(db_path.to_path_buf(), haematite::NodeCacheBudget::Unlimited).await?);
         let mut schema = SearchAttributeSchema::new();
         schema.register(NAMESPACE_ATTRIBUTE, SearchAttributeType::String)?;
         schema.register(TASK_QUEUE_ATTRIBUTE, SearchAttributeType::String)?;

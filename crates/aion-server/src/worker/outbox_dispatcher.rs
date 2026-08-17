@@ -809,7 +809,7 @@ mod tests {
     /// One shared store handle drives both the dispatcher and the test
     /// assertions, so they observe the same rows without a second connection.
     async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, ServerError> {
-        HaematiteStore::open_or_create(unique_temp_path(name))
+        HaematiteStore::open_or_create(unique_temp_path(name), haematite::NodeCacheBudget::Unlimited)
             .await
             .map(Arc::new)
             .map_err(ServerError::from)

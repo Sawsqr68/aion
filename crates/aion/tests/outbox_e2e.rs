@@ -303,7 +303,7 @@ async fn started_and_suspended_at(
     ),
     Box<dyn std::error::Error>,
 > {
-    let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path(name)).await?);
+    let store = Arc::new(HaematiteStore::open_or_create(unique_temp_path(name), haematite::NodeCacheBudget::Unlimited).await?);
     let fired = Arc::new(AtomicBool::new(false));
     let engine = engine_over(&store, entry, &fired).await?;
     let (workflow_id, run_id) = start_fixture_workflow(&engine).await?;

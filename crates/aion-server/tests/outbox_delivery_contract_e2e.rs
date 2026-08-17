@@ -393,7 +393,7 @@ async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, TestError> {
         "aion-delivery-contract-{name}-{}-{nanos}.db",
         std::process::id()
     ));
-    HaematiteStore::open_or_create(path)
+    HaematiteStore::open_or_create(path, haematite::NodeCacheBudget::Unlimited)
         .await
         .map(Arc::new)
         .map_err(test_error)
