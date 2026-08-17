@@ -339,3 +339,7 @@ impl ActivityEventPublisher {
 #[cfg(test)]
 #[path = "activity_publisher_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "activity_publisher_batching_tests.rs"]
+mod batching_tests;

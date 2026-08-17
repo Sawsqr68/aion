@@ -1,0 +1,22 @@
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.06s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-e00dc87887e7853e)
+
+running 1 test
+test activity_publisher::batching_tests::the_transcript_drain_coalesces_events_into_batched_commits ... FAILED
+
+failures:
+
+---- activity_publisher::batching_tests::the_transcript_drain_coalesces_events_into_batched_commits stdout ----
+
+thread 'activity_publisher::batching_tests::the_transcript_drain_coalesces_events_into_batched_commits' (961709) panicked at crates/aion-server/src/activity_publisher_batching_tests.rs:189:5:
+64 queued transcript events must cost at most 4 durable commits at a batch size of 16; observed 64 — one commit per event is one whole-leaf rewrite per event, the write amplification of record
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    activity_publisher::batching_tests::the_transcript_drain_coalesces_events_into_batched_commits
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1126 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p aion-server --lib`
