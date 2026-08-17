@@ -968,3 +968,161 @@ async fn collect_under_with_timeout_expiry_cancels_all_and_replays_byte_identica
     .await?;
     Ok(())
 }
+
+// --- #42: settle order vs the recorded trail ---------------------------------
+
+/// Run `all_two` to a settled fan-out over a FRESH store, forcing the members
+/// to settle in exactly `release_order`, and return the settled run shape
+/// together with the recorded (ordinal, result) pairs.
+///
+/// Each gate is released only after the previous member's terminal is already
+/// in history, so the settle order is imposed by this function rather than
+/// raced for: the result is a function of `release_order` alone and carries no
+/// dependence on ambient machine load.
+async fn settled_trail_for_release_order(
+    release_order: [&str; 2],
+) -> Result<(Vec<String>, Vec<(u64, String)>), Box<dyn std::error::Error>> {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let gates = GateBoard::new();
+    let engine = engine_over(&store, "all_two", &gates).await?;
+    let (workflow_id, _) = start_parent(&engine).await?;
+
+    wait_for_history(&store, &workflow_id, "fan-out scheduled", |events| {
+        activity_event_count(events) == 4
+    })
+    .await?;
+    for (settled_so_far, key) in release_order.iter().enumerate() {
+        gates.release(key);
+        wait_for_history(
+            &store,
+            &workflow_id,
+            "the released member's terminal to be recorded",
+            |events| count_completed(events) == settled_so_far + 1,
+        )
+        .await?;
+    }
+    let settled = store.read_history(&workflow_id).await?;
+    wait_for("dispatcher tasks to finish", || {
+        gates.finished_dispatches() == 2
+    })
+    .await?;
+    engine.shutdown()?;
+
+    let pairs = settled
+        .iter()
+        .filter_map(|event| match event {
+            Event::ActivityCompleted {
+                activity_id,
+                result,
+                ..
+            } => Some((
+                activity_id.sequence_position(),
+                String::from_utf8_lossy(result.bytes()).into_owned(),
+            )),
+            _ => None,
+        })
+        .collect();
+    Ok((run_shape(&settled), pairs))
+}
+
+/// #42: one dependency-parallel layer, one deterministic dispatcher, two
+/// settle orders — the recorded durable trail must be the same trail.
+///
+/// The engine allocates the layer's activity ordinals once, contiguously, in
+/// written order (`nif_collect.rs::pin_or_allocate` +
+/// `dispatch_unscheduled`), so which member owns which ordinal never moves.
+/// What moves is the ORDER the members' terminal events are appended in: each
+/// completion task appends its own terminal when it lands, so the trail
+/// records settle order. Releasing the gates in the two possible orders is
+/// therefore the whole defect, reproduced without needing a loaded box.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_parallel_layer_records_one_trail_whichever_member_settles_first() -> TestResult {
+    let (written_order_shape, written_order_pairs) =
+        settled_trail_for_release_order(["a", "b"]).await?;
+    let (inverted_shape, inverted_pairs) = settled_trail_for_release_order(["b", "a"]).await?;
+
+    // The ordinal each member owns is fixed by written order in both runs:
+    // this is the assignment half of the invariant, and it already holds.
+    assert_eq!(
+        written_order_pairs,
+        vec![
+            (0, String::from("\"done-a\"")),
+            (1, String::from("\"done-b\"")),
+        ],
+        "written-order settle must bind ordinal 0 to member a and 1 to member b"
+    );
+    assert_eq!(
+        inverted_pairs
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>(),
+        written_order_pairs
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>(),
+        "inverted settle must bind the same result to the same ordinal"
+    );
+
+    // The trail half: the durable event sequence must not encode which member
+    // happened to settle first.
+    assert_eq!(
+        written_order_shape, inverted_shape,
+        "the same layer over the same deterministic dispatcher recorded two \
+         different durable trails purely because the members settled in a \
+         different order"
+    );
+    Ok(())
+}
+
+/// #42, the correctness question the trail divergence raises: does a history
+/// whose layer settled in INVERTED order still replay with every recorded
+/// result bound to the member that produced it?
+///
+/// This is the control arm for the test above. It records the inverted-settle
+/// history, restarts the engine over it, and requires replay to resolve the
+/// collect from recorded events alone — appending nothing, re-dispatching
+/// nothing — and to return the input-ordered result list. A red here would
+/// mean settle order corrupts replay; a green means the recorded ordinal, not
+/// the recorded position, is what binds a result to its branch.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_layer_settled_in_inverted_order_replays_each_result_onto_its_own_member() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let gates = GateBoard::new();
+    let engine = engine_over(&store, "all_two", &gates).await?;
+    let (workflow_id, run_id) = start_parent(&engine).await?;
+
+    wait_for_history(&store, &workflow_id, "fan-out scheduled", |events| {
+        activity_event_count(events) == 4
+    })
+    .await?;
+    // Member b settles FIRST — the inverted trail.
+    gates.release("b");
+    wait_for_history(&store, &workflow_id, "b's terminal recorded", |events| {
+        count_completed(events) == 1
+    })
+    .await?;
+    gates.release("a");
+    let settled = wait_for_history(&store, &workflow_id, "fan-out settled", |events| {
+        count_completed(events) == 2
+    })
+    .await?;
+    let shape = run_shape(&settled);
+    assert_eq!(shape[5], "6|acomp|1|\"done-b\"|1");
+    assert_eq!(shape[6], "7|acomp|0|\"done-a\"|1");
+    wait_for("dispatcher tasks to finish", || {
+        gates.finished_dispatches() == 2
+    })
+    .await?;
+    engine.shutdown()?;
+
+    restart_replay_and_finish(
+        &store,
+        "all_two",
+        &workflow_id,
+        &run_id,
+        &settled,
+        &json!(["\"done-a\"", "\"done-b\""]),
+    )
+    .await?;
+    Ok(())
+}

@@ -1,0 +1,24 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running tests/concurrency_e2e.rs (target/debug/deps/concurrency_e2e-427ea8b737e8bfa0)
+
+running 2 tests
+test a_layer_settled_in_inverted_order_replays_each_result_onto_its_own_member ... ok
+test a_parallel_layer_records_one_trail_whichever_member_settles_first ... FAILED
+
+failures:
+
+---- a_parallel_layer_records_one_trail_whichever_member_settles_first stdout ----
+
+thread 'a_parallel_layer_records_one_trail_whichever_member_settles_first' (5603209) panicked at crates/aion/tests/concurrency_e2e.rs:1068:5:
+assertion `left == right` failed: the same layer over the same deterministic dispatcher recorded two different durable trails purely because the members settled in a different order
+  left: ["1|started|aion_collect_fixture|{\"fixture\":\"input\"}", "2|sched|0|gated_ok:a|\"in\"", "3|astart|0|1", "4|sched|1|gated_ok:b|\"in\"", "5|astart|1|1", "6|acomp|0|\"done-a\"|1", "7|acomp|1|\"done-b\"|1"]
+ right: ["1|started|aion_collect_fixture|{\"fixture\":\"input\"}", "2|sched|0|gated_ok:a|\"in\"", "3|astart|0|1", "4|sched|1|gated_ok:b|\"in\"", "5|astart|1|1", "6|acomp|1|\"done-b\"|1", "7|acomp|0|\"done-a\"|1"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_parallel_layer_records_one_trail_whichever_member_settles_first
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.64s
+
+error: test failed, to rerun pass `-p aion-rs --test concurrency_e2e`
