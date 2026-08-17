@@ -141,6 +141,12 @@ async fn one_turn_costs_about_one_envelope_not_three() -> TestResult {
     let events = emitted_turn().await?;
     let base_bytes = serde_json::to_vec(&events[0])?.len();
     let turn_bytes = persisted_bytes(&events)?;
+    // Printed so the measurement is in the record on every run, not only when it regresses.
+    println!(
+        "one turn: {turn_bytes} B persisted; base frame {base_bytes} B; \
+         three full copies would be ~{} B",
+        base_bytes * 3
+    );
 
     assert!(
         turn_bytes < base_bytes * 2,

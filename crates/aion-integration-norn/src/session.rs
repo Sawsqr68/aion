@@ -20,6 +20,7 @@ use std::sync::Arc;
 use aion_core::{ActivityEvent, InterventionCapabilities, InterventionCommand, Payload};
 use aion_integrations::HarnessError;
 use aion_integrations::contract::AgentSession;
+use aion_integrations::envelope_delta::{Compaction, EnvelopeDeltaEncoder};
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
 };
@@ -111,12 +112,18 @@ async fn pump_loop<R, W>(
     W: AsyncWrite + Unpin + Send,
 {
     let mut worker_seq: u64 = 0;
+    // One encoder for the life of the pump. A provider repeats the whole response envelope —
+    // instructions block and all — in every lifecycle frame of a turn; this persists it once per
+    // turn and the rest as deltas against it. It never emits a delta it has not proved reproduces
+    // the frame byte for byte, so a frame it cannot compact is passed through exactly as before.
+    let mut envelopes = EnvelopeDeltaEncoder::new();
     loop {
         match connection.recv().await {
             Ok(Some(IncomingMessage::Notification(note))) => {
                 let params = note.params.unwrap_or(serde_json::Value::Null);
-                let event =
+                let mut event =
                     translate::notification_to_event(&identity, worker_seq, &note.method, &params);
+                record_compaction(&note.method, &envelopes.compact(&mut event));
                 worker_seq = worker_seq.saturating_add(1);
                 // A send failure means the consumer dropped the events stream; keep pumping so the
                 // result and acks still route, just stop forwarding events. Not an error.
@@ -139,6 +146,41 @@ async fn pump_loop<R, W>(
                 tracing::debug!(%error, "norn adapter: reader pump ended on transport error");
                 return;
             }
+        }
+    }
+}
+
+/// Records what compaction did with one frame.
+///
+/// A frame kept whole is the safe outcome, not the failure outcome — the stream is exactly what it
+/// would have been without compaction — but it is the outcome worth being able to see, because a
+/// provider shape that stopped compacting would otherwise be invisible.
+fn record_compaction(method: &str, compaction: &Compaction) {
+    match compaction {
+        Compaction::NotApplicable => {}
+        Compaction::BaseRecorded { base } => {
+            tracing::trace!(method, %base, "norn adapter: recorded a turn's base envelope");
+        }
+        Compaction::Compacted {
+            base,
+            full_bytes,
+            delta_bytes,
+        } => {
+            tracing::trace!(
+                method,
+                %base,
+                full_bytes,
+                delta_bytes,
+                "norn adapter: persisted a response frame as an envelope delta",
+            );
+        }
+        Compaction::FullRetained { base, reason } => {
+            tracing::debug!(
+                method,
+                %base,
+                ?reason,
+                "norn adapter: kept a response frame whole rather than compacting it",
+            );
         }
     }
 }
