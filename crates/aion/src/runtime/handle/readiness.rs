@@ -68,3 +68,13 @@ impl RuntimeHandle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::pending_await_deadline;
+
+    #[test]
+    fn recovered_pending_await_has_no_false_error_deadline() {
+        assert_eq!(pending_await_deadline(), None);
+    }
+}
