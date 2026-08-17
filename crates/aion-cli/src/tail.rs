@@ -478,6 +478,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn old_norn_response_turn_render_is_pinned_before_format_change() -> Result<()> {
+        let events: Vec<ActivityEvent> = serde_json::from_str(include_str!(
+            "../tests/fixtures/norn_response_turn_old.json"
+        ))?;
+        let rendered = events
+            .iter()
+            .map(render_event)
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+
+        assert_eq!(
+            rendered,
+            include_str!("../tests/fixtures/norn_response_turn_old.rendered.txt")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn prefix_keeps_attempt_and_supersession_visible() {
         let mut targets = vec![target(1), target(2)];
         mark_superseded(&mut targets);
