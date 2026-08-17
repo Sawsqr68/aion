@@ -176,6 +176,127 @@ fn seq_of_started(history: &[Event], wanted: u32) -> Option<u64> {
     })
 }
 
+fn adoption_offer_records(history: &[Event]) -> Vec<(u64, u32)> {
+    history
+        .iter()
+        .filter_map(|event| {
+            let value = serde_json::to_value(event).ok()?;
+            if value.get("type")?.as_str()? != "ActivityAdoptionOffered" {
+                return None;
+            }
+            let data = value.get("data")?;
+            Some((
+                data.get("envelope")?.get("seq")?.as_u64()?,
+                u32::try_from(data.get("attempt")?.as_u64()?).ok()?,
+            ))
+        })
+        .collect()
+}
+
+async fn recovery_offers_dangling_attempt_for_adoption(
+    paused: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+
+    // Life 1 leaves attempt 1 dangling exactly as a remote agent still owned by
+    // its worker does when only the server disappears. `Park` stands the old
+    // completion task down without manufacturing a terminal record.
+    let holder = ScriptedDispatcher::new(vec![Step::Park]);
+    let engine = engine_with(Arc::clone(&holder) as Arc<dyn ActivityDispatcher>, &store).await?;
+    let handle = engine
+        .start_workflow(
+            "retry_policy",
+            Payload::from_json(&json!({ "name": "Ada" }))?,
+            std::collections::HashMap::new(),
+            String::from("default"),
+        )
+        .await?;
+    await_history(
+        &store,
+        handle.workflow_id(),
+        "the live holder's dangling Started{1}",
+        |history| started_attempts(history) == vec![1],
+    )
+    .await?;
+    if paused {
+        engine
+            .pause_workflow(handle.workflow_id(), handle.run_id(), None, None)
+            .await?;
+        let history = store.read_history(handle.workflow_id()).await?;
+        assert_eq!(
+            aion_core::status_from_events(&history),
+            WorkflowStatus::Paused,
+            "fixture control: the dangling holder must cross boot as Paused: {history:#?}"
+        );
+    }
+    engine.shutdown()?;
+
+    // Life 2 replays through the same Recorder-owned dispatch seam. The
+    // adoption offer must retain attempt 1: no false failure and no invented
+    // attempt 2 are allowed before the surviving holder is joined.
+    let serving = ScriptedDispatcher::new(vec![Step::Succeed]);
+    let recovered =
+        engine_with(Arc::clone(&serving) as Arc<dyn ActivityDispatcher>, &store).await?;
+    if paused {
+        recovered
+            .resume_paused_workflow(handle.workflow_id(), handle.run_id(), None)
+            .await?;
+    }
+    let result = recovered
+        .result(handle.workflow_id(), handle.run_id())
+        .await?;
+    let payload = result.map_err(|error| format!("adopted run failed: {error:?}"))?;
+    let reply: serde_json::Value = serde_json::from_slice(payload.bytes())?;
+    assert_eq!(reply, json!("steady hello, Ada"));
+
+    let history = store.read_history(handle.workflow_id()).await?;
+    assert!(
+        supersession_records(&history).is_empty(),
+        "a live holder must never be recorded as superseded by server death: {history:#?}"
+    );
+    assert_eq!(
+        adoption_offer_records(&history),
+        vec![(
+            adoption_offer_records(&history)
+                .first()
+                .map(|(seq, _)| *seq)
+                .unwrap_or_default(),
+            1,
+        )],
+        "recovery must record exactly one explicit adoption offer for attempt 1: {history:#?}"
+    );
+    assert_eq!(
+        started_attempts(&history),
+        vec![1],
+        "adoption redelivers the dangling attempt; it does not invent a successor: {history:#?}"
+    );
+    assert_eq!(holder.seen_attempts(), vec![1]);
+    assert_eq!(serving.seen_attempts(), vec![1]);
+
+    recovered.shutdown()?;
+    Ok(())
+}
+
+/// #36 Running face: a server generation must offer its dangling remote
+/// attempt for adoption, not write the false server-death supersession that
+/// killed the observed Running incidents.
+#[tokio::test]
+async fn running_recovery_records_adoption_without_supersession()
+-> Result<(), Box<dyn std::error::Error>> {
+    recovery_offers_dangling_attempt_for_adoption(false).await
+}
+
+/// #36 Paused face: Paused histories admitted by the startup sweep have the
+/// same truthful adoption contract as Running histories.
+#[tokio::test]
+async fn paused_recovery_records_adoption_without_supersession()
+-> Result<(), Box<dyn std::error::Error>> {
+    recovery_offers_dangling_attempt_for_adoption(true).await
+}
+
 /// THE DEFECT: a server that dies with attempt 1 in flight leaves the
 /// attempt dangling forever — no terminal, no failure, nothing. The
 /// recovering server's re-dispatch must first record the honest
