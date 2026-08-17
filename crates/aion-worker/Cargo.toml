@@ -28,6 +28,7 @@ aion-proto = { version = "0.17.0", path = "../aion-proto", features = ["generate
 # Transcript events carry a producer-clock emission instant; the worker stamps
 # one per line of command output it streams.
 chrono = { workspace = true }
+dashmap = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
 prost = { workspace = true }
