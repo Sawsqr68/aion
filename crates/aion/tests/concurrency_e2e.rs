@@ -27,6 +27,14 @@ use aion_package::{
 use aion_store::{EventStore, InMemoryStore};
 use serde_json::json;
 
+// #42: the recast pin below compares through the differential's own
+// comparison, so it uses the very modules `awl_bc4_differential` uses rather
+// than a second implementation that could drift from them.
+#[path = "common/terminal_order.rs"]
+mod terminal_order;
+#[path = "common/trail_norm.rs"]
+mod trail_norm;
+
 const COLLECT_MODULE: &str = "aion_collect_fixture";
 const COLLECT_BEAM: &[u8] = include_bytes!("fixtures/aion_collect_fixture.beam");
 const COLLECT_SOURCE: &[u8] = include_bytes!("fixtures/aion_collect_fixture.erl");
@@ -972,8 +980,7 @@ async fn collect_under_with_timeout_expiry_cancels_all_and_replays_byte_identica
 // --- #42: settle order vs the recorded trail ---------------------------------
 
 /// Run `all_two` to a settled fan-out over a FRESH store, forcing the members
-/// to settle in exactly `release_order`, and return the settled run shape
-/// together with the recorded (ordinal, result) pairs.
+/// to settle in exactly `release_order`, and return the settled history.
 ///
 /// Each gate is released only after the previous member's terminal is already
 /// in history, so the settle order is imposed by this function rather than
@@ -981,7 +988,7 @@ async fn collect_under_with_timeout_expiry_cancels_all_and_replays_byte_identica
 /// dependence on ambient machine load.
 async fn settled_trail_for_release_order(
     release_order: [&str; 2],
-) -> Result<(Vec<String>, Vec<(u64, String)>), Box<dyn std::error::Error>> {
+) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let gates = GateBoard::new();
     let engine = engine_over(&store, "all_two", &gates).await?;
@@ -1007,8 +1014,30 @@ async fn settled_trail_for_release_order(
     })
     .await?;
     engine.shutdown()?;
+    Ok(settled)
+}
 
-    let pairs = settled
+/// The `sched` anchors of a trail, as `(ordinal, activity_type)` in recorded
+/// order — the command-stream half of the invariant, which no normalizer is
+/// permitted to touch.
+fn scheduled_anchors(history: &[Event]) -> Vec<(u64, String)> {
+    history
+        .iter()
+        .filter_map(|event| match event {
+            Event::ActivityScheduled {
+                activity_id,
+                activity_type,
+                ..
+            } => Some((activity_id.sequence_position(), activity_type.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The recorded `(ordinal, result)` bindings, keyed so two trails compare
+/// regardless of the order their terminals landed in.
+fn ordinal_bindings(history: &[Event]) -> std::collections::BTreeMap<u64, String> {
+    history
         .iter()
         .filter_map(|event| match event {
             Event::ActivityCompleted {
@@ -1021,55 +1050,88 @@ async fn settled_trail_for_release_order(
             )),
             _ => None,
         })
-        .collect();
-    Ok((run_shape(&settled), pairs))
+        .collect()
 }
 
-/// #42: one dependency-parallel layer, one deterministic dispatcher, two
-/// settle orders — the recorded durable trail must be the same trail.
+/// The ordinals of the recorded terminals in the order they were appended —
+/// i.e. the settle order the trail happens to have recorded.
+fn settle_order(history: &[Event]) -> Vec<u64> {
+    history
+        .iter()
+        .filter_map(|event| match event {
+            Event::ActivityCompleted { activity_id, .. } => Some(activity_id.sequence_position()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #42, the permanent pin: one dependency-parallel layer settled in BOTH
+/// orders records one trail — the invariant, not the enumeration.
 ///
 /// The engine allocates the layer's activity ordinals once, contiguously, in
-/// written order (`nif_collect.rs::pin_or_allocate` +
-/// `dispatch_unscheduled`), so which member owns which ordinal never moves.
-/// What moves is the ORDER the members' terminal events are appended in: each
-/// completion task appends its own terminal when it lands, so the trail
-/// records settle order. Releasing the gates in the two possible orders is
-/// therefore the whole defect, reproduced without needing a loaded box.
+/// written order (`nif_collect.rs::pin_or_allocate` + `dispatch_unscheduled`),
+/// so which member owns which ordinal never moves. What legitimately moves is
+/// the ORDER the members' terminals are appended in: each completion task
+/// appends its own when it lands. Recording a higher ordinal's terminal before
+/// a lower one has resolved is not an accident — it is what lets `collect_all`
+/// fail fast and cancel a still-running sibling, pinned directly below by
+/// `collect_all_fail_fast_cancels_unresolved_and_replays_byte_identically`.
+///
+/// So this asserts the four properties the design DOES promise, over two runs
+/// that genuinely settled in opposite orders:
+///
+/// 1. both settle orders actually occurred (otherwise the rest is vacuous);
+/// 2. the `sched` anchors are identical — the command stream never moves;
+/// 3. every ordinal binds the same result in both runs;
+/// 4. the canonically ordered, identity-normalized trails are EQUAL.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_parallel_layer_records_one_trail_whichever_member_settles_first() -> TestResult {
-    let (written_order_shape, written_order_pairs) =
-        settled_trail_for_release_order(["a", "b"]).await?;
-    let (inverted_shape, inverted_pairs) = settled_trail_for_release_order(["b", "a"]).await?;
+    let written_order = settled_trail_for_release_order(["a", "b"]).await?;
+    let inverted = settled_trail_for_release_order(["b", "a"]).await?;
 
-    // The ordinal each member owns is fixed by written order in both runs:
-    // this is the assignment half of the invariant, and it already holds.
+    // 1. The experiment really did run both arms. Without this the equality
+    //    below could pass because the gate seam silently stopped imposing an
+    //    order and both runs settled the same way.
     assert_eq!(
-        written_order_pairs,
-        vec![
-            (0, String::from("\"done-a\"")),
-            (1, String::from("\"done-b\"")),
-        ],
-        "written-order settle must bind ordinal 0 to member a and 1 to member b"
+        settle_order(&written_order),
+        vec![0, 1],
+        "the a-then-b arm must have recorded member a's terminal first"
     );
     assert_eq!(
-        inverted_pairs
-            .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>(),
-        written_order_pairs
-            .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>(),
-        "inverted settle must bind the same result to the same ordinal"
+        settle_order(&inverted),
+        vec![1, 0],
+        "the b-then-a arm must have recorded member b's terminal first"
     );
 
-    // The trail half: the durable event sequence must not encode which member
-    // happened to settle first.
+    // 2. The command stream is identical: same anchors, same ordinals, same
+    //    written order. This is the half the normalizer may never touch.
     assert_eq!(
-        written_order_shape, inverted_shape,
-        "the same layer over the same deterministic dispatcher recorded two \
-         different durable trails purely because the members settled in a \
-         different order"
+        scheduled_anchors(&written_order),
+        scheduled_anchors(&inverted),
+        "settle order must never perturb the recorded sched anchors"
+    );
+
+    // 3. Every ordinal binds the result its own member produced, both ways.
+    let expected_bindings: std::collections::BTreeMap<u64, String> = [
+        (0, String::from("\"done-a\"")),
+        (1, String::from("\"done-b\"")),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(ordinal_bindings(&written_order), expected_bindings);
+    assert_eq!(ordinal_bindings(&inverted), expected_bindings);
+
+    // 4. Through the differential's own comparison — the canonical order over
+    //    concurrent terminals, then the identity normalizer, the same two
+    //    functions in the same order `driver.rs` uses — the two trails are one
+    //    trail.
+    let written_order_trail =
+        trail_norm::normalized_trail(&terminal_order::canonical_terminal_order(&written_order))?;
+    let inverted_trail =
+        trail_norm::normalized_trail(&terminal_order::canonical_terminal_order(&inverted))?;
+    assert_eq!(
+        written_order_trail, inverted_trail,
+        "two settle orders of one parallel layer must normalize to one trail"
     );
     Ok(())
 }

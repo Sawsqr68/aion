@@ -1,5 +1,23 @@
 # Finding — the BC-4 differential gate cannot distinguish, and is red on main
 
+> **STATUS: RESOLVED 2026-08-18** (was: Filed, not fixed). Resolved by the
+> aion#42 lane and the steward's disposition
+> (`gate-logs/42-fork-ordering/DISPOSITION.md`). This finding read the
+> mechanism correctly on the first pass — "two concurrent branches landing in
+> the opposite order — the trail is being compared without a total order over
+> concurrent events" — and the remedy it proposed below ("sort fork branches by
+> a stable key, not by arrival") is what shipped, scoped to directly adjacent
+> activity terminals in `crates/aion/tests/common/terminal_order.rs`. Its
+> instruction "**Do not** widen the `excluded` set to make it pass" was
+> honoured: `EXCLUDED_OUT_OF_ORACLE` did not grow. #42 added what this finding
+> could not: a load-independent reproduction, proof that the ordinal ASSIGNMENT
+> half was intact all along, and proof that replay was never at risk because it
+> binds by ordinal and not by position. Its second defect — that
+> `cargo test -p aion-rs` stops after the first failing target, so `TEST_EXIT=$?`
+> is not optional — is superseded by the estate's three-leg extraction standard,
+> which runs `--no-fail-fast` and reports machine-readable finding lines.
+> The sampling warning at the foot of this file stands unamended and still binds.
+
 **Found:** 2026-08-06, incidentally, while establishing a baseline for the #7 build.
 **Tree:** `9189ba585` (origin/main).
 **Target:** `cargo test -p aion-rs --test awl_bc4_differential`,
@@ -103,10 +121,18 @@ oracle into a quiet one.
 
 ## Disposition
 
-Filed, not fixed. It is outside the #7 lane and outside Tom's six-issue list;
-taking it silently would be inventing work. It is recorded here so the next
-seat does not re-derive it, and so no one reads a single BC-4 run as evidence
-in either direction.
+**RESOLVED 2026-08-18 by aion#42.** ~~Filed, not fixed.~~ The original reason
+for parking it stands as written and is left here unedited:
+
+> Filed, not fixed. It is outside the #7 lane and outside Tom's six-issue list;
+> taking it silently would be inventing work. It is recorded here so the next
+> seat does not re-derive it, and so no one reads a single BC-4 run as evidence
+> in either direction.
+
+That park held for twelve days and cost five red batteries before #42 was
+opened on the same mechanism. The resolution is in
+`gate-logs/42-fork-ordering/` (charter, disposition, REPORT.md, battery) and in
+`crates/aion/tests/common/terminal_order.rs` with its red controls.
 
 **Anyone citing a BC-4 divergence count as evidence must state how many samples
 they took.** One is never enough.

@@ -2,8 +2,32 @@
 //! normalized-trail divergence (fixture, event index, JSON pointer, both
 //! values) and every out-of-intersection refusal (fixture, refusal text).
 //!
-//! Decision 11 is law: a divergence is never normalized away. The
-//! differential asserts on an EMPTY divergence set with the full report in
+//! Decision 11 is law, as amended by the aion#42 disposition (2026-08-18): **a
+//! divergence in a PROMISED property is never normalized away** — and the
+//! position of two concurrent activity terminals relative to each other is not
+//! one of the promised properties.
+//!
+//! The original wording ("a divergence is never normalized away") read every
+//! byte of a recorded trail as contractual. It is not. The durability design
+//! grants a parallel layer exactly one freedom: each member's completion task
+//! appends its own terminal when it lands, so settle order shows up in the
+//! trail. `durability/cursor.rs` calls a parallel activity's interleaved events
+//! "an interleaving artifact, not a command-stream divergence", replay binds a
+//! recorded result to its call by ORDINAL and never by position, and out-of-
+//! ordinal terminal recording is what lets `collect_all` fail fast and cancel a
+//! still-running sibling. Comparing that position asserted the enumeration
+//! rather than the invariant, and cost five red batteries on a defect that was
+//! never there (see #42's REPORT.md and the 2026-08-06 finding it resolves).
+//!
+//! So `common/terminal_order.rs` puts adjacent activity terminals in canonical
+//! ordinal-keyed order before the identity normalizer runs, and NOTHING else
+//! moves — not `sched` anchors, not signals, not child terminals, not
+//! lifecycle events. The prohibition is unchanged in force everywhere else:
+//! the normalizer is never extended to make a red case green, and the four
+//! literal defect shapes the canonical order is deliberately NOT blind to are
+//! pinned as red controls in `terminal_order_controls.rs`.
+//!
+//! The differential asserts on an EMPTY divergence set with the full report in
 //! the failure message, so any sixth differing field family surfaces loudly
 //! for the Fable seat to adjudicate. Refusals are compared against a pinned
 //! expected list (ratchet style), so intersection shrinkage is equally loud.

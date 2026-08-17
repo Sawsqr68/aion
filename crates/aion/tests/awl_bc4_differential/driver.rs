@@ -403,14 +403,23 @@ fn fold_runs(
         );
         return;
     }
-    let reference_trail = match crate::trail_norm::normalized_trail(&reference.trail) {
+    // #42: concurrent activity terminals are put in their canonical
+    // ordinal-keyed order BEFORE the identity normalizer runs. That position is
+    // settle order — the one freedom the durability design grants a recorded
+    // trail (see `common/terminal_order.rs`) — so comparing it would assert the
+    // enumeration rather than the invariant. Every promised property still
+    // compares positionally afterwards, and the four literal defect shapes this
+    // is NOT blind to are pinned in `terminal_order_controls.rs`.
+    let reference_canonical = crate::terminal_order::canonical_terminal_order(&reference.trail);
+    let direct_canonical = crate::terminal_order::canonical_terminal_order(&direct.trail);
+    let reference_trail = match crate::trail_norm::normalized_trail(&reference_canonical) {
         Ok(trail) => trail,
         Err(error) => {
             report.record_infra(name, &format!("reference trail serialize: {error}"));
             return;
         }
     };
-    let direct_trail = match crate::trail_norm::normalized_trail(&direct.trail) {
+    let direct_trail = match crate::trail_norm::normalized_trail(&direct_canonical) {
         Ok(trail) => trail,
         Err(error) => {
             report.record_infra(name, &format!("direct trail serialize: {error}"));

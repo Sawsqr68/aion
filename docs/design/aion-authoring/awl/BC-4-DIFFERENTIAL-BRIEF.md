@@ -41,6 +41,23 @@ normalized_trail(&b)?`.
    backends is a divergence to adjudicate — NEVER extend the normalizer to
    make a red case green.**
 
+   > **Amended 2026-08-18 by the aion#42 disposition.** Decision 11 governs
+   > PROMISED properties, and the position of two concurrent activity
+   > terminals relative to each other is not one. A dependency-parallel
+   > layer's members complete concurrently and each records its own terminal
+   > when it lands, so the trail carries settle order; replay binds a recorded
+   > result to its call by ORDINAL, never by position, and recording a higher
+   > ordinal's terminal first is what lets `collect_all` fail fast and cancel a
+   > still-running sibling. A SECOND normalizer,
+   > `crates/aion/tests/common/terminal_order.rs`, therefore puts directly
+   > adjacent activity terminals in canonical ordinal-keyed order before the
+   > identity normalizer runs. Its scope is exactly that: no `sched` anchor, no
+   > signal, no child terminal, no lifecycle event ever moves, and a terminal
+   > never crosses a non-terminal. The prohibition above is otherwise
+   > untouched, and the shapes the canonical order must stay blind to are
+   > pinned as red controls in
+   > `awl_bc4_differential/terminal_order_controls.rs`.
+
 2. **The differential harness** over the covered ratchet
    (`crates/aion-awl/src/mir/covered.rs`, currently 70 entries). New
    integration test root `crates/aion/tests/awl_bc4_differential.rs` fanning
@@ -49,8 +66,14 @@ normalized_trail(&b)?`.
    fixture: build both packages, run both, compare normalized trails.
    - Fixtures whose steps dispatch activities get canned deterministic
      results from one dispatcher implementation used for BOTH runs (echo of
-     activity type + stable payload), so trails can only diverge on backend
-     behavior.
+     activity type + stable payload), so every VALUE in the trail can only
+     diverge on backend behavior. *(Amended 2026-08-18, aion#42: a
+     deterministic dispatcher does NOT make the trail's event ORDER a function
+     of backend behavior — once a layer dispatches concurrently, which member
+     records its terminal first is scheduling. That gap was sound while the
+     corpus was 70 fixtures and stopped being sound at 105, when the
+     dependency-parallel layers joined; it is closed by the canonical terminal
+     order, not by the dispatcher.)*
    - A fixture that `lower` refuses (`LowerError::Unsupported`/`Message`) is
      out-of-intersection: record it in the run report (see 5), skip, never
      fail. `lower` re-runs the checker internally; no separate check call.
