@@ -174,16 +174,29 @@ fn required_env(name: &str) -> TestResult<String> {
     std::env::var(name).map_err(|error| format!("missing helper env {name}: {error}").into())
 }
 
-fn helper_command(
-    binary: &Path,
-    tree: &Path,
-    home: &Path,
-    base_url: &str,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    ready: &Path,
-    done: &Path,
-) -> TestResult<Command> {
+#[derive(Clone, Copy)]
+struct HelperLaunch<'a> {
+    binary: &'a Path,
+    tree: &'a Path,
+    home: &'a Path,
+    base_url: &'a str,
+    workflow_id: &'a WorkflowId,
+    run_id: &'a RunId,
+    ready: &'a Path,
+    done: &'a Path,
+}
+
+fn helper_command(launch: HelperLaunch<'_>) -> TestResult<Command> {
+    let HelperLaunch {
+        binary,
+        tree,
+        home,
+        base_url,
+        workflow_id,
+        run_id,
+        ready,
+        done,
+    } = launch;
     let current = std::env::current_exe()?;
     let mut command = Command::new(current);
     command
@@ -269,7 +282,7 @@ fn listed_session_ids(binary: &Path, tree: &Path, home: &Path) -> TestResult<Vec
         .collect())
 }
 
-async fn stop_orphan(pid: u32) {
+fn stop_orphan(pid: u32) {
     if process_is_live(pid) {
         let _ = std::process::Command::new("/bin/kill")
             .args(["-KILL", &pid.to_string()])
@@ -299,16 +312,16 @@ async fn replacement_worker_reattaches_the_surviving_norn_session() -> TestResul
 
     let first_ready = root.path().join("first.ready");
     let first_done = root.path().join("first.done");
-    let mut first = helper_command(
-        &binary,
-        &tree,
-        &home,
-        &provider.base_url,
-        &workflow_id,
-        &run_id,
-        &first_ready,
-        &first_done,
-    )?
+    let mut first = helper_command(HelperLaunch {
+        binary: &binary,
+        tree: &tree,
+        home: &home,
+        base_url: &provider.base_url,
+        workflow_id: &workflow_id,
+        run_id: &run_id,
+        ready: &first_ready,
+        done: &first_done,
+    })?
     .spawn()?;
     wait_for_path(&first_ready, "the first worker to start Norn").await?;
     wait_for_accepted(&provider.accepted, 1).await?;
@@ -328,16 +341,16 @@ async fn replacement_worker_reattaches_the_surviving_norn_session() -> TestResul
 
     let second_ready = root.path().join("second.ready");
     let second_done = root.path().join("second.done");
-    let mut second = helper_command(
-        &binary,
-        &tree,
-        &home,
-        &provider.base_url,
-        &workflow_id,
-        &run_id,
-        &second_ready,
-        &second_done,
-    )?
+    let mut second = helper_command(HelperLaunch {
+        binary: &binary,
+        tree: &tree,
+        home: &home,
+        base_url: &provider.base_url,
+        workflow_id: &workflow_id,
+        run_id: &run_id,
+        ready: &second_ready,
+        done: &second_done,
+    })?
     .spawn()?;
     wait_for_path(&second_ready, "the replacement worker to reattach").await?;
     let post_session = std::fs::read_to_string(&second_ready)?;
@@ -362,6 +375,6 @@ async fn replacement_worker_reattaches_the_surviving_norn_session() -> TestResul
         "replacement worker must finish the resumed run"
     );
     wait_for_path(&second_done, "replacement result").await?;
-    stop_orphan(surviving_pid).await;
+    stop_orphan(surviving_pid);
     Ok(())
 }
