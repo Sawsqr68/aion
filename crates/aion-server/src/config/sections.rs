@@ -111,6 +111,35 @@ pub struct StoreConfig {
     /// node's `owned_shards` before recovery. Ignored by every non-haematite
     /// backend.
     pub cluster: Option<ClusterConfig>,
+    /// The byte ceiling the haematite node caches may hold.
+    /// **Required; no default** — the haematite boot path refuses to start
+    /// without it. Ignored by every other backend (only haematite has a node
+    /// cache), which is why it is required where it is USED rather than at
+    /// parse time: a `memory` or `libsql` deployment is not asked to rule on a
+    /// cache it does not have.
+    ///
+    /// A node is not a fixed-size thing — under byte-aware chunking a leaf
+    /// reaches the ~96KB class — so a cache bounded only by `max_entries`
+    /// carries a standing footprint of `entries x (whatever a node weighs)`,
+    /// unbounded in bytes by construction. This is the missing bound, and
+    /// haematite 0.8.2 refuses a `DatabaseConfig` that does not carry it.
+    ///
+    /// Deserialized through haematite's own wire shape, so there is exactly one
+    /// parser for this value estate-wide:
+    ///
+    /// ```toml
+    /// [store]
+    /// node_cache_budget = { bytes = 1073741824 }  # 1 GiB
+    /// # or, the pre-budget behaviour said out loud:
+    /// node_cache_budget = "unlimited"
+    /// ```
+    ///
+    /// Absent fails startup with [`STORE_NODE_CACHE_BUDGET_REQUIRED`]; a zero
+    /// byte count is refused by haematite at parse time (a zero ceiling admits
+    /// nothing, which is "disable the cache" and must be spelled differently).
+    ///
+    /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`]: super::STORE_NODE_CACHE_BUDGET_REQUIRED
+    pub node_cache_budget: Option<haematite::NodeCacheBudget>,
 }
 
 /// Distributed-cluster membership for the haematite backend, from `[store.cluster]`.
@@ -862,6 +891,9 @@ impl Default for StoreConfig {
             url: None,
             owned_shards: Vec::new(),
             data_dir: None,
+            // NOT a default: `None` is "the operator has not ruled", which the
+            // haematite boot path turns into a refusal to start, not a guess.
+            node_cache_budget: None,
             // 64, NOT 4096 (#187): raising the default to 4096 bricked every
             // fresh server — engine boot's scan_prefix materializes every
             // shard, then each haematite 0.4.0 commit fans out one thread +

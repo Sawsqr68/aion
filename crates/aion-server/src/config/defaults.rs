@@ -164,6 +164,17 @@ pub(crate) const OBSERVABILITY_MAX_EVENT_BYTES_REQUIRED: &str = "observability.m
 /// cap would retain no transcript at all).
 pub(crate) const OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED: &str = "observability.max_stream_events must be a positive integer when set (a zero per-stream cap would retain no transcript at all); omit observability.max_stream_events (or AION_OBSERVABILITY_MAX_STREAM_EVENTS) to use the default, or set it to a positive integer";
 
+/// Operator-facing message for an absent `store.node_cache_budget`.
+///
+/// There is NO default for this knob, in this crate or in haematite: a node is
+/// not a fixed-size thing (a leaf reaches the ~96KB class under byte-aware
+/// chunking), so a node cache bounded only by its entry count is unbounded in
+/// BYTES by construction. How much resident memory this process may spend on
+/// cached nodes is a deployment decision the engine cannot make, and
+/// `"unlimited"` — the pre-budget behaviour — is available as an explicit,
+/// visible-in-a-diff choice rather than as a silent fallback.
+pub const STORE_NODE_CACHE_BUDGET_REQUIRED: &str = "store.node_cache_budget is required and has no default: it is the byte ceiling the haematite node caches may hold, and a cache bounded only by entry count is unbounded in bytes (a leaf reaches the ~96KB class under byte-aware chunking, so a 1,024-entry cache can hold gigabytes). Set store.node_cache_budget (or AION_STORE_NODE_CACHE_BUDGET) to either `{ bytes = <positive integer> }` or the string \"unlimited\" — `unlimited` is the pre-budget behaviour, stated out loud";
+
 /// Operator-facing message for an absent or zero `observability.max_batch_events`.
 ///
 /// There is NO default for this knob: every durable transcript commit

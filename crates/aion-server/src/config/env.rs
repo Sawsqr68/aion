@@ -55,6 +55,9 @@ pub fn overlay(config: &mut ServerConfig) -> Result<(), ServerError> {
             "AION_STORE_SHARD_COUNT" => {
                 config.store.shard_count = parse_positive_usize(&name, &value)?;
             }
+            "AION_STORE_NODE_CACHE_BUDGET" => {
+                config.store.node_cache_budget = Some(parse_node_cache_budget(&name, &value)?);
+            }
             "AION_RUNTIME_SCHEDULER_THREADS" => {
                 config.runtime.scheduler_threads = parse_positive_usize(&name, &value)?;
             }
@@ -167,6 +170,41 @@ fn overlay_websocket(
 /// Split out so the observability knobs live together and each overlay stays
 /// within the per-function line budget. Unknown names fall through to
 /// [`overlay_outbox`] and ultimately the silent-ignore default.
+/// Parse `AION_STORE_NODE_CACHE_BUDGET` through haematite's OWN serde repr.
+///
+/// The variable's value is the TOML right-hand side the operator would write in
+/// `config.toml`, verbatim — `{ bytes = 1073741824 }` or `"unlimited"` — so the
+/// env override and the file spelling are one spelling, and there is no second
+/// byte-size parser anywhere in this crate to drift from haematite's. Wrapping
+/// the value in a one-key document is the whole of the translation; deciding
+/// what the value MEANS stays with the type that owns it.
+///
+/// # Errors
+///
+/// Returns [`ServerError::Config`] naming the variable when the value is not a
+/// budget haematite accepts (including a zero byte count, which haematite
+/// refuses because a zero ceiling admits nothing).
+fn parse_node_cache_budget(
+    name: &str,
+    value: &str,
+) -> Result<haematite::NodeCacheBudget, ServerError> {
+    /// The one-key document `value` is parsed as.
+    #[derive(serde::Deserialize)]
+    struct Document {
+        node_cache_budget: haematite::NodeCacheBudget,
+    }
+
+    let document: Document = toml::from_str(&format!("node_cache_budget = {value}"))
+        .map_err(|error| ServerError::Config {
+            message: format!(
+                "{name} must be a node cache budget written exactly as it would be in \
+                 config.toml — `{{ bytes = <positive integer> }}` or `\"unlimited\"` — got \
+                 `{value}`: {error}"
+            ),
+        })?;
+    Ok(document.node_cache_budget)
+}
+
 fn overlay_observability(
     config: &mut ServerConfig,
     name: &str,
