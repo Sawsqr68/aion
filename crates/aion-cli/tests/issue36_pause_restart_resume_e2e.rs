@@ -21,6 +21,13 @@
 //!    **Now**: recovery offers the dangling attempt for adoption, the worker
 //!    joins the execution it already owns, and the run completes.
 //!
+//! Both faces of the incident run here. The PAUSED face is the recorded one
+//! (paused at boot, which is why recovery never examined it). The RUNNING face
+//! is the same incident's scope-widening observation — no pause anywhere, just
+//! a server generation ending under a live builder — and it is recovered with
+//! no operator action at all. The record must be identical either way: that
+//! equality is the leg-4 requirement.
+//!
 //! # Isolation
 //!
 //! Nothing here can reach the estate. The server binary is the one cargo built
@@ -462,8 +469,29 @@ fn process_is_live(pid: u32) -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
+/// #36's Paused face, verbatim: pause → server death → restart → resume.
+///
+/// This is the incident as it was recorded — the run was Paused at boot, which
+/// is why recovery never examined it and the live builder was disowned.
 #[test]
 fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Result<(), TestError> {
+    incident_across_a_server_death(true)
+}
+
+/// #36's Running face, from the same incident's scope-widening observation: no
+/// pause anywhere in the story, just a server generation ending under a live
+/// builder. Recovery must offer the dangling attempt for adoption here exactly
+/// as it does for a Paused history — the leg-4 requirement, at the layer the
+/// incident was observed on.
+#[test]
+fn a_running_run_recovered_across_a_server_death_adopts_its_live_builder() -> Result<(), TestError>
+{
+    incident_across_a_server_death(false)
+}
+
+/// The incident, with `paused` selecting which face of it runs.
+fn incident_across_a_server_death(paused: bool) -> Result<(), TestError> {
+    let face = if paused { "paused" } else { "running" };
     let Some(norn_binary) = std::env::var_os(NORN_BIN_ENV)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
@@ -471,7 +499,7 @@ fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Resul
         let mut stderr = std::io::stderr();
         let _announced = writeln!(
             stderr,
-            "{SKIP_TOKEN} (PROVES NOTHING): issue #36's pause/restart/resume repro against a \
+            "{SKIP_TOKEN} (PROVES NOTHING): issue #36's {face} restart repro against a \
              real agent — not established by this run. Set {NORN_BIN_ENV} to a real agent \
              executable to run it."
         );
@@ -595,29 +623,38 @@ fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Resul
     );
     let opened_at = opened_at.clone();
 
-    // ---- The incident, step by step.
-    aion_json(
-        root,
-        &server_home,
-        &["--endpoint", &endpoint, "pause", &workflow_id],
-    )
-    .map_err(TestError::from)?;
-    wait_for(PHASE_DEADLINE, "the run to read back Paused", || {
-        Ok(aion_json(
+    // ---- The incident, step by step. The Paused face crosses the boot as a
+    // paused history (the one recovery never examined); the Running face
+    // crosses it Running, and is recovered with no operator action at all.
+    if paused {
+        aion_json(
             root,
             &server_home,
-            &["--endpoint", &endpoint, "describe", &workflow_id],
+            &["--endpoint", &endpoint, "pause", &workflow_id],
         )
-        .ok()
-        .filter(|description| {
-            description
-                .get("summary")
-                .and_then(|summary| summary.get("status"))
-                .and_then(serde_json::Value::as_str)
-                == Some("Paused")
-        })
-        .map(|_| ()))
-    })?;
+        .map_err(TestError::from)?;
+    }
+    let crossing_status = if paused { "Paused" } else { "Running" };
+    wait_for(
+        PHASE_DEADLINE,
+        "the run to read back the status it must cross the boot with",
+        || {
+            Ok(aion_json(
+                root,
+                &server_home,
+                &["--endpoint", &endpoint, "describe", &workflow_id],
+            )
+            .ok()
+            .filter(|description| {
+                description
+                    .get("summary")
+                    .and_then(|summary| summary.get("status"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some(crossing_status)
+            })
+            .map(|_| ()))
+        },
+    )?;
 
     server.kill9()?;
     assert!(
@@ -626,19 +663,21 @@ fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Resul
     );
 
     let mut restarted = boot_server(root, &server_home, http_port, &root.join("server-2.log"))?;
-    aion_json(
-        root,
-        &server_home,
-        &["--endpoint", &endpoint, "resume", &workflow_id],
-    )
-    .map_err(TestError::from)?;
+    if paused {
+        aion_json(
+            root,
+            &server_home,
+            &["--endpoint", &endpoint, "resume", &workflow_id],
+        )
+        .map_err(TestError::from)?;
+    }
 
     // The held call is what kept the builder alive across all of that. Let it
     // answer: the run must now finish through the session it already had.
     provider.release();
     let description = wait_for(
         PHASE_DEADLINE,
-        "the resumed run to reach a terminal",
+        "the recovered run to reach a terminal",
         || {
             worker.require_alive()?;
             restarted.require_alive()?;
@@ -668,7 +707,7 @@ fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Resul
             .and_then(|summary| summary.get("status"))
             .and_then(serde_json::Value::as_str),
         Some("Completed"),
-        "the resumed run must complete, not die against its own builder:\n{rendered}"
+        "the {face} run must complete, not die against its own builder:\n{rendered}"
     );
     assert!(
         !rendered.contains(SERVER_DEATH_REASON),
@@ -712,7 +751,7 @@ fn a_paused_run_resumed_across_a_server_death_adopts_its_live_builder() -> Resul
     assert_eq!(
         sessions,
         vec![(expected_session.clone(), opened_at)],
-        "the resumed run must continue the session its live builder opened, and open no other"
+        "the {face} run must continue the session its live builder opened, and open no other"
     );
 
     // Teardown: the worker drains its own agent, and both guards reap.

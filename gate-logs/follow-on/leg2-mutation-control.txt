@@ -19,20 +19,26 @@ warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dw
   = note: `#[warn(linker_messages)]` on by default
 
 warning: `aion-cli` (bin "aion") generated 1 warning
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.21s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.48s
      Running tests/issue36_pause_restart_resume_e2e.rs (target/debug/deps/issue36_pause_restart_resume_e2e-d579ceac0641aaf2)
 
-running 1 test
+running 2 tests
+test a_paused_run_resumed_across_a_server_death_adopts_its_live_builder ... FAILED
+test a_running_run_recovered_across_a_server_death_adopts_its_live_builder ... FAILED
 
-thread 'a_paused_run_resumed_across_a_server_death_adopts_its_live_builder' (1002440) panicked at crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs:673:5:
+failures:
+
+---- a_paused_run_resumed_across_a_server_death_adopts_its_live_builder stdout ----
+
+thread 'a_paused_run_resumed_across_a_server_death_adopts_its_live_builder' (1027078) panicked at crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs:712:5:
 a live builder must never be recorded as superseded by server death:
 {
   "summary": {
-    "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e",
+    "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63",
     "workflow_type": "issue36_resume",
     "status": "Completed",
-    "started_at": "2026-08-17T10:46:12.423298Z",
-    "ended_at": "2026-08-17T10:46:13.919894Z",
+    "started_at": "2026-08-17T10:52:11.812709Z",
+    "ended_at": "2026-08-17T10:52:13.293720Z",
     "parent": null
   },
   "history": [
@@ -41,14 +47,14 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 1,
-          "recorded_at": "2026-08-17T10:46:12.423298Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:11.812709Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "workflow_type": "issue36_resume",
         "input": {
           "question": "say adopted"
         },
-        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "run_id": "1522ef99-3cee-4624-91eb-0534834f7631",
         "parent_run_id": null,
         "package_version": "7b6ec5e007f4c52eb434a34f22496afd4ee2cf01e0d8656c824b5f95c6a78d9a"
       }
@@ -58,10 +64,10 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 2,
-          "recorded_at": "2026-08-17T10:46:12.423298Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:11.812709Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
-        "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e",
+        "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63",
         "attributes": {
           "aion.namespace": {
             "type": "String",
@@ -75,13 +81,13 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 3,
-          "recorded_at": "2026-08-17T10:46:12.423298Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:11.812709Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "timer_id": {
-          "Named": "deadline:c183b0b1-a438-4ca1-998d-59c4cbffe090"
+          "Named": "deadline:1522ef99-3cee-4624-91eb-0534834f7631"
         },
-        "fire_at": "2026-08-17T11:16:12.423298Z"
+        "fire_at": "2026-08-17T11:22:11.812709Z"
       }
     },
     {
@@ -89,8 +95,8 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 4,
-          "recorded_at": "2026-08-17T10:46:12.514813Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:11.907066Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "activity_id": 0,
         "activity_type": "ask",
@@ -106,8 +112,8 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 5,
-          "recorded_at": "2026-08-17T10:46:12.514813Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:11.907066Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "activity_id": 0,
         "attempt": 1
@@ -118,10 +124,10 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 6,
-          "recorded_at": "2026-08-17T10:46:12.750219Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:12.135728Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
-        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "run_id": "1522ef99-3cee-4624-91eb-0534834f7631",
         "reason": null,
         "operator": null
       }
@@ -131,8 +137,8 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 7,
-          "recorded_at": "2026-08-17T10:46:13.507169Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:12.933084Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "activity_id": 0,
         "error": {
@@ -148,10 +154,10 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 8,
-          "recorded_at": "2026-08-17T10:46:13.658658Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:13.126242Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
-        "run_id": "c183b0b1-a438-4ca1-998d-59c4cbffe090",
+        "run_id": "1522ef99-3cee-4624-91eb-0534834f7631",
         "operator": null
       }
     },
@@ -160,15 +166,15 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 9,
-          "recorded_at": "2026-08-17T10:46:13.866588Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:13.244618Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "activity_id": 0,
         "result": {
           "text": "adopted",
           "final_message": "adopted",
           "stop_reason": "end_turn",
-          "session_id": "9a80dfb1-0117-4369-8914-7c3849e5917e-ask"
+          "session_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63-ask"
         },
         "attempt": 1
       }
@@ -178,28 +184,201 @@ a live builder must never be recorded as superseded by server death:
       "data": {
         "envelope": {
           "seq": 10,
-          "recorded_at": "2026-08-17T10:46:13.919894Z",
-          "workflow_id": "9a80dfb1-0117-4369-8914-7c3849e5917e"
+          "recorded_at": "2026-08-17T10:52:13.293720Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
         },
         "result": {
           "outcome": "answered",
           "payload": {
             "reply": "adopted",
-            "session": "9a80dfb1-0117-4369-8914-7c3849e5917e-ask"
+            "session": "ec8a8711-2caf-4b07-973e-ba2fabf19e63-ask"
           }
         }
+      }
+    },
+    {
+      "type": "TimerCancelled",
+      "data": {
+        "envelope": {
+          "seq": 11,
+          "recorded_at": "2026-08-17T10:52:13.342886Z",
+          "workflow_id": "ec8a8711-2caf-4b07-973e-ba2fabf19e63"
+        },
+        "timer_id": {
+          "Named": "deadline:1522ef99-3cee-4624-91eb-0534834f7631"
+        },
+        "cause": "WorkflowIntent"
       }
     }
   ]
 }
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-test a_paused_run_resumed_across_a_server_death_adopts_its_live_builder ... FAILED
 
-failures:
+---- a_running_run_recovered_across_a_server_death_adopts_its_live_builder stdout ----
+
+thread 'a_running_run_recovered_across_a_server_death_adopts_its_live_builder' (1029151) panicked at crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs:712:5:
+a live builder must never be recorded as superseded by server death:
+{
+  "summary": {
+    "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3",
+    "workflow_type": "issue36_resume",
+    "status": "Completed",
+    "started_at": "2026-08-17T10:52:15.765359Z",
+    "ended_at": "2026-08-17T10:52:17.202938Z",
+    "parent": null
+  },
+  "history": [
+    {
+      "type": "WorkflowStarted",
+      "data": {
+        "envelope": {
+          "seq": 1,
+          "recorded_at": "2026-08-17T10:52:15.765359Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "workflow_type": "issue36_resume",
+        "input": {
+          "question": "say adopted"
+        },
+        "run_id": "07f86a21-1181-4b72-8cea-06a43d9c5084",
+        "parent_run_id": null,
+        "package_version": "7b6ec5e007f4c52eb434a34f22496afd4ee2cf01e0d8656c824b5f95c6a78d9a"
+      }
+    },
+    {
+      "type": "SearchAttributesUpdated",
+      "data": {
+        "envelope": {
+          "seq": 2,
+          "recorded_at": "2026-08-17T10:52:15.765359Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3",
+        "attributes": {
+          "aion.namespace": {
+            "type": "String",
+            "data": "default"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerStarted",
+      "data": {
+        "envelope": {
+          "seq": 3,
+          "recorded_at": "2026-08-17T10:52:15.765359Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "timer_id": {
+          "Named": "deadline:07f86a21-1181-4b72-8cea-06a43d9c5084"
+        },
+        "fire_at": "2026-08-17T11:22:15.765359Z"
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 4,
+          "recorded_at": "2026-08-17T10:52:15.847865Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "activity_id": 0,
+        "activity_type": "ask",
+        "input": {
+          "prompt": "say adopted"
+        },
+        "task_queue": "issue36_resume",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 5,
+          "recorded_at": "2026-08-17T10:52:15.847865Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "activity_id": 0,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityFailed",
+      "data": {
+        "envelope": {
+          "seq": 6,
+          "recorded_at": "2026-08-17T10:52:16.811783Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "activity_id": 0,
+        "error": {
+          "kind": "Retryable",
+          "message": "superseded:server-death",
+          "details": null
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 7,
+          "recorded_at": "2026-08-17T10:52:17.153746Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "activity_id": 0,
+        "result": {
+          "text": "adopted",
+          "final_message": "adopted",
+          "stop_reason": "end_turn",
+          "session_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3-ask"
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowCompleted",
+      "data": {
+        "envelope": {
+          "seq": 8,
+          "recorded_at": "2026-08-17T10:52:17.202938Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "result": {
+          "outcome": "answered",
+          "payload": {
+            "reply": "adopted",
+            "session": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3-ask"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerCancelled",
+      "data": {
+        "envelope": {
+          "seq": 9,
+          "recorded_at": "2026-08-17T10:52:17.237944Z",
+          "workflow_id": "c69e7e1e-b17f-4ad5-b872-2d005e88eda3"
+        },
+        "timer_id": {
+          "Named": "deadline:07f86a21-1181-4b72-8cea-06a43d9c5084"
+        },
+        "cause": "WorkflowIntent"
+      }
+    }
+  ]
+}
+
 
 failures:
     a_paused_run_resumed_across_a_server_death_adopts_its_live_builder
+    a_running_run_recovered_across_a_server_death_adopts_its_live_builder
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.82s
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.29s
 
 error: test failed, to rerun pass `-p aion-cli --test issue36_pause_restart_resume_e2e`
