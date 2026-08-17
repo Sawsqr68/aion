@@ -1,0 +1,6 @@
+    Checking haematite v0.8.3
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion-server)
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion-store-haematite)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 48.87s

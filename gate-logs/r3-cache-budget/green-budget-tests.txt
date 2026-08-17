@@ -1,0 +1,17 @@
+   Compiling beamr v0.17.1
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion-server)
+   Compiling haematite v0.8.2 (/Users/tom/Developer/ablative/stack/haematite/crates/haematite)
+   Compiling aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-r3-budget/crates/aion-store-haematite)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 50s
+────────────
+ Nextest run ID 82ce5e21-88e6-48ea-a593-2449aa2f37a1 with nextest profile: default
+    Starting 2 tests across 1 binary (1141 tests skipped)
+        PASS [   0.033s] (1/2) aion-server state::tests::haematite_boot_refuses_without_a_node_cache_budget
+        PASS [   0.097s] (2/2) aion-server state::tests::configured_node_cache_budget_reaches_the_created_database
+────────────
+     Summary [   0.118s] 2 tests run: 2 passed, 1141 skipped
