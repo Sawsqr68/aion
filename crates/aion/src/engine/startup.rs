@@ -1,7 +1,7 @@
 //! Startup recovery wiring used by `EngineBuilder::build()`: schedule
 //! coordinator bootstrap, active-workflow repopulation, and timer recovery.
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use chrono::Utc;
 
@@ -207,7 +207,11 @@ async fn repopulate_active_workflows(
     let catalog = &context.catalog;
     let registry = &context.registry;
     let supervision = &context.supervision;
-    for workflow_id in store.as_ref().list_active().await? {
+    let mut recoverable = store.as_ref().list_active().await?;
+    recoverable.extend(store.as_ref().list_paused().await?);
+    let mut seen = HashSet::new();
+    recoverable.retain(|workflow_id| seen.insert(workflow_id.clone()));
+    for workflow_id in recoverable {
         // Idempotent repopulation: a workflow already resident in this engine's
         // registry must not be re-spawned. At the boot path the registry is
         // empty, so this never fires; on the SS-5 failover re-run (adopting a
@@ -232,14 +236,14 @@ async fn repopulate_active_workflows(
             );
             continue;
         }
-        // #204: a run that was paused between the `list_active` snapshot and this
-        // per-run re-read projects `Paused` — non-terminal, so the `is_terminal`
-        // guard above does not catch it. A durably-`Paused` run must NOT be
-        // respawned (GATE-2): the dispatch hold (rebuilt from `list_paused`) keeps
-        // its outbox rows held and an operator `resume` respawns it. Excluding it on
-        // exact `!= Running` mirrors `list_active`'s own filter and closes the
-        // pause-during-recovery race.
-        if projected_status == WorkflowStatus::Paused {
+        // #36: an ordinary paused run stays non-resident, but Paused is not a
+        // blanket recovery exclusion. When a remote attempt is dangling, startup
+        // must replay far enough for its dispatcher/harness to adopt the surviving
+        // execution; otherwise the later operator resume is the first observer and
+        // falsely disowns live work as server death. The paused-runs dispatch hold
+        // remains in force, so unrelated held outbox rows are not released here.
+        if projected_status == WorkflowStatus::Paused && !history_needs_activity_adoption(&history)
+        {
             continue;
         }
         supervision.ensure_type_supervisor(workflow_type.clone())?;
@@ -320,6 +324,43 @@ async fn repopulate_active_workflows(
     }
 
     Ok(())
+}
+
+/// Whether history ends with at least one dispatched activity attempt that has
+/// no matching terminal record. These are the remote-agent executions recovery
+/// must offer to the adoption path for both Running and Paused workflows (#36).
+fn history_needs_activity_adoption(history: &[Event]) -> bool {
+    let mut dangling = HashSet::new();
+    for event in history {
+        match event {
+            Event::ActivityStarted {
+                activity_id,
+                attempt,
+                ..
+            } => {
+                dangling.insert((activity_id.clone(), *attempt));
+            }
+            Event::ActivityFailed {
+                activity_id,
+                attempt,
+                ..
+            }
+            | Event::ActivityCompleted {
+                activity_id,
+                attempt,
+                ..
+            }
+            | Event::ActivityCancelled {
+                activity_id,
+                attempt,
+                ..
+            } => {
+                dangling.remove(&(activity_id.clone(), *attempt));
+            }
+            _ => {}
+        }
+    }
+    !dangling.is_empty()
 }
 
 /// One resident workflow recovered by the AD seam, ready for registration.
