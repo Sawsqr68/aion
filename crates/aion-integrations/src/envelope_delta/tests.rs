@@ -513,3 +513,32 @@ fn applying_a_patch_to_the_wrong_base_errors_instead_of_half_patching() {
         Err(PatchError::BaseNotAnObject)
     );
 }
+
+#[test]
+fn an_ephemeral_envelope_frame_cannot_displace_a_durable_turns_base() {
+    let frames = turn();
+    let mut encoder = EnvelopeDeltaEncoder::new();
+    let mut base = raw_event(1, frames[0].clone());
+    encoder.compact(&mut base);
+    let mut delta = raw_event(3, frames[2].clone());
+    encoder.compact(&mut delta);
+
+    // An ephemeral frame of a DIFFERENT turn arrives between them. The encoder never recorded it,
+    // so the decoder must not either — otherwise the durable delta loses the base it needs.
+    let mut intruder_value = frames[0].clone();
+    if let Some(response) = intruder_value
+        .get_mut("response")
+        .and_then(Value::as_object_mut)
+    {
+        response.insert("id".to_owned(), json!("resp_other_turn"));
+    }
+    let mut intruder = raw_event(2, intruder_value);
+    intruder.ephemeral = true;
+
+    let mut decoder = EnvelopeDeltaDecoder::new();
+    assert_eq!(decoder.resolve(&base), ResolvedEnvelope::Verbatim);
+    assert_eq!(decoder.resolve(&intruder), ResolvedEnvelope::Verbatim);
+    let (resolved, unresolved) = decoder.resolve_event(&delta);
+    assert_eq!(unresolved, None, "the durable turn's base must survive");
+    assert_eq!(raw_value(&resolved), &frames[2]);
+}

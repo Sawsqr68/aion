@@ -118,6 +118,13 @@ impl EnvelopeDeltaDecoder {
         let Some(response_id) = wire::envelope_response_id(value) else {
             return ResolvedEnvelope::Verbatim;
         };
+        // An ephemeral frame is never persisted, so the encoder never recorded it as a base and a
+        // durable delta can never refer to one. Recording it here would break that symmetry: an
+        // ephemeral frame of a DIFFERENT turn would displace the base a durable delta still needs.
+        // The two halves must agree on what a base is, exactly.
+        if event.ephemeral {
+            return ResolvedEnvelope::Verbatim;
+        }
         self.record_base(slot, response_id, event.worker_seq, value);
         ResolvedEnvelope::Verbatim
     }
