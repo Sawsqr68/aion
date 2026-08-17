@@ -71,6 +71,7 @@ use crate::context::ActivityContext;
 use crate::error::WorkerError;
 use crate::protocol::ActivityTask;
 use crate::runtime::agent::spawn_dyn_agent;
+use crate::runtime::agent_flights::{AgentExecutionKey, AgentFlights};
 use crate::runtime::intervention::{ControlRegistry, SessionKey};
 use crate::runtime::liminal_drain::{DrainBinding, LiveWriter, spawn_event_drain};
 use crate::runtime::liminal_liveness::{LivenessPing, LivenessPong, SilenceMonitor};
@@ -374,6 +375,8 @@ pub struct LiminalActivityWorker {
     /// `with_intervention_capabilities`), because capabilities are needed to register
     /// the session in the [`ControlRegistry`] BEFORE the session starts.
     agent_capabilities: InterventionCapabilities,
+    /// Same `(workflow, activity)` redeliveries join the leader's one outcome.
+    agent_flights: Arc<AgentFlights<AgentDispatch>>,
     /// The shared live-connection slot every observability drain publishes
     /// through (#254). Seeded at connect with this connection's writer; the redial
     /// driver ([`serve_with_redial`](crate::serve_with_redial)) REPLACES it with a
@@ -497,6 +500,7 @@ impl LiminalActivityWorker {
             agent_harness: None,
             agent_activity_types: BTreeSet::new(),
             agent_capabilities: InterventionCapabilities::none(),
+            agent_flights: Arc::new(AgentFlights::default()),
             live_writer,
             drain_backoff,
             address: address.to_owned(),
@@ -900,6 +904,20 @@ impl LiminalActivityWorker {
         let Some(harness) = self.agent_harness.clone() else {
             return;
         };
+        let key = AgentExecutionKey::new(request.workflow_id.clone(), request.ordinal);
+        let delivery = AgentDispatch {
+            correlation_id,
+            request,
+            run_id,
+        };
+        let delivery = match self.agent_flights.join_or_lead(key.clone(), delivery) {
+            Ok(()) => {
+                tracing::info!("agent redelivery joined the live execution");
+                return;
+            }
+            Err(leader) => leader,
+        };
+        let flights = Arc::clone(&self.agent_flights);
         let control = self.control.clone();
         let capabilities = self.agent_capabilities.clone();
         let writer = self.client.writer_handle();
@@ -926,13 +944,13 @@ impl LiminalActivityWorker {
                 harness,
                 control,
                 capabilities,
+                AgentFlight {
+                    registry: flights,
+                    key,
+                },
                 writer,
                 drain,
-                AgentDispatch {
-                    correlation_id,
-                    request,
-                    run_id,
-                },
+                delivery,
             ));
         });
     }
@@ -1178,15 +1196,13 @@ async fn run_agent_dispatch(
     harness: Arc<dyn DynAgentHarness>,
     control: ControlRegistry,
     capabilities: InterventionCapabilities,
+    flight: AgentFlight,
     writer: PushWriter,
     drain: DrainBinding,
     dispatch: AgentDispatch,
 ) {
-    let AgentDispatch {
-        correlation_id,
-        request,
-        run_id,
-    } = dispatch;
+    let request = &dispatch.request;
+    let run_id = &dispatch.run_id;
     // The wire's one-based delivery attempt keys the session exactly as the
     // server binds the attempt's owner (`request_for_row` / the bridge stamp),
     // and the run keys it exactly as the server's `AttemptKey` does — the two
@@ -1210,10 +1226,10 @@ async fn run_agent_dispatch(
     // dequeue and answer liveness pings for the whole run — the connection
     // window adds nothing here, and the dispatch's own window arms the pump
     // exactly as before.
-    let _liveness = spawn_liveness_pump(writer.clone(), &request, None);
+    let _liveness = spawn_liveness_pump(writer.clone(), request, None);
     let spec = AgentRunSpec::new(
         request.workflow_id.clone(),
-        run_id,
+        run_id.clone(),
         activity_id,
         attempt,
         // The dispatched activity-type name is neutral run identity the harness may
@@ -1229,18 +1245,32 @@ async fn run_agent_dispatch(
     // A harness fault is a retryable activity failure, mapped as the gRPC driver does.
     let outcome =
         outcome.unwrap_or_else(|error| crate::runtime::agent::harness_error_to_outcome(&error));
+    let outcome = wire_outcome(outcome);
+    reply_agent_dispatch(&writer, dispatch, &outcome);
+    for follower in flight.registry.finish(&flight.key) {
+        reply_agent_dispatch(&writer, follower, &outcome);
+    }
+}
+
+/// Reply one delivery with the leader execution's terminal outcome.
+fn reply_agent_dispatch(
+    writer: &PushWriter,
+    dispatch: AgentDispatch,
+    outcome: &Result<String, String>,
+) {
+    let request = dispatch.request;
     let response = DispatchResponse {
         workflow_id: request.workflow_id.clone(),
         ordinal: request.ordinal,
         run_id: request.run_id.clone(),
         completion_token: request.completion_token.clone(),
-        outcome: wire_outcome(outcome),
+        outcome: outcome.clone(),
     };
     // Reply the terminal result to the server on the shared connection. A failed
     // reply (connection gone) is logged; the outbox re-drives the row on timeout.
     match serde_json::to_vec(&response) {
         Ok(payload) => {
-            if let Err(error) = writer.reply(correlation_id, payload) {
+            if let Err(error) = writer.reply(dispatch.correlation_id, payload) {
                 tracing::warn!(%error, "agent dispatch: failed to reply DispatchResponse");
             }
         }
@@ -1263,6 +1293,12 @@ struct AgentDispatch {
     /// (not the wire `Option`) because the session key and every transcript
     /// event this attempt emits are keyed on it.
     run_id: RunId,
+}
+
+/// One leader execution's shared join registry binding.
+struct AgentFlight {
+    registry: Arc<AgentFlights<AgentDispatch>>,
+    key: AgentExecutionKey,
 }
 
 /// Starts the automatic liveness pump for one liveness-TRACKED dispatch, or

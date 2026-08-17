@@ -2,8 +2,8 @@
 
 /// Harness-blind trait driver (NOI-4): `spawn_agent` drives any `AgentHarness`.
 pub mod agent;
-/// Same-execution single-flight coordination contract for liminal agent redeliveries (#36).
-#[cfg(all(feature = "liminal-transport", test))]
+/// Same-execution single-flight coordination for liminal agent redeliveries (#36).
+#[cfg(feature = "liminal-transport")]
 pub(crate) mod agent_flights;
 /// Typed activity dispatch and payload conversion helpers.
 pub mod dispatch;
