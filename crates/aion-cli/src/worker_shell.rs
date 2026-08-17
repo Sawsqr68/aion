@@ -746,24 +746,48 @@ step shout_second after greet_first
         Ok(())
     }
 
-    /// Waits for the spawned shell's pid file and returns the pid in it.
+    /// Waits for the spawned shell's pid file to hold a PARSEABLE pid, and
+    /// returns it.
+    ///
+    /// Existence is not readiness. The fixture shells write their pid with
+    /// `echo $$ > "$1"`, and the redirect creates and truncates the file before
+    /// `echo` writes into it — so a waiter keyed on `is_file()` can return
+    /// while the file is still empty and hand the reader an empty string
+    /// (`ParseIntError { kind: Empty }`, twice observed across full-workspace
+    /// batteries, never solo, because a loaded box widens the window). The
+    /// readiness condition is the one the caller actually needs: content that
+    /// parses.
+    ///
+    /// This returns the pid it parsed rather than leaving the caller to re-read
+    /// the file, so there is no second window between the check and the read.
     async fn wait_for_pid(path: &Path) -> Result<i32, Box<dyn Error>> {
         let deadline = Instant::now() + Duration::from_secs(5);
-        while !path.is_file() {
+        loop {
+            if let Some(pid) = try_read_pid(path) {
+                return Ok(pid);
+            }
             if Instant::now() >= deadline {
+                let observed = std::fs::read_to_string(path).unwrap_or_default();
                 return Err(io::Error::other(format!(
-                    "timed out waiting for pid file {}",
+                    "timed out waiting for a parseable pid in {} (last read {observed:?})",
                     path.display()
                 ))
                 .into());
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        read_pid(path)
     }
 
-    fn read_pid(path: &Path) -> Result<i32, Box<dyn Error>> {
-        Ok(std::fs::read_to_string(path)?.trim().parse()?)
+    /// The pid in `path`, or `None` while the file is absent, unwritten, or
+    /// holds anything that is not yet a whole integer.
+    ///
+    /// Every not-yet case collapses to `None` deliberately — they are all "keep
+    /// waiting" — and [`wait_for_pid`]'s deadline is what turns a permanent one
+    /// into a failure that quotes what it actually read.
+    fn try_read_pid(path: &Path) -> Option<i32> {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|contents| contents.trim().parse().ok())
     }
 
     async fn wait_for_processes_gone(

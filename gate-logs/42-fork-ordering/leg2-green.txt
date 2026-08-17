@@ -1,0 +1,8 @@
+test worker_shell::tests::the_worker_advertises_the_documents_action_surface ... ok
+test worker_shell::tests::emitted_manifest_passes_the_real_whole_queue_startup_check ... ok
+test worker_shell::tests::process_boundary_round_trips_text_and_json ... ok
+test worker_shell::tests::an_existing_but_empty_pid_file_is_not_readiness ... ok
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 281 filtered out; finished in 2.05s
+
