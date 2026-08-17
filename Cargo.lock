@@ -343,7 +343,7 @@ dependencies = [
  "dashmap",
  "fs4",
  "futures",
- "haematite 0.8.2",
+ "haematite 0.8.3",
  "jsonschema",
  "rand_chacha 0.10.0",
  "rand_core 0.10.1",
@@ -388,7 +388,7 @@ dependencies = [
  "exacl",
  "fs4",
  "futures",
- "haematite 0.8.2",
+ "haematite 0.8.3",
  "http-body-util",
  "jsonschema",
  "jsonwebtoken",
@@ -446,7 +446,7 @@ dependencies = [
  "aion-store",
  "async-trait",
  "chrono",
- "haematite 0.8.2",
+ "haematite 0.8.3",
  "serde",
  "serde_json",
  "tempfile",
@@ -825,6 +825,37 @@ dependencies = [
  "rand 0.10.2",
  "rustix 1.1.4",
  "serde_json",
+ "tokio",
+ "unicode-segmentation",
+ "web-time",
+ "zstd",
+]
+
+[[package]]
+name = "beamr"
+version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9a16c4343642f0deff1da8b74370b1239370aa14f46c89814331c172dda560b"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-queue",
+ "dashmap",
+ "flate2",
+ "getrandom 0.4.2",
+ "gleam-types",
+ "io-uring",
+ "libc",
+ "md5",
+ "mio",
+ "num_cpus",
+ "rand 0.10.2",
+ "rustix 1.1.4",
  "tokio",
  "unicode-segmentation",
  "web-time",
@@ -2266,11 +2297,11 @@ dependencies = [
 
 [[package]]
 name = "haematite"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cce3d5d687bb2cadd73765babb4da2713f54b51f4e90969d445af2482ceb3c3a"
+checksum = "29ed98bb87be199d544cffd3727d7a608af8132ae46b7478defeb35cdfe2b0ca"
 dependencies = [
- "beamr 0.16.3",
+ "beamr 0.17.1",
  "blake3",
  "crc32fast",
  "dashmap",
