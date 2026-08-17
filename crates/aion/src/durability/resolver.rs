@@ -284,6 +284,7 @@ fn resolution_from_matched(events: &[Event]) -> Result<ResolvedCommand, Durabili
         | Event::SearchAttributesUpdated { .. }
         | Event::ActivityScheduled { .. }
         | Event::ActivityStarted { .. }
+        | Event::ActivityAdoptionOffered { .. }
         // The advisory warning is a RECORD, never a command outcome: no
         // command waits on it, so a matched range ending here is a history
         // shape defect exactly like ending on ActivityStarted.
@@ -323,6 +324,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::SearchAttributesUpdated { .. } => "SearchAttributesUpdated",
         Event::ActivityScheduled { .. } => "ActivityScheduled",
         Event::ActivityStarted { .. } => "ActivityStarted",
+        Event::ActivityAdoptionOffered { .. } => "ActivityAdoptionOffered",
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
         Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",

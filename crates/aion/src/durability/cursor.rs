@@ -629,6 +629,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::SearchAttributesUpdated { .. } => "SearchAttributesUpdated",
         Event::ActivityScheduled { .. } => "ActivityScheduled",
         Event::ActivityStarted { .. } => "ActivityStarted",
+        Event::ActivityAdoptionOffered { .. } => "ActivityAdoptionOffered",
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
         Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",

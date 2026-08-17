@@ -79,6 +79,7 @@ pub fn status_from_events(events: &[Event]) -> WorkflowStatus {
             Event::SearchAttributesUpdated { .. }
             | Event::ActivityScheduled { .. }
             | Event::ActivityStarted { .. }
+            | Event::ActivityAdoptionOffered { .. }
             | Event::ActivityCompleted { .. }
             | Event::ActivityFailed { .. }
             // The advisory warning says a SIDE CHANNEL failed; it says
@@ -137,6 +138,7 @@ pub fn current_lease_terminal(events: &[Event]) -> Option<&Event> {
             | Event::SearchAttributesUpdated { .. }
             | Event::ActivityScheduled { .. }
             | Event::ActivityStarted { .. }
+            | Event::ActivityAdoptionOffered { .. }
             | Event::ActivityCompleted { .. }
             | Event::ActivityFailed { .. }
             // The advisory warning says a SIDE CHANNEL failed; it says

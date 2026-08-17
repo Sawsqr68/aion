@@ -654,6 +654,27 @@ impl Recorder {
         .await
     }
 
+    /// Records that recovery retained a dangling activity attempt and offered
+    /// that same execution identity to the worker adoption path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DurabilityError`] if the event store rejects the append or the
+    /// sequence tracker cannot advance after a successful append.
+    pub async fn record_activity_adoption_offered(
+        &mut self,
+        recorded_at: DateTime<Utc>,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> Result<(), DurabilityError> {
+        self.append_with(recorded_at, |envelope| Event::ActivityAdoptionOffered {
+            envelope,
+            activity_id,
+            attempt,
+        })
+        .await
+    }
+
     /// Records successful activity completion.
     ///
     /// # Errors

@@ -185,39 +185,6 @@ pub(super) struct ActivityCall {
     pub(super) attempt: u32,
 }
 
-/// #266 Defect B: an attempt the dead server left in flight gets its honest
-/// NON-terminal failure record BEFORE the re-dispatch starts the next one —
-/// the record that stops an orphaned run reading as silently still working.
-///
-/// Budget-inert by the ruled honesty-only semantics: infrastructure death is
-/// attempt-neutral (the worker-loss arm's precedent), so nothing about the
-/// dispatch decision changes; only the durable trail gains the truth about
-/// the superseded attempt. A trail with nothing dangling — fresh ordinal,
-/// already-failed tail (#197), settled attempt — records nothing.
-fn record_superseded_attempt(
-    ctx: &mut ProcessContext,
-    context: &NifContext,
-    activity_id: &ActivityId,
-) -> Result<(), Term> {
-    let Some(superseded) =
-        super::nif_activity_retry::superseded_dangling_attempt(context.history(), activity_id)
-    else {
-        return Ok(());
-    };
-    context
-        .record_activity_failed(
-            chrono::Utc::now(),
-            activity_id.clone(),
-            aion_core::ActivityError {
-                kind: aion_core::ActivityErrorKind::Retryable,
-                message: super::nif_activity_retry::SUPERSEDED_BY_SERVER_DEATH_REASON.to_owned(),
-                details: None,
-            },
-            superseded,
-        )
-        .map_err(|error| context_error_term(ctx, &error))
-}
-
 fn dispatch_activity_with_context(
     ctx: &mut ProcessContext,
     mut context: NifContext,
@@ -269,30 +236,45 @@ fn dispatch_activity_with_context(
             // value onto BOTH the recorded `ActivityScheduled` and the live
             // dispatch so history and routing never diverge.
             let node = super::nif_activity::resolve_node(&call.config);
-            // #197: a live re-dispatch continues the ordinal's recorded attempt
-            // trail instead of restarting it — a crash-recovery resume after a
-            // dangling retryable failure keeps `(workflow, activity, attempt)` a
-            // stable identity. A fresh ordinal resolves to `call.attempt`
-            // (`FIRST_DELIVERY_ATTEMPT`) exactly as before.
-            let attempt =
+            // #36: a dangling remote execution survives the engine process by
+            // contract. Retain its attempt identity and record an explicit
+            // adoption OFFER through this run's Recorder. The worker's
+            // single-flight/spawn gate decides whether a holder survived; the
+            // engine must not pre-emptively lie that it died. A settled tail or
+            // fresh dispatch follows the ordinary next-attempt path.
+            let adoption_attempt = super::nif_activity_retry::dangling_attempt_for_adoption(
+                context.history(),
+                &activity_id,
+            );
+            let attempt = adoption_attempt.unwrap_or_else(|| {
                 super::nif_activity_retry::next_delivery_attempt(context.history(), &activity_id)
-                    .max(call.attempt);
-            record_superseded_attempt(ctx, &context, &activity_id)?;
-            record_started(
-                ctx,
-                &context,
-                activity_id.clone(),
-                super::nif_activity::ScheduledActivity {
-                    activity_type: call.name.clone(),
-                    input: input_payload,
-                    task_queue: task_queue.clone(),
-                    node: node.clone(),
-                    // NOI-0: stamp the SAME one-based attempt onto the recorded `ActivityStarted`
-                    // that is stamped onto the live `ActivityDispatch` below, so history and the
-                    // worker wire agree.
-                    attempt,
-                },
-            )?;
+                    .max(call.attempt)
+            });
+            if let Some(adoption_attempt) = adoption_attempt {
+                context
+                    .record_activity_adoption_offered(
+                        chrono::Utc::now(),
+                        activity_id.clone(),
+                        adoption_attempt,
+                    )
+                    .map_err(|error| context_error_term(ctx, &error))?;
+            } else {
+                record_started(
+                    ctx,
+                    &context,
+                    activity_id.clone(),
+                    super::nif_activity::ScheduledActivity {
+                        activity_type: call.name.clone(),
+                        input: input_payload,
+                        task_queue: task_queue.clone(),
+                        node: node.clone(),
+                        // NOI-0: stamp the SAME one-based attempt onto the recorded `ActivityStarted`
+                        // that is stamped onto the live `ActivityDispatch` below, so history and the
+                        // worker wire agree.
+                        attempt,
+                    },
+                )?;
+            }
             let labels = labels_from_config(&call.config);
             // R5: the declared class comes off the contract this run is pinned
             // to, never off the dispatch config the SDK builds.

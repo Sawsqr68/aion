@@ -159,7 +159,8 @@ fn guard_no_pending_work(events: &[Event]) -> Result<(), EngineError> {
     for event in events {
         match event {
             Event::ActivityScheduled { activity_id, .. }
-            | Event::ActivityStarted { activity_id, .. } => {
+            | Event::ActivityStarted { activity_id, .. }
+            | Event::ActivityAdoptionOffered { activity_id, .. } => {
                 pending_activities.insert(activity_id.clone());
             }
             Event::ActivityCompleted { activity_id, .. }

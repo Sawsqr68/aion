@@ -471,6 +471,7 @@ const fn event_family(event: &Event) -> EventFamily {
         | Event::SearchAttributesUpdated { .. } => EventFamily::Workflow,
         Event::ActivityScheduled { .. }
         | Event::ActivityStarted { .. }
+        | Event::ActivityAdoptionOffered { .. }
         | Event::ActivityCompleted { .. }
         | Event::ActivityFailed { .. }
         | Event::ActivityAdvisoryExhausted { .. }

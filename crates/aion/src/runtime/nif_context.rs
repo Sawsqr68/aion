@@ -288,6 +288,28 @@ impl NifContext {
             .map_err(Into::into)
     }
 
+    /// Records a recovery adoption offer through this run's single-writer
+    /// recorder.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any [`DurabilityError`] returned by the recorder.
+    pub(crate) fn record_activity_adoption_offered(
+        &self,
+        recorded_at: chrono::DateTime<chrono::Utc>,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> Result<(), NifContextError> {
+        self.tokio_handle
+            .block_on(async {
+                let mut recorder = self.recorder.lock().await;
+                recorder
+                    .record_activity_adoption_offered(recorded_at, activity_id, attempt)
+                    .await
+            })
+            .map_err(Into::into)
+    }
+
     /// Records successful activity completion through the workflow's single-writer recorder.
     ///
     /// # Errors

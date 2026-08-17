@@ -1,17 +1,11 @@
-//! End-to-end tests for the #266 Defect-B supersession record: an attempt
-//! left in flight by a dead server gets an honest, non-terminal
-//! `ActivityFailed{attempt, reason: server-death}` recorded by the recovery
-//! re-dispatch BEFORE the next attempt starts — closing the forever-dangling
-//! attempt trail that made an orphaned run read as silently still working.
+//! End-to-end tests for recovery adoption: an activity attempt left in flight
+//! across an engine generation retains its identity, records an explicit
+//! `ActivityAdoptionOffered`, and redelivers to the worker adoption path.
 //!
-//! Ruled semantics (honesty-only, ratified 2026-08-17): the record is an
-//! HONESTY record, not a budget event. Re-dispatch proceeds unconditionally
-//! — infrastructure death is attempt-neutral at the budget layer, exactly as
-//! the live retry loop's TRANSPORT-domain worker-loss arm already treats a
-//! worker dying mid-attempt. Terminality by retry policy governs
-//! action-authored failures only. The record must be BUDGET-INERT: writing
-//! it consumes nothing beyond the pre-existing attempt-number inflation
-//! (which is its own ticketed design question, untouched here).
+//! The engine does not claim the worker found a holder; it truthfully records
+//! the offer and leaves holder liveness to worker single-flight/spawn-gate
+//! adoption. It never writes `superseded:server-death` for that dangling
+//! execution, and the offer itself consumes no retry budget.
 //!
 //! The corpse in every test is produced without killing anything: the parked
 //! sentinel (`parked:server-draining`) stands the retry loop down with
@@ -167,15 +161,6 @@ fn supersession_records(history: &[Event]) -> Vec<(u64, u32)> {
         .collect()
 }
 
-fn seq_of_started(history: &[Event], wanted: u32) -> Option<u64> {
-    history.iter().find_map(|event| match event {
-        Event::ActivityStarted {
-            envelope, attempt, ..
-        } if *attempt == wanted => Some(envelope.seq),
-        _ => None,
-    })
-}
-
 fn adoption_offer_records(history: &[Event]) -> Vec<(u64, u32)> {
     history
         .iter()
@@ -297,15 +282,12 @@ async fn paused_recovery_records_adoption_without_supersession()
     recovery_offers_dangling_attempt_for_adoption(true).await
 }
 
-/// THE DEFECT: a server that dies with attempt 1 in flight leaves the
-/// attempt dangling forever — no terminal, no failure, nothing. The
-/// recovering server's re-dispatch must first record the honest
-/// `ActivityFailed{attempt: 1, Retryable, superseded:server-death}` and only
-/// then start attempt 2. A fresh run on the recovered engine is the control:
-/// it must carry NO supersession record.
+/// A dangling attempt is offered once under the SAME attempt identity. A fresh
+/// run is the negative control: it receives neither an adoption offer nor a
+/// server-death supersession record.
 #[tokio::test]
-async fn recovery_records_the_superseded_attempt_before_redispatch()
--> Result<(), Box<dyn std::error::Error>> {
+async fn recovery_records_one_same_attempt_adoption_offer() -> Result<(), Box<dyn std::error::Error>>
+{
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
@@ -355,29 +337,22 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
     let history = store.read_history(handle.workflow_id()).await?;
     assert_eq!(
         started_attempts(&history),
-        vec![1, 2],
-        "the re-dispatch must continue the attempt trail: {history:#?}"
+        vec![1],
+        "adoption must retain the dangling attempt identity: {history:#?}"
     );
-
-    // The record itself — the defect's cure. Exactly one, for attempt 1,
-    // sequenced BEFORE attempt 2's ActivityStarted.
-    let records = supersession_records(&history);
+    assert!(
+        supersession_records(&history).is_empty(),
+        "adoption must not record server death: {history:#?}"
+    );
+    let records = adoption_offer_records(&history);
     assert_eq!(
         records.len(),
         1,
-        "the superseded attempt must get exactly one honest failure record: {history:#?}"
+        "the dangling attempt gets one adoption offer: {history:#?}"
     );
-    let (record_seq, record_attempt) = records[0];
     assert_eq!(
-        record_attempt, 1,
-        "the record names the DANGLING attempt, never the new one: {history:#?}"
-    );
-    let started_2 = seq_of_started(&history, 2)
-        .ok_or_else(|| format!("attempt 2 must record its start: {history:#?}"))?;
-    assert!(
-        record_seq < started_2,
-        "the supersession record ({record_seq}) must precede attempt 2's start \
-         ({started_2}): the old attempt ends before the new one begins: {history:#?}"
+        records[0].1, 1,
+        "the offer names the dangling attempt: {history:#?}"
     );
 
     // Control: a fresh run on the recovered engine carries no supersession
@@ -399,27 +374,28 @@ async fn recovery_records_the_superseded_attempt_before_redispatch()
     let fresh_history = store.read_history(fresh.workflow_id()).await?;
     assert!(
         supersession_records(&fresh_history).is_empty(),
-        "a fresh ordinal must never receive a supersession record: {fresh_history:#?}"
+        "a fresh ordinal must never receive a server-death record: {fresh_history:#?}"
+    );
+    assert!(
+        adoption_offer_records(&fresh_history).is_empty(),
+        "a fresh ordinal must never receive an adoption offer: {fresh_history:#?}"
     );
 
-    // Wire trail: the record is a HISTORY event only — the superseded attempt
-    // is never re-delivered. Life 1 delivered attempt 1 once; life 2 delivered
-    // the recovered run's attempt 2 and then the fresh run's attempt 1.
+    // Life 1 and recovery both deliver attempt 1; the second is the adoption
+    // redelivery. The final 1 belongs to the fresh control.
     assert_eq!(parked.seen_attempts(), vec![1]);
-    assert_eq!(serving.seen_attempts(), vec![2, 1]);
+    assert_eq!(serving.seen_attempts(), vec![1, 1]);
 
     recovered.shutdown()?;
     Ok(())
 }
 
-/// NO DOUBLE RECORD: an attempt whose failure is ALREADY recorded (the #197
-/// crash-mid-backoff shape — a real retryable failure at attempt 1, then the
-/// server dies with attempt 2 in flight) must not receive a second failure
-/// record. Recovery writes the supersession record for the DANGLING attempt
-/// (2) only; attempt 1 keeps exactly its one real failure.
+/// A prior retryable failure stays exactly once in history. If the following
+/// attempt dangles, recovery offers only that attempt for adoption and does not
+/// duplicate or rewrite the earlier terminal for attempt 1.
 #[tokio::test]
-async fn an_already_failed_attempt_is_not_recorded_twice() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn adoption_does_not_duplicate_an_earlier_attempt_failure()
+-> Result<(), Box<dyn std::error::Error>> {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
@@ -446,7 +422,7 @@ async fn an_already_failed_attempt_is_not_recorded_twice() -> Result<(), Box<dyn
     .await?;
     engine.shutdown()?;
 
-    // Life 2: recovery completes the run at attempt 3.
+    // Life 2: recovery redelivers and completes dangling attempt 2.
     let serving = ScriptedDispatcher::new(vec![Step::Succeed]);
     let recovered =
         engine_with(Arc::clone(&serving) as Arc<dyn ActivityDispatcher>, &store).await?;
@@ -460,18 +436,20 @@ async fn an_already_failed_attempt_is_not_recorded_twice() -> Result<(), Box<dyn
     let history = store.read_history(handle.workflow_id()).await?;
     assert_eq!(
         started_attempts(&history),
-        vec![1, 2, 3],
+        vec![1, 2],
         "the trail continues through both lives: {history:#?}"
     );
-    let records = supersession_records(&history);
+    assert!(
+        supersession_records(&history).is_empty(),
+        "recovery writes no false server-death record: {history:#?}"
+    );
     assert_eq!(
-        records
+        adoption_offer_records(&history)
             .iter()
             .map(|(_, attempt)| *attempt)
             .collect::<Vec<_>>(),
         vec![2],
-        "ONLY the dangling attempt gets a supersession record — attempt 1's \
-         real failure already closed it: {history:#?}"
+        "only the dangling attempt gets an adoption offer: {history:#?}"
     );
     let attempt_1_failures = history
         .iter()
@@ -482,23 +460,19 @@ async fn an_already_failed_attempt_is_not_recorded_twice() -> Result<(), Box<dyn
         "attempt 1 keeps exactly its one real failure record: {history:#?}"
     );
 
-    // Wire trail: life 1 delivered attempts 1 and 2; the recovery re-dispatch
-    // delivered only attempt 3 — no superseded attempt travels again.
+    // Wire trail: recovery redelivers the retained attempt 2 identity.
     assert_eq!(script.seen_attempts(), vec![1, 2]);
-    assert_eq!(serving.seen_attempts(), vec![3]);
+    assert_eq!(serving.seen_attempts(), vec![2]);
 
     recovered.shutdown()?;
     Ok(())
 }
 
-/// BUDGET-INERT (the ruled term): writing the supersession record consumes
-/// nothing beyond the pre-existing attempt-number inflation. Under the
-/// example's 3-attempt policy, a run whose attempt 1 died with the server
-/// still gets its remaining numbered attempts: a real retryable failure at
-/// attempt 2 retries (2 < 3), and attempt 3 completes the run. A reader that
-/// made the record consume budget would refuse that final attempt.
+/// BUDGET-INERT: an adoption offer spends no attempt. Recovery redelivers
+/// attempt 1; if that retained attempt fails retryably, the ordinary policy
+/// advances once to attempt 2 and succeeds.
 #[tokio::test]
-async fn the_supersession_record_is_budget_inert() -> Result<(), Box<dyn std::error::Error>> {
+async fn the_adoption_offer_is_budget_inert() -> Result<(), Box<dyn std::error::Error>> {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
@@ -523,9 +497,7 @@ async fn the_supersession_record_is_budget_inert() -> Result<(), Box<dyn std::er
     .await?;
     engine.shutdown()?;
 
-    // Life 2: the re-dispatch (attempt 2) fails for real, retryably; the
-    // policy's remaining number budget must carry it to attempt 3, which
-    // succeeds.
+    // Life 2: adopted attempt 1 fails retryably, then attempt 2 succeeds.
     let serving = ScriptedDispatcher::new(vec![Step::FailRetryable, Step::Succeed]);
     let recovered =
         engine_with(Arc::clone(&serving) as Arc<dyn ActivityDispatcher>, &store).await?;
@@ -539,32 +511,32 @@ async fn the_supersession_record_is_budget_inert() -> Result<(), Box<dyn std::er
     let history = store.read_history(handle.workflow_id()).await?;
     assert_eq!(
         started_attempts(&history),
-        vec![1, 2, 3],
-        "the record must not eat the remaining numbered attempts: {history:#?}"
+        vec![1, 2],
+        "the offer must not invent or consume an attempt: {history:#?}"
+    );
+    assert!(
+        supersession_records(&history).is_empty(),
+        "the adoption path writes no server-death failure: {history:#?}"
     );
     assert_eq!(
-        supersession_records(&history)
+        adoption_offer_records(&history)
             .iter()
             .map(|(_, attempt)| *attempt)
             .collect::<Vec<_>>(),
         vec![1],
-        "one supersession record, for the one superseded attempt: {history:#?}"
+        "one adoption offer for the dangling attempt: {history:#?}"
     );
     assert!(
         history
             .iter()
-            .any(|event| matches!(event, Event::ActivityCompleted { attempt: 3, .. })),
-        "the final numbered attempt completes the run: {history:#?}"
-    );
-    assert!(
-        seq_of_started(&history, 2).is_some(),
-        "attempt 2's start is recorded: {history:#?}"
+            .any(|event| matches!(event, Event::ActivityCompleted { attempt: 2, .. })),
+        "the next ordinary numbered attempt completes the run: {history:#?}"
     );
 
-    // Wire trail: life 1 delivered attempt 1; life 2 delivered attempts 2 and
-    // 3 — the supersession record put nothing extra on the wire.
+    // Wire trail: life 1 delivered attempt 1; recovery redelivered attempt 1,
+    // then ordinary retry delivered attempt 2.
     assert_eq!(parked.seen_attempts(), vec![1]);
-    assert_eq!(serving.seen_attempts(), vec![2, 3]);
+    assert_eq!(serving.seen_attempts(), vec![1, 2]);
 
     recovered.shutdown()?;
     Ok(())

@@ -415,6 +415,23 @@ pub enum Event {
         #[serde(default = "legacy_activity_attempt")]
         attempt: u32,
     },
+    /// Recovery offered a previously dispatched, still-dangling activity
+    /// attempt back to the worker adoption path.
+    ///
+    /// This is deliberately an OFFER, not a claim that the worker found a live
+    /// holder: the engine cannot observe a harness process directly. It records
+    /// the truthful recovery decision — retain and redeliver the same execution
+    /// identity instead of falsely terminating it as server death. The worker's
+    /// single-flight/spawn gate then either joins the holder or starts it when no
+    /// holder survived.
+    ActivityAdoptionOffered {
+        /// Recording metadata for this event.
+        envelope: EventEnvelope,
+        /// Activity whose dangling attempt is being offered for adoption.
+        activity_id: ActivityId,
+        /// One-based attempt identity retained across the recovery redelivery.
+        attempt: u32,
+    },
     /// An activity completed successfully.
     ActivityCompleted {
         /// Recording metadata for this event.
@@ -703,6 +720,7 @@ impl Event {
             | Self::SearchAttributesUpdated { envelope, .. }
             | Self::ActivityScheduled { envelope, .. }
             | Self::ActivityStarted { envelope, .. }
+            | Self::ActivityAdoptionOffered { envelope, .. }
             | Self::ActivityCompleted { envelope, .. }
             | Self::ActivityFailed { envelope, .. }
             | Self::ActivityAdvisoryExhausted { envelope, .. }
