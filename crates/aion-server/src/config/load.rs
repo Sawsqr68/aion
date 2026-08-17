@@ -415,6 +415,7 @@ impl ServerConfig {
         if let Some(input) = self.store.retired_input {
             let found = match input {
                 RetiredStoreInput::Backend => "backend = \"libsql\"",
+                RetiredStoreInput::BackendEnvironment => "AION_STORE_BACKEND=libsql",
                 RetiredStoreInput::Url => "store.url",
                 RetiredStoreInput::Environment => "AION_STORE_URL",
                 RetiredStoreInput::Flag => "--store-url",
@@ -1996,6 +1997,21 @@ mod tests {
             ),
             "store.url",
         );
+    }
+
+    /// The FIFTH door: `AION_STORE_BACKEND=libsql` names the retired backend as
+    /// squarely as `backend = "libsql"` in the file does, and must reach the same
+    /// named refusal rather than the parser's "must be one of" list, which names
+    /// no remedy and reads like a typo.
+    #[test]
+    fn retired_libsql_backend_environment_is_refused_with_remedy() {
+        let mut config = ServerConfig::default();
+        let result = super::env::overlay_vars(
+            &mut config,
+            [("AION_STORE_BACKEND".to_owned(), "libsql".to_owned())],
+        )
+        .and_then(|()| config.validate().map(|()| config));
+        assert_retired_store_refusal(result, "AION_STORE_BACKEND=libsql");
     }
 
     #[test]

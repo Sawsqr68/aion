@@ -69,6 +69,8 @@ pub enum StoreBackend {
 pub(crate) enum RetiredStoreInput {
     /// `backend = "libsql"` in the config file's `[store]` section.
     Backend,
+    /// `AION_STORE_BACKEND=libsql` in the environment.
+    BackendEnvironment,
     /// `url = ...` in the config file's `[store]` section.
     Url,
     /// The `AION_STORE_URL` environment variable.

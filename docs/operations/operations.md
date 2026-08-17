@@ -76,13 +76,14 @@ Both flags belong to the bare form only and are refused next to a subcommand.
 
 ### Retired store inputs (startup refuses, naming the remedy)
 
-The libSQL backend is gone. Four inputs used to select it, and each one is now
+The libSQL backend is gone. Five inputs used to select it, and each one is now
 a startup refusal rather than a silent ignore or a fallback:
 
 | Retired input | Where |
 |---|---|
 | `backend = "libsql"` | `[store]` in the config file |
 | `store.url` (`url = …`) | `[store]` in the config file |
+| `AION_STORE_BACKEND=libsql` | environment |
 | `AION_STORE_URL` | environment |
 | `--store-url` | `aion server` command line |
 

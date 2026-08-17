@@ -33,7 +33,17 @@ pub(crate) fn overlay_vars(
                 config.server.cors_allowed_origins = parse_csv_origins(&value);
             }
             "AION_STORE_BACKEND" => {
-                config.store.backend = parse_store_backend(&name, &value)?;
+                // The retired backend has to be RECOGNISED here, not fall to
+                // `parse_store_backend`'s unknown-variant list: naming libsql is
+                // a deliberate act by an operator carrying a 0.15 deployment, and
+                // "must be one of: memory, haematite" reads like a typo and names
+                // no remedy. Recorded, so it converges on the one refusal every
+                // other retired door reaches.
+                if value.eq_ignore_ascii_case("libsql") {
+                    config.store.retired_input = Some(RetiredStoreInput::BackendEnvironment);
+                } else {
+                    config.store.backend = parse_store_backend(&name, &value)?;
+                }
             }
             "AION_STORE_URL" => {
                 config.store.retired_input = Some(RetiredStoreInput::Environment);

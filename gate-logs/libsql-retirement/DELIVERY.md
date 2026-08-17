@@ -2,9 +2,19 @@
 
 Baseline: `00064c41c`. Census-first commit: `dc7d2933e`. Red-first commit: `5179b58d6`.
 
+> **Rebased 2026-08-17 onto the R3 lane (`d4317268f`), branch `retire-libsql`.**
+> The five commits above were replayed there; their SHAs on the landing branch
+> differ. Four things changed in the replay and are NOT described below: the
+> fixture constructor now takes R3's required node cache budget; the
+> `haematite-backend` feature is removed outright rather than left declared and
+> empty; the retired-input wire carries `store.node_cache_budget` again (the
+> pre-budget wire struct had silently narrowed the config surface); and the
+> operator runbook gained the retired-input refusal table. The battery of
+> record for the rebased tree is `gate-logs/35-retire-libsql/`.
+
 ## Boundary
 
-The four retired inputs (`backend = "libsql"`, `store.url`, `AION_STORE_URL`, and `--store-url`) converge on `ServerConfig::validate`'s single `retired_input` refusal. The refusal names the input, prescribes `backend = "haematite"` plus `store.data_dir`, and states that this build does not read existing libsql database files. There is no fallback or migration.
+The retired inputs (`backend = "libsql"`, `store.url`, `AION_STORE_BACKEND=libsql`, `AION_STORE_URL`, and `--store-url`) converge on `ServerConfig::validate`'s single `retired_input` refusal. The environment backend door was a fifth found in the rebase — it had been reaching `parse_store_backend`'s unknown-variant list, which names no remedy. The refusal names the input, prescribes `backend = "haematite"` plus `store.data_dir`, and states that this build does not read existing libsql database files. There is no fallback or migration.
 
 ## Test-file dispositions
 
@@ -43,7 +53,14 @@ The shared conformance contract remains implemented by the in-memory store and b
 
 ## Verification record
 
-Exit-code-bearing logs are under `gate-logs/libsql-retirement/verification/`. They include workspace compilation, the full workspace suite, the server integration population, tree-wide fmt, workspace and ordered per-crate clippy, the doc pointer gate, and the final absence/census checks. Only completed commands are reported in the delivery response.
+The battery of record is `gate-logs/35-retire-libsql/`, run on the rebased tree:
+the canonical three-leg extraction (check, clippy, nextest) plus named
+per-feature clippy legs for `--no-default-features` / `--all-features` on
+aion-server and aion-cli, since this lane deletes a cargo feature and the
+canonical legs compile only the default set. It carries `findings.jsonl`,
+per-leg stderr, the nextest Summary line, the extraction's own red proof
+(`instrument-proof.jsonl`), and the refusal's red/green mutation pair
+(`red-mutation-refusal.log` / `green-refusal.log`).
 
 ## Non-goals
 
