@@ -1,0 +1,45 @@
+# Expected-red census for #85 and #229
+
+Historical mentions are retained. The following search is the pre-change inventory used to identify live runbook/gate instructions that must stop teaching future batteries to excuse the retired libsql red.
+
+CHANGELOG.md:141:  can fail whether or not the machine is busy (#85).** This release pins the
+CHANGELOG.md:317:  (#85).** The `libsql` dependency this release pins (0.9.30) carries a
+CHANGELOG.md:337:  remedy is a dependency move, tracked as #85.
+crates/aion-server/changelog-embed/CHANGELOG.md:141:  can fail whether or not the machine is busy (#85).** This release pins the
+crates/aion-server/changelog-embed/CHANGELOG.md:317:  (#85).** The `libsql` dependency this release pins (0.9.30) carries a
+crates/aion-server/changelog-embed/CHANGELOG.md:337:  remedy is a dependency move, tracked as #85.
+gate-logs/148-epoch-gate/r23-brief.txt:34:- Gates: cargo fmt --check, cargo clippy -p aion-rs --all-targets -- -D warnings, cargo clippy --workspace --all-targets -- -D warnings, cargo test -p aion-rs. Logs in the scratchpad (r22b-fmt.log, r22b-clippy-p.log, r22b-clippy-ws.log, r22b-suite-1.log, r22b-suite-2.log, r22b-suite-3.log; the first battery run's logs are archived as r22b-run1-*). All gates EXIT 0. Suites: runs 1 and 3 are the green pair — each 60 verdict lines, 1130 passed, 0 failed. Run 2 is EXIT 101: `outbox_out_of_order_completions_still_settle_with_n_terminals` (tests/outbox_e2e.rs, untouched by the lane) failed with `Backend("SQLite failure: bad parameter or other API misuse")` — the KNOWN libsql 0.9.30 double-close defect (task #85, mechanism verified in the dependency source), attributed after verifying the tree held exactly the lane's files; cargo's fail-fast cut that run at 39 verdict lines. Two other known-on-main flakes you may hit: #149 `covered::covered_set_is_byte_identical` (BC-4 differential, red-and-nondeterministic on main) and #85 above. If you see either, attribute there, not to the lane — anything ELSE red is a finding. Re-run whichever you need; send suite output to a file and read the file (never pipe a suite through head/tail — a `failures:` block thrown away by head is a flake you cannot re-catch).
+gate-logs/148-epoch-gate/r24-brief.txt:17:GATE EVIDENCE FOR THE FIX PASS (all in the scratchpad below, transcript r23-fix-gates.transcript): fmt-check EXIT 0 · module 5/0 · clippy -p EXIT 0 with `Checking aion-rs` · clippy --workspace EXIT 0 · suite attempt 1 EXIT 101 = known #85 (libsql 0.9.30 double-close, `outbox_happy_path_completes_with_n_terminals_in_order`, tests/outbox_e2e.rs untouched by the lane — 2 hits in 4 quiet runs today, task updated) · suite attempt 2 (r23f-suite-2.log) EXIT 0, 60 verdict lines, 1130/0. Known flakes to attribute, not charge: #85 (any `bad parameter or other API misuse`/SIGSEGV in outbox_e2e or other libsql-backed e2e) and #149 (covered::covered_set_is_byte_identical). Anything else red is a finding.
+gate-logs/148-epoch-gate/r25-brief.txt:19:KNOWN FLAKES if you run the suite (your choice; not required for a doc-only delta): #85 (libsql outbox e2e, `bad parameter or other API misuse`/SIGSEGV faces) and #149 (covered::covered_set_is_byte_identical). Anything else red is a finding. Suite output goes to a FILE first; count `^test result` lines (60 expected for -p aion-rs); read the failures: block from the file.
+gate-logs/148-epoch-gate/review-23-verdict.md:75:| The seat's suite evidence | Counted from the log files directly: `r22b-suite-1` and `r22b-suite-3` each **60 verdict lines / 1130 passed / 0 failed / 0 `FAILED` strings**; `r22b-suite-2` = 39 lines, 1 failure, `failures:` block names `outbox_out_of_order_completions_still_settle_with_n_terminals` with `Backend("SQLite failure: bad parameter or other API misuse")` in `tests/outbox_e2e.rs` — untouched by the lane, task #85. Attribution accepted. |
+gate-logs/148-epoch-gate/review-23-verdict.md:94:| `cargo test -p aion-rs` (full crate, to a file) | **EXIT 0**, **60 verdict lines, 1130 passed, 0 failed**, zero `FAILED` strings — neither #85 nor #149 appeared | 7.63 → 27.82 (self-decay) |
+gate-logs/148-epoch-gate/review-24-verdict.md:40:- **Suite evidence reconciled** (my own laws demand this): 60 verdict lines = 58 binaries (1 lib + exactly the 57 integration files on disk) + 2 doctest result lines. No binary vanished, so the 1130/0 tally is not hiding a crashed binary. Attempt 1's single failure is `outbox_happy_path_completes_with_n_terminals_in_order` with `Backend("SQLite failure: bad parameter or other API misuse")` — the #85 signature, in a file the lane does not touch.
+gate-logs/148-epoch-gate/review-24-verdict.md:44:**Taken on trust:** R23's per-claim list for the pre-fix bytes (its remit, and its core conclusion I independently corroborated by mutation); the #85 and #149 flake attributions as known-on-main; the historical r22 battery load readings. I could not byte-diff `nif_continue_as_new_tests.rs` against R23's pin (no copy survives) — I closed that gap by mutation instead.
+gate-logs/148-epoch-gate/review-25-verdict.md:52:**Fix 2 — the R23 section.** `r23-fix-gates.transcript` has one suite step: `suite EXIT 101 verdict-lines 39` + `FAILED. 7 passed; 1 failed`, and `DONE` at 22:43:28 → it is attempt 1, as the record now says. `r23f-suite.log`: 39 `^test result` lines; failure is `outbox_happy_path_completes_with_n_terminals_in_order`, `Running tests/outbox_e2e.rs`, `SQLite failure: bad parameter or other API misuse` — matches the record verbatim and is known flake #85. `r23f-suite-2.log` mtime **23:22:04**, 60 `^test result` lines, summing **1130 passed / 0 failed**, zero `^error` lines, doctests completed — so "A MANUAL RE-RUN OUTSIDE THE HARNESS at 23:22" is correct. Loads "5.0–9.6" match the transcript's 5.40/5.69/5.04/7.43/9.60/8.55.
+gate-logs/148-epoch-gate/review-25-verdict.md:63:- The #85/#149 flake attributions and the "2 hits in 4 quiet-box runs" count.
+gate-logs/85-double-close-proof/FINDING-234.md:1:# #234 — SETTLED AS #85, WITH A CORRECTION TO #85 THAT MATTERS
+gate-logs/85-double-close-proof/FINDING-234.md:27:memory-safety failure inside the dependency — which is exactly what #85 names.
+gate-logs/85-double-close-proof/FINDING-234.md:52:**2. It IS #85, and my "refutes the #85 classification" was too strong.** The
+gate-logs/85-double-close-proof/FINDING-234.md:54:#85's recorded wording, verbatim. Same error code, same dependency, same
+gate-logs/85-double-close-proof/FINDING-234.md:56:#85's *contention-only signature*, not #85's *identity*. Those are different
+gate-logs/85-double-close-proof/FINDING-234.md:67:#85's record says "isolated: 5/5 green" and 0.14.0 shipped a known-issues entry
+gate-logs/85-double-close-proof/FINDING-234.md:68:on that basis. **#85 reproduces on a QUIET box** — load 2.07–3.77, ~17% of
+gate-logs/85-double-close-proof/FINDING-234.md:72:So this is not a new defect to file. It is #85, understated.
+gate-logs/COMPACT-58-STATE.md:11:- RED 1 `-p aion-rs --test outbox_e2e` = #85 libsql double-close, classified,
+gate-logs/COMPACT-58-STATE.md:71:#85 crashing binaries, and is the #195 signature (no verdict line at all).
+gate-logs/deans-box-0140/NOTE.md:51:## The one red class: #85, not the release delta
+gate-logs/deans-box-0140/NOTE.md:64:shape. This is task **#85** — libsql 0.9.30 double-close (use-after-free),
+gate-logs/deans-box-0140/NOTE.md:72:one #85-signature failure each; isolation series `outbox_e2e` 5/5 green
+gate-logs/deans-box-0140/NOTE.md:80:known-mechanism dependency flake (#85) as the only red class, each affected
+gate-logs/deans-box-0140/NOTE.md:83:battery green; this is green-except-#85-classified, so the word is his).
+gate-logs/deans-box-0140/testleg.sh:3:# run-2 red = #85 flake (outbox_e2e::race_settles, API-misuse face).
+gate-logs/deans-box-0140/testleg.sh:5:# run-4 red = #85 flake again (outbox_e2e::crash_recovery_rearms — DIFFERENT test,
+gate-logs/deans-box-0140/testleg.sh:7:# run-5 runs every binary regardless, so one #85 hit cannot drop coverage.
+gate-logs/publish-0138/RELEASE-EVIDENCE.txt:38:1. test-workspace: #85 libsql 0.9.30 double-close flake (known signature,
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:15:  2d7a7e423  #85 known-issues entry in BOTH changelog copies (the embedded
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:33:  13:30Z — PUBLISH under the #85 classification ("five honest runs with a
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:44:  red is one #85-signature failure (aion-store-libsql pool test).
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:48:  #85-face failure at a moving location; isolation series outbox_e2e 5/5
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:51:#85 classification and the ruled reachability answer
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt:53:libsql 0.9.30 double-close (use-after-free), task #85, filed 2026-08-06,
+workflows/gates/README.md:64:the lock while confounding their timings (and box contention is the #85

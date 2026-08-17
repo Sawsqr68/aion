@@ -1,0 +1,9 @@
+# Canary proof
+
+Command: `rg -l LIBSQL_CENSUS_CANARY Cargo.toml crates docs workflows census-canary -g Cargo.toml -g "*.rs" -g "*.md" -g "*.yml" -g "*.yaml" -g "*.toml"`
+
+census-canary/Cargo.toml
+census-canary/config/canary.toml
+census-canary/docs/canary.md
+census-canary/src/canary.rs
+census-canary/workflows/canary.yml

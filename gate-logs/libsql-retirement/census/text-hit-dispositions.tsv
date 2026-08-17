@@ -1,0 +1,408 @@
+path	disposition
+.evidence/118/battery-acceptance.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/battery-clean-tree.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/battery-final.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/battery-probation.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/battery.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/clean-rebuild.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/shakedown-allfeatures.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/shakedown-default.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/workspace-build.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+.evidence/118/workspace-default-build.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+CHANGELOG.md	UPDATE release notes and remove present-tense known-issue/expected-red guidance; retain historical entries as history
+CLAUDE.md	UPDATE normative/assistant-facing current guidance
+Cargo.toml	UPDATE remove dependency/feature edge
+README.md	UPDATE normative/assistant-facing current guidance
+crates/aion-cli/CHANGELOG.md	REVIEW and update if normative; otherwise retain as historical record
+crates/aion-cli/Cargo.toml	UPDATE remove dependency/feature edge
+crates/aion-cli/src/launch.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-cli/src/main.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-cli/src/server.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-cli/templates/shared/aion.toml	UPDATE tracked config/example to the haematite-only truth
+crates/aion-server/Cargo.toml	UPDATE remove dependency/feature edge
+crates/aion-server/changelog-embed/CHANGELOG.md	UPDATE release notes and remove present-tense known-issue/expected-red guidance; retain historical entries as history
+crates/aion-server/src/api/http/worker_deployments_tests.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/cluster.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/config/env.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/config/load.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/config/sections.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/observability/instrumented_store.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/run.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/state.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/update_check/fixtures/aion-cli-index.jsonl	REVIEW and update if normative; otherwise retain as historical record
+crates/aion-server/src/worker/outbox_dispatcher.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/src/worker/outbox_redrive.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/templates/first-run-config.toml	UPDATE tracked config/example to the haematite-only truth
+crates/aion-server/tests/deploy_restart_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/graceful_shutdown_park_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/haematite_backend.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/lsub1_xnode_dispatch_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/lsub3_failover_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/namespace_restart.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/outbox_delivery_contract_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/outbox_transport_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/recovery_declared_body_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/run_server_outbox_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/run_server_outbox_support/helpers.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-server/tests/worker_deployment_spawn_fence.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store-haematite/src/lib.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store-haematite/src/store.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store-haematite/tests/conformance.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store-libsql/Cargo.toml	DELETE retired backend crate
+crates/aion-store-libsql/README.md	DELETE retired backend crate
+crates/aion-store-libsql/src/append.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/append/tests.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/config.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/connection.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/error.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/lib.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/namespace.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/outbox.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/outbox/transitions.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/outbox_tests.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/package.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/pool.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/read.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/read/tests.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/schema.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/store.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/timer.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/visibility.rs	DELETE retired backend crate
+crates/aion-store-libsql/src/worker_deployment.rs	DELETE retired backend crate
+crates/aion-store-libsql/tests/conformance.rs	DELETE retired backend crate
+crates/aion-store-libsql/tests/outbox_hold.rs	DELETE retired backend crate
+crates/aion-store-libsql/tests/persistence.rs	DELETE retired backend crate
+crates/aion-store-libsql/tests/replica_sync.rs	DELETE retired backend crate
+crates/aion-store/src/conformance.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store/src/namespace.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store/src/outbox.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store/src/store.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion-store/src/testing/stale_active_list.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion/Cargo.toml	UPDATE remove dependency/feature edge
+crates/aion/src/durability/recorder/fan_out_tests.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion/src/engine/builder.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion/src/engine/startup_tests.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion/src/lifecycle/completion_retry.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+crates/aion/tests/outbox_e2e.rs	UPDATE production/test reference; migrate durable tests to haematite or fixture tests to memory
+dev-config.toml	UPDATE tracked config/example to the haematite-only truth
+docs/GETTING-STARTED.md	UPDATE normative/assistant-facing current guidance
+docs/archive/AION-DISTRIBUTION-REVIEW.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/AION-OUTBOX-BUILD-PLAN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/AION-OUTBOX-CUTOVER-DECISION.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/IMPLEMENTATION-TRACKER.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/LIMINAL-SWAP-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/NAMESPACE-TASKQUEUE-SPLIT-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/NODE-AFFINITY-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/REVIEW-23-07.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/STORAGE-SWAP-MATURITY-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/TIMER-CANCELLATION-FIX-PLAN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/WORKFLOW-REOPEN-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/archive/XNODE-DELIVERY-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/briefs/all-features-gate-was-shadowed.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/briefs/runtime-package-reload.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/contracts/CANCELLATION-CONTRACT.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/contracts/PAUSE-RESUME-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/DELIVERY-CONTRACT-SCOPING.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/NAMESPACE-REGISTRY-PHASE-1.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/NORN-OBSERVABILITY-AND-INTERVENTION.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/STACK-AUDIT-2026-06-30.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/WORKER-LIFECYCLE-W0-BRIEF-2026-08-08.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/ACTIVITY-STARTED-SEMANTICS-DECISION.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/AGENT-OUTCOME-DECODE-CENSUS.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/AION-HOME-ISOLATION-INVERSION.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/BLOCK-G-122-POOL-IN-FLIGHT.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/BLOCK-H-READGUARD-COMPILE-GUARD.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/BOUNDARY-CONTRACT-MEASUREMENT.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/FLEET-SMOKE-STATE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/LANE-91-LEG2-STATE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/LIBSQL-CONNECTION-POOL-DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/LIBSQL-DOUBLE-CLOSE-85.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/LIBSQL-SHARED-CONNECTION-FINDING.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/OPEN-ISSUES-WHOLE-PICTURE-2026-08-07.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/RECOVERY-LOOP-GUARDS-121.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/RELEASE-0.11.0-PLAN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/REVIEW-20-FINDINGS.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-E.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-F.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-G.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-H.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-I.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-01-J.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-02-R.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-05-AI.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-05-AJ.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-AO.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-AS.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-AY.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-AZ.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BA.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BB.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BC.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BD.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BF.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-06-BK.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BM.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BP.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BQ.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BR.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BS.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BU.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-RESUME-2026-08-07-BX.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/SEAT-STATE-2026-07-31-EVENING.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-authoring/evidence/85-outbox-flake/README.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-005-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-005.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-005.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-007-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-007.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/briefs/AC-007.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-core/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-011.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-011.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-012.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-012.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-013.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/briefs/AD-013.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-durability/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-dx/briefs/DX-011-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-dx/briefs/DX-011.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-dx/briefs/DX-011.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-engine/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-engine/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-002-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-002.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-002.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-004-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-004.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-history/briefs/AH-004.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/CHECKLIST.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/briefs/AO-003-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/briefs/AO-003.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/briefs/AO-003.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-operations/checklist.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-package/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-package/briefs/AP-007-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-package/briefs/AP-007.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-package/briefs/AP-007.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-001-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-001.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-001.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-002-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-002.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-002.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-003-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-003.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/briefs/PK-003.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-publish/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-server/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-server/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/CHECKLIST.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/USER-STORIES.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-001-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-001.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-001.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-002-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-002.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-002.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-003-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-003.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-003.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-004-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-004.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-004.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-005-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-005.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-005.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-006-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-006.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-006.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-007-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-007.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-007.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-008-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-008.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-008.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-009-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-009.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/briefs/AS-009.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/checklist.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-store-libsql/stories.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-time-signals/DESIGN.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-time-signals/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-001-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-002-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-002.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-002.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-003-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-003.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-003.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-004-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-005-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-005.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-005.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/briefs/AV-006-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/checklist.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/design.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/aion-visibility/stories.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/fanout-observability/transcript-retention-spec.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/outbox/briefs/OBX-010-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/outbox/briefs/OBX-011-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/outbox/briefs/OBX-012-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/outbox/briefs/OBX-013-input.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/workflow-engine/COMPONENT-ARCHITECTURE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/design/workflow-engine/DESIGN-OVERVIEW.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/evidence/delivery-contract-fix.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/evidence/delivery-contract-pins-red-run1.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/evidence/samples/aion-server-hang-after-drain-15202.sample	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/evidence/worker-lifecycle-w0-durable-record-wire-identity.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/evidence/worker-out-of-box-contract-admission.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+docs/operations/operations.md	REVIEW and update if normative; otherwise retain as historical record
+docs/remediation/2026-07-23/lanes/L01-doc-sweep.md	REVIEW and update if normative; otherwise retain as historical record
+docs/remediation/2026-07-23/lanes/L07-haematite-outbox-cas.md	REVIEW and update if normative; otherwise retain as historical record
+docs/remediation/2026-07-23/lanes/L08-oracle-extension.md	REVIEW and update if normative; otherwise retain as historical record
+docs/vision/AION-DISTRIBUTION-DESIGN.md	REVIEW and update if normative; otherwise retain as historical record
+docs/workers/WORKER-AUTHORING.md	REVIEW and update if normative; otherwise retain as historical record
+gate-logs/136-awl-template/cargo-clippy-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/r21-diff.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/r21-nif.bak	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/r23-brief.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/r24-brief.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/r25-brief.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/148-epoch-gate/review-22-verdict.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/154-ship-run/154-r2-check.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/154-ship-run/gates-1.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/159-scaffold-unify/159-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/159-scaffold-unify/159-r2-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/160-tutorial-worker/clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/197-liveness/leg03-check.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/197-liveness/leg04-testbuild.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/197-liveness/leg17-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/205-build/battery-clippy-aion-server.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/205-build/battery-clippy-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-final-message/battery.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-final-message/clippy-rerun.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-remediation/battery-pre-fix-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-remediation/battery-registry-transient-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-remediation/battery-transient-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-remediation/final-battery.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/241-remediation/registry-transient-rerun.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/85-double-close-proof/FINDING-234.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/85-double-close-proof/e1-lldb-bt.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/COMPACT-58-STATE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/advisory-green-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/advisory-red-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/battery-0150-run2/test.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/battery-0150-run3/test.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/battery-0150/clippy_server.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/battery-0150/test.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/beamr-0163-bump/bb-clippy-ws.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/beamr-017-bump/beamr-017-test.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/cargo-clippy-handshake.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/cargo-clippy-reviewer-final.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/convergence-duplicate-census.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/crash-lane/RECOVERY-ORDERING-BRIEF.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/dead-man-switch/test-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0110-test-run1-emfile.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0110-test-run2.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0120/clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0120/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0120/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0120/test.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/NOTE.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/bc4-probe-111.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/libsql-iso-1.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/libsql-iso-2.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/libsql-iso-3.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/libsql-iso-4.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/libsql-iso-5.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/server-reverify.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-0140/test-workspace-run5.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/deans-box-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/death-note-regate/FLAKE-ATTRIBUTION.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/death-note-regate/test-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/death-note/clippy-p-aion-server.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/death-note/clippy-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/death-note/test-death-note.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/device/clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/device/tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/failover-start-path/clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/failover-start-path/tests-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/gate-speaks-run/report.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/landing-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/libsql-retirement/gate.sh	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/lsub5b-fixture-queue-truing/clippy.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/lsub5b-fixture-queue-truing/tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/namespace-mint-routing/clippy.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/namespace-mint-routing/tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/on-failure-lowering-clippy.json	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/on-failure-lowering-red-bc4.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/on-failure-lowering-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0110/aion-store-libsql.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0130/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0130/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0131/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0131/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0132/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0132/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0133/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0133/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0134/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0134/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0135/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0136/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0137/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0138/RELEASE-EVIDENCE.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0138/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0140/RELEASE-EVIDENCE.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0140/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0140/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0141/publish-exits.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/publish-0141/registry-verify.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/refix-f1-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/regate-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/regate-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/registration-refusal-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/retry-counting-landing-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/retry-counting-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/status-front-run/MECHANISM.md	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/status-front/gate.sh	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/test-workspace-reviewer.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/test-workspace-reviewer6.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/test-workspace-reviewer7.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/test-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/SHA256SUMS	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix-gates/GATE_EXITS.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix-gates/clippy-aion-server.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix-gates/clippy-aion-store-libsql.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix-gates/probe-m3-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix-gates/rust-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/GATE_EXITS.txt	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/clippy-aion-server.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/clippy-aion-store-libsql.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/clippy-workspace.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/planted-positive-r2-green.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/planted-positive-r2-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/probe2-spawn-scanner-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/rust-tests-six-crates-final.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/fix2-gates/rust-tests-six-crates.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/w0-aion-store-libsql-tests.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/w0-planted-positive-restart-green.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/w0-planted-positive-restart-red.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/w0-workspace-clippy-final.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/w0-worker-deployment/w0-workspace-clippy.log	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+gate-logs/workflow-dispatch/gate.sh	RETAIN historical evidence/design record unless separately identified as a live expected-red/runbook claim
+publish-workspace.sh	REVIEW and update if normative; otherwise retain as historical record
+slice1-logs/R2-clippy-aion-server.log	REVIEW and update if normative; otherwise retain as historical record
+slice1-logs/R2-tests-server-lib.log	REVIEW and update if normative; otherwise retain as historical record
+slice1-logs/clippy-cli-server.log	REVIEW and update if normative; otherwise retain as historical record
+slice1-logs/server-tests.log	REVIEW and update if normative; otherwise retain as historical record
+workspace.json	REVIEW and update if normative; otherwise retain as historical record
+xtask/src/main.rs	REVIEW and update if normative; otherwise retain as historical record

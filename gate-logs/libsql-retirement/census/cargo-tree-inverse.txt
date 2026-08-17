@@ -1,0 +1,57 @@
+=== cargo tree -i aion-store-libsql --workspace ===
+aion-store-libsql v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-store-libsql)
+[dev-dependencies]
+├── aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion)
+│   ├── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│   ├── aion-client v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-client)
+│   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│   ├── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server)
+│   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│   └── million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/benchmarks/million-processes)
+└── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+=== cargo tree -i libsql --workspace ===
+libsql v0.9.30
+└── aion-store-libsql v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-store-libsql)
+    [dev-dependencies]
+    ├── aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion)
+    │   ├── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+    │   ├── aion-client v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-client)
+    │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+    │   ├── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server)
+    │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+    │   └── million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/benchmarks/million-processes)
+    └── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+[dev-dependencies]
+└── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+=== cargo tree -i libsql-sys --workspace ===
+libsql-sys v0.9.30
+├── libsql v0.9.30
+│   └── aion-store-libsql v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-store-libsql)
+│       [dev-dependencies]
+│       ├── aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion)
+│       │   ├── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│       │   ├── aion-client v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-client)
+│       │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│       │   ├── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server)
+│       │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+│       │   └── million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/benchmarks/million-processes)
+│       └── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+│   [dev-dependencies]
+│   └── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+└── libsql_replication v0.9.30
+    └── libsql v0.9.30 (*)
+=== cargo tree -i libsql_replication --workspace ===
+libsql_replication v0.9.30
+└── libsql v0.9.30
+    └── aion-store-libsql v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-store-libsql)
+        [dev-dependencies]
+        ├── aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion)
+        │   ├── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+        │   ├── aion-client v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-client)
+        │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+        │   ├── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server)
+        │   │   └── aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-cli)
+        │   └── million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/benchmarks/million-processes)
+        └── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
+    [dev-dependencies]
+    └── aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/libsql-retirement/crates/aion-server) (*)
