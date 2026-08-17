@@ -1,0 +1,30 @@
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 26s
+────────────
+ Nextest run ID be20aeb5-07b6-47ca-9f3d-18a47d1c9056 with nextest profile: default
+    Starting 1 test across 1 binary (1141 tests skipped)
+        FAIL [   0.096s] (1/1) aion-server state::tests::haematite_boot_refuses_without_a_node_cache_budget
+  stdout ───
+
+    running 1 test
+    test state::tests::haematite_boot_refuses_without_a_node_cache_budget ... FAILED
+
+    failures:
+
+    failures:
+        state::tests::haematite_boot_refuses_without_a_node_cache_budget
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1141 filtered out; finished in 0.08s
+
+  stderr ───
+    Error: "the haematite boot path must refuse a store config with no node_cache_budget"
+
+────────────
+     Summary [   0.105s] 1 test run: 0 passed, 1 failed, 1141 skipped
+        FAIL [   0.096s] (1/1) aion-server state::tests::haematite_boot_refuses_without_a_node_cache_budget
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)

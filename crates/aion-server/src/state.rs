@@ -3232,6 +3232,48 @@ mod tests {
         Ok(())
     }
 
+    /// The haematite boot path REFUSES a store config that does not rule on the
+    /// node cache's byte budget, naming the missing key — the same
+    /// explicit-no-default guard `observability.max_batch_events` uses, applied
+    /// where the value is used (haematite is the only backend that has a node
+    /// cache, so this is the seam that consumes the ruling).
+    #[cfg(feature = "haematite-backend")]
+    #[tokio::test]
+    async fn haematite_boot_refuses_without_a_node_cache_budget()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::ServerError;
+        use crate::config::{StoreBackend, StoreConfig};
+
+        let sandbox = crate::test_support::private_tempdir()?;
+        let data_dir = sandbox.path().join("data");
+        let error = super::connect_haematite_store(StoreConfig {
+            backend: StoreBackend::Haematite,
+            data_dir: Some(
+                data_dir
+                    .to_str()
+                    .ok_or("temporary data path was not UTF-8")?
+                    .to_owned(),
+            ),
+            shard_count: 4,
+            ..StoreConfig::default()
+        })
+        .await
+        .err()
+        .ok_or("the haematite boot path must refuse a store config with no node_cache_budget")?;
+        let ServerError::Config { message } = error else {
+            return Err(format!("expected a config refusal, got {error:?}").into());
+        };
+        assert!(
+            message.contains("store.node_cache_budget"),
+            "the refusal must name the missing key, got: {message}"
+        );
+        assert!(
+            message.contains("AION_STORE_NODE_CACHE_BUDGET"),
+            "the refusal must name the environment override, got: {message}"
+        );
+        Ok(())
+    }
+
     // The libSQL connect path is now an opt-in backend (`libsql-backend`), so this
     // libSQL-specific outbox-sharing assertion compiles and runs only under that
     // feature. The memory case is covered above, unconditionally.
