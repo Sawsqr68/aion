@@ -17,6 +17,18 @@ grpc_address = "127.0.0.1:50051"    # gRPC API + worker protocol
 
 [store]
 backend = "haematite"               # durable ablative event store (the default)
+# The node cache's BYTE ceiling. REQUIRED — the server refuses to start
+# without it, because a node is not a fixed-size thing (a leaf reaches the
+# ~96KB class) and a cache bounded only by its entry count is unbounded in
+# bytes: a 1,024-entry cache can hold gigabytes of fat leaves.
+#
+# `unlimited` is the pre-budget behaviour, written out loud so that choosing
+# it is visible here and in a diff. It is what this scaffold ships because
+# only the operator knows how much resident memory this process may spend on
+# cached nodes — nothing here invents that number for you. SET A CEILING
+# once you know your box, e.g.:
+#   node_cache_budget = { bytes = 1073741824 }   # 1 GiB
+node_cache_budget = "unlimited"
 # The database directory defaults to `<AION_HOME>/data`, created on start.
 # One legacy exception: when AION_HOME is unset (a derived home) and a real
 # `./aion-data` directory sits in the server's working directory, that
