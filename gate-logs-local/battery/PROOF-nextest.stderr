@@ -1,0 +1,28 @@
+────────────
+ Nextest run ID d56614cc-bdf4-4d1e-b799-7a173ee0fefe with nextest profile: default
+    Starting 1 test across 1 binary (694 tests skipped)
+        FAIL [   0.018s] (1/1) aion-rs runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed
+  output ───
+
+    running 1 test
+
+    thread 'runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed' (10793868) panicked at crates/aion/src/runtime/nif_determinism.rs:621:9:
+    assertion `left == right` failed: a resumed run's first now() is its start, not the wake event it has not reached
+      left: "1700000000000"
+     right: "battery-channel-proof"
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    test runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 694 filtered out; finished in 0.00s
+
+
+────────────
+     Summary [   0.046s] 1 test run: 0 passed, 1 failed, 694 skipped
+        FAIL [   0.018s] (1/1) aion-rs runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)

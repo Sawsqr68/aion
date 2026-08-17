@@ -1,0 +1,6 @@
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":212,"column":9,"lint":"unused_variables","message":"unused variable: `unused`"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":211,"column":4,"lint":"dead_code","message":"function `battery_channel_proof` is never used"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":213,"column":5,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":212,"column":9,"lint":"unused_variables","message":"unused variable: `unused`"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":211,"column":4,"lint":"dead_code","message":"function `battery_channel_proof` is never used"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_determinism.rs","line":213,"column":5,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}

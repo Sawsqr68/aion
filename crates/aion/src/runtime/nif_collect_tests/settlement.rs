@@ -199,3 +199,45 @@ async fn expired_scope_cancels_unresolved_and_replay_derives_the_same_abort() ->
     assert_eq!(replay.pinned(), None);
     replay.shutdown()
 }
+
+/// aion#1: a settled race advances workflow-visible now over EVERY member's
+/// recorded terminal — the WINNER included.
+///
+/// A one-member race has no loser cancellation to cover the winner, so a
+/// settlement that observed only the losers would leave a replayed run's
+/// position behind its live original's: live advanced when it recorded the
+/// completion, replay would advance to nothing. The same gap opens on a
+/// multi-member race whose losers already carried earlier terminals.
+#[tokio::test(flavor = "multi_thread")]
+async fn race_settlement_advances_now_over_the_recorded_winner() -> TestResult {
+    let mut events = pending_batch(&["a"]);
+    events.push(completed(0, r#""win-a""#));
+    let harness = CollectHarness::over_events(&events).await?;
+
+    // A fresh engine epoch: this handle has consumed nothing yet, so the
+    // position cell is unset and `now` would answer the run's start.
+    assert_eq!(
+        harness.handle.workflow_now_millis(),
+        None,
+        "a fresh handle starts with no consumed position"
+    );
+
+    let step = harness.step(CollectKind::Race, &specs(&["a"]));
+    assert_eq!(step, Ok(CollectStep::RaceWon(Ok(r#""win-a""#.to_owned()))));
+
+    let history = harness.store.read_history(&harness.workflow_id).await?;
+    let winner_recorded_at = history
+        .iter()
+        .find_map(|event| match event {
+            Event::ActivityCompleted { .. } => Some(*event.recorded_at()),
+            _ => None,
+        })
+        .ok_or("the winner's ActivityCompleted must be in history")?;
+
+    assert_eq!(
+        harness.handle.workflow_now_millis(),
+        Some(winner_recorded_at.timestamp_millis()),
+        "the settled race must advance workflow-visible now to the winner's recorded terminal"
+    );
+    harness.shutdown()
+}

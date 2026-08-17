@@ -121,11 +121,21 @@ pub(super) fn settle_race(
     }
     if let Some((winner_ordinal, outcome)) = winner {
         for ordinal in base_ordinal..base_ordinal + count {
+            // EVERY member is observed, the winner included, before the
+            // winner-only skip. A winner found by `recorded_race_winner` was
+            // recorded by an EARLIER pass — which advanced to it live — so a
+            // replayed settlement that skipped it would land on a smaller
+            // maximum than its live original whenever no later loser
+            // cancellation covered it (a one-member race, or a batch whose
+            // other members already had earlier terminals). `observed_terminal`
+            // only reads history, so hoisting it above `drop_runtime_entries`
+            // changes nothing else.
+            let recorded = observed_terminal(context, ordinal)?;
             if ordinal == winner_ordinal {
                 continue;
             }
             drop_runtime_entries(deps, pid, ordinal)?;
-            if observed_terminal(context, ordinal)?.is_none() {
+            if recorded.is_none() {
                 record_cancelled(context, ordinal)?;
             }
         }
