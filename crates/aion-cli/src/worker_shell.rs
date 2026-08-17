@@ -683,10 +683,8 @@ step shout_second after greet_first
         );
         let execution = tokio::spawn(async move { execute(&action, &Value::Null, &context).await });
 
-        wait_for_pid_file(&parent_file).await?;
-        wait_for_pid_file(&grandchild_file).await?;
-        let parent = read_pid(&parent_file)?;
-        let grandchild = read_pid(&grandchild_file)?;
+        let parent = wait_for_pid(&parent_file).await?;
+        let grandchild = wait_for_pid(&grandchild_file).await?;
         cancellation.cancel();
 
         let result = tokio::time::timeout(Duration::from_secs(5), execution)
@@ -711,7 +709,45 @@ step shout_second after greet_first
         .into())
     }
 
-    async fn wait_for_pid_file(path: &Path) -> TestResult {
+    /// The pid-file race, made deterministic (aion#45).
+    ///
+    /// `cancellation_reaps_the_entire_spawned_process_group` has twice failed a
+    /// full-workspace battery with `ParseIntError { kind: Empty }` and is green
+    /// every time it runs solo. The mechanism is in the fixture's own shell:
+    /// `echo $$ > "$1"` CREATES and TRUNCATES the file before `echo` writes into
+    /// it, so between those two syscalls the path is an existing file holding
+    /// nothing. A waiter that polls `is_file()` returns inside that window and
+    /// the reader parses an empty string.
+    ///
+    /// Rather than hunt for the window under load, this plants it: an empty file
+    /// that exists from the start, filled in a little later by a writer that
+    /// stands in for the spawned shell. A waiter keyed on existence returns
+    /// immediately and the read fails; a waiter keyed on a PARSEABLE pid waits
+    /// and reads the real one.
+    #[tokio::test]
+    async fn an_existing_but_empty_pid_file_is_not_readiness() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("racing.pid");
+        // The create-vs-write window, held open deliberately.
+        std::fs::write(&path, b"")?;
+
+        let writer_path = path.clone();
+        let writer = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            std::fs::write(&writer_path, b"4242\n")
+        });
+
+        let pid = wait_for_pid(&path).await?;
+        writer.await??;
+        assert_eq!(
+            pid, 4242,
+            "the waiter must yield the pid the writer actually wrote"
+        );
+        Ok(())
+    }
+
+    /// Waits for the spawned shell's pid file and returns the pid in it.
+    async fn wait_for_pid(path: &Path) -> Result<i32, Box<dyn Error>> {
         let deadline = Instant::now() + Duration::from_secs(5);
         while !path.is_file() {
             if Instant::now() >= deadline {
@@ -723,7 +759,7 @@ step shout_second after greet_first
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        Ok(())
+        read_pid(path)
     }
 
     fn read_pid(path: &Path) -> Result<i32, Box<dyn Error>> {

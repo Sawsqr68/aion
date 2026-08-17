@@ -1,0 +1,25 @@
+test worker_shell::tests::composite_field_projection_is_typed_refusal ... ok
+test worker_shell::tests::an_existing_but_empty_pid_file_is_not_readiness ... FAILED
+test worker_shell::tests::strict_manifest_rejects_unknown_keys_and_bad_placeholders ... ok
+test worker_shell::tests::a_wired_action_streams_its_output_onto_the_transcript ... ok
+test worker_shell::tests::a_queue_the_document_does_not_declare_is_refused ... ok
+test worker_shell::tests::an_action_with_a_declared_body_is_refused ... ok
+test worker_shell::tests::an_undeclared_action_is_refused_by_name ... ok
+test worker_shell::tests::a_partially_wired_queue_is_refused ... ok
+test worker_shell::tests::the_worker_advertises_the_documents_action_surface ... ok
+test worker_shell::tests::emitted_manifest_passes_the_real_whole_queue_startup_check ... ok
+test worker_shell::tests::process_boundary_round_trips_text_and_json ... ok
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+failures:
+
+---- worker_shell::tests::an_existing_but_empty_pid_file_is_not_readiness stdout ----
+Error: ParseIntError { kind: Empty }
+
+
+failures:
+    worker_shell::tests::an_existing_but_empty_pid_file_is_not_readiness
+
+test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 281 filtered out; finished in 2.04s
+
+error: test failed, to rerun pass `-p aion-cli --bin aion`
