@@ -2,7 +2,7 @@
 
 **Brief:** `docs/briefs/aion-write-amplification-fix-brief-20260817.md`, piece A.
 **Evidence base:** `docs/tracking/aion-write-amplification-forensics-20260817.md`.
-**Worktree:** `stack/aion/.worktrees/wa-batching`, branch `wa-batching` off `dev` @ `c58079469`.
+**Worktree:** `stack/aion/.worktrees/wa-batching`, branch `wa-batching` off `dev` @ `513ee6c51`.
 **Never pushed, never merged.**
 
 ## The defect, and what changed
@@ -23,9 +23,9 @@ in the batch**, not one per event.
 
 | Commit | What |
 |---|---|
-| `55ed634fe` | **RED** — `test(wa-a): the transcript drain costs one store commit per event` |
-| `1c82b42da` | **FIX** — `fix(wa-a): coalesce transcript appends — N events, one commit per stream` |
-| `6023bad65` | **FIX** — `fix(wa-a): the stock-config test boots state the flush policy` (found by the gate extraction, not by me) |
+| `e91a8ca46` | **RED** — `test(wa-a): the transcript drain costs one store commit per event` |
+| `1616aeace` | **FIX** — `fix(wa-a): coalesce transcript appends — N events, one commit per stream` |
+| `1b9689065` | **FIX** — `fix(wa-a): the stock-config test boots state the flush policy` (found by the gate extraction, not by me) |
 
 ### The red, quoted
 
@@ -140,7 +140,7 @@ required-no-default knob (`websocket.cluster_broadcast_capacity` behaves the
 same way today). The deployed estate config must gain the two keys BEFORE the
 aion server is next restarted on this branch. Three integration tests that
 booted from a literally empty config were updated for exactly this reason
-(commit `6023bad65`) — the gate found them, and their failure was the product
+(commit `1b9689065`) — the gate found them, and their failure was the product
 behaving as designed, not a defect.
 
 ## Battery — canonical gate extraction
@@ -163,7 +163,7 @@ probe was reverted:
 
 That same probe run also surfaced four REAL findings
 (`update_check_start_binding` booting from an empty config), fixed in
-`6023bad65` — the instrument earned its keep on its proving run.
+`1b9689065` — the instrument earned its keep on its proving run.
 
 **FINAL BATTERY — GREEN: EMPTY EXTRACTION.**
 
@@ -184,7 +184,7 @@ construction) and the script actually executed,
 `gate-logs/wa-batching/gate-battery.sh`.
 
 Under this style rc codes are not the verdict, but for the record the script
-exited 0 and the run was made on the final tree — HEAD `6023bad65`, working
+exited 0 and the run was made on the final tree — HEAD `1b9689065`, working
 tree clean apart from this report and the gate logs.
 
 That the nextest leg genuinely runs and reports (rather than being silently
@@ -217,7 +217,7 @@ lane also touched:
 
 **No overlap with the live `wa-envelope-delta` lane.** Verified by set
 intersection of the two branches' changed-file lists against the common base
-`c58079469`: **empty**. That lane's files (`aion-integrations/*`,
+`513ee6c51`: **empty**. That lane's files (`aion-integrations/*`,
 `aion-integration-norn/*`, `aion-cli/src/tail.rs`, `transcript_resolve*`,
 `api/http/transcripts.rs`, `stream/transcript_stream.rs`) were not opened here,
 and `aion-integrations/tests/mock_harness.rs` was never touched. The zone split
@@ -255,3 +255,24 @@ is a genuine textual overlap and whoever lands second should expect it.
 - **No live estate anything.** Nothing was run against the estate server,
   `~/.aion`, or `stack/aion/aion-data`. Every store in every test is a
   per-test temp directory created by the test itself.
+
+---
+
+## Post-rebase addendum (Vesper, at collection — 2026-08-17 ~12:55Z)
+
+- **SHA note:** commit citations above were remapped after this lane rebased
+  onto post-D main (`513ee6c51`); the builder verified the rebase preserved
+  its work byte-identically (`git diff base..tip -- crates/` hashes equal
+  before and after). Per the estate rule this lesson produced: reports cite
+  commits **by subject**; the SHA table is a snapshot **as of base
+  `513ee6c51`**.
+- **Battery of record is the post-rebase run** (battery re-runs on a new
+  tree), with completion kept provable this time: check rc=0, clippy rc=0,
+  nextest Summary `5136 tests run: 5135 passed (5 slow), 1 failed,
+  0 skipped` (`gate-logs/wa-batching/rebase-nextest.stderr`), findings
+  `rebase-findings.jsonl` = exactly one line — the known aion#42
+  load-sensitive awl_bc4 differential flake (a THIRD distinct divergent
+  case, `layer_hygiene`, same fork-ordering activity_id swap shape; two
+  solo re-runs on this tree passed, `rebase-flake-probe-{1,2}.log`). This
+  lane touches zero files in `crates/aion`; the finding is inherited, not
+  caused, and is tracked on the board as aion#42.
