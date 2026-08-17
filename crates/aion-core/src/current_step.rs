@@ -25,8 +25,9 @@
 //!   adoption path (#36) — the same execution, the same attempt, already
 //!   dispatched. Retiring the ordinal on it would tell a reader that a builder
 //!   still at work had stopped; re-opening it as scheduled would erase the
-//!   dispatch that is still in flight. Both would be false, so the arm is
-//!   written out rather than left to the catch-all.
+//!   dispatch that is still in flight. Both would be false, and the pin
+//!   `an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched` fails
+//!   against either.
 //! - `ActivityCompleted` / `ActivityFailed` / `ActivityCancelled` retire it.
 //! - [`Event::ActivityAdvisoryExhausted`] is deliberately NOT a terminal: it
 //!   ACCOMPANIES an `ActivityFailed` and never replaces it, so treating it as
@@ -130,11 +131,6 @@ fn fold(history: &[Event]) -> Vec<Open> {
                     held.last_advanced_at = position;
                 }
             }
-            // The adopted attempt is the one already folded above: same
-            // ordinal, same attempt, same dispatch instant. Stated, not left to
-            // the catch-all, so a future edit has to argue with the module docs
-            // before it retires or re-opens a live execution.
-            Event::ActivityAdoptionOffered { .. } => {}
             Event::ActivityCompleted { activity_id, .. }
             | Event::ActivityFailed { activity_id, .. }
             | Event::ActivityCancelled { activity_id, .. } => {
@@ -150,6 +146,15 @@ fn fold(history: &[Event]) -> Vec<Open> {
                 envelope.recorded_at,
                 position,
             ),
+            // Everything else leaves the fold alone, INCLUDING
+            // `ActivityAdoptionOffered`: the adopted attempt is the one already
+            // folded above — same ordinal, same attempt, same dispatch instant —
+            // so there is nothing to advance and nothing to retire. It is named
+            // here rather than given its own arm because an arm doing nothing is
+            // this arm (clippy::match_same_arms, correctly); what stops a future
+            // edit from retiring or re-opening a live execution is the pin
+            // `an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched`,
+            // which fails against both mistakes.
             _ => {}
         }
     }

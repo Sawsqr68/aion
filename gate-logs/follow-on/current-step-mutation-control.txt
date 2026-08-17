@@ -1,5 +1,3 @@
-test current_step::tests::an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched ... FAILED
-
 failures:
 
 ---- current_step::tests::an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched stdout ----

@@ -1,0 +1,27 @@
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto-generated)
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-mcp)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+    Checking aion-darwin-acl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-darwin-acl)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/xtask)
+error: these match arms have identical bodies
+   --> crates/aion-core/src/current_step.rs:137:13
+    |
+137 |             Event::ActivityAdoptionOffered { .. } => {}
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+153 |             _ => {}
+    |             ^^^^^^^ the wildcard arm
+    |
+    = help: if this is unintentional make the arms return different values
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#match_same_arms
+    = note: `-D clippy::match-same-arms` implied by `-D clippy::pedantic`
+    = help: to override `-D clippy::pedantic` add `#[allow(clippy::match_same_arms)]`
+help: otherwise remove the non-wildcard arm
+    |
+137 -             Event::ActivityAdoptionOffered { .. } => {}
+    |
+
+error: could not compile `aion-core` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `aion-core` (lib test) due to 1 previous error
