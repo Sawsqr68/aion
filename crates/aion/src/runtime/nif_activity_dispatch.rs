@@ -219,6 +219,99 @@ fn record_superseded_attempt(
         .map_err(|error| context_error_term(ctx, &error))
 }
 
+/// Everything the opening record of ONE delivery needs, so the decision below
+/// can be read on its own rather than inside a two-hundred-line dispatch.
+struct Opening<'a> {
+    /// The ordinal being delivered.
+    activity_id: &'a ActivityId,
+    /// The declared action's name — the key the class is resolved by.
+    activity_type: &'a str,
+    /// The payload the delivery carries.
+    input: aion_core::Payload,
+    /// The queue the dispatch resolved to.
+    task_queue: &'a str,
+    /// The node affinity the dispatch resolved to, if any.
+    node: Option<&'a str>,
+    /// The attempt a FRESH ordinal delivers at (`FIRST_DELIVERY_ATTEMPT`).
+    first_delivery_attempt: u32,
+}
+
+/// Record what recovery owes this ordinal, and answer the attempt the live
+/// dispatch must carry.
+///
+/// What a DANGLING attempt means depends on whether its holder can outlive the
+/// engine, and only the declared class can say. See
+/// [`super::nif_activity_agent`] for the argument in full:
+///
+/// * agent (#36): the holder is its own OS process and may still be working.
+///   RETAIN the attempt identity — the worker's spawn gate and single-flight
+///   recognise the execution they already hold — and record an explicit
+///   adoption OFFER. The engine must not pre-emptively lie that it died.
+/// * ordinary (#266 Defect B): nothing survives to settle it. Record the
+///   honest supersession and continue the trail at the NEXT attempt, so the run
+///   stops reading as silently still working.
+///
+/// #197: either way a live re-dispatch continues the ordinal's recorded trail
+/// rather than restarting it, and a fresh ordinal resolves to
+/// `first_delivery_attempt` exactly as before.
+///
+/// The two records are mutually exclusive by construction — one `match`, one
+/// arm each — so no attempt can ever carry both.
+fn open_this_delivery(
+    ctx: &mut ProcessContext,
+    context: &NifContext,
+    catalog: Option<&crate::loader::WorkflowCatalog>,
+    opening: Opening<'_>,
+) -> Result<u32, Term> {
+    let Opening {
+        activity_id,
+        activity_type,
+        input,
+        task_queue,
+        node,
+        first_delivery_attempt,
+    } = opening;
+    let dangling = super::nif_activity_retry::dangling_attempt(context.history(), activity_id);
+    let adopts = dangling.is_some()
+        && super::nif_activity_agent::declared_agent(
+            catalog,
+            &context.workflow_handle(),
+            activity_type,
+        );
+    match dangling {
+        Some(dangling) if adopts => {
+            context
+                .record_activity_adoption_offered(chrono::Utc::now(), activity_id.clone(), dangling)
+                .map_err(|error| context_error_term(ctx, &error))?;
+            Ok(dangling)
+        }
+        dangling => {
+            let attempt =
+                super::nif_activity_retry::next_delivery_attempt(context.history(), activity_id)
+                    .max(first_delivery_attempt);
+            if let Some(superseded) = dangling {
+                record_superseded_attempt(ctx, context, activity_id, superseded)?;
+            }
+            record_started(
+                ctx,
+                context,
+                activity_id.clone(),
+                super::nif_activity::ScheduledActivity {
+                    activity_type: activity_type.to_owned(),
+                    input,
+                    task_queue: task_queue.to_owned(),
+                    node: node.map(str::to_owned),
+                    // NOI-0: stamp the SAME one-based attempt onto the recorded
+                    // `ActivityStarted` that is stamped onto the live
+                    // `ActivityDispatch` below, so history and the worker wire agree.
+                    attempt,
+                },
+            )?;
+            Ok(attempt)
+        }
+    }
+}
+
 fn dispatch_activity_with_context(
     ctx: &mut ProcessContext,
     mut context: NifContext,
@@ -270,69 +363,19 @@ fn dispatch_activity_with_context(
             // value onto BOTH the recorded `ActivityScheduled` and the live
             // dispatch so history and routing never diverge.
             let node = super::nif_activity::resolve_node(&call.config);
-            // What a DANGLING attempt means depends on whether its holder can
-            // outlive the engine, and only the declared class can say. See
-            // `super::nif_activity_agent` for the argument in full:
-            //
-            // * agent (#36): the holder is its own OS process and may still be
-            //   working. RETAIN the attempt identity — the worker's spawn gate
-            //   and single-flight recognise the execution they already hold —
-            //   and record an explicit adoption OFFER. The engine must not
-            //   pre-emptively lie that it died.
-            // * ordinary (#266 Defect B): nothing survives to settle it. Record
-            //   the honest supersession and continue the trail at the NEXT
-            //   attempt, so the run stops reading as silently still working.
-            //
-            // #197: either way a live re-dispatch continues the ordinal's
-            // recorded trail rather than restarting it, and a fresh ordinal
-            // resolves to `call.attempt` (`FIRST_DELIVERY_ATTEMPT`) as before.
-            let dangling =
-                super::nif_activity_retry::dangling_attempt(context.history(), &activity_id);
-            let adopts = dangling.is_some()
-                && super::nif_activity_agent::declared_agent(
-                    catalog,
-                    &context.workflow_handle(),
-                    &call.name,
-                );
-            let attempt = match dangling {
-                Some(dangling) if adopts => dangling,
-                _ => super::nif_activity_retry::next_delivery_attempt(
-                    context.history(),
-                    &activity_id,
-                )
-                .max(call.attempt),
-            };
-            match dangling {
-                Some(dangling) if adopts => {
-                    context
-                        .record_activity_adoption_offered(
-                            chrono::Utc::now(),
-                            activity_id.clone(),
-                            dangling,
-                        )
-                        .map_err(|error| context_error_term(ctx, &error))?;
-                }
-                dangling => {
-                    if let Some(superseded) = dangling {
-                        record_superseded_attempt(ctx, &context, &activity_id, superseded)?;
-                    }
-                    record_started(
-                        ctx,
-                        &context,
-                        activity_id.clone(),
-                        super::nif_activity::ScheduledActivity {
-                            activity_type: call.name.clone(),
-                            input: input_payload,
-                            task_queue: task_queue.clone(),
-                            node: node.clone(),
-                            // NOI-0: stamp the SAME one-based attempt onto the recorded
-                            // `ActivityStarted` that is stamped onto the live
-                            // `ActivityDispatch` below, so history and the worker wire agree.
-                            attempt,
-                        },
-                    )?;
-                }
-            }
+            let attempt = open_this_delivery(
+                ctx,
+                &context,
+                catalog,
+                Opening {
+                    activity_id: &activity_id,
+                    activity_type: &call.name,
+                    input: input_payload,
+                    task_queue: &task_queue,
+                    node: node.as_deref(),
+                    first_delivery_attempt: call.attempt,
+                },
+            )?;
             let labels = labels_from_config(&call.config);
             // R5: the declared class comes off the contract this run is pinned
             // to, never off the dispatch config the SDK builds.

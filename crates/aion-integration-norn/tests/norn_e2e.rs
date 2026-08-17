@@ -252,10 +252,18 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
     let decoded = payload
         .to_json()
         .map_err(|error| format!("the result payload must be JSON: {error}"))?;
+    assert_agent_outcome_record(&decoded, "hello from the mock provider")?;
+    Ok(())
+}
+
+/// Hold a completed run's payload against the agent-outcome contract
+/// `AgentSession::wait_result` states: the record's four fields, the canonical
+/// stop reason, and a session id that is a FACT rather than a promise.
+fn assert_agent_outcome_record(decoded: &serde_json::Value, reply: &str) -> Result<(), String> {
     let Some(outcome) = decoded.as_object() else {
-        return Err(
-            format!("a completed run's output is the agent-outcome RECORD, got {decoded}").into(),
-        );
+        return Err(format!(
+            "a completed run's output is the agent-outcome RECORD, got {decoded}"
+        ));
     };
     let field = |name: &str| -> Result<String, String> {
         outcome
@@ -264,13 +272,12 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
             .map(str::to_owned)
             .ok_or_else(|| format!("the agent-outcome record must carry `{name}`: {decoded}"))
     };
-    let text = field("text")?;
     assert!(
-        text.contains("hello from the mock provider"),
-        "the record's text carries the agent's accumulated output: {text}"
+        field("text")?.contains(reply),
+        "the record's text carries the agent's accumulated output: {decoded}"
     );
     assert!(
-        field("final_message")?.contains("hello from the mock provider"),
+        field("final_message")?.contains(reply),
         "the record's final_message carries the last completed answer: {decoded}"
     );
     assert_eq!(
@@ -278,9 +285,10 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
         "end_turn",
         "the record spells the stop reason through the one canonical mapping: {decoded}"
     );
-    // A FACT, not a resumability promise (#205): the handle of the conversation that
-    // produced this outcome. The empty string is refused at `into_payload`, so a
-    // present-but-empty id would mean that funnel was bypassed.
+    // A FACT, not a resumability promise (#205): the handle of the conversation
+    // that produced this outcome. The empty string is refused at
+    // `into_payload`, so a present-but-empty id would mean that funnel was
+    // bypassed.
     assert!(
         !field("session_id")?.is_empty(),
         "the record names the conversation that produced it: {decoded}"
