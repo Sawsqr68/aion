@@ -69,6 +69,11 @@ fn config_for(path: &std::path::Path) -> DatabaseConfig {
         shard_count: 3,
         executor_threads: None,
         distributed: None,
+        // No byte bound, stated out loud: this fixture measures
+        // replication/routing and never re-reads enough nodes for a ceiling
+        // to bind, so a number here would be decoration. haematite has no
+        // default for this; `Unlimited` is the pre-budget behaviour, named.
+        node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
     }
 }
 
