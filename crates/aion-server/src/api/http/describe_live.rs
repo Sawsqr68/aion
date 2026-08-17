@@ -275,6 +275,12 @@ async fn transcript(
         .replay_from(key, 0)
         .await
         .map_err(|error| HttpWireError(ServerError::from(error).to_wire_error()))?;
+    // Reconstruct before the tail is cut, for the same reason the REST fetch does: the base of the
+    // turn a tail opens inside is older than the tail.
+    crate::transcript_resolve::note_unresolved(
+        "http:workflows/describe-live",
+        &crate::transcript_resolve::resolve_records(&mut records),
+    );
     let head_seq = transcript_head(&records)?;
     let tail = usize::try_from(tail).unwrap_or(usize::MAX);
     let omitted = records.len().saturating_sub(tail);

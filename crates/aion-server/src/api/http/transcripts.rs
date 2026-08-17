@@ -160,6 +160,13 @@ pub(crate) async fn fetch_transcript(
     } else {
         ranged
     };
+    // Reconstruct the compacted provider envelopes BEFORE the window is narrowed: a turn's base
+    // frame can sit outside the slice the caller asked for and still be the only thing that can
+    // resolve the deltas inside it.
+    crate::transcript_resolve::note_unresolved(
+        "http:workflows/transcript",
+        &crate::transcript_resolve::resolve_records(&mut records),
+    );
     let head_seq = transcript_head(&records)?;
     if request.last.is_none() && read_from != 0 {
         records.retain(|record| record.store_seq >= read_from);

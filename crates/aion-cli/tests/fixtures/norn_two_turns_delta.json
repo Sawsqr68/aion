@@ -1,0 +1,258 @@
+[
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:43:37Z",
+    "worker_seq": 100,
+    "store_seq": 40,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {
+          "id": "resp_fixture_turn_01",
+          "object": "response",
+          "created_at": 1786895017,
+          "status": "queued",
+          "model": "gpt-5.2-codex",
+          "instructions": "You are the implementation agent for an isolated repository lane. Inspect the repository before editing. Preserve unrelated changes. Implement the bounded capability end to end, add focused regression tests, run the required verification battery, and report only evidence you directly observed. Never use the live estate, a sibling worktree, or a globally installed project binary. Do not bypass lints, ignore tests, weaken assertions, or hide failures behind fallbacks.",
+          "output": [],
+          "parallel_tool_calls": true,
+          "temperature": 1.0,
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "name": "read",
+              "type": "function"
+            },
+            {
+              "name": "bash",
+              "type": "function"
+            }
+          ],
+          "usage": null
+        },
+        "agent_id": "33333333-3333-4333-8333-333333333333",
+        "agent_role": "orchestrator"
+      }
+    }
+  },
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:43:37.002Z",
+    "worker_seq": 101,
+    "store_seq": 41,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "aion_envelope_delta": {
+          "v": 1,
+          "base": "resp_fixture_turn_01",
+          "base_worker_seq": 100,
+          "base_digest": "135c15ee5a0cd90892c5e15d1afcc294e6f4218f51188c1984c5f816aaa43072",
+          "set": {
+            "type": "response.in_progress",
+            "sequence_number": 1,
+            "response": {
+              "status": "in_progress"
+            }
+          },
+          "unset": []
+        }
+      }
+    }
+  },
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:43:38.513Z",
+    "worker_seq": 102,
+    "store_seq": 42,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "aion_envelope_delta": {
+          "v": 1,
+          "base": "resp_fixture_turn_01",
+          "base_worker_seq": 100,
+          "base_digest": "135c15ee5a0cd90892c5e15d1afcc294e6f4218f51188c1984c5f816aaa43072",
+          "set": {
+            "type": "response.completed",
+            "sequence_number": 8,
+            "response": {
+              "status": "completed",
+              "output": [
+                {
+                  "id": "msg_fixture_01",
+                  "type": "message",
+                  "role": "assistant",
+                  "status": "completed",
+                  "content": [
+                    {
+                      "type": "output_text",
+                      "text": "Implemented and verified."
+                    }
+                  ]
+                }
+              ],
+              "usage": {
+                "input_tokens": 1200,
+                "output_tokens": 7,
+                "total_tokens": 1207
+              }
+            }
+          },
+          "unset": []
+        }
+      }
+    }
+  },
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:44:10Z",
+    "worker_seq": 103,
+    "store_seq": 43,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {
+          "id": "resp_fixture_turn_02",
+          "object": "response",
+          "created_at": 1786895050,
+          "status": "queued",
+          "model": "gpt-5.2-codex",
+          "instructions": "You are the implementation agent for an isolated repository lane. Inspect the repository before editing. Preserve unrelated changes. Implement the bounded capability end to end, add focused regression tests, run the required verification battery, and report only evidence you directly observed. Never use the live estate, a sibling worktree, or a globally installed project binary. Do not bypass lints, ignore tests, weaken assertions, or hide failures behind fallbacks.",
+          "output": [],
+          "parallel_tool_calls": true,
+          "temperature": 1.0,
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "name": "read",
+              "type": "function"
+            },
+            {
+              "name": "bash",
+              "type": "function"
+            }
+          ],
+          "usage": null
+        },
+        "agent_id": "33333333-3333-4333-8333-333333333333",
+        "agent_role": "orchestrator"
+      }
+    }
+  },
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:44:10.004Z",
+    "worker_seq": 104,
+    "store_seq": 44,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "aion_envelope_delta": {
+          "v": 1,
+          "base": "resp_fixture_turn_02",
+          "base_worker_seq": 103,
+          "base_digest": "9c2964cdcc0408410cef12e13496f200343c9541df34ea720afd472ab526b3a9",
+          "set": {
+            "type": "response.in_progress",
+            "sequence_number": 1,
+            "response": {
+              "status": "in_progress"
+            }
+          },
+          "unset": []
+        }
+      }
+    }
+  },
+  {
+    "workflow_id": "11111111-1111-4111-8111-111111111111",
+    "run_id": "22222222-2222-4222-8222-222222222222",
+    "activity_id": 7,
+    "attempt": 2,
+    "agent_id": "33333333-3333-4333-8333-333333333333",
+    "agent_role": "orchestrator",
+    "emitted_at": "2026-08-16T15:44:12.881Z",
+    "worker_seq": 105,
+    "store_seq": 45,
+    "ephemeral": false,
+    "kind": {
+      "kind": "Raw",
+      "source": "event/raw",
+      "value": {
+        "aion_envelope_delta": {
+          "v": 1,
+          "base": "resp_fixture_turn_02",
+          "base_worker_seq": 103,
+          "base_digest": "9c2964cdcc0408410cef12e13496f200343c9541df34ea720afd472ab526b3a9",
+          "set": {
+            "type": "response.completed",
+            "sequence_number": 8,
+            "response": {
+              "status": "completed",
+              "output": [
+                {
+                  "id": "msg_fixture_02",
+                  "type": "message",
+                  "role": "assistant",
+                  "status": "completed",
+                  "content": [
+                    {
+                      "type": "output_text",
+                      "text": "Second turn complete."
+                    }
+                  ]
+                }
+              ],
+              "usage": {
+                "input_tokens": 1310,
+                "output_tokens": 5,
+                "total_tokens": 1315
+              }
+            }
+          },
+          "unset": []
+        }
+      }
+    }
+  }
+]

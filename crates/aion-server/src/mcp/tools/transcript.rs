@@ -64,10 +64,16 @@ pub(crate) async fn read_transcript(
         attempt,
     );
     let publisher = state.transcript_publisher();
-    let records = publisher
+    let mut records = publisher
         .replay_from(&key, from_seq)
         .await
         .map_err(|error| tool_failure(&crate::ServerError::from(error).to_wire_error()))?;
+    // Reconstruct the compacted provider envelopes before paging, so an agent reading a transcript
+    // through MCP sees exactly the envelopes a pre-compaction store held.
+    crate::transcript_resolve::note_unresolved(
+        "mcp:read_transcript",
+        &crate::transcript_resolve::resolve_records(&mut records),
+    );
     // A ranged read that lands past the end returns nothing and therefore
     // cannot see the head. Re-read from zero for THAT case only, so the head is
     // the stream's real head rather than an echo of the cursor the caller

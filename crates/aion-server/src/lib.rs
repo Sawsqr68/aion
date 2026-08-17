@@ -87,6 +87,9 @@ pub mod stream;
 /// private-root validation.
 #[cfg(test)]
 pub(crate) mod test_support;
+/// The transcript serving boundary's reconstruction of compacted provider
+/// envelopes, shared by every surface that serves a transcript.
+pub(crate) mod transcript_resolve;
 /// The built-in manual-only update check: embedded document, boot install,
 /// completed-check recording, and the served last-check state.
 pub mod update_check;

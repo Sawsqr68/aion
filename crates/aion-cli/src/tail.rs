@@ -477,6 +477,181 @@ fn parse_run_id(value: &str) -> Result<RunId> {
 mod tests {
     use super::*;
 
+    /// The three stream shapes a transcript reader must handle, forever.
+    ///
+    /// `Old` is what every stream written before envelope compaction contains. `Delta` is what a
+    /// stream written after it contains. `Mixed` is a single stream that spans the change — the
+    /// shape that never goes away, because history is not rewritten.
+    const OLD: &str = include_str!("../tests/fixtures/norn_two_turns_old.json");
+    const DELTA: &str = include_str!("../tests/fixtures/norn_two_turns_delta.json");
+    const MIXED: &str = include_str!("../tests/fixtures/norn_two_turns_mixed.json");
+
+    /// The one rendering every shape must produce. Generated from the OLD fixture by the
+    /// unmodified renderer, so it is the reader's real behaviour and not a description of it.
+    const GOLDEN: &str = include_str!("../tests/fixtures/norn_two_turns_old.rendered.txt");
+
+    /// Everything the CLI receives has already crossed the server's transcript serving boundary,
+    /// which reconstructs compacted envelopes. This is that boundary's call, so a fixture is put
+    /// through exactly what a served stream is put through.
+    fn as_served(events: &[ActivityEvent]) -> (Vec<ActivityEvent>, usize) {
+        let mut decoder = aion_integrations::envelope_delta::EnvelopeDeltaDecoder::new();
+        let mut unresolved = 0;
+        let served = events
+            .iter()
+            .map(|event| {
+                let (resolved, report) = decoder.resolve_event(event);
+                if report.is_some() {
+                    unresolved += 1;
+                }
+                resolved
+            })
+            .collect();
+        (served, unresolved)
+    }
+
+    fn render_all(events: &[ActivityEvent]) -> String {
+        events
+            .iter()
+            .map(render_event)
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    }
+
+    /// The control arm: the old format renders to the golden, by construction.
+    #[test]
+    fn the_old_format_two_turn_stream_is_the_control_rendering() -> Result<()> {
+        let old: Vec<ActivityEvent> = serde_json::from_str(OLD)?;
+        assert_eq!(old.len(), 6, "two turns of three lifecycle frames");
+        assert_eq!(render_all(&old), GOLDEN);
+        Ok(())
+    }
+
+    /// Shape two: every frame after each turn's first is a delta.
+    #[test]
+    fn a_pure_delta_stream_renders_byte_for_byte_as_the_old_format_did() -> Result<()> {
+        let delta: Vec<ActivityEvent> = serde_json::from_str(DELTA)?;
+        let compacted = delta
+            .iter()
+            .filter(|event| {
+                matches!(&event.kind,
+                ActivityEventKind::Raw { value, .. }
+                    if value.get(aion_integrations::envelope_delta::ENVELOPE_DELTA_KEY).is_some())
+            })
+            .count();
+        assert_eq!(compacted, 4, "both turns keep a base and compact the rest");
+
+        let (served, unresolved) = as_served(&delta);
+        assert_eq!(unresolved, 0, "every delta has its base in this window");
+
+        // The stronger claim first: the served EVENTS are byte-identical to the old-format ones,
+        // so equivalence does not depend on the renderer being lossy in a convenient way.
+        let old: Vec<ActivityEvent> = serde_json::from_str(OLD)?;
+        assert_eq!(serde_json::to_vec(&served)?, serde_json::to_vec(&old)?);
+        assert_eq!(render_all(&served), GOLDEN);
+        Ok(())
+    }
+
+    /// Shape three: one stream carrying old-format frames and then compacted ones. This is the
+    /// shape that exists forever once the emitter changes, and the reason the reader landed first.
+    #[test]
+    fn a_mixed_old_then_delta_stream_renders_byte_for_byte_as_the_old_format_did() -> Result<()> {
+        let mixed: Vec<ActivityEvent> = serde_json::from_str(MIXED)?;
+        let compacted = mixed
+            .iter()
+            .filter(|event| {
+                matches!(&event.kind,
+                ActivityEventKind::Raw { value, .. }
+                    if value.get(aion_integrations::envelope_delta::ENVELOPE_DELTA_KEY).is_some())
+            })
+            .count();
+        assert_eq!(
+            compacted, 2,
+            "the first turn is old-format, the second compacted"
+        );
+
+        let (served, unresolved) = as_served(&mixed);
+        assert_eq!(unresolved, 0);
+        let old: Vec<ActivityEvent> = serde_json::from_str(OLD)?;
+        assert_eq!(serde_json::to_vec(&served)?, serde_json::to_vec(&old)?);
+        assert_eq!(render_all(&served), GOLDEN);
+        Ok(())
+    }
+
+    /// A window that opens inside a turn cannot reconstruct that turn, and says so rather than
+    /// inventing an envelope. The frames whose base IS in the window still resolve.
+    #[test]
+    fn a_window_opening_after_a_base_reports_it_and_invents_nothing() -> Result<()> {
+        let delta: Vec<ActivityEvent> = serde_json::from_str(DELTA)?;
+        // Drop the first turn's base — the retention/resume case.
+        let (served, unresolved) = as_served(&delta[1..]);
+        assert_eq!(unresolved, 2, "the first turn's two deltas lose their base");
+
+        let rendered = render_all(&served);
+        assert!(
+            rendered.contains("aion_envelope_delta"),
+            "an unresolvable frame is shown as the delta it is: {rendered}"
+        );
+        assert!(
+            !rendered.contains("resp_fixture_turn_01\",\"object\""),
+            "the first turn's envelope must NOT be fabricated"
+        );
+        // The second turn is untouched by the first turn's loss. The window dropped OLD[0], so
+        // the second turn's three frames are SERVED[2..5] against OLD[3..6].
+        let old: Vec<ActivityEvent> = serde_json::from_str(OLD)?;
+        assert_eq!(
+            serde_json::to_vec(&served[2..5])?,
+            serde_json::to_vec(&old[3..6])?,
+            "a turn whose base is in the window resolves regardless of an earlier turn's loss"
+        );
+        Ok(())
+    }
+
+    /// What the change is for. The mechanism is the claim: the turn-invariant instructions block
+    /// stops being persisted once per lifecycle frame and is persisted once per turn.
+    ///
+    /// The byte ratio this fixture shows is real but understates the deployed one — these frames
+    /// carry a ~430 B instructions block inside a ~1 KB envelope, where the measured production
+    /// frames are ~82 KB dominated by that block. The saving is the size of what stops repeating,
+    /// so the assertion here is on the repetition count, and the ratio is asserted only as the
+    /// strict reduction this fixture genuinely demonstrates.
+    #[test]
+    fn the_instructions_block_stops_repeating_and_the_turn_costs_strictly_less() -> Result<()> {
+        const INVARIANT: &str = "Never use the live estate, a sibling worktree";
+        let old: Vec<ActivityEvent> = serde_json::from_str(OLD)?;
+        let delta: Vec<ActivityEvent> = serde_json::from_str(DELTA)?;
+
+        let carrying = |events: &[ActivityEvent]| -> Result<usize> {
+            let mut count = 0;
+            for event in events {
+                if String::from_utf8_lossy(&serde_json::to_vec(&event.kind)?).contains(INVARIANT) {
+                    count += 1;
+                }
+            }
+            Ok(count)
+        };
+        assert_eq!(
+            carrying(&old)?,
+            6,
+            "the old format repeats it in every frame"
+        );
+        assert_eq!(carrying(&delta)?, 2, "compaction leaves one copy per turn");
+
+        let bytes = |events: &[ActivityEvent]| -> Result<usize> {
+            let mut total = 0;
+            for event in events {
+                total += serde_json::to_vec(&event.kind)?.len();
+            }
+            Ok(total)
+        };
+        let (old_bytes, delta_bytes) = (bytes(&old)?, bytes(&delta)?);
+        assert!(
+            delta_bytes < old_bytes,
+            "compacted {delta_bytes} B must cost less than {old_bytes} B"
+        );
+        Ok(())
+    }
+
     #[test]
     fn old_norn_response_turn_render_is_pinned_before_format_change() -> Result<()> {
         let events: Vec<ActivityEvent> = serde_json::from_str(include_str!(

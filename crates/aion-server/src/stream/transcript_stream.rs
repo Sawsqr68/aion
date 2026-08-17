@@ -27,6 +27,7 @@
 //! replayed.
 
 use aion_core::{ActivityId, RunId};
+use aion_integrations::envelope_delta::EnvelopeDeltaDecoder;
 use aion_proto::{
     PerWorkflowSubscription, ProtoRunId, ProtoWorkflowId, StreamedActivityEvent,
     TranscriptSubscription, WireError,
@@ -83,7 +84,12 @@ pub async fn serve_transcript_socket(
         .replay_from(&key, from_seq)
         .await
         .map_err(ServerError::from)?;
-    for record in replay {
+    // One decoder for the life of the socket, spanning BOTH the durable replay and the live
+    // splice: a turn whose base frame arrives during replay must still resolve the deltas that
+    // arrive live afterwards. Resetting it at the splice would break every turn straddling it.
+    let mut envelopes = EnvelopeDeltaDecoder::new();
+    for mut record in replay {
+        resolve_frame(&mut envelopes, &mut record.event);
         if send_activity_frame(&mut socket, record.event)
             .await?
             .is_break()
@@ -110,7 +116,8 @@ pub async fn serve_transcript_socket(
             }
             item = live.next() => {
                 match item {
-                    Some(Ok(event)) => {
+                    Some(Ok(mut event)) => {
+                        resolve_frame(&mut envelopes, &mut event);
                         if forward_live_frame(&mut socket_tx, event).await?.is_break() {
                             return Ok(());
                         }
@@ -122,6 +129,17 @@ pub async fn serve_transcript_socket(
                 }
             }
         }
+    }
+}
+
+/// Reconstruct one frame's compacted provider envelope, recording a delta this socket cannot
+/// resolve.
+///
+/// A socket that resumes from a cursor inside a turn genuinely lacks that turn's base; the frame
+/// is forwarded with its delta document intact and the fact is noted, never guessed at.
+fn resolve_frame(envelopes: &mut EnvelopeDeltaDecoder, event: &mut aion_core::ActivityEvent) {
+    if let Some(report) = crate::transcript_resolve::resolve_event(envelopes, event) {
+        crate::transcript_resolve::note_unresolved("ws:transcript", std::slice::from_ref(&report));
     }
 }
 
