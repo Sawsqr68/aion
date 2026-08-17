@@ -249,9 +249,11 @@ async fn exhausted_retries_fail_the_run_and_reopen_continues_the_trail()
             event,
             Event::ActivityFailed { error, attempt: 3, .. }
                 if error.kind == ActivityErrorKind::Terminal
-                    && error.message == "retryable:upstream stream reset (delivery attempt 3)"
+                    && error.message
+                        == "exhausted: spent 3 of 3 attempts; last refusal: \
+                            retryable:upstream stream reset (delivery attempt 3)"
         )),
-        "the exhausted terminal must carry the final attempt and the verbatim reason: {history:#?}"
+        "the exhausted terminal must name exhaustion, the spent budget, and the last refusal: {history:#?}"
     );
     assert_eq!(dispatcher.seen_attempts(), vec![1, 2, 3]);
 

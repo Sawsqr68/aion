@@ -290,9 +290,11 @@ async fn advisory_exhaustion_warns_and_the_run_completes() -> TestResult {
     let terminals = terminal_activity_failures(&record.history);
     assert!(
         terminals.iter().any(|(attempt, message)| *attempt == 3
-            && message == "retryable:meridian unreachable (delivery attempt 3)"),
+            && message
+                == "exhausted: spent 3 of 3 attempts; last refusal: \
+                    retryable:meridian unreachable (delivery attempt 3)"),
         "the exhausted advisory activity must still record its terminal \
-         ActivityFailed with the verbatim last reason: {terminals:?}"
+         ActivityFailed naming exhaustion and the last refusal: {terminals:?}"
     );
 
     // And the run carries the visible warning R5 requires.
@@ -402,7 +404,9 @@ async fn advisory_exhaustion_replays_from_history_without_divergence() -> TestRe
             &step.projection,
             aion::durability::replay_inspect::StepProjection::Resolved(
                 aion::durability::Resolution::ActivityFailedTerminal(error)
-            ) if error.message == "retryable:meridian unreachable (delivery attempt 3)"
+            ) if error.message
+                == "exhausted: spent 3 of 3 attempts; last refusal: \
+                    retryable:meridian unreachable (delivery attempt 3)"
         )
     });
     assert!(
