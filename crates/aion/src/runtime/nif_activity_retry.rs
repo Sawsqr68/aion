@@ -351,8 +351,31 @@ pub(super) fn activity_settled(history: &[Event], activity_id: &ActivityId) -> b
     false
 }
 
-/// The dangling attempt a recovery re-dispatch can offer for adoption, or
-/// `None` when there is no live execution identity to retain (#36).
+/// The recorded reason a recovery re-dispatch stamps onto an ORDINARY
+/// activity's dangling attempt: the prior server died with this attempt in
+/// flight and nothing else will ever settle it (#266 Defect B).
+///
+/// The record is written with `ActivityErrorKind::Retryable` — NON-terminal —
+/// and is an HONESTY record, not a budget event (ruled 2026-08-17,
+/// honesty-only): infrastructure death is attempt-neutral at the budget layer,
+/// exactly as [`is_worker_lost_reason`]'s arm treats a worker dying
+/// mid-attempt, so re-dispatch proceeds unconditionally and the history cursor
+/// walks past this record exactly as it walks past a live retry record (#197).
+/// Terminality by retry policy governs action-authored failures only.
+///
+/// It is NOT written for a declared AGENT action: that holder can outlive the
+/// engine by construction, so the same sentence about it would be a lie about
+/// live work (#36). See `super::nif_activity_agent` for the fork.
+pub(super) const SUPERSEDED_BY_SERVER_DEATH_REASON: &str = "superseded:server-death";
+
+/// The dangling attempt a recovery re-dispatch has to account for, or `None`
+/// when there is nothing dangling.
+///
+/// ONE detector, TWO consumers, because they are asking the same question and
+/// must never disagree about the answer: an ordinary activity's dangling
+/// attempt is SUPERSEDED (#266 Defect B) and an agent's is OFFERED FOR
+/// ADOPTION (#36). What differs is what gets recorded and whether the attempt
+/// identity is retained — not which attempt is dangling.
 ///
 /// `Some(n)` exactly when the ordinal's highest recorded attempt `n` has an
 /// [`Event::ActivityStarted`] and NO settling record of its own — no
@@ -360,10 +383,7 @@ pub(super) fn activity_settled(history: &[Event], activity_id: &ActivityId) -> b
 /// [`Event::ActivityCancelled`] at attempt `n`. An already-settled attempt is
 /// not adoptable; a fresh ordinal has no identity to adopt; and a
 /// Scheduled-with-no-Started trail carries no attempt number at all.
-pub(super) fn dangling_attempt_for_adoption(
-    history: &[Event],
-    activity_id: &ActivityId,
-) -> Option<u32> {
+pub(super) fn dangling_attempt(history: &[Event], activity_id: &ActivityId) -> Option<u32> {
     let latest = latest_recorded_attempt(history, activity_id)?;
     let mut started = false;
     for event in history {
@@ -446,8 +466,8 @@ mod tests {
 
     use super::{
         Backoff, PARKED_ACTIVITY_REASON, RetryPolicy, activity_settled,
-        activity_timeout_from_config, activity_timeout_reason, dangling_attempt_for_adoption,
-        is_parked_reason, is_retryable_reason, latest_recorded_attempt, next_delivery_attempt,
+        activity_timeout_from_config, activity_timeout_reason, dangling_attempt, is_parked_reason,
+        is_retryable_reason, latest_recorded_attempt, next_delivery_attempt,
         retry_policy_from_config,
     };
 
@@ -730,14 +750,11 @@ mod tests {
     fn supersession_names_only_a_started_and_unsettled_attempt() {
         let target = ActivityId::from_sequence_position(0);
         // The wild shape: Started with nothing after it.
-        assert_eq!(
-            dangling_attempt_for_adoption(&[started(1, 0, 1)], &target),
-            Some(1)
-        );
+        assert_eq!(dangling_attempt(&[started(1, 0, 1)], &target), Some(1));
         // Mid-trail death: the earlier attempt's failure is recorded, the
         // latest Started dangles — the LATEST attempt is the superseded one.
         assert_eq!(
-            dangling_attempt_for_adoption(
+            dangling_attempt(
                 &[
                     started(1, 0, 1),
                     failed(2, 0, 1, ActivityErrorKind::Retryable),
@@ -749,7 +766,7 @@ mod tests {
         );
         // #197 crash-mid-backoff: the failure IS recorded — no second record.
         assert_eq!(
-            dangling_attempt_for_adoption(
+            dangling_attempt(
                 &[
                     started(1, 0, 1),
                     failed(2, 0, 1, ActivityErrorKind::Retryable),
@@ -760,28 +777,22 @@ mod tests {
         );
         // A completed attempt is settled, not dangling.
         assert_eq!(
-            dangling_attempt_for_adoption(&[started(1, 0, 1), completed(2, 0, 1)], &target),
+            dangling_attempt(&[started(1, 0, 1), completed(2, 0, 1)], &target),
             None
         );
         // A cancelled attempt is settled, not dangling.
         assert_eq!(
-            dangling_attempt_for_adoption(&[started(1, 0, 1), cancelled(2, 0, 1)], &target),
+            dangling_attempt(&[started(1, 0, 1), cancelled(2, 0, 1)], &target),
             None
         );
         // A fresh ordinal has nothing to supersede.
-        assert_eq!(dangling_attempt_for_adoption(&[], &target), None);
+        assert_eq!(dangling_attempt(&[], &target), None);
         // Scheduled-with-no-Started carries no attempt number: nothing
         // started, so nothing is fabricated for it (the park-before-start
         // shape — stated, not recorded).
-        assert_eq!(
-            dangling_attempt_for_adoption(&[scheduled(1, 0)], &target),
-            None
-        );
+        assert_eq!(dangling_attempt(&[scheduled(1, 0)], &target), None);
         // Another ordinal's dangling trail is invisible to this one.
-        assert_eq!(
-            dangling_attempt_for_adoption(&[started(1, 9, 4)], &target),
-            None
-        );
+        assert_eq!(dangling_attempt(&[started(1, 9, 4)], &target), None);
     }
 
     #[test]

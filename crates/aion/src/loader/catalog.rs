@@ -293,6 +293,43 @@ impl WorkflowCatalog {
             .any(|action| action.name == activity_name && action.advisory))
     }
 
+    /// Whether the loaded `(workflow_type, version)` declares `activity_name`
+    /// as an AGENT action.
+    ///
+    /// The sibling of [`Self::declares_advisory_action`], and it answers the
+    /// same kind of question off the same authority: the `.v4` worker contract
+    /// the run is pinned to. Recovery asks it to tell a dangling attempt whose
+    /// holder can outlive the engine (a remote agent, its own OS process) from
+    /// one whose holder cannot — see `runtime::nif_activity_agent`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is
+    /// poisoned. Every other absence — unknown version, a package carrying no
+    /// contract, an undeclared activity — answers `Ok(false)`.
+    pub fn declares_agent_action(
+        &self,
+        workflow_type: &str,
+        version: &ContentHash,
+        activity_name: &str,
+    ) -> Result<bool, EngineError> {
+        let snapshot = self.current()?;
+        let Some(entry) = snapshot
+            .by_version
+            .get(&(workflow_type.to_owned(), version.clone()))
+        else {
+            return Ok(false);
+        };
+        let Ok(contract) = entry.workflow.contract() else {
+            return Ok(false);
+        };
+        Ok(contract
+            .workers
+            .iter()
+            .flat_map(|worker| worker.actions.iter())
+            .any(|action| action.name == activity_name && action.agent))
+    }
+
     /// Every retained loaded workflow record.
     ///
     /// # Errors

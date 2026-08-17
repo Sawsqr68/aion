@@ -185,13 +185,47 @@ pub(super) struct ActivityCall {
     pub(super) attempt: u32,
 }
 
+/// #266 Defect B: an ORDINARY activity's attempt that the dead server left in
+/// flight gets its honest NON-terminal failure record BEFORE the re-dispatch
+/// starts the next one — the record that stops an orphaned run reading as
+/// silently still working.
+///
+/// Budget-inert by the ruled honesty-only semantics: infrastructure death is
+/// attempt-neutral, so nothing about the dispatch decision changes; only the
+/// durable trail gains the truth about the superseded attempt.
+///
+/// The caller decides WHETHER this is the truthful record for the dangling
+/// attempt it found — for a declared agent action it is not, and the adoption
+/// offer is recorded instead (#36) — so this function takes the attempt rather
+/// than re-deriving it, and the two records can never be written for one
+/// attempt.
+fn record_superseded_attempt(
+    ctx: &mut ProcessContext,
+    context: &NifContext,
+    activity_id: &ActivityId,
+    superseded: u32,
+) -> Result<(), Term> {
+    context
+        .record_activity_failed(
+            chrono::Utc::now(),
+            activity_id.clone(),
+            aion_core::ActivityError {
+                kind: aion_core::ActivityErrorKind::Retryable,
+                message: super::nif_activity_retry::SUPERSEDED_BY_SERVER_DEATH_REASON.to_owned(),
+                details: None,
+            },
+            superseded,
+        )
+        .map_err(|error| context_error_term(ctx, &error))
+}
+
 fn dispatch_activity_with_context(
     ctx: &mut ProcessContext,
     mut context: NifContext,
     dispatcher: Option<Arc<dyn ActivityDispatcher>>,
     runtime: Arc<crate::RuntimeHandle>,
     tokio_handle: &tokio::runtime::Handle,
-    advisory_catalog: Option<&crate::loader::WorkflowCatalog>,
+    catalog: Option<&crate::loader::WorkflowCatalog>,
     call: ActivityCall,
 ) -> Result<Term, Term> {
     let input_payload = json_payload(ctx, &call.input, "dispatch_activity", "input")?;
@@ -236,50 +270,74 @@ fn dispatch_activity_with_context(
             // value onto BOTH the recorded `ActivityScheduled` and the live
             // dispatch so history and routing never diverge.
             let node = super::nif_activity::resolve_node(&call.config);
-            // #36: a dangling remote execution survives the engine process by
-            // contract. Retain its attempt identity and record an explicit
-            // adoption OFFER through this run's Recorder. The worker's
-            // single-flight/spawn gate decides whether a holder survived; the
-            // engine must not pre-emptively lie that it died. A settled tail or
-            // fresh dispatch follows the ordinary next-attempt path.
-            let adoption_attempt = super::nif_activity_retry::dangling_attempt_for_adoption(
-                context.history(),
-                &activity_id,
-            );
-            let attempt = adoption_attempt.unwrap_or_else(|| {
-                super::nif_activity_retry::next_delivery_attempt(context.history(), &activity_id)
-                    .max(call.attempt)
-            });
-            if let Some(adoption_attempt) = adoption_attempt {
-                context
-                    .record_activity_adoption_offered(
-                        chrono::Utc::now(),
+            // What a DANGLING attempt means depends on whether its holder can
+            // outlive the engine, and only the declared class can say. See
+            // `super::nif_activity_agent` for the argument in full:
+            //
+            // * agent (#36): the holder is its own OS process and may still be
+            //   working. RETAIN the attempt identity — the worker's spawn gate
+            //   and single-flight recognise the execution they already hold —
+            //   and record an explicit adoption OFFER. The engine must not
+            //   pre-emptively lie that it died.
+            // * ordinary (#266 Defect B): nothing survives to settle it. Record
+            //   the honest supersession and continue the trail at the NEXT
+            //   attempt, so the run stops reading as silently still working.
+            //
+            // #197: either way a live re-dispatch continues the ordinal's
+            // recorded trail rather than restarting it, and a fresh ordinal
+            // resolves to `call.attempt` (`FIRST_DELIVERY_ATTEMPT`) as before.
+            let dangling =
+                super::nif_activity_retry::dangling_attempt(context.history(), &activity_id);
+            let adopts = dangling.is_some()
+                && super::nif_activity_agent::declared_agent(
+                    catalog,
+                    &context.workflow_handle(),
+                    &call.name,
+                );
+            let attempt = match dangling {
+                Some(dangling) if adopts => dangling,
+                _ => super::nif_activity_retry::next_delivery_attempt(
+                    context.history(),
+                    &activity_id,
+                )
+                .max(call.attempt),
+            };
+            match dangling {
+                Some(dangling) if adopts => {
+                    context
+                        .record_activity_adoption_offered(
+                            chrono::Utc::now(),
+                            activity_id.clone(),
+                            dangling,
+                        )
+                        .map_err(|error| context_error_term(ctx, &error))?;
+                }
+                dangling => {
+                    if let Some(superseded) = dangling {
+                        record_superseded_attempt(ctx, &context, &activity_id, superseded)?;
+                    }
+                    record_started(
+                        ctx,
+                        &context,
                         activity_id.clone(),
-                        adoption_attempt,
-                    )
-                    .map_err(|error| context_error_term(ctx, &error))?;
-            } else {
-                record_started(
-                    ctx,
-                    &context,
-                    activity_id.clone(),
-                    super::nif_activity::ScheduledActivity {
-                        activity_type: call.name.clone(),
-                        input: input_payload,
-                        task_queue: task_queue.clone(),
-                        node: node.clone(),
-                        // NOI-0: stamp the SAME one-based attempt onto the recorded `ActivityStarted`
-                        // that is stamped onto the live `ActivityDispatch` below, so history and the
-                        // worker wire agree.
-                        attempt,
-                    },
-                )?;
+                        super::nif_activity::ScheduledActivity {
+                            activity_type: call.name.clone(),
+                            input: input_payload,
+                            task_queue: task_queue.clone(),
+                            node: node.clone(),
+                            // NOI-0: stamp the SAME one-based attempt onto the recorded
+                            // `ActivityStarted` that is stamped onto the live
+                            // `ActivityDispatch` below, so history and the worker wire agree.
+                            attempt,
+                        },
+                    )?;
+                }
             }
             let labels = labels_from_config(&call.config);
             // R5: the declared class comes off the contract this run is pinned
             // to, never off the dispatch config the SDK builds.
             let advisory = super::nif_activity_advisory::declared_advisory(
-                advisory_catalog,
+                catalog,
                 &context.workflow_handle(),
                 &call.name,
             );

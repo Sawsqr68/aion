@@ -1,0 +1,219 @@
+### cargo clippy -p aion-core --all-targets -- -D warnings
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.07s
+rc=0
+### cargo clippy -p aion-rs --all-targets -- -D warnings
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-package)
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store)
+    Checking aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-libsql)
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-haematite)
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-package)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.97s
+rc=0
+### cargo clippy -p aion-server --all-targets -- -D warnings
+   Compiling serde_json v1.0.150
+    Checking tokio v1.52.3
+    Checking tungstenite v0.29.0
+    Checking serde_spanned v1.1.1
+   Compiling beamr v0.18.2
+   Compiling rustls v0.23.40
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+    Checking toml v1.1.2+spec-1.1.0
+    Checking referencing v0.46.6
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Checking schemars v1.2.1
+    Checking tracing-subscriber v0.3.23
+    Checking jsonschema v0.46.6
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking beamr v0.16.3
+    Checking tokio-tungstenite v0.29.0
+    Checking tokio-io-timeout v1.2.1
+    Checking tokio-rustls v0.25.0
+    Checking h2 v0.4.14
+    Checking h2 v0.3.27
+    Checking tower v0.5.3
+    Checking tower v0.4.13
+    Checking tokio-rustls v0.26.4
+    Checking rustls-platform-verifier v0.7.0
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-mcp)
+    Checking tower-http v0.6.11
+    Checking tower-http v0.4.4
+    Checking hyper v0.14.32
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-package)
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integrations)
+    Checking axum v0.8.9
+    Checking hyper-timeout v0.5.2
+    Checking hyper-rustls v0.27.9
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking reqwest v0.13.4
+    Checking hyper-timeout v0.4.1
+    Checking axum v0.6.20
+    Checking hyper-rustls v0.25.0
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl)
+    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-toolchain)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+    Checking liminal-rs v0.5.0
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-haematite)
+    Checking tonic v0.14.6
+    Checking tonic v0.11.0
+    Checking tonic-web v0.11.0
+    Checking libsql_replication v0.9.30
+    Checking tonic-prost v0.14.5
+    Checking aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto-generated)
+    Checking libsql v0.9.30
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto)
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-package)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-libsql)
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 54.30s
+rc=0
+### cargo clippy -p aion-store-libsql --all-targets -- -D warnings
+    Checking smallvec v1.15.1
+   Compiling cc v1.2.63
+    Checking mio v1.2.1
+    Checking serde v1.0.228
+    Checking futures-util v0.3.32
+   Compiling libc v0.2.186
+    Checking tracing v0.1.44
+    Checking bitflags v2.13.0
+    Checking typenum v1.20.1
+   Compiling prettyplease v0.2.37
+    Checking parking_lot_core v0.9.12
+   Compiling pin-project-internal v1.1.13
+   Compiling ahash v0.8.12
+   Compiling prost-derive v0.12.6
+    Checking parking_lot v0.12.5
+    Checking bytes v1.11.1
+    Checking getrandom v0.4.2
+    Checking generic-array v0.14.7
+   Compiling cmake v0.1.58
+    Checking tokio v1.52.3
+    Checking http v0.2.12
+    Checking uuid v1.23.4
+    Checking block-padding v0.3.3
+   Compiling ring v0.17.14
+    Checking pin-project v1.1.13
+    Checking inout v0.1.4
+    Checking crypto-common v0.1.7
+    Checking http-body v0.4.6
+   Compiling async-stream-impl v0.3.6
+    Checking cipher v0.4.4
+    Checking chrono v0.4.45
+   Compiling zerocopy-derive v0.7.35
+   Compiling errno v0.3.14
+   Compiling clang-sys v1.8.1
+    Checking prost v0.12.6
+   Compiling rustix v0.38.44
+    Checking axum-core v0.3.4
+    Checking hashbrown v0.14.5
+    Checking async-stream v0.3.6
+    Checking hashlink v0.8.4
+    Checking zerocopy v0.7.35
+    Checking futures-executor v0.3.32
+    Checking security-framework v2.11.1
+   Compiling libsql-sqlite3-parser v0.13.0
+   Compiling which v4.4.2
+   Compiling thiserror-impl v1.0.69
+    Checking aes v0.8.4
+   Compiling bindgen v0.66.1
+    Checking rustls-native-certs v0.7.3
+    Checking futures v0.3.32
+    Checking ts-rs v12.0.1
+    Checking cbc v0.1.2
+    Checking tokio-util v0.7.18
+    Checking tokio-io-timeout v1.2.1
+    Checking tokio-stream v0.1.18
+    Checking thiserror v1.0.69
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Checking libsql-hrana v0.9.30
+    Checking h2 v0.3.27
+    Checking tower v0.4.13
+    Checking bincode v1.3.3
+    Checking tower-http v0.4.4
+   Compiling rustls v0.22.4
+    Checking rustls-webpki v0.102.8
+   Compiling libsql-ffi v0.9.30
+    Checking hyper v0.14.32
+    Checking tokio-rustls v0.25.0
+    Checking hyper-timeout v0.4.1
+    Checking axum v0.6.20
+    Checking hyper-rustls v0.25.0
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store)
+    Checking tonic v0.11.0
+    Checking libsql-rusqlite v0.9.30
+    Checking libsql-sys v0.9.30
+    Checking tonic-web v0.11.0
+    Checking libsql_replication v0.9.30
+    Checking libsql v0.9.30
+    Checking aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-libsql)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.32s
+rc=0
+### cargo clippy -p aion-cli --all-targets -- -D warnings
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.71s
+rc=0
+### cargo clippy -p aion-integration-norn --all-targets -- -D warnings
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integrations)
+    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-norn)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.44s
+rc=0
+### cargo clippy -p aion-worker --features liminal-transport --all-targets -- -D warnings
+    Checking mio v1.2.1
+   Compiling serde_json v1.0.150
+   Compiling anyhow v1.0.102
+    Checking regalloc2 v0.15.1
+    Checking getrandom v0.3.4
+    Checking axum-core v0.5.6
+    Checking rustix v1.1.4
+    Checking zip v8.6.0
+    Checking tungstenite v0.30.0
+    Checking ahash v0.8.12
+    Checking tokio v1.52.3
+   Compiling prost-derive v0.14.3
+    Checking cranelift-codegen v0.131.2
+    Checking tempfile v3.27.0
+   Compiling prost v0.14.3
+    Checking referencing v0.46.6
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
+    Checking schemars v1.2.1
+    Checking jsonschema v0.46.6
+   Compiling prost-types v0.14.3
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+   Compiling prost-build v0.14.3
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+   Compiling tonic-prost-build v0.14.5
+    Checking axum v0.8.9
+   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto-generated)
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking hyper-timeout v0.5.2
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integrations)
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-package)
+    Checking tonic v0.14.6
+    Checking cranelift-native v0.131.2
+    Checking cranelift-module v0.131.2
+    Checking cranelift-frontend v0.131.2
+    Checking cranelift-jit v0.131.2
+    Checking tonic-prost v0.14.5
+    Checking beamr v0.16.3
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto)
+    Checking haematite v0.7.0
+    Checking liminal-rs v0.5.0
+    Checking liminal-sdk v0.5.0
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.42s
+rc=0

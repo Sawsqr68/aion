@@ -397,6 +397,18 @@ activity_id: ActivityId,
  * legacy/unknown sentinel, never a genuine attempt. The encoding of the existing fields is
  * untouched.
  */
+attempt: number, } } | { "type": "ActivityAdoptionOffered", "data": {
+/**
+ * Recording metadata for this event.
+ */
+envelope: EventEnvelope,
+/**
+ * Activity whose dangling attempt is being offered for adoption.
+ */
+activity_id: ActivityId,
+/**
+ * One-based attempt identity retained across the recovery redelivery.
+ */
 attempt: number, } } | { "type": "ActivityCompleted", "data": {
 /**
  * Recording metadata for this event.

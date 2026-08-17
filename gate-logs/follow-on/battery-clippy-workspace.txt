@@ -1,32 +1,3 @@
-    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-core)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-server)
-    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-package)
-    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store)
-    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integrations)
-    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-proto)
-    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-norn)
-    Checking aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-acp)
-    Checking aion-integration-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-integration-cli)
-    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-haematite)
-    Checking aion-store-libsql v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-store-libsql)
-    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl)
-    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
-    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-worker)
-    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-toolchain)
-    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-package)
-    Checking aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-awl-lsp)
-    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-client)
-    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/benchmarks/million-processes)
     Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion-cli)
-error: this function has too many lines (241/100)
-   --> crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs:493:1
-    |
-493 | fn incident_across_a_server_death(paused: bool) -> Result<(), TestError> {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_lines
-    = note: `-D clippy::too-many-lines` implied by `-D clippy::pedantic`
-    = help: to override `-D clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
-
-error: could not compile `aion-cli` (test "issue36_pause_restart_resume_e2e") due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.40s

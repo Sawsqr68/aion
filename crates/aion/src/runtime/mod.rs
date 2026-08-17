@@ -15,6 +15,7 @@ pub mod monitor;
 pub mod nif;
 mod nif_activity;
 mod nif_activity_advisory;
+mod nif_activity_agent;
 mod nif_activity_await;
 #[cfg(test)]
 mod nif_activity_delivery_tests;

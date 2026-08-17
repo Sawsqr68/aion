@@ -236,8 +236,14 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
     drop(events);
 
     // (4) wait_result returns the Payload — the id-matched run/execute Response's stop envelope,
-    //     interpreted by the adapter: a completed schema-less run yields the `output` VALUE, a
-    //     JSON string carrying the agent's final text (here the mock provider's canned reply).
+    //     interpreted by the adapter: the CANONICAL AGENT-OUTCOME RECORD. `AgentSession::
+    //     wait_result` states the contract ("a completed run's payload is the JSON serialization
+    //     of `aion_core::AgentOutcome` … from EVERY harness"), and #205 widened that record to
+    //     name the conversation that produced it. This assertion used to require a bare JSON
+    //     string, which was the PRE-#205 shape: #205 changed `translate.rs`/`session.rs` and
+    //     never came back for this reader, so the pin has been asserting a shape the adapter
+    //     stopped producing — visible only to a run with `NORN_BIN` set, which is why it
+    //     survived.
     let payload = tokio::time::timeout(Duration::from_secs(30), session.wait_result())
         .await
         .map_err(|_elapsed| "wait_result must resolve within the timeout".to_owned())?
@@ -246,15 +252,38 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
     let decoded = payload
         .to_json()
         .map_err(|error| format!("the result payload must be JSON: {error}"))?;
-    let Some(text) = decoded.as_str() else {
-        return Err(format!(
-            "a schema-less completed run's output is a JSON string, got {decoded}"
-        )
-        .into());
+    let Some(outcome) = decoded.as_object() else {
+        return Err(
+            format!("a completed run's output is the agent-outcome RECORD, got {decoded}").into(),
+        );
     };
+    let field = |name: &str| -> Result<String, String> {
+        outcome
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| format!("the agent-outcome record must carry `{name}`: {decoded}"))
+    };
+    let text = field("text")?;
     assert!(
         text.contains("hello from the mock provider"),
-        "the output carries the agent's final text: {text}"
+        "the record's text carries the agent's accumulated output: {text}"
+    );
+    assert!(
+        field("final_message")?.contains("hello from the mock provider"),
+        "the record's final_message carries the last completed answer: {decoded}"
+    );
+    assert_eq!(
+        field("stop_reason")?,
+        "end_turn",
+        "the record spells the stop reason through the one canonical mapping: {decoded}"
+    );
+    // A FACT, not a resumability promise (#205): the handle of the conversation that
+    // produced this outcome. The empty string is refused at `into_payload`, so a
+    // present-but-empty id would mean that funnel was bypassed.
+    assert!(
+        !field("session_id")?.is_empty(),
+        "the record names the conversation that produced it: {decoded}"
     );
     Ok(())
 }
