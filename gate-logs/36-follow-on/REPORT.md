@@ -516,3 +516,33 @@ zero bytes (the extraction script's per-leg redirects) and the builder died
 before capturing the nextest Summary line, so run 2 carries no independent
 completion proof. It is not the battery of record: the collector's post-rebase
 battery on the landed tree — run with completion evidence kept — supersedes it.
+
+## Collector's rebase addendum — SHA remap (2026-08-18, at landing)
+
+Rebased onto main `8fdacdef0` ("docs(wa-a): post-rebase collection addendum …")
+with zero conflicts; subjects are the stable citation, and every SHA cited
+above resolves as follows (verified pairwise by subject equality):
+
+```text
+a88008ae0 → 6300fdce9  test(36): exercise recovered readiness beyond old deadline — red
+d930fd2b3 → cf00aa66e  fix(36): recovered readiness waits on the live process
+601563a98 → 45ed18314  test(36): require truthful Running and Paused adoption — red
+d9d3e50dd → 760a571f9  fix(36): recover dangling attempts through truthful adoption
+e40da95ec → 1fe47728a  test(36): prove replacement worker reattaches one Norn session — red
+707104f0e → e1924b7e2  fix(36): replacement worker reattaches the surviving Norn session
+eb1b8da4c → 399f695da  fix(36): project the adoption offer through the server stream selector
+9cfc5f114 → ed95217d4  test(36): issue #36 verbatim — paused run resumed across a server death
+5c25a4c88 → 0d0fc1aca  test(36): the Running face of the incident, on the same server-level gate
+26b31c674 → dfe1f5e01  fix(36): state the adoption offer's treatment in the current-step fold
+34b4d55c2 → 5d17ec767  fix(36): the current-step guard is the pin, not a redundant arm
+0fff34d71 → 5ba2a9a76  refactor(36): split the incident gate into its phases
+ed04c529b → f89b6af7a  fix(36): recovery adoption is scoped to the DECLARED AGENT class
+5b4c14034 → 1269826ef  test(36): the canonical extraction battery, and the proof it can go red
+ded583b7e → 5e54d90e2  refactor(36): split the two functions the canonical battery named
+c4a80096b → 5f36cfc21  docs(36): delivery report — five legs proven, the over-application caught, run-2 closed at collection
+```
+
+The base named in the header (`e05d3e3b4`) is the charter's dispatch base and
+still resolves on main; the branch's true fork point was `c58079469`. The
+post-rebase battery of record (with completion evidence) lives beside this
+report as `rebase-battery-*`.
