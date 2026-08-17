@@ -447,6 +447,14 @@ const fn json_kind(value: &serde_json::Value) -> &'static str {
     }
 }
 
+/// Containment of a server-executed body: the authored per-attempt bound, and
+/// the run's cancellation. Its own file because its subjects are live process
+/// trees rather than dispatcher shapes; it builds them out of the fixtures
+/// [`tests`] shares with it.
+#[cfg(test)]
+#[path = "declared_body_containment_tests.rs"]
+mod declared_body_containment_tests;
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -468,7 +476,7 @@ mod tests {
     /// What a test returns. Every fallible step is carried rather than
     /// unwrapped, because the workspace denies panicking accessors in test
     /// code as firmly as in library code.
-    type TestResult = Result<(), Box<dyn std::error::Error>>;
+    pub(super) type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     /// Inner dispatcher that records whether it was reached.
     struct RecordingInner {
@@ -527,7 +535,7 @@ mod tests {
         }
     }
 
-    fn request(name: &str, input: &str) -> ActivityDispatch {
+    pub(super) fn request(name: &str, input: &str) -> ActivityDispatch {
         ActivityDispatch {
             namespace: "default".to_owned(),
             task_queue: "shell".to_owned(),
@@ -567,7 +575,7 @@ mod tests {
         None => std::num::NonZeroUsize::MIN,
     };
 
-    fn dispatcher_with_root(
+    pub(super) fn dispatcher_with_root(
         lookup: DeclaredBodyLookup,
         reply: Result<String, String>,
         workspace_root: WorkspaceRoot,
@@ -600,7 +608,7 @@ mod tests {
         (decorated, reached, transcript)
     }
 
-    fn reached_names(reached: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
+    pub(super) fn reached_names(reached: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
         match reached.lock() {
             Ok(names) => names.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
