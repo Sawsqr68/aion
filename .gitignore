@@ -36,7 +36,8 @@ __pycache__
 .idea
 .vscode
 .meridian/worksites/
-.claude/
+.claude/*
+!.claude/skills/
 aion.db
 
 # Testing
