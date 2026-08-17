@@ -50,11 +50,11 @@ async fn retryable_failure_redispatches_with_incremented_recorded_attempt() -> T
     Ok(())
 }
 
-/// Exhausted budget: the loop stops at `max_attempts`, the LAST reason is
-/// the delivered failure (verbatim), and the final attempt count rides
-/// with it.
+/// Exhausted budget: the loop stops at `max_attempts` and names exhaustion,
+/// including the attempts spent, configured budget, and last refusal. It must
+/// not preserve the retryable classifier as the terminal record's headline.
 #[tokio::test]
-async fn exhausted_retry_budget_fails_with_last_reason_and_attempt_count() -> TestResult {
+async fn exhausted_retry_budget_names_exhaustion_and_last_refusal() -> TestResult {
     let harness = RetryLoopHarness::seeded(FIXED_RETRY_CONFIG).await?;
     let dispatcher = ScriptedRetryDispatcher::new(vec![
         Err("retryable:reset one".to_owned()),
@@ -72,9 +72,10 @@ async fn exhausted_retry_budget_fails_with_last_reason_and_attempt_count() -> Te
     assert!(
         matches!(
             &outcome.terminal,
-            super::RetryLoopTerminal::Failed(reason) if reason == "retryable:reset three"
+            super::RetryLoopTerminal::Failed(reason)
+                if reason == "exhausted: spent 3 of 3 attempts; last refusal: retryable:reset three"
         ),
-        "the LAST reason must surface verbatim"
+        "budget exhaustion must name itself, its spent budget, and the last refusal: {outcome:?}"
     );
     assert_eq!(outcome.attempt, 3, "the budget is total attempts");
     assert_eq!(
