@@ -61,7 +61,7 @@ impl SpawnClaim {
                 Err(error) if error.kind() == ErrorKind::AlreadyExists => {
                     let marker = read_marker(&marker_path)?;
                     if marker_matches_live_process(&marker) {
-                        return Err(HarnessError::configuration(format!(
+                        return Err(HarnessError::occupied(format!(
                             "spawn refused: live sibling pid {} holds this tree \
                              (workflow {}, activity {})",
                             marker.pid, marker.workflow_id, marker.activity_id

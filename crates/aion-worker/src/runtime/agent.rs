@@ -334,11 +334,13 @@ where
 
 /// Maps a [`HarnessError`] into a [`DispatchOutcome::Failed`] a caller can report.
 ///
-/// A [`HarnessError::Harness`] (the agent ran but reported failure) and a
-/// transport/protocol/stale fault are all retryable activity failures: the
-/// attempt did not produce an accepted result, and each of those classes CAN
-/// be transient (a provider-overload burst, a one-off malformed frame, a
-/// dropped pipe), so the engine re-dispatches.
+/// A [`HarnessError::Harness`] (the agent ran but reported failure), a
+/// transport/protocol/stale fault, and an [`HarnessError::Occupied`] spawn
+/// refusal (a live sibling holds the declared tree — issue #33's field case)
+/// are all retryable activity failures: the attempt did not produce an
+/// accepted result, and each of those classes CAN be transient (a
+/// provider-overload burst, a one-off malformed frame, a dropped pipe, an
+/// occupant that exits or dies), so the engine re-dispatches.
 ///
 /// A DETERMINISTIC error ([`HarnessError::is_deterministic`] — today
 /// [`HarnessError::Contract`] or [`HarnessError::Configuration`]) is TERMINAL,

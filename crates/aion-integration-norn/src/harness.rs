@@ -844,6 +844,11 @@ mod tests {
              retryable — a terminal refusal here is exactly the #33 kill: \
              {refusal:?}"
         );
+        assert!(
+            matches!(refusal, HarnessError::Occupied { .. }),
+            "occupancy is its own first-class refusal, never a configuration \
+             fault — nothing anybody wrote is wrong: {refusal:?}"
+        );
         drop(first);
         Ok(())
     }

@@ -33,6 +33,24 @@ pub enum HarnessError {
         /// Human-readable detail describing why the target is stale.
         detail: String,
     },
+    /// The spawn target is held by a live sibling process, so no run was started.
+    ///
+    /// A TRANSIENT refusal, and its own variant precisely because it must NOT classify like
+    /// [`Self::Configuration`]: nothing anybody WROTE is wrong. The declared working tree is
+    /// occupied by a live process — a surviving attempt from before a server death, or the
+    /// previous workflow's agent still winding down in a sequentially reused tree — and the
+    /// occupancy ends the moment the holder exits or dies, at which point the stale-marker
+    /// cleanup admits the next claimant. The guard's refusal stays absolute while the holder
+    /// lives; only its CLASSIFICATION is retryable. Field case: issue #33 — server-death
+    /// recovery re-dispatched builder legs whose original processes had survived, and the
+    /// terminal classification killed a two-hour fleet run over a condition that clears by
+    /// itself. The worker maps this variant to a RETRYABLE activity failure; how long to keep
+    /// waiting belongs to the retry policy.
+    #[error("spawn target occupied: {detail}")]
+    Occupied {
+        /// Human-readable detail naming the live holder (pid, workflow, activity).
+        detail: String,
+    },
     /// The underlying transport failed (spawn/connect failure, broken pipe, EOF, I/O error).
     ///
     /// Neutral: it describes *that* the transport failed and carries the detail, never *which*
@@ -113,6 +131,15 @@ impl HarnessError {
         }
     }
 
+    /// Builds a [`Self::Occupied`] with a detail message naming the live holder
+    /// of the spawn target.
+    #[must_use]
+    pub fn occupied(detail: impl Into<String>) -> Self {
+        Self::Occupied {
+            detail: detail.into(),
+        }
+    }
+
     /// Builds a [`Self::Transport`] with a detail message.
     #[must_use]
     pub fn transport(detail: impl Into<String>) -> Self {
@@ -176,6 +203,12 @@ impl HarnessError {
     ///   same document. A refusal that presented as a transient transport
     ///   failure would tell the operator the wrong story AND spend the whole
     ///   attempt budget confirming it.
+    /// - [`Self::Occupied`]: the spawn target is held by a live process, and
+    ///   occupancy is transient by nature — the holder exits or dies, the
+    ///   stale marker is cleaned, and the next attempt proceeds. This holds
+    ///   across workflows too: sequential reuse of one tree waits out the
+    ///   previous occupant rather than dying on it (issue #33 is the field
+    ///   case for the terminal misclassification).
     /// - [`Self::Transport`]: a broken channel can heal.
     /// - [`Self::Protocol`]: a malformed frame CAN be a one-off peer flake
     ///   (truncated stream, interleaved write), so it stays retryable even
@@ -191,6 +224,7 @@ impl HarnessError {
             Self::Contract { .. } | Self::Configuration { .. } => true,
             Self::CapabilityNotSupported { .. }
             | Self::StaleTarget { .. }
+            | Self::Occupied { .. }
             | Self::Transport { .. }
             | Self::Protocol { .. }
             | Self::Harness { .. } => false,
@@ -223,6 +257,10 @@ mod tests {
             "stale target: attempt 2 superseded"
         );
         assert_eq!(
+            HarnessError::occupied("live sibling pid 7 holds this tree").to_string(),
+            "spawn target occupied: live sibling pid 7 holds this tree"
+        );
+        assert_eq!(
             HarnessError::transport("broken pipe").to_string(),
             "transport error: broken pipe"
         );
@@ -241,14 +279,17 @@ mod tests {
     }
 
     /// The retry-classification decision, pinned in the crate that makes it:
-    /// exactly the contract refusal is deterministic; every class that can be
-    /// transient stays non-deterministic. (The match inside `is_deterministic`
-    /// is exhaustive, so a new variant fails compilation there — this test
-    /// pins the ANSWERS, the compiler pins the completeness.)
+    /// exactly the contract and configuration refusals are deterministic;
+    /// every class that can be transient stays non-deterministic. (The match
+    /// inside `is_deterministic` is exhaustive, so a new variant fails
+    /// compilation there — this test pins the ANSWERS, the compiler pins the
+    /// completeness.)
     #[test]
-    fn only_the_contract_refusal_is_deterministic() {
+    fn deterministic_refusals_are_exactly_contract_and_configuration() {
         assert!(HarnessError::contract("output is a JSON object").is_deterministic());
+        assert!(HarnessError::configuration("pass-through entry is KEY=VALUE").is_deterministic());
         for transient in [
+            HarnessError::occupied("live sibling pid 7 holds this tree"),
             HarnessError::transport("broken pipe"),
             HarnessError::protocol("invalid JSON frame"),
             HarnessError::harness("run stopped without completing"),
