@@ -72,8 +72,7 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         // start to its shard owner (forwarding when remote); otherwise the R-1
         // remint places it locally. `placement` is `None` for single-node /
         // non-clustered boots (and own-all scope), so the engine mints as usual —
-        // default path unchanged. Without the cluster backend there is no
-        // steering or placement at all.
+        // default path unchanged.
         {
             let (metadata, _ext, inner) = request.into_parts();
             let placement = match self.resolve_start(&inner, &metadata).await {

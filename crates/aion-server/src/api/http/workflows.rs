@@ -123,8 +123,8 @@ pub(crate) async fn rename_workflow(
 
 /// Serve a rename on this node: the guard scopes the namespace, the shared
 /// handler resolves the run and records the name as a durable
-/// `SearchAttributesUpdated` event. Shared by both builds' entry points so the
-/// local answer cannot differ between them.
+/// `SearchAttributesUpdated` event. Reached both directly and after a forward
+/// declines, so the local answer is one implementation.
 async fn serve_rename_locally(
     state: &ServerState,
     caller: &crate::CallerIdentity,
