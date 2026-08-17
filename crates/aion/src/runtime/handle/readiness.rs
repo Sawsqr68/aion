@@ -39,14 +39,13 @@ impl RuntimeHandle {
     }
 
     /// Wait until a recovered workflow has committed a suspending-await park.
+    ///
+    /// Recovered readiness is a state transition, not a bounded operation. A
+    /// fixed deadline can expire after durable resume and resident registration
+    /// have succeeded. Wait until the live process parks or actually exits.
     pub(crate) async fn wait_for_pending_await(&self, pid: Pid) -> Result<(), EngineError> {
-        let budget = self
-            .signal_delivery
-            .ready_timeout
-            .saturating_mul(self.signal_delivery.max_enqueue_attempts.max(1));
-        let deadline = std::time::Instant::now() + budget;
         let mut backoff = self.signal_delivery.initial_backoff;
-        while std::time::Instant::now() < deadline {
+        loop {
             if self.nif_state.has_pending_await(pid) {
                 return Ok(());
             }
@@ -57,14 +56,6 @@ impl RuntimeHandle {
             }
             yield_signal_delivery_backoff(backoff).await;
             backoff = next_signal_delivery_backoff(backoff, self.signal_delivery.max_backoff);
-        }
-        if self.nif_state.has_pending_await(pid) {
-            Ok(())
-        } else {
-            Err(runtime_error(format!(
-                "recovered workflow process {pid} did not reach its pending await within {}ms",
-                budget.as_millis()
-            )))
         }
     }
 }
