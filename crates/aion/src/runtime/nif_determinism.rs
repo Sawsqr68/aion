@@ -340,7 +340,7 @@ mod tests {
     use beamr::term::Term;
     use beamr::term::binary_ref::BinaryRef;
     use beamr::term::boxed::Tuple;
-    use chrono::{TimeZone, Utc};
+    use chrono::{DateTime, TimeZone, Utc};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -348,7 +348,7 @@ mod tests {
         NifContextSource, deterministic_float, deterministic_i64, install_nif_context_source,
         now_from_context, now_impl, random_from_context, random_int_from_context,
     };
-    use crate::durability::Recorder;
+    use crate::durability::{Command, CorrelationKey, Recorder};
     use crate::registry::{
         CompletionNotifier, HandleResidency, Registry, WorkflowHandle, WorkflowHandleParts,
     };
@@ -414,6 +414,82 @@ mod tests {
             result: payload("done")?,
         })
     }
+
+    fn timer_started_event(
+        workflow_id: &aion_core::WorkflowId,
+        seq: u64,
+        millis: i64,
+        ordinal: u64,
+    ) -> TestResult<Event> {
+        Ok(Event::TimerStarted {
+            envelope: envelope(workflow_id, seq, millis)?,
+            timer_id: aion_core::TimerId::anonymous(ordinal),
+            fire_at: Utc
+                .timestamp_millis_opt(millis)
+                .single()
+                .ok_or_else(|| format!("invalid fixed timestamp {millis}"))?,
+        })
+    }
+
+    fn timer_fired_event(
+        workflow_id: &aion_core::WorkflowId,
+        seq: u64,
+        millis: i64,
+        ordinal: u64,
+    ) -> TestResult<Event> {
+        Ok(Event::TimerFired {
+            envelope: envelope(workflow_id, seq, millis)?,
+            timer_id: aion_core::TimerId::anonymous(ordinal),
+        })
+    }
+
+    fn signal_received_event(
+        workflow_id: &aion_core::WorkflowId,
+        seq: u64,
+        millis: i64,
+        name: &str,
+    ) -> TestResult<Event> {
+        Ok(Event::SignalReceived {
+            envelope: envelope(workflow_id, seq, millis)?,
+            name: name.to_owned(),
+            payload: payload("signal")?,
+        })
+    }
+
+    /// The run segment a crash mid-sleep leaves behind: started, slept, woke.
+    /// The tail is the WAKE event — the run's own future at every replay
+    /// position before the sleep is consumed.
+    fn resumed_run_history(workflow_id: &aion_core::WorkflowId) -> TestResult<Vec<Event>> {
+        Ok(vec![
+            started_event(workflow_id, 1, RUN_STARTED_MILLIS)?,
+            timer_started_event(workflow_id, 2, 1_700_000_000_500, 0)?,
+            timer_fired_event(workflow_id, 3, TIMER_FIRED_MILLIS, 0)?,
+        ])
+    }
+
+    fn sleep_command() -> Command {
+        Command::StartTimer {
+            key: CorrelationKey::Timer(aion_core::TimerId::anonymous(0)),
+            fire_at: DateTime::<Utc>::UNIX_EPOCH,
+        }
+    }
+
+    /// `now` millis served by the production NIF for `pid` under `state`.
+    fn now_through_nif(pid: u64, state: Arc<EngineNifState>) -> TestResult<String> {
+        let mut ctx = ProcessContext::new();
+        ctx.set_pid(Some(pid));
+        ctx.set_nif_private_data(Some(state));
+        let result = now_impl(&[], &mut ctx).map_err(|_| "now should return Ok at beamr level")?;
+        let (tag, value) = decode_result_tuple(result)?;
+        if tag != "ok" {
+            return Err(format!("now returned an error: {value}").into());
+        }
+        Ok(value)
+    }
+
+    const RUN_STARTED_MILLIS: i64 = 1_700_000_000_000;
+    const TIMER_FIRED_MILLIS: i64 = 1_700_003_600_000;
+    const LATE_ARRIVAL_MILLIS: i64 = 1_700_007_200_000;
 
     struct ContextFixture {
         registry: Arc<Registry>,
@@ -486,8 +562,16 @@ mod tests {
         Ok((tag_name.to_owned(), text))
     }
 
+    /// Re-cast of `now_returns_last_recorded_event_timestamp_millis` (aion#1).
+    ///
+    /// 🔴 The OLD assertion — that `now` answers the LAST recorded event's
+    /// timestamp — WAS the defect, not the contract. Workflow-visible time is
+    /// the replay POSITION: before any command has been consumed it is the
+    /// run's own `WorkflowStarted`, never a later event that replayed code has
+    /// not reached yet. The old expectation (`1700000999456`, the tail) is kept
+    /// in the fixture precisely so a regression to the tail read fails here.
     #[test]
-    fn now_returns_last_recorded_event_timestamp_millis() -> TestResult {
+    fn now_before_any_consumption_is_the_run_start_not_the_history_tail() -> TestResult {
         let runtime = tokio::runtime::Runtime::new()?;
         let workflow_id = workflow_id();
         let history = vec![
@@ -502,7 +586,225 @@ mod tests {
         let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
 
         assert_eq!(tag, "ok");
-        assert_eq!(value, "1700000999456");
+        assert_eq!(
+            value, "1700000000123",
+            "workflow-visible now before any consumed command is the run's start"
+        );
+        Ok(())
+    }
+
+    /// aion#1, the defect literally: on a RESUMED run the run segment's tail is
+    /// the wake event (`TimerFired@T_wake`). A fresh context is the first NIF
+    /// call of the re-spawned execution — replayed code has consumed nothing —
+    /// so `now` must answer the run's start.
+    #[test]
+    fn resumed_run_answers_the_run_start_before_the_sleep_is_consumed() -> TestResult {
+        let runtime = tokio::runtime::Runtime::new()?;
+        let workflow_id = workflow_id();
+        let history = resumed_run_history(&workflow_id)?;
+        let context = context_with_history(&runtime, 61, workflow_id, run_id(), &history)?;
+
+        let mut ctx = ProcessContext::new();
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+
+        assert_eq!(tag, "ok");
+        assert_eq!(
+            value,
+            RUN_STARTED_MILLIS.to_string(),
+            "a resumed run's first now() is its start, not the wake event it has not reached"
+        );
+        Ok(())
+    }
+
+    /// Consuming a recorded command advances workflow-visible now to THAT
+    /// event's timestamp — and to nothing further. The trailing
+    /// `SignalReceived` is an asynchronous arrival this run has not consumed:
+    /// it is the history tail, and it must stay invisible.
+    #[test]
+    fn consuming_a_recorded_command_advances_now_to_that_event_only() -> TestResult {
+        let runtime = tokio::runtime::Runtime::new()?;
+        let workflow_id = workflow_id();
+        let mut history = resumed_run_history(&workflow_id)?;
+        history.push(signal_received_event(
+            &workflow_id,
+            4,
+            LATE_ARRIVAL_MILLIS,
+            "unconsumed",
+        )?);
+        let mut context = context_with_history(&runtime, 62, workflow_id, run_id(), &history)?;
+
+        context.resolve_command(sleep_command())?;
+
+        let mut ctx = ProcessContext::new();
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+        assert_eq!(tag, "ok");
+        assert_eq!(
+            value,
+            TIMER_FIRED_MILLIS.to_string(),
+            "now advances to the consumed TimerFired, never to the unconsumed arrival after it"
+        );
+        Ok(())
+    }
+
+    /// Asynchronous arrivals stay invisible until the workflow consumes them
+    /// (aion#1, invariant E). A signal the services appended while the run was
+    /// working must not move workflow-visible now on its own.
+    #[test]
+    fn an_unconsumed_async_arrival_never_moves_now() -> TestResult {
+        let runtime = tokio::runtime::Runtime::new()?;
+        let workflow_id = workflow_id();
+        let history = vec![
+            started_event(&workflow_id, 1, RUN_STARTED_MILLIS)?,
+            signal_received_event(&workflow_id, 2, LATE_ARRIVAL_MILLIS, "unconsumed")?,
+        ];
+        let context = context_with_history(&runtime, 63, workflow_id, run_id(), &history)?;
+
+        let mut ctx = ProcessContext::new();
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+
+        assert_eq!(tag, "ok");
+        assert_eq!(
+            value,
+            RUN_STARTED_MILLIS.to_string(),
+            "an arrival the workflow has not consumed is not a position change"
+        );
+        Ok(())
+    }
+
+    /// The issue's flagship symptom, through the PRODUCTION NIF entry point
+    /// (`now_impl`), across two separate NIF calls sharing one workflow handle:
+    ///
+    /// ```text
+    /// started = now()      // replay position: the run's start
+    /// sleep(...)           // resolves from the recorded TimerFired
+    /// elapsed = now() - started
+    /// ```
+    ///
+    /// Under the history-tail read both calls answered `T_wake` and `elapsed`
+    /// collapsed to zero on every recovery.
+    #[test]
+    fn elapsed_across_a_replayed_sleep_is_the_recorded_span_not_zero() -> TestResult {
+        let runtime = tokio::runtime::Runtime::new()?;
+        let workflow_id = workflow_id();
+        let history = resumed_run_history(&workflow_id)?;
+        let fixture =
+            context_fixture_with_history(&runtime, 64, workflow_id, run_id(), &history)?;
+        let state = Arc::new(EngineNifState::default());
+        install_nif_context_source(
+            &state,
+            Arc::new(NifContextSource::new(
+                Arc::clone(&fixture.registry),
+                runtime.handle().clone(),
+                Arc::clone(&fixture.store),
+                crate::runtime::SignalDeliveryConfig::default(),
+            )),
+        );
+
+        let started = now_through_nif(64, Arc::clone(&state))?.parse::<i64>()?;
+
+        // The sleep: a fresh per-call context, exactly as production builds one.
+        let mut sleep_context = NifContext::new_with_history_store(
+            64,
+            fixture.registry.as_ref(),
+            runtime.handle().clone(),
+            Some(Arc::clone(&fixture.store)),
+            crate::runtime::SignalDeliveryConfig::default(),
+        )?;
+        sleep_context.resolve_command(sleep_command())?;
+
+        let ended = now_through_nif(64, state)?.parse::<i64>()?;
+
+        assert_eq!(
+            ended - started,
+            TIMER_FIRED_MILLIS - RUN_STARTED_MILLIS,
+            "elapsed across a replayed sleep is the recorded start-to-wake span, not zero"
+        );
+        Ok(())
+    }
+
+    /// Live execution and its replay serve identical `now` sequences at the
+    /// same code positions (aion#1, the replay-parity rule).
+    ///
+    /// Positions observed, in order: before the dispatch, after the dispatch
+    /// returns its correlation id, and after the await returns the result. The
+    /// dispatch seam deliberately does NOT move workflow-visible now: live
+    /// cannot know the completion timestamp there, and replay's resolution of
+    /// the dispatch command reaches the terminal, so advancing at that seam is
+    /// the one shape that cannot be reproduced live.
+    #[test]
+    fn live_and_replayed_activity_serve_identical_now_sequences() -> TestResult {
+        let runtime = tokio::runtime::Runtime::new()?;
+        let workflow_id = workflow_id();
+        let scheduled_at = 1_700_000_000_400;
+        let completed_at = 1_700_000_000_900;
+        let activity_id = aion_core::ActivityId::from_sequence_position(0);
+        let command = Command::RunActivity {
+            key: CorrelationKey::Activity(0),
+            activity_type: "activity".to_owned(),
+            input: payload("activity-input")?,
+        };
+
+        // LIVE: history holds only the start; the run records as it goes.
+        let live = context_fixture_with_history(
+            &runtime,
+            71,
+            workflow_id.clone(),
+            run_id(),
+            &[started_event(&workflow_id, 1, RUN_STARTED_MILLIS)?],
+        )?;
+        let mut live_now = Vec::new();
+        let mut ctx = ProcessContext::new();
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+        let scheduled_at_time = Utc
+            .timestamp_millis_opt(scheduled_at)
+            .single()
+            .ok_or("invalid scheduled timestamp")?;
+        live.context.record_activity_scheduled_started(
+            scheduled_at_time,
+            activity_id.clone(),
+            crate::runtime::nif_activity::ScheduledActivity {
+                activity_type: "activity".to_owned(),
+                input: payload("activity-input")?,
+                task_queue: String::from("default"),
+                node: None,
+                attempt: 1,
+            },
+        )?;
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+        let completed_at_time = Utc
+            .timestamp_millis_opt(completed_at)
+            .single()
+            .ok_or("invalid completed timestamp")?;
+        live.context.record_activity_completed(
+            completed_at_time,
+            activity_id,
+            payload("activity-result")?,
+            1,
+        )?;
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+
+        // REPLAY: a fresh handle over the history live just produced.
+        let replay_history = runtime.block_on(live.store.read_history(&workflow_id))?;
+        let replay = context_fixture_with_history(
+            &runtime,
+            72,
+            workflow_id,
+            run_id(),
+            &replay_history,
+        )?;
+        let mut replay_context = replay.context;
+        let mut replay_now = Vec::new();
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+        replay_context.resolve_command(command.clone())?;
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+        replay_context.resolve_command(command)?;
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+
+        assert_eq!(
+            live_now, replay_now,
+            "live and replayed executions must serve identical now sequences"
+        );
+        assert_eq!(replay_now.last().map(String::as_str), Some("1700000000900"));
         Ok(())
     }
 

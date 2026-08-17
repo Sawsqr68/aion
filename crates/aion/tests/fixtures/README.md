@@ -29,6 +29,9 @@ erlc -Werror -o crates/aion/tests/fixtures crates/aion/tests/fixtures/*.erl
 - `wait/0`, which blocks in `receive` so cancellation can observe a live workflow.
 - `activity/1`, which blocks in `receive` so dispatch tests can observe a linked
   in-VM activity child before workflow cancellation propagates through links.
+- `now_span/1`, which reads `aion_flow_ffi:now/0` either side of one durable
+  `sleep` and returns the span in milliseconds — the workflow-visible-time
+  position proof used by `tests/replay_now_position_e2e.rs` (aion#1).
 
 `aion_parent_fixture` exercises the child-workflow NIF bridge
 (`aion_flow_ffi:spawn_child/3`, `await_child/1`, `receive_signal/2`) for the

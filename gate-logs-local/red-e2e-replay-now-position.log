@@ -1,0 +1,25 @@
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.12s
+     Running tests/replay_now_position_e2e.rs (target/debug/deps/replay_now_position_e2e-e03c7db142c36ad3)
+
+running 1 test
+test replayed_sleep_reports_the_recorded_span_not_zero_elapsed ... FAILED
+
+failures:
+
+---- replayed_sleep_reports_the_recorded_span_not_zero_elapsed stdout ----
+
+thread 'replayed_sleep_reports_the_recorded_span_not_zero_elapsed' (10223645) panicked at crates/aion/tests/replay_now_position_e2e.rs:185:5:
+assertion `left == right` failed: workflow-visible elapsed time across a replayed sleep must be the recorded start-to-wake span; a zero span is the history-tail read (aion#1)
+  left: 0
+ right: 3600000
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    replayed_sleep_reports_the_recorded_span_not_zero_elapsed
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+error: test failed, to rerun pass `-p aion-rs --test replay_now_position_e2e`
+=== EXIT 101 ===

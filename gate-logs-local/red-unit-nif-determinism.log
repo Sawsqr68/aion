@@ -1,0 +1,74 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/aion-5ec1044a6c173b48)
+
+running 11 tests
+test runtime::nif_determinism::tests::random_int_is_stable_uniform_and_validates_ranges ... ok
+test runtime::nif_determinism::tests::random_is_stable_for_same_ids_and_sequence ... ok
+test runtime::nif_determinism::tests::random_int_context_returns_error_for_invalid_range ... ok
+test runtime::nif_determinism::tests::now_before_any_consumption_is_the_run_start_not_the_history_tail ... FAILED
+test runtime::nif_determinism::tests::replay_sequence_matches_recorded_history_and_seeded_positions ... ok
+test runtime::nif_determinism::tests::live_and_replayed_activity_serve_identical_now_sequences ... FAILED
+test runtime::nif_determinism::tests::consuming_a_recorded_command_advances_now_to_that_event_only ... FAILED
+test runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed ... FAILED
+test runtime::nif_determinism::tests::elapsed_across_a_replayed_sleep_is_the_recorded_span_not_zero ... FAILED
+test runtime::nif_determinism::tests::an_unconsumed_async_arrival_never_moves_now ... FAILED
+test runtime::nif_determinism::tests::each_engine_state_resolves_its_own_context_source ... ok
+
+failures:
+
+---- runtime::nif_determinism::tests::now_before_any_consumption_is_the_run_start_not_the_history_tail stdout ----
+
+thread 'runtime::nif_determinism::tests::now_before_any_consumption_is_the_run_start_not_the_history_tail' (10221949) panicked at crates/aion/src/runtime/nif_determinism.rs:589:9:
+assertion `left == right` failed: workflow-visible now before any consumed command is the run's start
+  left: "1700000999456"
+ right: "1700000000123"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- runtime::nif_determinism::tests::live_and_replayed_activity_serve_identical_now_sequences stdout ----
+
+thread 'runtime::nif_determinism::tests::live_and_replayed_activity_serve_identical_now_sequences' (10221948) panicked at crates/aion/src/runtime/nif_determinism.rs:803:9:
+assertion `left == right` failed: live and replayed executions must serve identical now sequences
+  left: ["1700000000000", "1700000000000", "1700000000000"]
+ right: ["1700000000900", "1700000000900", "1700000000900"]
+
+---- runtime::nif_determinism::tests::consuming_a_recorded_command_advances_now_to_that_event_only stdout ----
+
+thread 'runtime::nif_determinism::tests::consuming_a_recorded_command_advances_now_to_that_event_only' (10221945) panicked at crates/aion/src/runtime/nif_determinism.rs:641:9:
+assertion `left == right` failed: now advances to the consumed TimerFired, never to the unconsumed arrival after it
+  left: "1700007200000"
+ right: "1700003600000"
+
+---- runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed stdout ----
+
+thread 'runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed' (10221980) panicked at crates/aion/src/runtime/nif_determinism.rs:611:9:
+assertion `left == right` failed: a resumed run's first now() is its start, not the wake event it has not reached
+  left: "1700003600000"
+ right: "1700000000000"
+
+---- runtime::nif_determinism::tests::elapsed_across_a_replayed_sleep_is_the_recorded_span_not_zero stdout ----
+
+thread 'runtime::nif_determinism::tests::elapsed_across_a_replayed_sleep_is_the_recorded_span_not_zero' (10221947) panicked at crates/aion/src/runtime/nif_determinism.rs:717:9:
+assertion `left == right` failed: elapsed across a replayed sleep is the recorded start-to-wake span, not zero
+  left: 0
+ right: 3600000
+
+---- runtime::nif_determinism::tests::an_unconsumed_async_arrival_never_moves_now stdout ----
+
+thread 'runtime::nif_determinism::tests::an_unconsumed_async_arrival_never_moves_now' (10221944) panicked at crates/aion/src/runtime/nif_determinism.rs:666:9:
+assertion `left == right` failed: an arrival the workflow has not consumed is not a position change
+  left: "1700007200000"
+ right: "1700000000000"
+
+
+failures:
+    runtime::nif_determinism::tests::an_unconsumed_async_arrival_never_moves_now
+    runtime::nif_determinism::tests::consuming_a_recorded_command_advances_now_to_that_event_only
+    runtime::nif_determinism::tests::elapsed_across_a_replayed_sleep_is_the_recorded_span_not_zero
+    runtime::nif_determinism::tests::live_and_replayed_activity_serve_identical_now_sequences
+    runtime::nif_determinism::tests::now_before_any_consumption_is_the_run_start_not_the_history_tail
+    runtime::nif_determinism::tests::resumed_run_answers_the_run_start_before_the_sleep_is_consumed
+
+test result: FAILED. 5 passed; 6 failed; 0 ignored; 0 measured; 684 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-rs --lib`
+=== EXIT  ===

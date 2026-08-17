@@ -5,6 +5,7 @@
     wait/0,
     wait/1,
     activity/1,
+    now_span/1,
     spawn_children/0,
     overflow_children/0,
     parked_children/0,
@@ -33,6 +34,19 @@ activity(_Input) ->
     receive
         stop -> ok
     end.
+
+%% Workflow-visible elapsed time across one durable sleep (aion#1).
+%%
+%% Reads `now` before the sleep and after it, and returns the span in
+%% milliseconds. On a run replayed from a recorded `TimerFired` the two reads
+%% sit at two different replay positions, so the span must be the recorded
+%% start-to-wake distance. A `now` that answers from the history tail returns
+%% the wake timestamp at BOTH positions and the span collapses to zero.
+now_span(_Input) ->
+    {ok, Started} = aion_flow_ffi:now(),
+    {ok, <<"fired">>} = aion_flow_ffi:sleep(<<"3600000">>),
+    {ok, Ended} = aion_flow_ffi:now(),
+    binary_to_integer(Ended) - binary_to_integer(Started).
 
 spawn_children() ->
     spawn_children(64).
