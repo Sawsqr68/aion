@@ -2008,8 +2008,8 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
 /// [`HaematiteStore::open_or_create_distributed`]: aion_store_haematite::HaematiteStore::open_or_create_distributed
 async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, ServerError> {
     // Required HERE, at the only seam that consumes it: haematite is the only
-    // backend with a node cache, so a `memory` or `libsql` deployment is never
-    // asked to rule on a cache it does not have. Same explicit-no-default guard
+    // backend with a node cache, so a `memory` deployment is never asked to
+    // rule on a cache it does not have. Same explicit-no-default guard
     // `observability.max_batch_events` uses, at the same kind of seam. Read
     // before `config` is partially moved below.
     let node_cache_budget = required_node_cache_budget(&config)?;

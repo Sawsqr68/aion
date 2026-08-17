@@ -38,7 +38,6 @@ naming a missing file still refuses rather than inventing one
 | `--config <path>` | Explicit TOML config file; skips auto-discovery. |
 | `--listen-address <addr>` | Override `server.listen_address` (HTTP/JSON + ops console). |
 | `--grpc-address <addr>` | Override `server.grpc_address` — the server's **own bind address**. The global `--endpoint` is a *client* dial address; `aion server` refuses to start if it is passed rather than silently binding the default port. |
-| `--store-url <path>` | Set `store.url` **and select the libSQL backend** (an implicit `haematite`/`memory` backend is coerced to `libsql` — haematite ignores `store.url`, so the flag is only meaningful as a libSQL choice). |
 | `--scheduler-threads <n>` | Override `runtime.scheduler_threads`; must be non-zero. |
 | `--drain-timeout <seconds>` | Override `drain.timeout_seconds`; must be non-zero. |
 | `--workflow-package <path>` | Extra `.aion` archive loaded at startup; repeatable (see "Boot-time loads"). |
@@ -68,13 +67,30 @@ Both flags belong to the bare form only and are refused next to a subcommand.
 
 | Key | Required when |
 |---|---|
-| `store.url` | `store.backend = "libsql"`. |
 | `auth.jwks_url` | `auth.enabled = true`. |
 | `authoring.project_root` | `authoring.gleam_path` is set. |
 | `store.cluster.node_id`, `store.cluster.bind_address` | a `[store.cluster]` section is present (and each `[[store.cluster.peers]]` entry needs `name` + `address`). |
 | `outbox.reconcile_interval_ms` **and** `outbox.reconcile_stale_after_ms` | either one is set — the pair is both-or-neither; both absent leaves reconciliation dark. |
 | `outbox.liminal_listen_address` | `outbox.enabled = true` with `transport = "liminal"` (surfaced when the dispatcher spawns). |
 | every `[worker_supervision]` key | ANY `[worker_supervision]` key is set — the section is all-or-nothing and has no defaults. Absent entirely = managed-worker supervision uncommissioned; partial = startup fails naming each missing key. |
+
+### Retired store inputs (startup refuses, naming the remedy)
+
+The libSQL backend is gone. Four inputs used to select it, and each one is now
+a startup refusal rather than a silent ignore or a fallback:
+
+| Retired input | Where |
+|---|---|
+| `backend = "libsql"` | `[store]` in the config file |
+| `store.url` (`url = …`) | `[store]` in the config file |
+| `AION_STORE_URL` | environment |
+| `--store-url` | `aion server` command line |
+
+Any one of them stops startup with a message naming the input it found and
+prescribing `backend = "haematite"` plus `store.data_dir`. This build does not
+read existing libSQL database files; there is no migration path and no
+compatibility mode. An existing libSQL database is only readable by an Aion
+0.15 or earlier binary.
 
 Tuning knobs (`runtime.query_timeout_ms`, the websocket capacities, the
 deploy ceilings, the outbox knobs, the observability bounds) default when
@@ -109,7 +125,6 @@ cors_allowed_origins = []               # default: empty — the SECURE default:
 
 [store]
 backend = "haematite"                   # default; durable ablative event store.
-                                        # "libsql" = lightweight embedded backend;
                                         # "memory" = ephemeral, loses state on stop
 data_dir = "…"                          # haematite database directory, created
                                         # on start; defaults to <home>/data (see
@@ -122,10 +137,7 @@ shard_count = 64                        # default; virtual shards created on a
 owned_shards = []                       # default: empty = this node owns ALL
                                         # shards (the single-node default). Set =
                                         # static shard assignment for multi-node
-                                        # haematite; ignored by memory/libsql
-# url = "aion.db"                       # REQUIRED when backend = "libsql":
-                                        # embedded libSQL file, created on start;
-                                        # ignored by haematite
+                                        # haematite; ignored by memory
 
 # Optional distributed-haematite membership. Absent (the default) = the
 # single-node path, byte-identical to before the section existed. Only valid
@@ -461,8 +473,7 @@ supported variables are:
 
 - `AION_SERVER_LISTEN_ADDRESS`, `AION_SERVER_GRPC_ADDRESS`,
   `AION_SERVER_CORS_ALLOWED_ORIGINS` (comma-separated; empty clears the list)
-- `AION_STORE_BACKEND`, `AION_STORE_URL` (selects libSQL, like
-  `--store-url`), `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
+- `AION_STORE_BACKEND`, `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
 - `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`
 - `AION_DRAIN_TIMEOUT_SECONDS`
 - `AION_AUTH_ENABLED`, `AION_AUTH_JWKS_URL`, `AION_AUTH_JWKS_REFRESH_SECONDS`
@@ -494,9 +505,8 @@ a config key — it is the home resolver above. Examples:
 
 ```sh
 AION_SERVER_GRPC_ADDRESS=127.0.0.1:60051
-AION_STORE_BACKEND=haematite            # default; "libsql" or "memory" to opt out
+AION_STORE_BACKEND=haematite            # default; "memory" to opt out
 AION_STORE_DATA_DIR=aion-data           # haematite database directory
-# AION_STORE_BACKEND=libsql AION_STORE_URL=aion.db   # lightweight embedded opt-out
 AION_RUNTIME_QUERY_TIMEOUT_MS=10000
 AION_DEPLOY_ENABLED=true
 ```
@@ -532,7 +542,7 @@ Sixteen fields ride on it:
 | `http_address` | the resolved HTTP/JSON + ops-console bind address |
 | `default_namespace` | `namespaces.default` as resolved |
 | `namespace_mode` | `SharedEngine` or `SingleTenant` |
-| `store_backend` | `haematite`, `libsql`, or `memory` |
+| `store_backend` | `haematite` or `memory` |
 | `auth_enabled` | whether `[auth]` is commissioned |
 | `deploy_enabled` | whether the deploy surface is mounted |
 | `metrics_enabled` | whether `GET /metrics` serves |
@@ -613,8 +623,7 @@ Metrics (Prometheus text at `GET /metrics` when `[metrics] enabled`):
 ## Persistence and recovery
 
 Status is a projection of event history; there is no mutable run state to
-lose. With a durable store — the **haematite** event store (the default,
-first-class ablative backend) or the lightweight embedded **libsql** store:
+lose. With the durable **haematite** event store (the default):
 
 1. Every workflow event (start, activity scheduled/completed, timer fired,
    signal, terminal) is appended durably as it happens.
@@ -763,7 +772,7 @@ On SIGINT/SIGTERM the server drains: it stops accepting mutations
 explicit message; the versions read model keeps serving), asks workers to
 finish in-flight tasks (`DrainRequest`), and waits up to
 `[drain] timeout_seconds`. `kill -9` skips all of that and is still safe
-with a durable store (haematite or libsql) — that is the point of event
+on the durable haematite store — that is the point of event
 sourcing — but in-flight activities will re-dispatch on recovery.
 
 ## Operating runs

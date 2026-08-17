@@ -35,7 +35,7 @@ the failover.
 
 ```sh
 # `gleam` must be on PATH (the hello-world workflow is rebuilt from source).
-cargo run -p aion-server --example failover_demo --features haematite-backend
+cargo run -p aion-server --example failover_demo
 ```
 
 You will see node-1 (owner of shard 1) die, node-0 detect the dropped
@@ -43,9 +43,9 @@ replication link, debounce, auto-adopt shard 1, and node-1's orphaned workflow
 replay from its replicated haematite history to `✅ completed`, while the witness
 node finishes uninterrupted.
 
-This is the same machinery the real `aion` server runs: build the binary with
-`--features haematite-backend` (forwarded from `aion-cli`) and a distributed
-`[store.cluster]` config in which each peer declares its `owned_shards`, and the
+This is the same machinery the real `aion` server runs: give the binary a
+distributed `[store.cluster]` config in which each peer declares its
+`owned_shards`, and the
 **SS-5b cluster supervisor** is commissioned automatically — it polls each peer's
 replication liveness and calls the engine's `adopt_shards` failover path when a
 peer with owned shards stays down past the debounce. A single-node /

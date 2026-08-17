@@ -49,9 +49,9 @@ in durable workflow history.
 > liminal_listen_address = "127.0.0.1:50061"
 > ```
 >
-> `outbox.enabled = true` additionally requires a durable store
-> (`store.backend = "libsql"` or `"haematite"`); the in-memory store has no
-> outbox table and commissioning against it is a configuration error.
+> `outbox.enabled = true` additionally requires the durable store
+> (`store.backend = "haematite"`); the in-memory store has no outbox table and
+> commissioning against it is a configuration error.
 >
 > **Read the address the server actually bound**, rather than assuming the one
 > you configured: the server log's `liminal server listener bound` line

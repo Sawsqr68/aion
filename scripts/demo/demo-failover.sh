@@ -110,11 +110,11 @@ say "build (ops-console bundle + aion cluster binary + worker + packager)"
   || note "ops-console bundle rebuild skipped/failed (need bun) — nodes serve the committed bundle"
 # The ops console is always embedded (rust_embed over the committed ops-console-embed/),
 # so each node serves the real ops console at its HTTP port with no extra feature.
-( cd "$ROOT" && cargo build -p aion-cli --features haematite-backend,liminal-transport ) \
+( cd "$ROOT" && cargo build -p aion-cli --features liminal-transport ) \
   || die "aion CLI build failed"
 ( cd "$WORKER_DIR" && cargo build ) || die "$WORKER_NAME build failed"
 ( cd "$PACKAGER_DIR" && cargo build ) || die "fleet-packager build failed"
-ok "built aion (+haematite-backend,+liminal-transport,+embedded ops console), $WORKER_NAME, packager"
+ok "built aion (+liminal-transport,+embedded ops console), $WORKER_NAME, packager"
 
 # Real-AI worker preflight: the Norn binary must exist and be logged in (the
 # project uses the ChatGPT OAuth login, not an API key), or every fan:N step

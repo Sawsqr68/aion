@@ -41,7 +41,7 @@ the workload, regenerates configs, and boots fresh.
 
 ## What you see
 
-1. **Build** — the cluster binary (`--features haematite-backend,liminal-transport`), the redial-capable worker, and the workload packager.
+1. **Build** — the cluster binary (`--features liminal-transport`), the redial-capable worker, and the workload packager.
 2. **Boot** — N nodes boot staggered (3s apart, to dodge the beamr
    simultaneous-connect boot race); each answers `/health/live` and commissions
    its SS-5b cluster supervisor.
@@ -268,7 +268,7 @@ To actually run it, set the variable:
 
 ```bash
 AION_RUN_COSTLY_TESTS=1 \
-cargo test -p aion-cli --features haematite-backend,liminal-transport \
+cargo test -p aion-cli --features liminal-transport \
   --test lsub5b_osproc_kill9_failover_e2e -- --nocapture
 ```
 

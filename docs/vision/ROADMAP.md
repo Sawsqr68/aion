@@ -110,7 +110,7 @@ The "stop regressions silently rotting" track. **The keystone gap.**
 > (`-D warnings`, default + all-features), a no-norn-in-platform invariant gate, the
 > workspace test job (default + all-features), AND a dedicated **osproc failover gates**
 > job running the kill-9 e2e guards (post-#157 regression guards, `cargo test -p aion-cli
-> --features haematite-backend,liminal-transport`). The two items below are done.
+> --features liminal-transport`). The two items below are done.
 
 - ✅ **DELIVERED** — **Public full-gate CI** (from prior roadmap §2.2; was the biggest
   hole — only `ops-console-embed.yml` existed). Now `ci.yml` runs fmt + clippy `-D` +

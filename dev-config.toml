@@ -24,8 +24,7 @@ grpc_address = "127.0.0.1:50051"
 
 [store]
 # Durable ablative event store (the default). Use backend = "memory" for an
-# ephemeral local run that loses all state on stop, or backend = "libsql" with
-# url = "aion.db" for the lightweight embedded backend (libsql-backend feature).
+# ephemeral local run that loses all state on stop.
 backend = "haematite"
 data_dir = "aion-data"
 

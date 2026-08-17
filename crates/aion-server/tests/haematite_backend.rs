@@ -218,8 +218,7 @@ listen_address = "127.0.0.1:8080"
 grpc_address = "127.0.0.1:50051"
 
 [store]
-backend = "libsql"
-url = "file:test.db"
+backend = "memory"
 
 [store.cluster]
 node_id = "n@127.0.0.1"

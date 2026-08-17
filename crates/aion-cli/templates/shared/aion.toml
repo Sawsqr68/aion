@@ -39,11 +39,6 @@ node_cache_budget = "unlimited"
 # working directory; a leading `~` expands against $HOME).
 # shard_count = 64                  # shards on a fresh database (default 64)
 #
-# Lightweight alternative — embedded libSQL (requires the `libsql-backend`
-# feature: build with `cargo install aion-cli --features libsql-backend`):
-#   backend = "libsql"
-#   url = "aion.db"                 # embedded libSQL file, created on start
-#
 # Ephemeral only — in-memory store, loses all state on stop:
 #   backend = "memory"
 

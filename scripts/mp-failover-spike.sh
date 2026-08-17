@@ -99,9 +99,9 @@ wait_for() { # <file> <pattern> <timeout-s>
 
 # ----------------------------------------------------------------------------
 say "build"
-( cd "$ROOT" && cargo build -p aion-cli --features haematite-backend ) || { bad "CLI build failed"; exit 1; }
+( cd "$ROOT" && cargo build -p aion-cli ) || { bad "CLI build failed"; exit 1; }
 ( cd "$ROOT/spike/greet-worker" && cargo build ) || { bad "worker build failed"; exit 1; }
-ok "aion CLI (+haematite-backend) and greet-worker built"
+ok "aion CLI and greet-worker built"
 
 say "workspace"
 rm -rf "$WORK"; mkdir -p "$WORK/logs"

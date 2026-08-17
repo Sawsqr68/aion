@@ -76,9 +76,10 @@ pub struct StoreConfig {
     /// Static distribution-shard assignment for this node (multi-shard
     /// active-active). When empty (the default) the node owns ALL shards — the
     /// single-node default, byte-identical to today. When set, the engine boot
-    /// path scopes recovery and enumeration to exactly these shards. Single-shard
-    /// the memory backend ignores the assignment; it is meaningful only for
-    /// a sharded backend. No election is performed: assignment is static config.
+    /// path scopes recovery and enumeration to exactly these shards. The
+    /// single-shard memory backend ignores the assignment; it is meaningful only
+    /// for a sharded backend. No election is performed: assignment is static
+    /// config.
     pub owned_shards: Vec<usize>,
     /// Filesystem data directory for the haematite backend. Required when
     /// `backend = haematite`; ignored by every other backend. The directory is
@@ -119,8 +120,8 @@ pub struct StoreConfig {
     /// **Required; no default** — the haematite boot path refuses to start
     /// without it. Ignored by every other backend (only haematite has a node
     /// cache), which is why it is required where it is USED rather than at
-    /// parse time: a `memory` or `libsql` deployment is not asked to rule on a
-    /// cache it does not have.
+    /// parse time: a `memory` deployment is not asked to rule on a cache it does
+    /// not have.
     ///
     /// A node is not a fixed-size thing — under byte-aware chunking a leaf
     /// reaches the ~96KB class — so a cache bounded only by `max_entries`
