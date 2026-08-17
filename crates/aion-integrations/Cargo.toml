@@ -21,7 +21,13 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# The envelope-delta format binds a delta to the exact base bytes it was diffed
+# against, so a base that was truncated or replaced after the fact can never be
+# patched into a wrong envelope. A leaf hashing crate, not a platform crate: the
+# SDK's dependency discipline is about never reaching into aion's own layers.
+sha2 = { workspace = true }
 thiserror = { workspace = true }
+uuid = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "io-util", "macros", "rt", "sync"] }
 
 [dev-dependencies]
@@ -34,4 +40,3 @@ tokio = { workspace = true, features = [
     "time",
 ] }
 chrono = { workspace = true }
-uuid = { workspace = true }

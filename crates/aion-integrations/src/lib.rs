@@ -33,6 +33,8 @@
 
 /// The harness-integration seam: the [`AgentHarness`] / [`AgentSession`] traits.
 pub mod contract;
+/// Persisting a turn's repeated provider response envelopes once instead of once per frame.
+pub mod envelope_delta;
 /// The DECLARED environment a harness subprocess is launched with.
 pub mod environment;
 /// The harness-neutral error taxonomy for the seam.
@@ -45,6 +47,9 @@ pub mod spec;
 pub mod workspace;
 
 pub use contract::{AgentHarness, AgentSession, DynAgentHarness, DynAgentSession};
+pub use envelope_delta::{
+    Compaction, EnvelopeDeltaDecoder, EnvelopeDeltaEncoder, ResolvedEnvelope, UnresolvedDelta,
+};
 pub use environment::{
     ChildEnvironment, EnvironmentDeclaration, EnvironmentError, process_environment,
 };
