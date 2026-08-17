@@ -259,8 +259,10 @@ fn probe_live(http_port: u16) -> Option<String> {
 }
 
 /// The server config: reserved ports, the durable store under this run's own
-/// home, the liminal worker channel the agent worker dials, and deploy enabled
-/// so `aion deploy` can reach it.
+/// home, the liminal worker channel the agent worker dials, deploy enabled
+/// so `aion deploy` can reach it, and the transcript flush policy
+/// (`observability.max_batch_events` / `max_batch_hold_ms`), which is
+/// required with no default — the server refuses to boot without it.
 fn server_config(http: u16, grpc: u16, liminal: u16) -> String {
     format!(
         "[server]\n\
@@ -280,7 +282,10 @@ fn server_config(http: u16, grpc: u16, liminal: u16) -> String {
          \n[deploy]\n\
          enabled = true\n\
          max_archive_bytes = 16777216\n\
-         max_inflated_bytes = 67108864\n"
+         max_inflated_bytes = 67108864\n\
+         \n[observability]\n\
+         max_batch_events = 64\n\
+         max_batch_hold_ms = 0\n"
     )
 }
 
