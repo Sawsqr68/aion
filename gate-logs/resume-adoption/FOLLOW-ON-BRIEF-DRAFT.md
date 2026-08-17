@@ -1,9 +1,16 @@
-# Resume-adoption remainder — follow-on lane brief (r0 DRAFT, awaiting battery + Waffles' review)
+# Resume-adoption remainder — follow-on lane brief (r1, DISPATCH-READY)
 
-- **Status**: r0 draft, authored at Vesper's seat on Waffles' ruling 07:20Z
-  2026-08-17. Blocked-until: his collect-battery verdict on the first lane's
-  eleven commits (green → they land OPEN-IN-PART and this lane opens against
-  main; red → diagnosis first, this brief re-bases on the findings).
+- **Status**: r1, dispatch-ready. r0 authored at Vesper's seat on Waffles'
+  ruling 07:20Z 2026-08-17; **approved with three amendments 09:51Z (all
+  folded below: base named, leg-2 binary-provenance wall, battery
+  modernized), dispatch at Vesper's discretion — no further pass needed.**
+- **Base**: fresh worktree from landed aion main — the e05d3e3b4 tree
+  (12 commits landed by ff, battery run 4 single-run green 5085/5085;
+  record commit 36a5ce8ba). Board rows aion#37–#41 are these five legs.
+  NOTE for leg authors: the landed base's e2e expectations already carry
+  the honest exhausted-wording (`exhausted: spent N of M attempts; last
+  refusal: …`) — activity_retry_e2e and advisory_class_e2e were fixed at
+  landing (e05d3e3b4). Do not re-derive that fight.
 - **Execution mode**: PLAIN BUILDER — **no aion harness anywhere in this
   lane's execution** (Tom's directive 07:15Z: no more development through
   aion). The worktree is the deliverable; collection is manual through
@@ -50,7 +57,12 @@ and this lane must not assume the work is merely unfinished rather than hard.
 **Leg 2 — issue #36 verbatim e2e.** Live builder → pause → server restart →
 resume → run completes with ONE agent session, on an isolated in-worktree
 server (own AION_HOME, own ports, recorded). This is the charter's original
-first acceptance leg and it has never run.
+first acceptance leg and it has never run. **Binary-provenance WALL
+(amendment 2, 09:51Z): the e2e's server binary MUST be built from the
+worktree tree under test at the tested commit — never `~/.cargo/bin/aion`,
+which is a different tree by definition. A leg-2 green against the installed
+binary proves nothing about this lane's code. REPORT.md records the binary's
+path and the commit it was built from.**
 
 **Leg 3 — supersession-absence proof + adoption event.** History assertion:
 while the holder lives, NO `superseded:server-death` record is written for
@@ -90,8 +102,18 @@ than none.
   aion-data/, live workers, or any sibling worktree with a live agent.
   All e2e legs on an isolated server inside the worktree.
 - No lint bypasses, no #[allow], no #[ignore], no test skips.
-- Full workspace battery (fmt, clippy ×2 workspace AND per-crate, workspace
-  tests) at the FINAL tree — the first lane never ran it post-commit.
+- Full workspace battery at the FINAL tree — the first lane never ran it
+  post-commit. **Shape modernized (amendment 3, 09:51Z, both halves from
+  this morning's own incidents):** (a) there is NO fmt gate — Tom struck it
+  (his word, 2026-08-17); builders `cargo fmt --all` (autoformat) before
+  committing and never format-check. (b) The battery is the extraction
+  pipeline: `cargo check` → `cargo clippy -- -D warnings` → `cargo nextest
+  run --workspace`, all `--keep-going` / `--no-fail-fast`, JSON
+  message-format jq-reduced to one finding per line. Fail-fast hid two red
+  files entirely in run 3's predecessor — the battery runs EVERYTHING and
+  reports everything, never stopping at the first red binary. (Clippy ×2
+  workspace AND per-crate still applies — the preserve_order resolution
+  differs between them.)
 - Explicit non-claim in REPORT.md is the only permitted fallback for any
   unproven leg; silence is not an option.
 - **No allocation instrumentation without a disk budget** (Waffles' ruling
@@ -105,6 +127,7 @@ than none.
 
 ## Sequencing
 
-Battery verdict → (green) Waffles lands lane 1 OPEN-IN-PART → this brief to
-his review → his approval → dispatch as a plain builder on a fresh worktree
-from the landed main.
+DONE: battery green (run 4, 5085/5085 single-run) → lane 1 landed
+(168baa5f4..e05d3e3b4, pushed) → Waffles' review pass (approved w/ three
+amendments, 09:51Z, folded above). REMAINING: dispatch as a plain builder on
+a fresh worktree from the landed main, at Vesper's discretion.
