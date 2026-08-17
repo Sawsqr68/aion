@@ -59,6 +59,32 @@ event_broadcast_capacity = 1024
 # /events/stream; default 64). Cluster events are low-rate, so keep small.
 cluster_broadcast_capacity = 64
 
+[observability]
+# The agent-transcript drain's flush policy. BOTH KEYS ARE REQUIRED and have no
+# default: the server refuses to start without them, on purpose, because they
+# are a deployment trade nobody can make for you.
+#
+# Why they exist: every durable transcript commit re-persists its whole
+# containing storage leaf as a new permanent blob. Committing one event at a
+# time therefore makes a run's store cost scale with its event COUNT, not its
+# bytes — measured 2026-08-17, a 136 KB status sweep left 73.7 MB of permanent
+# store. Batching divides that count.
+#
+# max_batch_events: the most transcript events one durable commit carries.
+# Bigger means fewer commits (less store) and more events in one commit — so a
+# single refused commit loses more, and more events sit in memory at once
+# (~17 KB each at the measured average, so 64 is ~1 MB in flight).
+max_batch_events = 64
+# max_batch_hold_ms: how long a PARTIAL batch may be held open waiting to fill.
+# This is the only durability-timing knob here: transcript events already wait
+# in an in-memory queue and are already lost if the process dies; this bounds
+# how much LONGER they may wait, and so how much transcript a kill -9 can cost.
+# It also bounds how far the live transcript tail lags. 0 means never wait —
+# only events that genuinely arrived together share a commit, with no added
+# window at all. The transcript is observability, never workflow replay
+# authority, which is the only reason this trade is offered.
+max_batch_hold_ms = 200
+
 [deploy]
 # Runtime package deploy/route/unload: lets `aion deploy` reach this server.
 # Deploying is running code on this server, which is why the surface ships

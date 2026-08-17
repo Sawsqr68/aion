@@ -13,17 +13,30 @@
 //! # Losing a transcript never fails a command
 //!
 //! Publishing is observability, and the command's replay-authoritative result is
-//! its own. A store that refuses an event costs a log line and the event, never
-//! the activity: the first failure of a run names the reason, the rest are
-//! counted, and the total is reported when the command ends. That is the same
-//! coalescing discipline the worker-side drain uses, for the same reason — a
-//! failing sink must not turn one line of output into one log line per line of
-//! output.
+//! its own. A store that refuses events costs a log line and those events, never
+//! the activity: the refusal is named once per refused BATCH — never once per
+//! line of output — and the exact total is reported when the command ends. That
+//! is the same coalescing discipline the worker-side drain uses, for the same
+//! reason: a failing sink must not turn one line of output into one log line per
+//! line of output.
+//!
+//! # One commit per batch, not per line
+//!
+//! A verbose command emits one transcript event per output line, and each
+//! durable commit re-persists its whole containing storage leaf. This drain
+//! therefore runs through the shared coalescing loop
+//! ([`ActivityEventPublisher::drain`]) under the operator's
+//! `observability.max_batch_events` / `max_batch_hold_ms` policy, exactly like
+//! the liminal observability tap: a thousand-line command costs commits
+//! proportional to its batches, not to its lines.
 
 use aion_core::ActivityEvent;
 use tokio::sync::mpsc;
 
 use crate::activity_publisher::ActivityEventPublisher;
+
+/// The `operation` label this drain's refusals are logged under.
+const OPERATION: &str = "declared_command_dispatch";
 
 /// Drain `events` into `publisher` until the activity's transcript seam closes.
 ///
@@ -34,27 +47,11 @@ pub(crate) async fn publish_declared_transcript(
     publisher: ActivityEventPublisher,
     mut events: mpsc::UnboundedReceiver<ActivityEvent>,
 ) {
-    let mut dropped: u64 = 0;
-    while let Some(event) = events.recv().await {
-        if let Err(error) = publisher.publish(&event).await {
-            if dropped == 0 {
-                tracing::warn!(
-                    %error,
-                    operation = "declared_command_dispatch",
-                    workflow_id = %event.workflow_id,
-                    activity_id = %event.activity_id,
-                    attempt = event.attempt,
-                    "declared command transcript: the sequencer refused an output line; the \
-                     command is unaffected and further refusals are counted, not logged"
-                );
-            }
-            dropped = dropped.saturating_add(1);
-        }
-    }
+    let dropped = publisher.drain(&mut events, OPERATION).await;
     if dropped > 0 {
         tracing::warn!(
             dropped,
-            operation = "declared_command_dispatch",
+            operation = OPERATION,
             "declared command transcript: output lines were not retained"
         );
     }
@@ -101,7 +98,11 @@ mod tests {
     async fn drained_lines_are_sequenced_into_the_durable_transcript() -> TestResult {
         let store = Arc::new(InMemoryObservabilityStore::default());
         let capacity = std::num::NonZeroUsize::new(16).ok_or("capacity must be non-zero")?;
-        let publisher = ActivityEventPublisher::new(store, capacity);
+        let publisher = ActivityEventPublisher::new(
+            store,
+            capacity,
+            crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED,
+        );
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
 
         let pump = tokio::spawn(publish_declared_transcript(publisher.clone(), receiver));

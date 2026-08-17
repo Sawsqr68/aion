@@ -1131,7 +1131,7 @@ mod tests {
             authoring: AuthoringConfig::default(),
             dev: DevConfig::default(),
             outbox: OutboxConfig::default(),
-            observability: crate::config::ObservabilityConfig::default(),
+            observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             mcp: crate::config::ResolvedMcpConfig::default(),
             scheduler_threads: 1,
             query_timeout: Some(Duration::from_secs(10)),

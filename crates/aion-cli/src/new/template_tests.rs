@@ -101,6 +101,10 @@ fn aion_toml_carries_every_required_server_key() {
             // Required since WS3: the cluster topology broadcast capacity, so
             // the scaffolded config boots without further edits.
             "cluster_broadcast_capacity",
+            // Required and defaultless: the transcript drain's flush policy.
+            // Without both keys the scaffolded server refuses to start.
+            "max_batch_events",
+            "max_batch_hold_ms",
             "enabled = true",
             // The outbox trio: without all three the liminal worker listener
             // is never bound and a remote worker's dial is refused forever.

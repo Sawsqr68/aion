@@ -393,6 +393,11 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        // These constructors bypass config validation and cannot fail, so an
+        // unruled flush policy falls back to the identity (unbatched) one rather
+        // than inventing a tuning value; see `TranscriptBatchPolicy::UNBATCHED`.
+        let batch = required_transcript_batch_policy(&runtime)
+            .unwrap_or(crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED);
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
@@ -423,6 +428,7 @@ impl ServerState {
                     None,
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
                     bounds,
+                    batch,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
@@ -486,6 +492,11 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        // These constructors bypass config validation and cannot fail, so an
+        // unruled flush policy falls back to the identity (unbatched) one rather
+        // than inventing a tuning value; see `TranscriptBatchPolicy::UNBATCHED`.
+        let batch = required_transcript_batch_policy(&runtime)
+            .unwrap_or(crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED);
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
@@ -516,6 +527,7 @@ impl ServerState {
                     None,
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
                     bounds,
+                    batch,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
@@ -574,6 +586,11 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        // These constructors bypass config validation and cannot fail, so an
+        // unruled flush policy falls back to the identity (unbatched) one rather
+        // than inventing a tuning value; see `TranscriptBatchPolicy::UNBATCHED`.
+        let batch = required_transcript_batch_policy(&runtime)
+            .unwrap_or(crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED);
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
@@ -606,6 +623,7 @@ impl ServerState {
                     None,
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
                     bounds,
+                    batch,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
@@ -659,6 +677,11 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        // These constructors bypass config validation and cannot fail, so an
+        // unruled flush policy falls back to the identity (unbatched) one rather
+        // than inventing a tuning value; see `TranscriptBatchPolicy::UNBATCHED`.
+        let batch = required_transcript_batch_policy(&runtime)
+            .unwrap_or(crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED);
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
@@ -691,6 +714,7 @@ impl ServerState {
                     None,
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
                     bounds,
+                    batch,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
@@ -1733,10 +1757,56 @@ fn build_real_time_publishers(
     ServerError,
 > {
     let capacity = required_cluster_broadcast_capacity(runtime)?;
+    let batch = required_transcript_batch_policy(runtime)?;
     Ok((
         crate::cluster_publisher::ClusterEventPublisher::new(capacity),
-        build_transcript_publisher(observability_store, capacity, transcript_bounds(runtime)),
+        build_transcript_publisher(
+            observability_store,
+            capacity,
+            transcript_bounds(runtime),
+            batch,
+        ),
     ))
+}
+
+/// The operator's transcript flush policy, or a startup refusal naming the key
+/// they have not ruled on.
+///
+/// `observability.max_batch_events` and `observability.max_batch_hold_ms` have
+/// NO shipped default (see [`crate::config::ObservabilityConfig`]): the trade
+/// between store cost and how much not-yet-durable transcript a crash can lose
+/// belongs to the deployment, and a guessed value would make it silently. This
+/// is the same explicit-no-default guard [`required_cluster_broadcast_capacity`]
+/// applies one line above, for the same reason.
+///
+/// # Errors
+///
+/// Returns [`ServerError`] when either key is unset, when `max_batch_events` is
+/// zero (a batch of no events would commit nothing, forever), or when the hold
+/// in milliseconds does not fit a [`Duration`](std::time::Duration).
+fn required_transcript_batch_policy(
+    runtime: &RuntimeConfig,
+) -> Result<crate::activity_publisher::TranscriptBatchPolicy, ServerError> {
+    let max_batch_events = runtime
+        .observability
+        .max_batch_events
+        .and_then(std::num::NonZeroUsize::new)
+        .ok_or_else(|| ServerError::Config {
+            message: crate::config::OBSERVABILITY_MAX_BATCH_EVENTS_REQUIRED.to_owned(),
+        })?;
+    // Zero is a MEANINGFUL setting here (never hold a partial batch open), so
+    // absence — not zero — is what fails.
+    let max_batch_hold_ms =
+        runtime
+            .observability
+            .max_batch_hold_ms
+            .ok_or_else(|| ServerError::Config {
+                message: crate::config::OBSERVABILITY_MAX_BATCH_HOLD_MS_REQUIRED.to_owned(),
+            })?;
+    Ok(crate::activity_publisher::TranscriptBatchPolicy {
+        max_batch_events,
+        max_hold: std::time::Duration::from_millis(max_batch_hold_ms),
+    })
 }
 
 /// The operator-configured transcript retention bounds from `[observability]`.
@@ -1761,10 +1831,12 @@ fn build_transcript_publisher(
     observability_store: Option<Arc<dyn aion_store::ObservabilityStore>>,
     capacity: std::num::NonZeroUsize,
     bounds: crate::activity_bounds::TranscriptBounds,
+    batch: crate::activity_publisher::TranscriptBatchPolicy,
 ) -> crate::activity_publisher::ActivityEventPublisher {
     let store = observability_store
         .unwrap_or_else(|| Arc::new(aion_store::InMemoryObservabilityStore::default()));
-    crate::activity_publisher::ActivityEventPublisher::new(store, capacity).with_bounds(bounds)
+    crate::activity_publisher::ActivityEventPublisher::new(store, capacity, batch)
+        .with_bounds(bounds)
 }
 
 /// The request-routing pieces built from the cluster store + peer config.
@@ -2394,7 +2466,7 @@ mod tests {
             authoring: AuthoringConfig::default(),
             dev: DevConfig::default(),
             outbox: OutboxConfig::default(),
-            observability: crate::config::ObservabilityConfig::default(),
+            observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             mcp: crate::config::ResolvedMcpConfig::default(),
             scheduler_threads: 1,
             query_timeout: Some(Duration::from_secs(10)),
@@ -2406,6 +2478,66 @@ mod tests {
             owned_shards: Vec::new(),
             cors_allowed_origins: Vec::new(),
         }
+    }
+
+    /// The flush policy is REQUIRED and has no default: a runtime that has not
+    /// ruled on it refuses to build the transcript publisher, and the refusal
+    /// names the key the operator must set. This is the loud-at-startup half of
+    /// "no invented tuning values".
+    #[test]
+    fn an_unruled_flush_policy_refuses_to_build_the_publisher() {
+        for (mutate, expected_key) in [
+            (
+                Box::new(|runtime: &mut RuntimeConfig| {
+                    runtime.observability.max_batch_events = None;
+                }) as Box<dyn Fn(&mut RuntimeConfig)>,
+                "observability.max_batch_events",
+            ),
+            (
+                Box::new(|runtime: &mut RuntimeConfig| {
+                    runtime.observability.max_batch_events = Some(0);
+                }),
+                "observability.max_batch_events",
+            ),
+            (
+                Box::new(|runtime: &mut RuntimeConfig| {
+                    runtime.observability.max_batch_hold_ms = None;
+                }),
+                "observability.max_batch_hold_ms",
+            ),
+        ] {
+            let mut runtime = runtime_config();
+            mutate(&mut runtime);
+            let message = super::required_transcript_batch_policy(&runtime)
+                .err()
+                .map_or_else(String::new, |error| error.to_string());
+            assert!(
+                message.contains(expected_key),
+                "the refusal must name {expected_key}: {message}"
+            );
+            assert!(
+                message.contains("no default"),
+                "and must say the key has no default: {message}"
+            );
+        }
+    }
+
+    /// A stated policy is carried through verbatim — including a hold of ZERO,
+    /// which is a real ruling ("never wait"), not a missing one.
+    #[test]
+    fn a_stated_flush_policy_is_carried_through_verbatim() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut runtime = runtime_config();
+        runtime.observability = crate::config::ObservabilityConfig::with_flush_policy(32, 0);
+        let policy = super::required_transcript_batch_policy(&runtime)?;
+        assert_eq!(policy.max_batch_events.get(), 32);
+        assert_eq!(policy.max_hold, Duration::ZERO);
+
+        runtime.observability = crate::config::ObservabilityConfig::with_flush_policy(8, 250);
+        let policy = super::required_transcript_batch_policy(&runtime)?;
+        assert_eq!(policy.max_batch_events.get(), 8);
+        assert_eq!(policy.max_hold, Duration::from_millis(250));
+        Ok(())
     }
 
     /// The engine's schema must accept EVERY attribute the server's start
@@ -3290,6 +3422,7 @@ mod tests {
         let transcript = crate::activity_publisher::ActivityEventPublisher::new(
             Arc::new(aion_store::InMemoryObservabilityStore::default()),
             ServerState::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+            crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED,
         );
         let (dispatcher, _mock_registry, _attempt_owners, _workspace_root, update_status) =
             super::build_decorated_dispatcher(&runtime, &seams, transcript);

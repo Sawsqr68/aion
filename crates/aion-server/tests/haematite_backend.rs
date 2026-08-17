@@ -31,6 +31,11 @@ query_timeout_ms = 10000
 [websocket]
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
+
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
 "#
     )
 }
@@ -69,6 +74,11 @@ query_timeout_ms = 10000
 [websocket]
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
+
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
 "#;
     let home = private_tempdir()?;
     let config = ServerConfig::from_slice_with_home(toml.as_bytes(), home.path())?;
@@ -99,6 +109,11 @@ query_timeout_ms = 10000
 [websocket]
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
+
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
 "#;
     match ServerConfig::from_slice(toml.as_bytes()) {
         Ok(_) => Err("haematite backend with an empty data_dir must be rejected".into()),
@@ -160,6 +175,11 @@ query_timeout_ms = 10000
 [websocket]
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
+
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
 "#
     )
 }
@@ -206,6 +226,11 @@ query_timeout_ms = 10000
 [websocket]
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
+
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
 "#;
     match ServerConfig::from_slice(toml.as_bytes()) {
         Ok(_) => Err("[store.cluster] on a non-haematite backend must be rejected".into()),

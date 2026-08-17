@@ -164,6 +164,21 @@ pub(crate) const OBSERVABILITY_MAX_EVENT_BYTES_REQUIRED: &str = "observability.m
 /// cap would retain no transcript at all).
 pub(crate) const OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED: &str = "observability.max_stream_events must be a positive integer when set (a zero per-stream cap would retain no transcript at all); omit observability.max_stream_events (or AION_OBSERVABILITY_MAX_STREAM_EVENTS) to use the default, or set it to a positive integer";
 
+/// Operator-facing message for an absent or zero `observability.max_batch_events`.
+///
+/// There is NO default for this knob: every durable transcript commit
+/// re-persists its whole containing storage leaf, so the number of events one
+/// commit carries is a deployment trade (store cost against how much transcript
+/// a single refused commit can lose) that only the operator can make.
+pub const OBSERVABILITY_MAX_BATCH_EVENTS_REQUIRED: &str = "observability.max_batch_events is required and has no default: it is the maximum number of transcript events the drain commits in one durable append, and one durable commit re-persists the whole containing storage leaf, so committing one event at a time is the write amplification measured on 2026-08-17 (a 136 KB status sweep left 73.7 MB of permanent store). Set observability.max_batch_events (or AION_OBSERVABILITY_MAX_BATCH_EVENTS) to a positive integer, together with observability.max_batch_hold_ms";
+
+/// Operator-facing message for an absent `observability.max_batch_hold_ms`.
+///
+/// Zero is a valid setting (never wait), so absence — not zero — is the error:
+/// the operator must state how long a partial batch may be held, because that
+/// window bounds how much not-yet-durable transcript a crash can cost.
+pub const OBSERVABILITY_MAX_BATCH_HOLD_MS_REQUIRED: &str = "observability.max_batch_hold_ms is required and has no default: it is how long, in milliseconds, the transcript drain may hold a partial batch open waiting for it to fill, which bounds how much not-yet-durable transcript a crash can cost. Set observability.max_batch_hold_ms (or AION_OBSERVABILITY_MAX_BATCH_HOLD_MS) to a non-negative integer — 0 means never wait, and commit whatever is already queued — together with observability.max_batch_events";
+
 /// Child directory below Aion home used by the default haematite store.
 ///
 /// The complete default is `<AION_HOME>/data`; it is resolved dynamically after

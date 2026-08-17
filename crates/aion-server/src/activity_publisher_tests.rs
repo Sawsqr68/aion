@@ -17,9 +17,22 @@ fn capacity(value: usize) -> Result<NonZeroUsize, Box<dyn std::error::Error>> {
     NonZeroUsize::new(value).ok_or_else(|| "capacity must be non-zero".into())
 }
 
+/// These tests pin the SINGLE-EVENT sequencing contract (monotonicity, failover
+/// dedup, retention bounds), so they run the sequencer under the identity flush
+/// policy — one event per durable commit, no hold — which is the pre-batching
+/// behaviour. Coalescing has its own tests in `activity_publisher_batching_tests`.
+const UNBATCHED: TranscriptBatchPolicy = TranscriptBatchPolicy {
+    max_batch_events: NonZeroUsize::MIN,
+    max_hold: std::time::Duration::ZERO,
+};
+
 fn publisher(cap: usize) -> Result<ActivityEventPublisher, Box<dyn std::error::Error>> {
     let store = Arc::new(InMemoryObservabilityStore::default());
-    Ok(ActivityEventPublisher::new(store, capacity(cap)?))
+    Ok(ActivityEventPublisher::new(
+        store,
+        capacity(cap)?,
+        UNBATCHED,
+    ))
 }
 
 /// The first generation of the continue-as-new chain the fixtures live in.
@@ -165,8 +178,8 @@ async fn failover_double_emit_dedupes_to_one_monotonic_stream()
     // ONE durable store (the server), TWO publisher clones = the dying +
     // adopting worker's events both flowing through the single server writer.
     let store = Arc::new(InMemoryObservabilityStore::default());
-    let dying = ActivityEventPublisher::new(store.clone(), capacity(256)?);
-    let adopting = ActivityEventPublisher::new(store, capacity(256)?);
+    let dying = ActivityEventPublisher::new(store.clone(), capacity(256)?, UNBATCHED);
+    let adopting = ActivityEventPublisher::new(store, capacity(256)?, UNBATCHED);
 
     let mut handles = Vec::new();
     for worker_seq in 0..16u64 {
@@ -231,8 +244,8 @@ async fn process_local_atomic_counter_collides_across_survivors()
     // By contrast the commit-allocated publisher over a shared store never
     // collides: the two survivors get DISTINCT sequences.
     let store = Arc::new(InMemoryObservabilityStore::default());
-    let a = ActivityEventPublisher::new(store.clone(), capacity(8)?);
-    let b = ActivityEventPublisher::new(store, capacity(8)?);
+    let a = ActivityEventPublisher::new(store.clone(), capacity(8)?, UNBATCHED);
+    let b = ActivityEventPublisher::new(store, capacity(8)?, UNBATCHED);
     let sa = a.publish(&event(0, 1, false, "a")).await?;
     let sb = b.publish(&event(0, 2, false, "b")).await?;
     assert_ne!(

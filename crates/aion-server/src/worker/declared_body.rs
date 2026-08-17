@@ -585,7 +585,11 @@ mod tests {
         bodies.install(Arc::new(FixedBodies { lookup }));
         let store: Arc<dyn aion_store::ObservabilityStore> =
             Arc::new(aion_store::InMemoryObservabilityStore::default());
-        let transcript = ActivityEventPublisher::new(store, TRANSCRIPT_CAPACITY);
+        let transcript = ActivityEventPublisher::new(
+            store,
+            TRANSCRIPT_CAPACITY,
+            crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED,
+        );
         let decorated = DeclaredCommandDispatcher::new(
             Arc::new(inner),
             bodies,
@@ -1033,6 +1037,7 @@ mod tests {
             ActivityEventPublisher::new(
                 Arc::new(aion_store::InMemoryObservabilityStore::default()),
                 TRANSCRIPT_CAPACITY,
+                crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED,
             ),
         );
 

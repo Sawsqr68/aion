@@ -334,7 +334,11 @@ async fn intervenable_attempts_enumerates_only_live_owned_attempts_of_the_workfl
 fn transcript_publisher() -> crate::activity_publisher::ActivityEventPublisher {
     let store = Arc::new(aion_store::InMemoryObservabilityStore::default());
     let capacity = std::num::NonZeroUsize::new(8).expect("non-zero capacity");
-    crate::activity_publisher::ActivityEventPublisher::new(store, capacity)
+    crate::activity_publisher::ActivityEventPublisher::new(
+        store,
+        capacity,
+        crate::activity_publisher::TranscriptBatchPolicy::UNBATCHED,
+    )
 }
 
 fn stream_key(attempt: u32) -> aion_store::ActivityStreamKey {

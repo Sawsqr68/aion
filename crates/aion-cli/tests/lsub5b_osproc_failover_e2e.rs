@@ -99,6 +99,11 @@ default = "default"
 event_broadcast_capacity = 1024
 cluster_broadcast_capacity = 64
 
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
+
 [outbox]
 enabled = true
 poll_interval_ms = 20

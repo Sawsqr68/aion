@@ -1439,11 +1439,20 @@ impl LiminalConnectionNotifier {
         // The ONE drain task: transcript events publish sequentially in
         // arrival order (see the `TranscriptTap` docs for why one consumer is
         // load-bearing). It lives as long as any queue sender does.
+        //
+        // The drain COALESCES under the operator's flush policy: the events
+        // waiting on this queue are committed as batches, so a chatty agent
+        // costs one storage-tree commit per batch instead of one per event —
+        // and one commit is one whole-leaf rewrite (forensics 2026-08-17).
+        // Arrival order is untouched; only the number of commits changes.
         tokio::runtime::Handle::current().spawn(async move {
-            while let Some(event) = events.recv().await {
-                if let Err(error) = publisher.publish(&event).await {
-                    tracing::warn!(%error, "observability tap: transcript publish failed");
-                }
+            let dropped = publisher.drain(&mut events, "observability_tap").await;
+            if dropped > 0 {
+                tracing::warn!(
+                    dropped,
+                    operation = "observability_tap",
+                    "observability tap: transcript events were not retained"
+                );
             }
         });
         self.transcript = Some(TranscriptTap { queue });

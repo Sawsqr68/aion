@@ -131,7 +131,7 @@ fn test_runtime(auto_create: AutoCreate) -> aion_server::config::RuntimeConfig {
         authoring: AuthoringConfig::default(),
         dev: DevConfig::default(),
         outbox: OutboxConfig::default(),
-        observability: aion_server::config::ObservabilityConfig::default(),
+        observability: aion_server::config::ObservabilityConfig::with_flush_policy(64, 0),
         mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(Duration::from_secs(5)),

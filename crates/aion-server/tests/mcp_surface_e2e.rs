@@ -198,7 +198,7 @@ fn runtime_config(mcp_enabled: bool, options: &HarnessOptions) -> RuntimeConfig 
         },
         dev: aion_server::config::DevConfig::default(),
         outbox: aion_server::config::OutboxConfig::default(),
-        observability: aion_server::config::ObservabilityConfig::default(),
+        observability: aion_server::config::ObservabilityConfig::with_flush_policy(64, 0),
         mcp: ResolvedMcpConfig {
             enabled: mcp_enabled,
             allowed_origins: vec![ORIGIN.to_owned()],

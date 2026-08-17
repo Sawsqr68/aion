@@ -490,6 +490,11 @@ outbound_buffer_bound = 32
 event_broadcast_capacity = 64
 cluster_broadcast_capacity = 64
 
+[observability]
+# Required, no default: the transcript drain's flush policy.
+max_batch_events = 64
+max_batch_hold_ms = 0
+
 [outbox]
 enabled = true
 # The default build compiles liminal-transport, which makes the outbox transport

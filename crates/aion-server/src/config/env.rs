@@ -179,6 +179,14 @@ fn overlay_observability(
         "AION_OBSERVABILITY_MAX_STREAM_EVENTS" => {
             config.observability.max_stream_events = parse_positive_u64(name, value)?;
         }
+        "AION_OBSERVABILITY_MAX_BATCH_EVENTS" => {
+            config.observability.max_batch_events = Some(parse_positive_usize(name, value)?);
+        }
+        "AION_OBSERVABILITY_MAX_BATCH_HOLD_MS" => {
+            // Zero is meaningful here (never hold a partial batch), so this
+            // parses a non-negative value rather than a positive one.
+            config.observability.max_batch_hold_ms = Some(parse_u64(name, value)?);
+        }
         other => overlay_outbox(config, other, value)?,
     }
     Ok(())
@@ -285,6 +293,15 @@ fn parse_positive_u64(name: &str, value: &str) -> Result<u64, ServerError> {
         return config_error(format!("{name} must be a positive integer"));
     }
     Ok(parsed)
+}
+
+/// Parse a NON-NEGATIVE integer: for knobs where zero is a meaningful setting
+/// rather than a misconfiguration (`observability.max_batch_hold_ms` = never
+/// hold a partial batch open).
+fn parse_u64(name: &str, value: &str) -> Result<u64, ServerError> {
+    value.parse::<u64>().map_err(|source| ServerError::Config {
+        message: format!("{name} must be a non-negative integer: {source}"),
+    })
 }
 
 fn parse_bool(name: &str, value: &str) -> Result<bool, ServerError> {

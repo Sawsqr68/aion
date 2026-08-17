@@ -153,7 +153,7 @@ pub(crate) fn runtime_config() -> RuntimeConfig {
         authoring: AuthoringConfig::default(),
         dev: crate::config::DevConfig::default(),
         outbox: crate::config::OutboxConfig::default(),
-        observability: crate::config::ObservabilityConfig::default(),
+        observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
         mcp: crate::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(std::time::Duration::from_secs(10)),

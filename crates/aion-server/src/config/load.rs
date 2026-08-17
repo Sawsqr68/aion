@@ -1115,6 +1115,59 @@ mod tests {
         Ok(())
     }
 
+    /// The flush policy parses and round-trips into the runtime view. Both keys
+    /// are `Option` with NO default, so what a config states is exactly what the
+    /// boot path sees — including a hold of zero, which is a real setting
+    /// ("never wait"), not an absence.
+    #[test]
+    fn observability_flush_policy_parses_and_round_trips() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let config = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [observability]
+                max_batch_events = 32
+                max_batch_hold_ms = 0
+            ",
+        )?;
+        assert_eq!(config.observability.max_batch_events, Some(32));
+        assert_eq!(config.observability.max_batch_hold_ms, Some(0));
+        let (_store, runtime) = config.into_parts();
+        assert_eq!(runtime.observability.max_batch_events, Some(32));
+        assert_eq!(
+            runtime.observability.max_batch_hold_ms,
+            Some(0),
+            "a stated zero hold survives as a stated zero, never collapsing to absent"
+        );
+        Ok(())
+    }
+
+    /// An omitted flush policy parses to `None` rather than to a guess. The
+    /// refusal happens where the value is used (the publisher build), which
+    /// `state.rs`'s tests pin; here the point is that nothing invents a value on
+    /// the way through.
+    #[test]
+    fn an_omitted_flush_policy_stays_absent() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [observability]
+                max_event_bytes = 512
+            ",
+        )?;
+        assert_eq!(config.observability.max_batch_events, None);
+        assert_eq!(config.observability.max_batch_hold_ms, None);
+        Ok(())
+    }
+
     #[test]
     fn zero_observability_max_event_bytes_fails_startup_validation() {
         let result = ServerConfig::from_slice(

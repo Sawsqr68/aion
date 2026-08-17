@@ -382,6 +382,7 @@ async fn configured_bounds_flow_from_runtime_config_to_the_wire() -> Result<(), 
     let server = RetentionServer::start(ObservabilityConfig {
         max_event_bytes: 512,
         max_stream_events: 3,
+        ..ObservabilityConfig::with_flush_policy(64, 0)
     })?;
 
     let huge = "x".repeat(10_000);

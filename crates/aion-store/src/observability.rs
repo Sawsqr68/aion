@@ -20,12 +20,25 @@
 //!
 //! `store_seq` is **not** allocated by the store: it is a caller-supplied
 //! `expected_seq` under optimistic concurrency, exactly like the workflow-history
-//! append path. [`ObservabilityStore::append_activity_event`] returns the
+//! append path. [`ObservabilityStore::append_activity_events`] returns the
 //! `SequenceConflict` the server's sequencer re-reads-head-and-retries on. The
 //! server is the *single writer* to this keyspace, so monotonicity is enforced by
 //! the server's read-head -> append(expected_seq) -> retry loop, not by any magic
 //! in the store. This mirrors [`StoreError::SequenceConflict`] on the workflow
 //! path and is why the store deliberately does not auto-allocate an id.
+//!
+//! # One append, many events (write amplification)
+//!
+//! The append primitive takes a SLICE of same-stream events, not one event,
+//! because a durable backend pays per COMMIT, not per byte: haematite
+//! re-persists the whole containing storage leaf as a new permanent blob on
+//! every commit, so appending N events one at a time costs N whole-leaf
+//! rewrites of a leaf that can reach tens of megabytes (forensics 2026-08-17:
+//! 2,359 honest bytes bought a 2,303,416-byte blob). One batched append of N
+//! same-stream events is ONE commit and therefore one rewrite. The single-event
+//! [`ObservabilityStore::append_activity_event`] remains as a documented
+//! one-line convenience over the slice form for callers that genuinely hold a
+//! single event; it is not a second implementation.
 
 use async_trait::async_trait;
 
@@ -126,24 +139,58 @@ pub struct ActivityStreamSummary {
 /// quad, never on the workflow alone and never on a run-ambiguous triple.
 #[async_trait]
 pub trait ObservabilityStore: Send + Sync + 'static {
-    /// Append `event` to its `(workflow, run, activity, attempt)` stream at
-    /// `expected_seq` (the current head the caller believes it holds).
+    /// Atomically append `events` — all belonging to ONE
+    /// `(workflow, run, activity, attempt)` stream — starting at `expected_seq`
+    /// (the current head the caller believes it holds), as a SINGLE durable
+    /// commit.
     ///
-    /// On success returns the newly assigned `store_seq` (which equals
-    /// `expected_seq`) — the caller advances its head to `store_seq + 1`. On a
-    /// stale expectation returns [`StoreError::SequenceConflict`] with the actual
-    /// head, leaving the stream unchanged, so the server's sequencer can re-read
-    /// the advanced head and retry. **Ephemeral events must never be passed
-    /// here** — they are WS-forward-only and are filtered out before this call.
+    /// The `i`-th event is assigned `store_seq == expected_seq + i`. On success
+    /// returns the stream's new head (`expected_seq + events.len()`), which is
+    /// the next `store_seq` to be written. On a stale expectation returns
+    /// [`StoreError::SequenceConflict`] with the actual head, leaving the stream
+    /// **entirely** unchanged — a batch is all-or-nothing, so the server's
+    /// sequencer can re-read the advanced head and retry the whole batch.
+    ///
+    /// An EMPTY slice is a no-op that commits nothing and returns
+    /// `expected_seq`: there is no partial state to reason about and no commit
+    /// to pay for.
+    ///
+    /// **Every event must share one stream key** — the durable backends address
+    /// one stream per commit, so a mixed slice is a caller bug and is refused
+    /// with [`StoreError::Backend`] rather than silently split (silently
+    /// splitting would re-introduce the per-event commit this method exists to
+    /// remove, and would assign sequences from the wrong stream's head).
+    /// **Ephemeral events must never be passed here** — they are
+    /// WS-forward-only and are filtered out before this call.
     ///
     /// # Errors
-    /// [`StoreError::SequenceConflict`] on a stale `expected_seq`; otherwise a
+    /// [`StoreError::SequenceConflict`] on a stale `expected_seq`;
+    /// [`StoreError::Backend`] when the slice mixes stream keys; otherwise a
     /// backend or serialization error.
+    async fn append_activity_events(
+        &self,
+        expected_seq: u64,
+        events: &[ActivityEvent],
+    ) -> Result<u64, StoreError>;
+
+    /// Append ONE event at `expected_seq`, returning its assigned `store_seq`
+    /// (which equals `expected_seq`).
+    ///
+    /// A one-line convenience over [`Self::append_activity_events`] for callers
+    /// that genuinely hold a single event — never a second implementation, and
+    /// never the way to write N events (that is N commits; see the module docs).
+    ///
+    /// # Errors
+    /// As [`Self::append_activity_events`].
     async fn append_activity_event(
         &self,
         expected_seq: u64,
         event: &ActivityEvent,
-    ) -> Result<u64, StoreError>;
+    ) -> Result<u64, StoreError> {
+        self.append_activity_events(expected_seq, std::slice::from_ref(event))
+            .await?;
+        Ok(expected_seq)
+    }
 
     /// Read the current head (next `store_seq` to be written) for `key`.
     ///
@@ -227,30 +274,44 @@ fn stream_head(stream: &[ActivityRecord]) -> u64 {
 
 #[async_trait]
 impl ObservabilityStore for InMemoryObservabilityStore {
-    async fn append_activity_event(
+    async fn append_activity_events(
         &self,
         expected_seq: u64,
-        event: &ActivityEvent,
+        events: &[ActivityEvent],
     ) -> Result<u64, StoreError> {
-        let key = ActivityStreamKey::of(event);
+        let Some(first) = events.first() else {
+            // An empty batch commits nothing and leaves the head where it is.
+            return Ok(expected_seq);
+        };
+        let key = ActivityStreamKey::of(first);
+        for event in events {
+            if ActivityStreamKey::of(event) != key {
+                return Err(StoreError::Backend(format!(
+                    "observability batch mixes stream keys: {key:?} and {:?} — one batch \
+                     addresses exactly one stream",
+                    ActivityStreamKey::of(event)
+                )));
+            }
+        }
         let mut streams = self.streams.lock().map_err(|error| {
             StoreError::Backend(format!("observability mutex poisoned: {error}"))
         })?;
         let stream = streams.entry(key_bytes(&key)).or_default();
         let head = stream_head(stream);
         if head != expected_seq {
+            // All-or-nothing: nothing of this batch is written.
             return Err(StoreError::SequenceConflict {
                 expected: expected_seq,
                 found: head,
             });
         }
-        let mut event = event.clone();
-        event.store_seq = Some(head);
-        stream.push(ActivityRecord {
-            store_seq: head,
-            event,
-        });
-        Ok(head)
+        for (offset, event) in events.iter().enumerate() {
+            let store_seq = head.saturating_add(u64::try_from(offset).unwrap_or(u64::MAX));
+            let mut event = event.clone();
+            event.store_seq = Some(store_seq);
+            stream.push(ActivityRecord { store_seq, event });
+        }
+        Ok(stream_head(stream))
     }
 
     async fn activity_head(&self, key: &ActivityStreamKey) -> Result<u64, StoreError> {
@@ -536,6 +597,94 @@ mod tests {
             .list_activity_streams(&workflow(), &generation_two())
             .await?;
         assert!(other_run.is_empty(), "an unwritten run lists empty");
+        Ok(())
+    }
+
+    /// The batch contract: one append, contiguous sequences from `expected_seq`,
+    /// the new head returned, order preserved, each record self-describing.
+    #[tokio::test]
+    async fn a_batch_assigns_contiguous_sequences_and_returns_the_new_head()
+    -> Result<(), StoreError> {
+        let store = InMemoryObservabilityStore::default();
+        let batch: Vec<ActivityEvent> = (0..4).map(|seq| event(0, seq, "batched")).collect();
+        assert_eq!(store.append_activity_events(0, &batch).await?, 4);
+        let records = store.read_activity_events_from(&key(0), 0).await?;
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| (
+                    record.store_seq,
+                    record.event.store_seq,
+                    record.event.worker_seq
+                ))
+                .collect::<Vec<(u64, Option<u64>, u64)>>(),
+            vec![
+                (0, Some(0), 0),
+                (1, Some(1), 1),
+                (2, Some(2), 2),
+                (3, Some(3), 3)
+            ],
+            "the i-th event lands at expected_seq + i, in order, self-describing"
+        );
+        // A second batch continues from the returned head.
+        let more: Vec<ActivityEvent> = (4..6).map(|seq| event(0, seq, "more")).collect();
+        assert_eq!(store.append_activity_events(4, &more).await?, 6);
+        assert_eq!(store.activity_head(&key(0)).await?, 6);
+        Ok(())
+    }
+
+    /// All-or-nothing: a stale `expected_seq` writes NO event of the batch, so a
+    /// losing writer never leaves a partial batch for the retry to duplicate.
+    #[tokio::test]
+    async fn a_conflicted_batch_writes_none_of_its_events() -> Result<(), StoreError> {
+        let store = InMemoryObservabilityStore::default();
+        store
+            .append_activity_event(0, &event(0, 1, "first"))
+            .await?;
+        let batch: Vec<ActivityEvent> = (2..6).map(|seq| event(0, seq, "losing")).collect();
+        assert_eq!(
+            store.append_activity_events(0, &batch).await,
+            Err(StoreError::SequenceConflict {
+                expected: 0,
+                found: 1
+            })
+        );
+        assert_eq!(
+            store.read_activity_events_from(&key(0), 0).await?.len(),
+            1,
+            "nothing partial was written"
+        );
+        Ok(())
+    }
+
+    /// One batch addresses ONE stream: a mixed slice is refused whole, never
+    /// silently split (which would re-introduce the per-event commit) and never
+    /// appended under the wrong stream's head.
+    #[tokio::test]
+    async fn a_batch_that_mixes_streams_is_refused() -> Result<(), StoreError> {
+        let store = InMemoryObservabilityStore::default();
+        let mixed = vec![event(0, 1, "attempt-0"), event(1, 2, "attempt-1")];
+        match store.append_activity_events(0, &mixed).await {
+            Err(StoreError::Backend(message)) => {
+                assert!(message.contains("mixes stream keys"), "{message}");
+            }
+            other => {
+                return Err(StoreError::Backend(format!(
+                    "expected a refusal: {other:?}"
+                )));
+            }
+        }
+        assert_eq!(store.activity_head(&key(0)).await?, 0);
+        assert_eq!(store.activity_head(&key(1)).await?, 0);
+        Ok(())
+    }
+
+    /// An empty batch is a no-op that returns the head it was given.
+    #[tokio::test]
+    async fn an_empty_batch_is_a_no_op() -> Result<(), StoreError> {
+        let store = InMemoryObservabilityStore::default();
+        assert_eq!(store.append_activity_events(0, &[]).await?, 0);
+        assert_eq!(store.activity_head(&key(0)).await?, 0);
         Ok(())
     }
 

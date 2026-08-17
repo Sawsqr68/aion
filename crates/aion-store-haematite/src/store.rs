@@ -1598,24 +1598,61 @@ fn observability_head_blocking(
     stream_next_seq_head(store, &stream_key)
 }
 
-/// Append one observability event to its `O`-stream at `expected_seq`.
+/// Append a batch of same-stream observability events to their `O`-stream
+/// starting at `expected_seq`, as ONE tree commit.
 ///
-/// Maps haematite's optimistic-concurrency `SequenceConflict` back to
-/// [`StoreError::SequenceConflict`] so the server sequencer can re-read the head
-/// and retry. On success returns the assigned `store_seq` (which equals
-/// `expected_seq`). The single-node store self-commits `append_batch`.
-fn observability_append_blocking(
+/// # Why the batch is the primitive
+///
+/// A haematite commit re-persists the ENTIRE containing storage leaf as a new
+/// permanent content-addressed blob, and the deployed V1 policy sizes leaves by
+/// entry count (4,096) regardless of entry size, so a transcript leaf reaches
+/// tens of megabytes. Appending N events as N calls therefore costs N
+/// whole-leaf rewrites — the write amplification measured on 2026-08-17
+/// (`docs/tracking/aion-write-amplification-forensics-20260817.md`: one 2,359
+/// honest-byte append bought a 2,303,416-byte permanent blob). One
+/// `append_batch` of N payloads is documented upstream as "atomically append
+/// many payloads to `stream_key` as one tree commit", so the same N events cost
+/// ONE rewrite. This function is the seam that turns N into 1.
+///
+/// The `i`-th event is stamped `store_seq == expected_seq + i` before
+/// serialization, so the persisted payload's self-reported sequence matches the
+/// api sequence the read path trusts. Maps haematite's optimistic-concurrency
+/// `SequenceConflict` back to [`StoreError::SequenceConflict`] (the batch is
+/// all-or-nothing: on a conflict haematite leaves the stream untouched) so the
+/// server sequencer can re-read the head and retry. Returns the stream's new
+/// head. The single-node store self-commits `append_batch`.
+fn observability_append_batch_blocking(
     store: &haematite::EventStore,
     expected_seq: u64,
-    event: &ActivityEvent,
+    events: &[ActivityEvent],
 ) -> Result<u64, StoreError> {
-    let key = ActivityStreamKey::of(event);
+    let Some(first) = events.first() else {
+        // An empty batch commits nothing: no leaf is rewritten and the head is
+        // unchanged.
+        return Ok(expected_seq);
+    };
+    let key = ActivityStreamKey::of(first);
     let stream_key = observability_key(&key);
-    let mut event = event.clone();
-    event.store_seq = Some(expected_seq);
-    let payload = serde_json::to_vec(&event).map_err(|error| serde_error(&error))?;
-    match store.append_batch(&stream_key, &[payload.as_slice()], expected_seq) {
-        Ok(_next_seq) => Ok(expected_seq),
+    let mut payloads = Vec::with_capacity(events.len());
+    for (offset, event) in events.iter().enumerate() {
+        if ActivityStreamKey::of(event) != key {
+            return Err(StoreError::Backend(format!(
+                "observability batch mixes stream keys: {key:?} and {:?} — one append_batch \
+                 addresses exactly one `O` stream",
+                ActivityStreamKey::of(event)
+            )));
+        }
+        let mut event = event.clone();
+        event.store_seq = Some(expected_seq.saturating_add(u64::try_from(offset).map_err(
+            |error| {
+                StoreError::Backend(format!("observability batch offset overflows u64: {error}"))
+            },
+        )?));
+        payloads.push(serde_json::to_vec(&event).map_err(|error| serde_error(&error))?);
+    }
+    let payload_refs: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
+    match store.append_batch(&stream_key, &payload_refs, expected_seq) {
+        Ok(next_seq) => Ok(next_seq),
         Err(haematite::ApiError::SequenceConflict(conflict)) => Err(StoreError::SequenceConflict {
             expected: expected_seq,
             found: conflict.actual,
@@ -1752,17 +1789,21 @@ fn insert_outbox_rows(store: &haematite::EventStore, rows: &[OutboxRow]) -> Resu
 
 #[async_trait]
 impl ObservabilityStore for HaematiteStore {
-    async fn append_activity_event(
+    async fn append_activity_events(
         &self,
         expected_seq: u64,
-        event: &ActivityEvent,
+        events: &[ActivityEvent],
     ) -> Result<u64, StoreError> {
         // Server-single-writer optimistic-concurrency append to the `O` keyspace.
         // The server's sequencer supplies `expected_seq` and retries on conflict;
-        // this store never auto-allocates the sequence (§5.3).
-        let event = event.clone();
-        self.blocking(move |store| observability_append_blocking(store, expected_seq, &event))
-            .await
+        // this store never auto-allocates the sequence (§5.3). The whole slice is
+        // ONE tree commit, which is one whole-leaf rewrite regardless of how many
+        // events it carries.
+        let events = events.to_vec();
+        self.blocking(move |store| {
+            observability_append_batch_blocking(store, expected_seq, &events)
+        })
+        .await
     }
 
     async fn activity_head(&self, key: &ActivityStreamKey) -> Result<u64, StoreError> {

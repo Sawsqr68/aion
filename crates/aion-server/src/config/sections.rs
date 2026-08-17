@@ -537,13 +537,17 @@ pub struct ResolvedMcpConfig {
     pub await_poll_interval_ms: u64,
 }
 
-/// Agent-observability transcript retention bounds from `[observability]`.
+/// Agent-observability transcript settings from `[observability]`: retention
+/// bounds, and the transcript drain's flush policy.
 ///
-/// Both knobs default (a minimal/empty config boots) and both guard the durable
-/// `O` keyspace against unbounded growth: `max_event_bytes` truncates one
-/// oversized transcript event before it is persisted, and `max_stream_events`
-/// caps how many events one `(workflow, activity, attempt)` stream retains
-/// (one marker record is persisted at the cap; live streaming continues).
+/// The two RETENTION knobs default (they guard the durable `O` keyspace against
+/// unbounded growth): `max_event_bytes` truncates one oversized transcript event
+/// before it is persisted, and `max_stream_events` caps how many events one
+/// `(workflow, activity, attempt)` stream retains (one marker record is
+/// persisted at the cap; live streaming continues).
+///
+/// The two FLUSH knobs have **no default and are required** — see
+/// [`Self::max_batch_events`].
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct ObservabilityConfig {
@@ -551,9 +555,59 @@ pub struct ObservabilityConfig {
     pub max_event_bytes: usize,
     /// Ceiling on retained events per `(workflow, activity, attempt)` stream.
     pub max_stream_events: u64,
+    /// Maximum transcript events the drain commits in ONE durable append.
+    /// **Required; no default** — the server refuses to start without it.
+    ///
+    /// Every durable commit re-persists its whole containing storage leaf as a
+    /// new permanent blob, so committing one event at a time made the store cost
+    /// of a run linear in event COUNT: measured 2026-08-17, a 136 KB status
+    /// sweep left 73.7 MB of permanent store (540x) and a single 2,359-byte
+    /// append bought a 2,303,416-byte blob. Batching divides that count by (up
+    /// to) this number.
+    ///
+    /// There is deliberately no shipped value: the trade between store cost and
+    /// how many events one refused commit can lose is the operator's, and an
+    /// invented default would silently make it for them. Absent or zero fails
+    /// startup with [`OBSERVABILITY_MAX_BATCH_EVENTS_REQUIRED`], the same
+    /// explicit-no-default guard `websocket.cluster_broadcast_capacity` uses.
+    ///
+    /// [`OBSERVABILITY_MAX_BATCH_EVENTS_REQUIRED`]: super::OBSERVABILITY_MAX_BATCH_EVENTS_REQUIRED
+    pub max_batch_events: Option<usize>,
+    /// How long, in milliseconds, the drain may hold a PARTIAL batch open
+    /// waiting for it to fill. **Required; no default** — but `0` is a valid,
+    /// meaningful setting: never wait, commit whatever is already queued.
+    ///
+    /// This is the only knob here that touches durability timing. Transcript
+    /// events already wait in an in-memory queue before they are committed, and
+    /// everything queued there is lost if the process dies; this value bounds
+    /// how much LONGER an event may wait, and therefore how much transcript a
+    /// kill-9 can cost. It buys commits: at `0` only events that genuinely
+    /// arrived together share a commit. The `O` keyspace is observability, never
+    /// workflow replay authority, which is why the trade is offered at all.
+    ///
+    /// Absent fails startup with [`OBSERVABILITY_MAX_BATCH_HOLD_MS_REQUIRED`].
+    ///
+    /// [`OBSERVABILITY_MAX_BATCH_HOLD_MS_REQUIRED`]: super::OBSERVABILITY_MAX_BATCH_HOLD_MS_REQUIRED
+    pub max_batch_hold_ms: Option<u64>,
 }
 
 impl ObservabilityConfig {
+    /// The default retention bounds with the REQUIRED flush policy stated.
+    ///
+    /// For an embedder that builds its `ServerConfig` in code rather than from
+    /// a file: [`Default`] deliberately leaves the flush policy unruled (so a
+    /// server built from it refuses to start), and this is how such a caller
+    /// states its ruling in one line. `max_batch_hold_ms` of `0` means the drain
+    /// never holds a partial batch open.
+    #[must_use]
+    pub fn with_flush_policy(max_batch_events: usize, max_batch_hold_ms: u64) -> Self {
+        Self {
+            max_batch_events: Some(max_batch_events),
+            max_batch_hold_ms: Some(max_batch_hold_ms),
+            ..Self::default()
+        }
+    }
+
     /// Validate the retention bounds: both must be positive — a zero event
     /// ceiling truncates every event to nothing and a zero stream cap retains
     /// no transcript at all, so each is a genuine misconfiguration caught at
@@ -565,15 +619,30 @@ impl ObservabilityConfig {
         if self.max_stream_events == 0 {
             return config_error(OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED);
         }
+        // The FLUSH policy is deliberately not checked here. Both retention
+        // bounds have documented defaults, so an omitted value is a resolved
+        // value and this function can decide it at parse time; the flush policy
+        // has no default at all, and a parsed `ServerConfig` is not yet a
+        // running server (embedders and `aion config` inspect one without
+        // booting). It is required where it is USED — at publisher
+        // construction on the server boot path, `state.rs`'s
+        // `required_transcript_batch_policy` — which is the same seam
+        // `websocket.cluster_broadcast_capacity` is finally required at, and
+        // which fails startup loudly, naming the missing key.
         Ok(())
     }
 }
 
 impl Default for ObservabilityConfig {
+    /// The retention bounds fall back to their documented defaults; the flush
+    /// policy does NOT — `None` here is "the operator has not ruled", which the
+    /// boot path turns into a refusal to start, not into a guess.
     fn default() -> Self {
         Self {
             max_event_bytes: DEFAULT_OBSERVABILITY_MAX_EVENT_BYTES,
             max_stream_events: DEFAULT_OBSERVABILITY_MAX_STREAM_EVENTS,
+            max_batch_events: None,
+            max_batch_hold_ms: None,
         }
     }
 }
