@@ -113,16 +113,6 @@ hostname = "0.4"
 # `loader/encode` (the `.beam` container writer behind the `encode` feature)
 # consumed by aion-awl's BC-3 bytecode emitter.
 beamr = { version = "0.18.2", features = ["json", "encode"] }
-# 0.8.2 + the UNPUBLISHED node-cache byte budget. MEASURED 2026-08-18: the
-# crates.io 0.8.2 tarball contains no `store/budget.rs`, no `NodeCacheBudget`
-# and no `DatabaseConfig.node_cache_budget` — zero occurrences in its whole
-# `src/` — and `cargo search haematite` reports 0.8.2 as the latest published
-# version, so there is no published release that carries the budget API. Those
-# bytes exist only in the sibling working tree (commit 934ef15, "green(PERF-003):
-# evict to the byte ceiling"), which is why the patch below exists. DROP the
-# patch and raise this req the moment haematite publishes the budget (it will
-# need a new version number; 0.8.2 is taken on crates.io by the pre-budget
-# build).
 haematite = "0.8.2"
 # 0.2.4 carries the park-flip (idle connections park on fd readiness — retires
 # the embedded front door's per-connection busy-spin measured 2026-07-13) and
@@ -150,12 +140,3 @@ reqwest = { version = "0.13.4", default-features = false, features = ["json", "r
 cap-std = "4.0.2"
 cap-fs-ext = "4.0.2"
 rustix = { version = "1.1.4", features = ["fs", "process"] }
-
-# TEMPORARY — awaiting Tom's word. This resolves `haematite` to the sibling
-# working tree because the node-cache byte budget this workspace now requires
-# is not on crates.io under any published version (see the pin comment above).
-# It makes the build depend on a checkout at ../haematite, which is a real cost
-# and not this lane's decision to make permanent: revert this stanza in one
-# commit the moment the budget publishes.
-[patch.crates-io]
-haematite = { path = "../haematite/crates/haematite" }
