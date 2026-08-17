@@ -500,11 +500,9 @@ mod tests {
     #[test]
     fn the_ready_report_names_every_location_per_backend() {
         let log_path = Path::new("/tmp/aion-home/server.log");
-        let mut store = StoreConfig {
-            backend: StoreBackend::Haematite,
-            data_dir: Some("/data/haematite".to_owned()),
-            ..StoreConfig::default()
-        };
+        let mut store = StoreConfig::default();
+        store.backend = StoreBackend::Haematite;
+        store.data_dir = Some("/data/haematite".to_owned());
         let report = ready_report(&store, "config: X", "http://127.0.0.1:8080/", log_path, 42);
         assert!(report.starts_with("aion is up.\n"));
         assert!(report.contains("config: X\n"));

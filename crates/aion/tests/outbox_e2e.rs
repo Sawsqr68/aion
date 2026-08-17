@@ -328,7 +328,9 @@ async fn started_and_suspended_at(
     // ...and every ordinal has a persisted Pending outbox row.
     // record_fan_out_dispatch stages these atomically with the scheduling
     // events; the live in-process path would never write them.
-    for ordinal in 0..FAN_OUT as u64 {
+    let ordinals: Vec<u64> = (0..FAN_OUT as u64).collect();
+    wait_for_rows_pending(&store, &workflow_id, &ordinals).await?;
+    for ordinal in ordinals {
         let key = OutboxRow::dispatch_key_for(&workflow_id, ordinal);
         let Some(state) = store.outbox_row_state(&key).await? else {
             return Err(format!("no outbox row staged for ordinal {ordinal} (key {key})").into());

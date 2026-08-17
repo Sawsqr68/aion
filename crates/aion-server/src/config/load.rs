@@ -1958,9 +1958,10 @@ mod tests {
         result: Result<ServerConfig, crate::error::ServerError>,
         found: &str,
     ) {
+        assert!(result.is_err(), "retired libsql input must be refused");
         let message = result
-            .expect_err("retired libsql input must be refused")
-            .to_string();
+            .err()
+            .map_or_else(String::new, |error| error.to_string());
         assert!(
             message.contains(found),
             "refusal did not name `{found}`: {message}"

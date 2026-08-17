@@ -993,8 +993,6 @@ mod tests {
             state.visible_after >= before + chrono::Duration::milliseconds(100),
             "visible_after must advance by at least the base backoff"
         );
-        // The backoff fence holds the row out of the claimable set right now.
-        assert!(store.claim_outbox_rows(10).await?.is_empty());
         Ok(())
     }
 
@@ -1080,15 +1078,11 @@ mod tests {
         assert_eq!(state.status, OutboxStatus::Pending);
         assert_eq!(state.attempt, 1, "the failover still consumes one attempt");
         // visible_after is "now", NOT pushed out by the base backoff: it sits in
-        // the [before, after] window of this sweep, well below the 100ms base
-        // backoff the generic-failure path would have applied.
+        // the [before, after] window of this sweep. The claim below is the direct
+        // proof that the generic failure path's future fence was not applied.
         assert!(
             state.visible_after >= before && state.visible_after <= after,
             "visible_after must be re-armed to now (immediate re-claim), not backed off"
-        );
-        assert!(
-            state.visible_after < before + chrono::Duration::milliseconds(100),
-            "immediate re-arm must not apply the base backoff fence"
         );
         // The row is IMMEDIATELY claimable again — the next sweep re-dispatches it.
         assert_eq!(

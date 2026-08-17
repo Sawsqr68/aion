@@ -1351,8 +1351,6 @@ mod lsub_prod_xnode_e2e {
         ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
         ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
     };
-    use aion_store::ReadableEventStore;
-    use aion_store_haematite::HaematiteStore;
     use aion_worker::{ActivityRegistry, LiminalActivityWorker, WorkerConfig};
     use axum::body;
     use axum::http::{Request, StatusCode};
@@ -1641,7 +1639,7 @@ mod lsub_prod_xnode_e2e {
     }
 
     async fn wait_for_history<F>(
-        store: &HaematiteStore,
+        store: &dyn aion_store::ReadableEventStore,
         workflow_id: &aion_core::WorkflowId,
         description: &str,
         predicate: F,
@@ -1794,13 +1792,12 @@ mod lsub_prod_xnode_e2e {
         // was recorded through the production engine callback (record_fan_out_completion)
         // — four ActivityCompleted + one WorkflowCompleted in durable history. This
         // is the full round-trip the retired stub never achieved.
-        let reader = HaematiteStore::open_or_create(db_path.clone())
-            .await
-            .map_err(test_error)?;
-        let settled = wait_for_history(&reader, &workflow_id, "fan-out settled", |events| {
-            count_completed(events) == FAN_OUT && count_workflow_completed(events) == 1
-        })
-        .await?;
+        let reader = state.engine().map_err(test_error)?.store();
+        let settled =
+            wait_for_history(reader.as_ref(), &workflow_id, "fan-out settled", |events| {
+                count_completed(events) == FAN_OUT && count_workflow_completed(events) == 1
+            })
+            .await?;
         assert_eq!(
             count_completed(&settled),
             FAN_OUT,

@@ -34,6 +34,17 @@ The shared conformance contract remains implemented by the in-memory store and b
 
 0.16 does not read libsql database files and publishes 21 crates. Consumers with 0.14/0.15 libsql data must retain a 0.15 binary to access it. No published versions are yanked.
 
+## Migration choices discovered by the green battery
+
+- Haematite exposes one live-writer handle per database. Migrated tests now share that handle (or read through `Engine::store`) instead of opening a second writer as libsql permitted.
+- Fan-out history can become visible before every routed haematite outbox KV is observable. `aion/tests/outbox_e2e.rs` therefore uses its existing bounded pending-row poll before asserting all four rows; the tests still require every row to exist as `Pending` and still drive the production claim/settle path.
+- Dispatcher retry tests assert the durable transition itself rather than elapsed wall-clock time: generic failure records a future `visible_after`, while connection loss is proved immediately claimable. No production backoff constant changed.
+- The fixture-only `HaematiteStore::open_or_create` constructor performs its blocking filesystem work on `spawn_blocking`; no runtime store behavior, default, cap, shard count, or tuning value changed.
+
+## Verification record
+
+Exit-code-bearing logs are under `gate-logs/libsql-retirement/verification/`. They include workspace compilation, the full workspace suite, the server integration population, tree-wide fmt, workspace and ordered per-crate clippy, the doc pointer gate, and the final absence/census checks. Only completed commands are reported in the delivery response.
+
 ## Non-goals
 
 This subtraction does not fix or claim to fix aion#32. It adds no migration tool, compatibility shim, fallback, wire change, SDK change, or haematite tuning constant.

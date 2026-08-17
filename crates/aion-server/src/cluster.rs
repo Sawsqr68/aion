@@ -908,7 +908,7 @@ mod tests {
 
         // Seed the incident state: a terminal (Failed) workflow owning one
         // stranded Claimed outbox row.
-        let seeder = HaematiteStore::open_or_create(db_path.clone()).await?;
+        let seeder = Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
         let workflow_id = aion_core::WorkflowId::new_v4();
         let envelope = |seq: u64| EventEnvelope {
             seq,
@@ -948,11 +948,10 @@ mod tests {
             .await?;
         assert_eq!(seeder.claim_outbox_rows(1).await?.len(), 1);
 
+        let event_store: Arc<dyn aion_store::EventStore> = Arc::clone(&seeder) as _;
         let engine = Arc::new(
             EngineBuilder::new()
-                .store_arc(Arc::new(
-                    HaematiteStore::open_or_create(db_path.clone()).await?,
-                ))
+                .store_arc(event_store)
                 .in_memory_visibility()
                 .scheduler_threads(1)
                 .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
@@ -962,8 +961,7 @@ mod tests {
                 .build()
                 .await?,
         );
-        let outbox_store: Arc<dyn OutboxStore> =
-            Arc::new(HaematiteStore::open_or_create(db_path.clone()).await?);
+        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&seeder) as _;
         let adopter =
             OutboxSettlingAdopter::new(Arc::clone(&engine), Some(Arc::clone(&outbox_store)));
 

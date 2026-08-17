@@ -25,7 +25,7 @@ pub struct CliOverrides {
     pub listen_address: Option<SocketAddr>,
     /// Override for `[server].grpc_address`.
     pub grpc_address: Option<SocketAddr>,
-    /// Override for `[store].url`.
+    /// Retired `--store-url` input retained only so load-time validation can refuse it.
     pub store_url: Option<String>,
     /// Override for `[runtime].scheduler_threads`.
     pub scheduler_threads: Option<usize>,

@@ -281,13 +281,24 @@ impl HaematiteStore {
     /// This is the constructor used by backend-agnostic integration fixtures:
     /// their first generation creates the durable store and later generations
     /// cold-open the same bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Backend`] when haematite cannot create or open the
+    /// database, or when the blocking constructor task cannot be joined.
     pub async fn open_or_create(data_dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let data_dir = data_dir.into();
-        if data_dir.exists() {
-            Self::open(&data_dir)
-        } else {
-            Self::create(data_dir)
-        }
+        tokio::task::spawn_blocking(move || {
+            if data_dir.exists() {
+                Self::open(&data_dir)
+            } else {
+                Self::create(data_dir)
+            }
+        })
+        .await
+        .map_err(|error| {
+            StoreError::Backend(format!("haematite open-or-create task failed: {error}"))
+        })?
     }
 
     /// Open an existing single-node store rooted at `data_dir`.
@@ -2655,6 +2666,11 @@ fn is_inflight(status: OutboxStatus) -> bool {
 
 impl HaematiteStore {
     /// Read back one outbox row's mutable lifecycle state, or `None` when absent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the dispatch key is malformed or haematite
+    /// cannot read or decode the durable row.
     pub async fn outbox_row_state(
         &self,
         dispatch_key: &str,
@@ -2691,6 +2707,11 @@ impl HaematiteStore {
     /// This narrow fixture seam lets integration tests exercise the production
     /// stale-claim reconciler without reaching through haematite's private
     /// keyspace encoding. It refuses an absent dispatch key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the row is absent or haematite cannot persist
+    /// the claimed timestamp.
     pub async fn set_outbox_claimed_at(
         &self,
         dispatch_key: &str,
