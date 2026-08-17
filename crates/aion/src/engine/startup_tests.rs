@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use aion_core::{
-    Event, EventEnvelope, Payload, RunId, SearchAttributeSchema, WorkflowId, WorkflowStatus,
+    ActivityId, Event, EventEnvelope, Payload, RunId, SearchAttributeSchema, WorkflowId,
+    WorkflowStatus,
 };
 use aion_store::{EventStore, StoreError};
 use chrono::Utc;
@@ -1382,4 +1383,37 @@ async fn a_cancelled_run_forced_into_the_active_list_never_has_a_writer_minted()
     );
 
     Ok(())
+}
+
+/// #36: Paused is not a blanket recovery exclusion. A paused history whose
+/// remote activity attempt is still dangling must enter the adoption sweep;
+/// otherwise resume is the first code to see it and falsely supersedes live
+/// work as `server-death`.
+#[test]
+fn paused_history_with_a_dangling_activity_requires_adoption() {
+    let workflow_id = WorkflowId::new_v4();
+    let activity_id = ActivityId::from_sequence_position(1);
+    let history = vec![
+        Event::ActivityStarted {
+            envelope: EventEnvelope {
+                seq: 1,
+                recorded_at: Utc::now(),
+                workflow_id: workflow_id.clone(),
+            },
+            activity_id: activity_id.clone(),
+            attempt: 1,
+        },
+        Event::WorkflowPaused {
+            envelope: EventEnvelope {
+                seq: 2,
+                recorded_at: Utc::now(),
+                workflow_id,
+            },
+            run_id: RunId::new_v4(),
+            reason: None,
+            operator: None,
+        },
+    ];
+
+    assert!(super::history_needs_activity_adoption(&history));
 }
