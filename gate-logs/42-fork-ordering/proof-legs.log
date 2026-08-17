@@ -1,0 +1,3 @@
+check rc=0
+clippy rc=0
+nextest rc=0
