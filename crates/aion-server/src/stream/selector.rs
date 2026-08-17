@@ -135,6 +135,7 @@ fn event_status(event: &Event) -> Option<WorkflowStatus> {
         | Event::WorkflowResumed { .. }
         | Event::ActivityScheduled { .. }
         | Event::ActivityStarted { .. }
+        | Event::ActivityAdoptionOffered { .. }
         | Event::ActivityCompleted { .. }
         | Event::ActivityFailed { .. }
         // A side channel exhausted its budget; the workflow it warns about
