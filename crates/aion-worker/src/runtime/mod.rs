@@ -4,6 +4,9 @@
 pub mod agent;
 /// Typed activity dispatch and payload conversion helpers.
 pub mod dispatch;
+/// Same-execution single-flight coordination for liminal agent redeliveries (#36).
+#[cfg(feature = "liminal-transport")]
+pub(crate) mod agent_flights;
 /// Worker-side mid-run intervention delivery (NOI-6): the attempt back-index that
 /// routes a pushed neutral command to the live session that owns its target.
 pub mod intervention;
