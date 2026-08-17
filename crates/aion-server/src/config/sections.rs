@@ -77,7 +77,7 @@ pub struct StoreConfig {
     /// active-active). When empty (the default) the node owns ALL shards — the
     /// single-node default, byte-identical to today. When set, the engine boot
     /// path scopes recovery and enumeration to exactly these shards. Single-shard
-    /// backends (memory, libSQL) ignore the assignment; it is meaningful only for
+    /// the memory backend ignores the assignment; it is meaningful only for
     /// a sharded backend. No election is performed: assignment is static config.
     pub owned_shards: Vec<usize>,
     /// Filesystem data directory for the haematite backend. Required when

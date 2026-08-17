@@ -27,7 +27,7 @@ pub struct ServerArgs {
     /// rather than start on a different port than the operator named.
     #[arg(long)]
     grpc_address: Option<SocketAddr>,
-    /// Override the event-store URL and select the libSQL backend when the default is memory.
+    /// Retired event-store URL flag; configuration loading refuses it with the haematite remedy.
     #[arg(long)]
     store_url: Option<String>,
     /// Number of engine scheduler worker threads.
