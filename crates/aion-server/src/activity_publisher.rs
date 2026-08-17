@@ -37,7 +37,7 @@
 //!
 //! Events do not reach this sequencer one call at a time from the outside world:
 //! they arrive on an in-process queue and a DRAIN task feeds them in
-//! ([`ActivityEventPublisher::drain`], used by the liminal observability tap and
+//! (`ActivityEventPublisher::drain`, used by the liminal observability tap and
 //! by the declared-command executor). Every durable append is one storage-tree
 //! commit, and one commit re-persists the whole containing leaf as a new
 //! permanent blob — so a drain that appended one event per commit made the store
@@ -47,9 +47,9 @@
 //! store, 540x).
 //!
 //! The drain therefore COALESCES: it takes up to
-//! [`TranscriptBatchPolicy::max_batch_events`] events off the queue, waiting at
-//! most [`TranscriptBatchPolicy::max_hold`] for the batch to fill, and appends
-//! each stream's share as ONE commit ([`Self::publish_all`]). Both values are
+//! `TranscriptBatchPolicy::max_batch_events` events off the queue, waiting at
+//! most `TranscriptBatchPolicy::max_hold` for the batch to fill, and appends
+//! each stream's share as ONE commit (`Self::publish_all`). Both values are
 //! operator config with **no default** — see the durability contract below.
 
 use std::sync::Arc;

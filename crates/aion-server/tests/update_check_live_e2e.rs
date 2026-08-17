@@ -48,7 +48,12 @@ const LIVE_GATE: &str = "AION_UPDATE_CHECK_LIVE";
 
 /// Stock configuration rooted at a private temp home, exactly as the
 /// assistant's out-of-box e2e boots — nothing here touches `~/.aion`.
-const STOCK_CONFIG: &[u8] = b"";
+/// The stock config a first-run server boots on, plus the two keys that have
+/// no default: `observability.max_batch_events` / `max_batch_hold_ms` are the
+/// transcript drain's flush policy, and the boot path refuses to build a
+/// publisher without an operator ruling on them (the scaffolded `aion.toml`
+/// ships both). A hold of 0 keeps this test's transcript timing unchanged.
+const STOCK_CONFIG: &[u8] = b"[observability]\nmax_batch_events = 64\nmax_batch_hold_ms = 0\n";
 
 /// How long the live check may take end to end before this proof fails:
 /// generous for one HTTPS GET plus engine scheduling, and a bound so a hung

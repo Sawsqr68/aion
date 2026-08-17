@@ -46,7 +46,12 @@ type TestError = Box<dyn std::error::Error>;
 /// Stock configuration: an empty document, so every value is the built-in
 /// default resolved against the given home. A test that hand-built a config
 /// would prove nothing about what an operator gets out of the box.
-const STOCK_CONFIG: &[u8] = b"";
+/// The stock config a first-run server boots on, plus the two keys that have
+/// no default: `observability.max_batch_events` / `max_batch_hold_ms` are the
+/// transcript drain's flush policy, and the boot path refuses to build a
+/// publisher without an operator ruling on them (the scaffolded `aion.toml`
+/// ships both). A hold of 0 keeps this test's transcript timing unchanged.
+const STOCK_CONFIG: &[u8] = b"[observability]\nmax_batch_events = 64\nmax_batch_hold_ms = 0\n";
 
 struct Harness {
     _home: tempfile::TempDir,
