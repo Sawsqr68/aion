@@ -238,7 +238,14 @@ pub(super) fn retry_policy_from_config(config: &str) -> Option<RetryPolicy> {
 /// wrote. A non-positive value is that class, and rejecting it mirrors the
 /// retry decoder rejecting `max_attempts: 0` — a `timeout 0s` would expire
 /// every attempt before it began, which is not a deadline anyone authored.
-pub(super) fn activity_timeout_from_config(config: &str) -> Option<Duration> {
+///
+/// Public because the authored bound has a SECOND consumer that must read it
+/// identically: `aion-server`'s declared-body executor, which runs the
+/// activity's command in the server's own process and applies this bound to
+/// that process. Two decoders would be two answers to "what did the document
+/// authorise", so there is one, and it is here.
+#[must_use]
+pub fn activity_timeout_from_config(config: &str) -> Option<Duration> {
     let value: serde_json::Value = serde_json::from_str(config).ok()?;
     let timeout = value.get("timeout_ms")?;
     if timeout.is_null() {
@@ -265,7 +272,13 @@ pub(super) fn activity_timeout_from_config(config: &str) -> Option<Duration> {
 /// needs to know WHICH deadline fired — this one is per attempt, and the
 /// enclosing `with_timeout` scope has its own distinct
 /// `timeout:deadline expired`.
-pub(super) fn activity_timeout_reason(bound: Duration) -> String {
+///
+/// Public for the same reason [`activity_timeout_from_config`] is: an attempt
+/// the SERVER ended on this bound must report it in the same words the engine
+/// uses when it ends one, or the two halves of one deadline would surface to
+/// an operator as two unrelated failures.
+#[must_use]
+pub fn activity_timeout_reason(bound: Duration) -> String {
     format!(
         "timeout:activity exceeded its per-attempt bound of {}ms",
         bound.as_millis()

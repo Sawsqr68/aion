@@ -21,6 +21,16 @@
 //! cursor reads an agent step's transcript uses (see
 //! [`super::declared_body_transcript`]). The activity's recorded result is
 //! untouched by this: it still carries the command's complete output.
+//!
+//! # The command is bounded by what the dispatch authored
+//!
+//! A dispatch carrying an authored per-attempt timeout (#223) ends its command
+//! at that bound HERE, in the server, where the process is — see
+//! [`run_bounded`]. The engine's own deadline stops the run WAITING and cannot
+//! reach a process, which is the right division of labour for a remote worker
+//! and no division at all for a body the server itself started. A dispatch that
+//! authored no bound is unbounded, exactly as before: the server adds no
+//! deadline of its own.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -334,10 +344,16 @@ impl DeclaredCommandDispatcher {
             request.name, request.workflow_id, request.run_id, request.activity_id, request.attempt,
         ));
 
+        // #223: the bound the DISPATCH authored, or `None` when it authored
+        // none. Read through the engine's own decoder so the server cannot
+        // answer "what did this document authorise" differently from the retry
+        // loop, and so an unbounded body stays unbounded — the server invents
+        // no deadline of its own.
+        let bound = aion::activity_timeout_from_config(&request.config);
         let transcript = self.transcript.clone();
-        let outcome = self.tokio.block_on(async move {
+        let ended = self.tokio.block_on(async move {
             let pump = tokio::spawn(publish_declared_transcript(transcript, drain));
-            let outcome = action.run(&arguments, &context).await;
+            let ended = run_bounded(&action, &arguments, &context, &cancellation, bound).await;
             // Closing the seam is what ends the pump; the context holds it.
             drop(context);
             if let Err(error) = pump.await {
@@ -348,12 +364,34 @@ impl DeclaredCommandDispatcher {
                      output lines may not have been retained"
                 );
             }
-            outcome
+            ended
         });
-        // Held, not wired: nothing cancels a single declared-command attempt
-        // today. Dropped only after the run so a future wiring cannot race a
-        // handle that died early.
-        drop(cancellation);
+
+        let outcome = match ended {
+            AttemptEnd::Ran(outcome) => outcome,
+            AttemptEnd::Expired { bound, ran_anyway } => {
+                if let Some(exit_code) = ran_anyway {
+                    // The command reached its own end inside the stopping
+                    // window. Its result is discarded — the attempt is already
+                    // recorded as having outlived its bound, and answering with
+                    // a late success would contradict a terminal the run has
+                    // already been told about — but the fact is said, not
+                    // swallowed.
+                    tracing::warn!(
+                        operation = "declared_command_dispatch",
+                        workflow_id = %request.workflow_id,
+                        activity_id = %request.activity_id,
+                        activity_name = %request.name,
+                        attempt = request.attempt,
+                        exit_code,
+                        bound_ms = bound.as_millis(),
+                        "the declared command finished while it was being stopped on its \
+                         authored bound; its result is discarded in favour of the timeout"
+                    );
+                }
+                return Err(aion::activity_timeout_reason(bound));
+            }
+        };
 
         match outcome {
             Ok(result) => serde_json::to_string(&result).map_err(|error| {
@@ -365,6 +403,71 @@ impl DeclaredCommandDispatcher {
                     aion_worker::Classification::Terminal => "terminal",
                 };
                 Err(format!("{prefix}:{}", failure.message()))
+            }
+        }
+    }
+}
+
+/// How one declared-command attempt ended.
+#[derive(Debug)]
+enum AttemptEnd {
+    /// The command ran to its own end — completed, failed, or was stopped by
+    /// something other than the authored bound.
+    Ran(Result<aion_worker::shell::ShellOutcome, aion_worker::ActivityFailure>),
+    /// The attempt outlived the per-attempt bound its dispatch authored, and
+    /// its process group has been stopped and PROVEN gone.
+    Expired {
+        /// The authored bound that fired, carried so the refusal can name it.
+        bound: std::time::Duration,
+        /// The exit code of a command that reached its own end inside the
+        /// stopping window, when that happened. `None` — the ordinary case —
+        /// means the command was still running when the bound was enforced.
+        ran_anyway: Option<i32>,
+    },
+}
+
+/// Run the declared command, ending it at the bound its dispatch authored.
+///
+/// # Why the server enforces a bound the engine already applies
+///
+/// The engine wraps every attempt in `tokio::time::timeout` at the same
+/// authored bound (`nif_activity_retry_dispatch::deliver_one_attempt`), and is
+/// explicit about what that achieves: "the dispatch future is DROPPED, which
+/// stops this run waiting and nothing more... the worker-side call runs on to
+/// its own end and its result is discarded". For a REMOTE worker that is
+/// someone else's machine and the right division of labour. For a declared body
+/// it is a process tree in the server's own process group hierarchy, on the
+/// operator's machine, with nothing left that could ever stop it — the run has
+/// already moved on.
+///
+/// So the bound is enforced HERE as well, where the process is. On expiry the
+/// activity's cancellation is signalled and the SAME run future is awaited to
+/// its end: [`aion_worker::run_cancellable_command`] does not return until
+/// `SIGTERM` → [`aion_worker::PROCESS_GROUP_TERMINATION_GRACE`] → `SIGKILL` has
+/// been delivered to the whole group and the group has been PROVEN gone. This
+/// therefore returns only once the command is genuinely stopped, and the
+/// termination ladder and its grace are the worker path's, not a second copy.
+///
+/// A dispatch that authored no bound is awaited exactly as before.
+async fn run_bounded(
+    action: &ShellAction,
+    arguments: &BTreeMap<String, serde_json::Value>,
+    context: &aion_worker::ActivityContext,
+    cancellation: &aion_worker::ActivityCancellationHandle,
+    bound: Option<std::time::Duration>,
+) -> AttemptEnd {
+    let run = action.run(arguments, context);
+    let Some(bound) = bound else {
+        return AttemptEnd::Ran(run.await);
+    };
+    tokio::pin!(run);
+    match tokio::time::timeout(bound, &mut run).await {
+        Ok(outcome) => AttemptEnd::Ran(outcome),
+        Err(_elapsed) => {
+            cancellation.cancel();
+            AttemptEnd::Expired {
+                bound,
+                ran_anyway: run.await.ok().map(|outcome| outcome.exit_code),
             }
         }
     }
