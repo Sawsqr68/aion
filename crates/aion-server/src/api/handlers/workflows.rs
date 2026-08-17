@@ -296,13 +296,14 @@ pub async fn query(
 
 /// Handles a decoded cancel request.
 ///
-/// After the cancellation is durably recorded, asks every worker holding one of
-/// this run's activities to stop it (#233). Cancelling records the fact, kills
-/// the workflow's own VM process, and settles its outbox rows so nothing more is
-/// dispatched — none of which reaches an activity a remote worker is ALREADY
-/// executing. Without that second step a cancelled run keeps a machine busy
-/// while the console truthfully reports `Cancelled`, so the operator stops
-/// watching.
+/// After the cancellation is durably recorded, stops every activity of this run
+/// that is still executing (#233): asks the worker holding each remote one, and
+/// signals each declared body THIS SERVER is running itself. Cancelling records
+/// the fact, kills the workflow's own VM process, and settles its outbox rows so
+/// nothing more is dispatched — none of which reaches an activity that is
+/// ALREADY executing, wherever it is executing. Without that second step a
+/// cancelled run keeps a machine busy while the console truthfully reports
+/// `Cancelled`, so the operator stops watching.
 ///
 /// The ask comes AFTER the engine call returns, never before: a cancel pushed
 /// ahead of the record could stop work for a cancellation that then fails to
@@ -349,8 +350,9 @@ pub async fn cancel(
     .instrument(span)
     .await?;
 
-    // #233. The cancellation is durably recorded; now ask whoever is executing
-    // this run's activities to stop. A failure to reach a worker is logged with
+    // #233. The cancellation is durably recorded; now stop whatever is executing
+    // this run's activities — a worker holding one, or this server running a
+    // declared body itself. A failure to reach a worker is logged with
     // the worker and activity named (inside `cancel_in_flight_activities`) and
     // does NOT fail the response — the cancellation genuinely happened, and
     // reporting it as failed would be its own lie. A poisoned lock is the one

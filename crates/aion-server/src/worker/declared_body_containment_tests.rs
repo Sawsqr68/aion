@@ -12,15 +12,20 @@
 //! `sleep 600` cannot, so a dispatch that returns at all is one the server
 //! stopped.
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aion_package::ActionBodyContract;
 
 use aion::ActivityDispatcher as _;
 
-use super::DeclaredBodyLookup;
 use super::tests::{TestResult, dispatcher_with_root, reached_names, request};
+use super::{DeclaredBodyLookup, DeclaredCommandDispatcher};
+use crate::worker::declared_body_cancel::DeclaredCommandAttempts;
+use crate::worker::heartbeat::HeartbeatTracker;
+use crate::worker::registry::ConnectedWorkerRegistry;
 use crate::worker::workspace_root::WorkspaceRoot;
+use crate::worker::{InFlightCancellation, cancel_in_flight_activities};
 
 /// How long a test waits for a stopped attempt to come back.
 ///
@@ -116,6 +121,53 @@ async fn await_started(marker: &std::path::Path) -> TestResult {
     Ok(())
 }
 
+/// The heartbeat window the tests' tracker is built with.
+///
+/// Inert here: no worker is registered and no activity is tracked, because a
+/// declared body has neither. The tracker exists only so these tests drive the
+/// REAL cancel entry point rather than a convenient half of it.
+const HEARTBEAT_WINDOW: Duration = Duration::from_secs(5);
+
+/// The dispatcher under test, the record of whether the worker path was reached,
+/// and the registry the run's cancel signals through.
+///
+/// The registry is built HERE, beside the dispatcher, because the production
+/// boot builds exactly one for the two of them: `ServerState` hands the same
+/// instance to the declared-body dispatcher and to
+/// `cancel_in_flight_activities`. A test that gave the cancel path a registry
+/// the executor never joined would be testing an empty room.
+fn containment_dispatcher(
+    marker: &std::path::Path,
+) -> (
+    DeclaredCommandDispatcher,
+    Arc<Mutex<Vec<String>>>,
+    DeclaredCommandAttempts,
+) {
+    let attempts = DeclaredCommandAttempts::new();
+    let (decorated, reached, _transcript) = dispatcher_with_root(
+        DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+            command: blocking_command(marker),
+        }),
+        Err("terminal:the worker path must never be reached".to_owned()),
+        WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+    );
+    (decorated, reached, attempts)
+}
+
+/// Stop everything this node is executing for `workflow_id`, through the one
+/// entry point the cancel handler uses.
+///
+/// The tracker and the worker registry are empty and stay empty: what is under
+/// test is the OTHER execution path, the one with no worker to ask.
+fn stop_in_flight_work(
+    attempts: &DeclaredCommandAttempts,
+    workflow_id: &aion_core::WorkflowId,
+) -> Result<InFlightCancellation, crate::error::ServerError> {
+    let tracker = HeartbeatTracker::new(HEARTBEAT_WINDOW);
+    let registry = ConnectedWorkerRegistry::default();
+    cancel_in_flight_activities(&tracker, &registry, attempts, workflow_id)
+}
+
 /// The dispatch config a workflow document authoring `timeout <bound>` produces
 /// (#223): the SDK's `activity_dispatch.config`, whose `timeout_ms` key is the
 /// one ruled per-attempt bound in this workspace.
@@ -142,13 +194,7 @@ async fn an_authored_bound_ends_the_server_executed_command() -> TestResult {
     let scratch = tempfile::tempdir()?;
     let marker = scratch.path().join("started");
     let token = marker.to_string_lossy().into_owned();
-    let (decorated, reached, _transcript) = dispatcher_with_root(
-        DeclaredBodyLookup::Declared(ActionBodyContract::Run {
-            command: blocking_command(&marker),
-        }),
-        Err("terminal:the worker path must never be reached".to_owned()),
-        WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
-    );
+    let (decorated, reached, _attempts) = containment_dispatcher(&marker);
     let mut dispatch = request("blocker", "{}");
     dispatch.config = bounded_config(AUTHORED_BOUND);
 
@@ -179,6 +225,125 @@ async fn an_authored_bound_ends_the_server_executed_command() -> TestResult {
     assert!(
         reached_names(&reached).is_empty(),
         "a bodied action must not fall through to the worker path"
+    );
+    Ok(())
+}
+
+/// A CANCELLED RUN MUST STOP THE BODY THIS SERVER IS RUNNING.
+///
+/// Cancelling a workflow records the fact, kills the workflow's VM process, and
+/// settles its outbox — and then asks whoever is executing the run's activities
+/// to stop (#233). "Whoever" was only ever the connected workers: a declared
+/// body is executed at the dispatch seam by the server itself, is held by no
+/// worker, and is tracked by no heartbeat, so the cancel path could not see it.
+/// The console reported `Cancelled` truthfully while the command kept the
+/// machine.
+///
+/// The subject blocks until it is signalled, so a dispatch that returns at all
+/// is one the cancel stopped, and the failure it returns is
+/// `run_cancellable_command`'s own — which is not produced until the process
+/// group has been PROVEN gone.
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_the_run_stops_the_server_executed_command() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let marker = scratch.path().join("started");
+    let token = marker.to_string_lossy().into_owned();
+    let (decorated, reached, attempts) = containment_dispatcher(&marker);
+    let dispatch = request("blocker", "{}");
+    let workflow_id = dispatch.workflow_id.clone();
+
+    let handle = tokio::task::spawn_blocking(move || decorated.dispatch(dispatch));
+    await_started(&marker).await?;
+
+    let stopped = stop_in_flight_work(&attempts, &workflow_id)?;
+
+    let Ok(joined) = tokio::time::timeout(STOP_DEADLINE, handle).await else {
+        reap_leftovers(&token);
+        return Err(
+            "cancelling the run left its server-executed command running: the executing \
+             attempt is invisible to the cancel path"
+                .into(),
+        );
+    };
+    let Err(error) = joined? else {
+        reap_leftovers(&token);
+        return Err("a cancelled command must fail the dispatch".into());
+    };
+    assert!(
+        error.starts_with("terminal:"),
+        "a cancelled attempt must not be retried: {error}"
+    );
+    assert!(
+        error.contains("cancelled") && error.contains("process group"),
+        "the failure must be the containment core's own, so it cannot be produced \
+         without the group having been proven gone: {error}"
+    );
+    assert!(
+        !tree_alive(&token)?,
+        "the dispatch reported a stop the process table does not agree with"
+    );
+    assert_eq!(
+        stopped.declared_attempts.len(),
+        1,
+        "the cancel must NAME the server-executed attempt it stopped, not stop it \
+         silently: {stopped:?}"
+    );
+    assert_eq!(
+        stopped.declared_attempts[0].workflow_id, workflow_id,
+        "the named attempt must be the run's own"
+    );
+    assert!(
+        stopped.worker_requests.is_empty(),
+        "no worker held this activity, so no worker may be asked about it"
+    );
+    assert!(
+        reached_names(&reached).is_empty(),
+        "a bodied action must not fall through to the worker path"
+    );
+    Ok(())
+}
+
+/// A cancel must not reach a bystander. Another run's server-executed body is
+/// neither named nor signalled, and goes on to end on its OWN terms.
+///
+/// "Its own terms" is its authored bound, which is what lets this test have a
+/// blocking subject and still terminate: the bystander ends with the timeout
+/// vocabulary, never the cancellation one, and the difference between those two
+/// strings is the whole assertion.
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_one_run_leaves_another_runs_body_alone() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let marker = scratch.path().join("started");
+    let token = marker.to_string_lossy().into_owned();
+    let (decorated, _reached, attempts) = containment_dispatcher(&marker);
+    let mut bystander = request("blocker", "{}");
+    bystander.config = bounded_config(AUTHORED_BOUND);
+    let cancelled_run = aion_core::WorkflowId::new_v4();
+
+    let handle = tokio::task::spawn_blocking(move || decorated.dispatch(bystander));
+    await_started(&marker).await?;
+
+    let stopped = stop_in_flight_work(&attempts, &cancelled_run)?;
+    assert!(
+        stopped.declared_attempts.is_empty(),
+        "another run's cancel must signal nothing here: {stopped:?}"
+    );
+
+    let Ok(joined) = tokio::time::timeout(STOP_DEADLINE, handle).await else {
+        reap_leftovers(&token);
+        return Err("the bystander's command never ended on its own bound".into());
+    };
+    let Err(error) = joined? else {
+        reap_leftovers(&token);
+        return Err("the blocking subject cannot complete on its own".into());
+    };
+    assert!(
+        error.starts_with("timeout:"),
+        "the bystander must end on its own bound, not on another run's cancel: {error}"
+    );
+    assert!(
+        !tree_alive(&token)?,
+        "the bystander's own bound must still have stopped its process"
     );
     Ok(())
 }

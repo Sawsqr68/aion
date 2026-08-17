@@ -1,4 +1,4 @@
-//! Asking the workers holding a run's activities to stop (#233).
+//! Stopping a run's in-flight activities, wherever they are executing (#233).
 //!
 //! Cancelling a workflow records `WorkflowCancelled`, kills the workflow's own
 //! VM process, and settles its outbox rows so nothing more is dispatched. None
@@ -18,13 +18,25 @@
 //! Routing comes from [`HeartbeatTracker::in_flight_for_workflow`] — the live
 //! registry of which worker holds which activity — rather than from the durable
 //! outbox row, which records no worker at all.
+//!
+//! # Not every in-flight activity has a worker
+//!
+//! An action whose contract declares a body is executed BY THIS SERVER
+//! ([`super::declared_body`]): no worker holds it, no heartbeat tracks it, and
+//! the tracker read above therefore cannot see it. Stopping those is
+//! [`super::declared_body_cancel`]'s job, and it happens HERE, in the same call,
+//! because "stop this run's in-flight work" is one question with two execution
+//! paths — and a caller that had to remember the second one would eventually
+//! forget it, which is the same silence #233 closed for the first.
 
 use aion_core::{ActivityId, WorkflowId};
 use aion_proto::{ProtoActivityId, ProtoCancelActivity, ProtoWorkflowId};
 use tracing::{info, warn};
 
 use crate::error::ServerError;
+use crate::worker::declared_body_cancel::DeclaredCommandAttempts;
 use crate::worker::heartbeat::HeartbeatTracker;
+use crate::worker::intervention::AttemptKey;
 use crate::worker::registry::{ConnectedWorkerRegistry, WorkerId, WorkerMessage};
 
 /// What happened when the server tried to ask one worker to stop one activity.
@@ -77,12 +89,43 @@ pub struct CancelRequest {
     pub delivery: CancelDelivery,
 }
 
-/// Ask every worker holding an activity of `workflow_id` to stop it (#233).
+/// Everything this node did to stop one run's in-flight work.
 ///
-/// Returns one [`CancelRequest`] per tracked in-flight activity, in the order
-/// the tracker yielded them, INCLUDING the ones that could not be asked. An
-/// empty result means the tracker held no in-flight activity for this
-/// workflow — which is the common case, and is not a failure.
+/// Two lists because there are two execution paths and they are stopped by
+/// different means — asking a worker over its stream, and signalling a process
+/// this server owns. Kept apart rather than merged into one vocabulary: a
+/// worker ask is a question whose answer this node never sees, and a declared
+/// body's stop is one the attempt itself witnesses, and calling both "cancel
+/// requests" would lose that difference exactly where an operator needs it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct InFlightCancellation {
+    /// One record per activity a WORKER was tracked as holding, including the
+    /// ones that could not be asked.
+    pub worker_requests: Vec<CancelRequest>,
+    /// The declared bodies THIS SERVER was executing, now signalled. Each named
+    /// attempt has had its cancellation raised; the attempt reports back only
+    /// once its process group has been proven gone.
+    pub declared_attempts: Vec<AttemptKey>,
+}
+
+impl InFlightCancellation {
+    /// Whether this node stopped nothing at all — the common case for a run with
+    /// no activity in flight, and not a failure.
+    #[must_use]
+    pub fn stopped_nothing(&self) -> bool {
+        self.worker_requests.is_empty() && self.declared_attempts.is_empty()
+    }
+}
+
+/// Stop every in-flight activity of `workflow_id`, by whichever path is
+/// executing it (#233).
+///
+/// Two paths, one call. Every activity a WORKER holds produces a
+/// [`CancelRequest`], in the order the tracker yielded them, INCLUDING the ones
+/// that could not be asked. Every declared body THIS SERVER is executing is
+/// signalled directly, which reaches the command's process group rather than
+/// merely a worker's inbox. An empty result on both means nothing was in flight
+/// for this workflow — the common case, and not a failure.
 ///
 /// Call this AFTER the terminal is durably recorded, never before: a cancel
 /// pushed ahead of the record could stop work for a cancellation that then
@@ -90,17 +133,19 @@ pub struct CancelRequest {
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::LockPoisoned`] when the tracker's or the registry's
-/// state cannot be trusted. A poisoned lock is not survivable here: it would
-/// mean answering "nothing was in flight" from state that cannot be read, and
-/// an operator would take that silence for a completed cancellation.
+/// Returns [`ServerError::LockPoisoned`] when the tracker's, the registry's, or
+/// the declared-attempt registry's state cannot be trusted. A poisoned lock is
+/// not survivable here: it would mean answering "nothing was in flight" from
+/// state that cannot be read, and an operator would take that silence for a
+/// completed cancellation.
 pub fn cancel_in_flight_activities(
     tracker: &HeartbeatTracker,
     registry: &ConnectedWorkerRegistry,
+    declared: &DeclaredCommandAttempts,
     workflow_id: &WorkflowId,
-) -> Result<Vec<CancelRequest>, ServerError> {
+) -> Result<InFlightCancellation, ServerError> {
     let in_flight = tracker.in_flight_for_workflow(workflow_id)?;
-    let mut requests = Vec::with_capacity(in_flight.len());
+    let mut worker_requests = Vec::with_capacity(in_flight.len());
     for liveness in in_flight {
         let delivery = ask_worker_to_stop(
             registry,
@@ -108,7 +153,7 @@ pub fn cancel_in_flight_activities(
             &liveness.workflow_id,
             &liveness.activity_id,
         )?;
-        requests.push(CancelRequest {
+        worker_requests.push(CancelRequest {
             worker_id: liveness.worker_id,
             workflow_id: liveness.workflow_id,
             activity_id: liveness.activity_id,
@@ -116,8 +161,16 @@ pub fn cancel_in_flight_activities(
             delivery,
         });
     }
-    report(workflow_id, &requests);
-    Ok(requests)
+    // The server's own execution path, in the SAME call: an activity is either
+    // held by a worker or run here, and a cancel that only covered the first
+    // left the second running under a console reporting `Cancelled`.
+    let declared_attempts = declared.cancel_workflow(workflow_id)?;
+    let cancellation = InFlightCancellation {
+        worker_requests,
+        declared_attempts,
+    };
+    report(workflow_id, &cancellation);
+    Ok(cancellation)
 }
 
 /// Push one cancel down one worker's dispatch stream.
@@ -148,15 +201,16 @@ fn ask_worker_to_stop(
     }
 }
 
-/// Log what was asked and what stopped an ask, per workflow.
+/// Log what was stopped, what was only asked, and what stopped an ask.
 ///
 /// Anything that is not a plain `Requested` is logged at WARN with the worker
 /// and activity named, because it means a cancelled run may still be holding a
 /// machine and nothing else in the system will say so.
-fn report(workflow_id: &WorkflowId, requests: &[CancelRequest]) {
-    if requests.is_empty() {
+fn report(workflow_id: &WorkflowId, cancellation: &InFlightCancellation) {
+    if cancellation.stopped_nothing() {
         return;
     }
+    let requests = &cancellation.worker_requests;
     let requested = requests
         .iter()
         .filter(|request| request.delivery.was_requested())
@@ -165,7 +219,9 @@ fn report(workflow_id: &WorkflowId, requests: &[CancelRequest]) {
         workflow_id = %workflow_id,
         in_flight = requests.len(),
         requested,
-        "asked workers to stop the cancelled run's in-flight activities"
+        declared_attempts = cancellation.declared_attempts.len(),
+        "stopped the cancelled run's in-flight activities: asked their workers, and \
+         signalled the declared bodies this server was executing"
     );
     for request in requests
         .iter()
@@ -185,7 +241,9 @@ fn report(workflow_id: &WorkflowId, requests: &[CancelRequest]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{CancelDelivery, CancelRequest, cancel_in_flight_activities};
+    use super::{
+        CancelDelivery, CancelRequest, DeclaredCommandAttempts, cancel_in_flight_activities,
+    };
     use crate::error::ServerError;
     use crate::worker::heartbeat::{HeartbeatTracker, InFlightActivity};
     use crate::worker::registry::{
@@ -260,7 +318,10 @@ mod tests {
         let workflow_id = WorkflowId::new_v4();
         track(&tracker, worker.worker_id, &workflow_id, 7)?;
 
-        let requests = cancel_in_flight_activities(&tracker, &worker.registry, &workflow_id)?;
+        let declared = DeclaredCommandAttempts::new();
+        let requests =
+            cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
+                .worker_requests;
 
         assert_eq!(requests.len(), 1, "one tracked activity, one ask");
         assert_eq!(requests[0].delivery, CancelDelivery::Requested);
@@ -291,8 +352,14 @@ mod tests {
         let worker = registry_with_worker(4)?;
         let tracker = HeartbeatTracker::new(WINDOW);
 
-        let requests =
-            cancel_in_flight_activities(&tracker, &worker.registry, &WorkflowId::new_v4())?;
+        let declared = DeclaredCommandAttempts::new();
+        let requests = cancel_in_flight_activities(
+            &tracker,
+            &worker.registry,
+            &declared,
+            &WorkflowId::new_v4(),
+        )?
+        .worker_requests;
 
         assert!(
             requests.is_empty(),
@@ -312,7 +379,10 @@ mod tests {
         track(&tracker, worker.worker_id, &cancelled, 1)?;
         track(&tracker, worker.worker_id, &bystander, 1)?;
 
-        let requests = cancel_in_flight_activities(&tracker, &worker.registry, &cancelled)?;
+        let declared = DeclaredCommandAttempts::new();
+        let requests =
+            cancel_in_flight_activities(&tracker, &worker.registry, &declared, &cancelled)?
+                .worker_requests;
 
         assert_eq!(requests.len(), 1, "only the cancelled run's activity");
         let Ok(WorkerMessage::CancelActivity(cancel)) = worker.received.try_recv() else {
@@ -340,8 +410,10 @@ mod tests {
         track(&tracker, worker.worker_id, &workflow_id, 1)?;
         worker.registration.deregister()?;
 
+        let declared = DeclaredCommandAttempts::new();
         let requests: Vec<CancelRequest> =
-            cancel_in_flight_activities(&tracker, &worker.registry, &workflow_id)?;
+            cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
+                .worker_requests;
 
         assert_eq!(requests.len(), 1, "the entry is reported, not dropped");
         assert_eq!(
@@ -388,7 +460,9 @@ mod tests {
         let workflow_id = WorkflowId::new_v4();
         track(&tracker, worker_id, &workflow_id, 1)?;
 
-        let requests = cancel_in_flight_activities(&tracker, &registry, &workflow_id)?;
+        let declared = DeclaredCommandAttempts::new();
+        let requests = cancel_in_flight_activities(&tracker, &registry, &declared, &workflow_id)?
+            .worker_requests;
 
         assert_eq!(requests.len(), 1, "the entry is reported, not dropped");
         assert_eq!(
@@ -409,7 +483,10 @@ mod tests {
         track(&tracker, worker.worker_id, &workflow_id, 1)?;
         drop(worker.received);
 
-        let requests = cancel_in_flight_activities(&tracker, &worker.registry, &workflow_id)?;
+        let declared = DeclaredCommandAttempts::new();
+        let requests =
+            cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
+                .worker_requests;
 
         assert_eq!(
             requests[0].delivery,

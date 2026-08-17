@@ -18,6 +18,10 @@ pub mod declared_body;
 /// The refusal, and the followable remedy, for retained versions that declare
 /// different bodies for one action.
 pub mod declared_body_ambiguity;
+/// Stopping the declared bodies this server is executing: the registry that
+/// makes a running server-executed attempt visible, and the signal that reaches
+/// its process group.
+pub mod declared_body_cancel;
 /// Which retained version's body a declared-command dispatch runs — the
 /// dispatching run's own, not the queue's.
 pub mod declared_body_selection;
@@ -84,7 +88,9 @@ pub mod transport_loss;
 /// Server-side `{workspace_root}` expansion for declared action bodies (#139).
 pub mod workspace_root;
 
-pub use activity_cancel::{CancelDelivery, CancelRequest, cancel_in_flight_activities};
+pub use activity_cancel::{
+    CancelDelivery, CancelRequest, InFlightCancellation, cancel_in_flight_activities,
+};
 pub use admission_audit::AdmissionAudit;
 pub use attempt_progress::{AttemptProgress, attempt_progress};
 pub use backpressure::{Backpressure, OwnedShardFraction};
@@ -94,6 +100,7 @@ pub use declared_body::{
     DispatchingRun, EngineDeclaredBodies,
 };
 pub use declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
+pub use declared_body_cancel::{DeclaredAttemptRegistration, DeclaredCommandAttempts};
 pub use declared_body_selection::select_declared_body;
 pub use dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, ActivityDispatcher,
