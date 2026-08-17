@@ -816,17 +816,18 @@ mod tests {
     /// RETRYABLE — a guard protecting against double-work must not convert a
     /// live, healthy attempt into a dead workflow.
     #[tokio::test]
-    async fn a_live_sibling_collision_is_retryable_not_terminal() -> TestResult {
+    async fn a_foreign_live_sibling_collision_is_retryable_not_terminal() -> TestResult {
         let tree = tempfile::tempdir()?;
         let binary = sleeping_binary(tree.path())?;
         let harness = NornHarness::with_binary(binary, fixed(tree.path()));
-        let spec = spec();
-        let first = harness.spawn(&spec)?;
+        let holder = spec();
+        let foreign = spec();
+        let first = harness.spawn(&holder)?;
 
         let refusal = harness
-            .spawn(&spec)
+            .spawn(&foreign)
             .err()
-            .ok_or("two sibling agents must never share one declared cwd")?;
+            .ok_or("two foreign sibling agents must never share one declared cwd")?;
 
         assert!(
             refusal.to_string().contains("live sibling pid"),
@@ -849,6 +850,30 @@ mod tests {
             "occupancy is its own first-class refusal, never a configuration \
              fault — nothing anybody wrote is wrong: {refusal:?}"
         );
+        drop(first);
+        Ok(())
+    }
+
+    /// #36: the marker's workflow/activity identity distinguishes a foreign
+    /// collision from a redelivery of this execution. A live holder with the
+    /// incoming execution identity is adopted rather than refused; the real
+    /// Norn invocation's resume-if-exists arguments re-attach the durable
+    /// session instead of creating a second session.
+    #[tokio::test]
+    async fn a_live_self_occupancy_is_adopted() -> TestResult {
+        let tree = tempfile::tempdir()?;
+        let binary = sleeping_binary(tree.path())?;
+        let harness = NornHarness::with_binary(binary, fixed(tree.path()));
+        let spec = spec();
+        let first = harness.spawn(&spec)?;
+
+        let mut adopted = harness.spawn(&spec)?;
+        assert!(
+            adopted.id().is_some(),
+            "self-occupancy must enter the re-attach invocation, not return an occupancy refusal"
+        );
+
+        adopted.kill().await?;
         drop(first);
         Ok(())
     }
