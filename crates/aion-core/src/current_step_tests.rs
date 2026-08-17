@@ -383,3 +383,35 @@ fn unrelated_events_neither_open_nor_retire_a_step() -> TestResult {
     assert!(open_steps(&history).is_empty());
     Ok(())
 }
+
+/// A recovery adoption offer (#36) advances nothing and retires nothing: it
+/// says the SAME execution is being handed back to the worker's adoption path,
+/// so the ordinal stays open at the attempt and dispatch instant it already
+/// had. A fold that retired it would tell an operator their still-working
+/// builder had stopped; a fold that re-opened it as Scheduled would erase the
+/// dispatch that is still in flight.
+#[test]
+fn an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched() -> TestResult {
+    let history = vec![
+        started(1)?,
+        scheduled(2, 0, "delegate")?,
+        dispatched(3, 0, 1),
+        Event::ActivityAdoptionOffered {
+            envelope: envelope(4),
+            activity_id: ActivityId::from_sequence_position(0),
+            attempt: 1,
+        },
+    ];
+    let step = current_step(&history).ok_or("the adopted ordinal is still the current step")?;
+    assert_eq!(step.activity_type, "delegate");
+    assert_eq!(
+        step.state,
+        StepState::Dispatched {
+            attempt: 1,
+            dispatched_at: recorded_at(3),
+        },
+        "the offer must not restate the attempt or move the dispatch instant"
+    );
+    assert_eq!(open_steps(&history).len(), 1, "no sibling is invented");
+    Ok(())
+}

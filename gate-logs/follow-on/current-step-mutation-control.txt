@@ -1,0 +1,14 @@
+test current_step::tests::an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched ... FAILED
+
+failures:
+
+---- current_step::tests::an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched stdout ----
+Error: "the adopted ordinal is still the current step"
+
+
+failures:
+    current_step::tests::an_adoption_offer_leaves_the_ordinal_exactly_as_dispatched
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 116 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-core --lib`

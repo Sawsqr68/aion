@@ -20,6 +20,13 @@
 //!   any worker is selected. That is why [`StepState::Dispatched`] is named for
 //!   what happened rather than for what a reader might hope happened, and why
 //!   liveness is answered by joining the live fleet, never by this fold.
+//! - [`Event::ActivityAdoptionOffered`] advances NOTHING. It records that
+//!   recovery handed the ordinal's still-dangling attempt back to the worker's
+//!   adoption path (#36) — the same execution, the same attempt, already
+//!   dispatched. Retiring the ordinal on it would tell a reader that a builder
+//!   still at work had stopped; re-opening it as scheduled would erase the
+//!   dispatch that is still in flight. Both would be false, so the arm is
+//!   written out rather than left to the catch-all.
 //! - `ActivityCompleted` / `ActivityFailed` / `ActivityCancelled` retire it.
 //! - [`Event::ActivityAdvisoryExhausted`] is deliberately NOT a terminal: it
 //!   ACCOMPANIES an `ActivityFailed` and never replaces it, so treating it as
@@ -123,6 +130,11 @@ fn fold(history: &[Event]) -> Vec<Open> {
                     held.last_advanced_at = position;
                 }
             }
+            // The adopted attempt is the one already folded above: same
+            // ordinal, same attempt, same dispatch instant. Stated, not left to
+            // the catch-all, so a future edit has to argue with the module docs
+            // before it retires or re-opens a live execution.
+            Event::ActivityAdoptionOffered { .. } => {}
             Event::ActivityCompleted { activity_id, .. }
             | Event::ActivityFailed { activity_id, .. }
             | Event::ActivityCancelled { activity_id, .. } => {
