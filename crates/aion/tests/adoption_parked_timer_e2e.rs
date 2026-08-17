@@ -121,6 +121,7 @@ async fn parked_timer_workflow_resumes_on_shard_adoption() -> TestResult {
     let concrete = Arc::new(HaematiteStore::create_with_shard_count(
         dir.path().join("db"),
         SHARD_COUNT,
+        haematite::NodeCacheBudget::Unlimited,
     )?);
     let store: Arc<dyn EventStore> = Arc::clone(&concrete) as Arc<dyn EventStore>;
 

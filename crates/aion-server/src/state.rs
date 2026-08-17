@@ -1784,6 +1784,31 @@ fn build_real_time_publishers(
 /// Returns [`ServerError`] when either key is unset, when `max_batch_events` is
 /// zero (a batch of no events would commit nothing, forever), or when the hold
 /// in milliseconds does not fit a [`Duration`](std::time::Duration).
+/// The operator's node-cache byte budget, or a refusal that names the key.
+///
+/// There is no default to fall back to — not here, and not in haematite, which
+/// refuses a `DatabaseConfig` that does not carry one. A node is not a
+/// fixed-size thing, so a cache bounded only by its entry count is unbounded in
+/// BYTES, and how much resident memory this process may spend on cached nodes is
+/// a deployment decision. `"unlimited"` is available as an explicit choice, so
+/// the pre-budget behaviour is still reachable — by NAME, visible in a diff.
+///
+/// # Errors
+///
+/// Returns [`ServerError::Config`] carrying
+/// [`STORE_NODE_CACHE_BUDGET_REQUIRED`](crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED)
+/// when `store.node_cache_budget` is unset.
+#[cfg(feature = "haematite-backend")]
+fn required_node_cache_budget(
+    config: &StoreConfig,
+) -> Result<haematite::NodeCacheBudget, ServerError> {
+    config
+        .node_cache_budget
+        .ok_or_else(|| ServerError::Config {
+            message: crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED.to_owned(),
+        })
+}
+
 fn required_transcript_batch_policy(
     runtime: &RuntimeConfig,
 ) -> Result<crate::activity_publisher::TranscriptBatchPolicy, ServerError> {
@@ -2134,6 +2159,12 @@ fn connect_libsql_store_unavailable() -> Result<ConnectedStore, ServerError> {
 /// [`HaematiteStore::open_or_create_distributed`]: aion_store_haematite::HaematiteStore::open_or_create_distributed
 #[cfg(feature = "haematite-backend")]
 async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, ServerError> {
+    // Required HERE, at the only seam that consumes it: haematite is the only
+    // backend with a node cache, so a `memory` or `libsql` deployment is never
+    // asked to rule on a cache it does not have. Same explicit-no-default guard
+    // `observability.max_batch_events` uses, at the same kind of seam. Read
+    // before `config` is partially moved below.
+    let node_cache_budget = required_node_cache_budget(&config)?;
     let Some(data_dir) = config.data_dir else {
         return Err(ServerError::Config {
             message: "store.data_dir must not be empty when store.backend is haematite".to_owned(),
@@ -2182,8 +2213,10 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
     // must not stall the async runtime, so run it on the blocking pool. The
     // distributed constructor itself steps onto a bare thread for the bind.
     let (store, responder) =
-        tokio::task::spawn_blocking(move || build_haematite_store(&data_dir, shard_count, cluster))
-            .await
+        tokio::task::spawn_blocking(move || {
+            build_haematite_store(&data_dir, shard_count, cluster, node_cache_budget)
+        })
+        .await
             .map_err(|error| ServerError::Config {
                 message: format!("haematite store initialization task failed: {error}"),
             })??;
@@ -2254,6 +2287,7 @@ fn build_haematite_store(
     data_dir: &str,
     shard_count: usize,
     cluster: Option<crate::config::ClusterConfig>,
+    node_cache_budget: haematite::NodeCacheBudget,
 ) -> Result<
     (
         aion_store_haematite::HaematiteStore,
@@ -2261,7 +2295,7 @@ fn build_haematite_store(
     ),
     ServerError,
 > {
-    build_haematite_store_with_hook(data_dir, shard_count, cluster, || Ok(()))
+    build_haematite_store_with_hook(data_dir, shard_count, cluster, node_cache_budget, || Ok(()))
 }
 
 #[cfg(feature = "haematite-backend")]
@@ -2269,6 +2303,7 @@ fn build_haematite_store_with_hook(
     data_dir: &str,
     shard_count: usize,
     cluster: Option<crate::config::ClusterConfig>,
+    node_cache_budget: haematite::NodeCacheBudget,
     before_backend_touch: impl FnOnce() -> Result<(), std::io::Error>,
 ) -> Result<
     (
@@ -2337,8 +2372,12 @@ fn build_haematite_store_with_hook(
         let store = if backend_path.join("config.json").exists() {
             HaematiteStore::open(&backend_path).map_err(ServerError::from)?
         } else {
-            HaematiteStore::create_with_shard_count(&backend_path, shard_count)
-                .map_err(ServerError::from)?
+            HaematiteStore::create_with_shard_count(
+                &backend_path,
+                shard_count,
+                node_cache_budget,
+            )
+            .map_err(ServerError::from)?
         };
         store.materialize_all_shards().map_err(ServerError::from)?;
         private_root
@@ -2360,8 +2399,13 @@ fn build_haematite_store_with_hook(
         timeout: HAEMATITE_CLUSTER_OP_TIMEOUT,
     };
     let (store, responder) =
-        HaematiteStore::open_or_create_distributed(&backend_path, shard_count, boot)
-            .map_err(ServerError::from)?;
+        HaematiteStore::open_or_create_distributed(
+            &backend_path,
+            shard_count,
+            boot,
+            node_cache_budget,
+        )
+        .map_err(ServerError::from)?;
     store.materialize_all_shards().map_err(ServerError::from)?;
     private_root
         .harden_tree()
@@ -2751,6 +2795,7 @@ mod tests {
             data_dir: Some(data_dir.path().to_string_lossy().into_owned()),
             shard_count: 1,
             cluster: None,
+            node_cache_budget: Some(test_node_cache_budget()?),
         })
         .await?;
         let event_store = connected.event_store;
@@ -2797,6 +2842,16 @@ mod tests {
         Ok(())
     }
 
+    /// A generous node-cache byte budget (1 GiB) for the haematite fixtures.
+    ///
+    /// Roomy enough that no fixture here can reach it, so these stay boot-path
+    /// and data-root tests rather than accidental cache-eviction tests. It is a
+    /// TEST value, not a default: production reads the operator's ruling.
+    #[cfg(feature = "haematite-backend")]
+    fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, Box<dyn std::error::Error>> {
+        Ok(haematite::NodeCacheBudget::bytes(1 << 30)?)
+    }
+
     #[cfg(all(feature = "haematite-backend", unix))]
     #[test]
     fn haematite_root_swap_before_first_backend_touch_cannot_redirect_writes()
@@ -2813,7 +2868,7 @@ mod tests {
             .ok_or("temporary data path was not UTF-8")?;
 
         let (store, responder) =
-            super::build_haematite_store_with_hook(configured, 4, None, || {
+            super::build_haematite_store_with_hook(configured, 4, None, test_node_cache_budget()?, || {
                 // The server has acquired and hardened `configured_root`, but
                 // Haematite has not opened or created anything. Replace the
                 // ambient name with an attacker-controlled symlink at exactly
@@ -2868,7 +2923,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None)?;
+        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         std::fs::rename(&configured_root, &held_root)?;
         symlink(&capture, &configured_root)?;
@@ -2929,7 +2984,7 @@ mod tests {
                 .to_str()
                 .ok_or("temporary data path was not UTF-8")?;
 
-            let Err(error) = super::build_haematite_store(configured, 4, None) else {
+            let Err(error) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?) else {
                 return Err(format!("mode {mode:04o} ancestor was accepted").into());
             };
             let message = error.to_string();
@@ -2982,7 +3037,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None);
+        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&shared)
@@ -3046,7 +3101,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None);
+        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&private_parent)
@@ -3088,7 +3143,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None);
+        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&shared)
@@ -3139,7 +3194,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None);
+        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&private_parent)
@@ -3172,7 +3227,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None)?;
+        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         drop(store);
@@ -3199,7 +3254,7 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) = super::build_haematite_store(configured, 4, None)?;
+        let (store, responder) = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         for shard in 0..4 {
@@ -3223,6 +3278,7 @@ mod tests {
             data_dir: None,
             shard_count: 1,
             cluster: None,
+            node_cache_budget: None,
         })
         .await?;
         assert!(
@@ -3274,6 +3330,45 @@ mod tests {
         Ok(())
     }
 
+    /// The operator's configured budget reaches the constructed
+    /// [`haematite::DatabaseConfig`] — observed where haematite records it, in
+    /// the created database's own `config.json`, so the assertion cannot pass by
+    /// a value that stopped short of `Database::create`.
+    #[cfg(feature = "haematite-backend")]
+    #[tokio::test]
+    async fn configured_node_cache_budget_reaches_the_created_database()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::config::{StoreBackend, StoreConfig};
+
+        const ONE_GIB: usize = 1 << 30;
+
+        let sandbox = crate::test_support::private_tempdir()?;
+        let data_dir = sandbox.path().join("data");
+        let connected = super::connect_haematite_store(StoreConfig {
+            backend: StoreBackend::Haematite,
+            data_dir: Some(
+                data_dir
+                    .to_str()
+                    .ok_or("temporary data path was not UTF-8")?
+                    .to_owned(),
+            ),
+            shard_count: 4,
+            node_cache_budget: Some(haematite::NodeCacheBudget::bytes(ONE_GIB)?),
+            ..StoreConfig::default()
+        })
+        .await?;
+        drop(connected);
+
+        let recorded: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(data_dir.join("config.json"))?)?;
+        assert_eq!(
+            recorded.get("node_cache_budget"),
+            Some(&serde_json::json!({ "bytes": ONE_GIB })),
+            "the operator's budget must be the one haematite created the database with"
+        );
+        Ok(())
+    }
+
     // The libSQL connect path is now an opt-in backend (`libsql-backend`), so this
     // libSQL-specific outbox-sharing assertion compiles and runs only under that
     // feature. The memory case is covered above, unconditionally.
@@ -3302,6 +3397,7 @@ mod tests {
             data_dir: None,
             shard_count: 1,
             cluster: None,
+            node_cache_budget: None,
         })
         .await?;
         assert!(

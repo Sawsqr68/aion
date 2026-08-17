@@ -136,7 +136,7 @@ async fn active_ids_scoped_to(
 #[tokio::test(flavor = "multi_thread")]
 async fn builder_owned_shards_scopes_recovery_to_disjoint_sets() -> TestResult {
     let dir = unique_dir();
-    let store = HaematiteStore::create_with_shard_count(&dir, SHARD_COUNT)?;
+    let store = HaematiteStore::create_with_shard_count(&dir, SHARD_COUNT, haematite::NodeCacheBudget::Unlimited)?;
     let database = store.event_store().database();
 
     // Stage WORKFLOWS workflows through the public append path (routed writes

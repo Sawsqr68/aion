@@ -136,7 +136,7 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     // ACT 1 — open a fresh haematite store and build a live engine over it.
     // ----------------------------------------------------------------------
     println!("\n--- ACT 1: open haematite + build the engine ---");
-    let first_store = HaematiteStore::create(&store_path)?;
+    let first_store = HaematiteStore::create(&store_path, haematite::NodeCacheBudget::Unlimited)?;
     println!("  haematite database CREATED at the path above.");
     // Type-erase the concrete store into the engine's `dyn EventStore` seam.
     // This is the entire wiring: HaematiteStore IS the engine's event store.

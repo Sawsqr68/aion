@@ -451,6 +451,7 @@ async fn adopted_deadline_fires_after_shard_adoption() -> TestResult {
     let concrete = Arc::new(HaematiteStore::create_with_shard_count(
         dir.path().join("db"),
         SHARD_COUNT,
+        haematite::NodeCacheBudget::Unlimited,
     )?);
     let store: Arc<dyn EventStore> = Arc::clone(&concrete) as Arc<dyn EventStore>;
 

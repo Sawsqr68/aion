@@ -212,13 +212,25 @@ mod tests {
         ))
     }
 
+    /// A generous node-cache byte budget (1 GiB) for these routing fixtures:
+    /// roomy enough that no test here can reach it, so these stay shard-routing
+    /// tests. A TEST value, never a default — production states its own.
+    fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, StoreError> {
+        haematite::NodeCacheBudget::bytes(1 << 30)
+            .map_err(|error| StoreError::Backend(error.to_string()))
+    }
+
     /// A multi-shard store owning exactly `owned` shards out of `shard_count`.
     fn store_owning(
         name: &str,
         shard_count: usize,
         owned: &[usize],
     ) -> Result<HaematiteStore, StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir(name), shard_count)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir(name),
+            shard_count,
+            test_node_cache_budget()?,
+        )?;
         store.set_owned_shards(owned.iter().copied());
         Ok(store)
     }
@@ -317,7 +329,7 @@ mod tests {
     /// is already local, so there is nothing to remint toward.
     #[test]
     fn start_with_own_all_scope_uses_engine_mint() -> TestResult {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("ownall"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(unique_dir("ownall"), 4, test_node_cache_budget()?)?;
         // No set_owned_shards call → owned_shards() == None == owns all.
         assert_eq!(route_start(Some(&store)), RemintOutcome::EngineMint);
         Ok(())
@@ -346,7 +358,11 @@ mod tests {
     #[test]
     fn steered_start_to_owned_shard_runs_locally() -> TestResult {
         // Own every shard so whichever shard the routing key targets is local.
-        let store = HaematiteStore::create_with_shard_count(unique_dir("steer-local"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("steer-local"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         let key = "tenant-a/order-1";
         let target = store.shard_for_routing_key(key);
         let SteerDecision::Local(workflow_id) = route_start_steered(&store, None, key) else {

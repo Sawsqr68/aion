@@ -221,12 +221,24 @@ mod tests {
         ))
     }
 
+    /// A generous node-cache byte budget (1 GiB) for these routing fixtures:
+    /// roomy enough that no test here can reach it, so these stay shard-routing
+    /// tests. A TEST value, never a default — production states its own.
+    fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, StoreError> {
+        haematite::NodeCacheBudget::bytes(1 << 30)
+            .map_err(|error| StoreError::Backend(error.to_string()))
+    }
+
     fn store(
         name: &str,
         shard_count: usize,
         owned: &[usize],
     ) -> Result<HaematiteStore, StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir(name), shard_count)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir(name),
+            shard_count,
+            test_node_cache_budget()?,
+        )?;
         store.set_owned_shards(owned.iter().copied());
         Ok(store)
     }

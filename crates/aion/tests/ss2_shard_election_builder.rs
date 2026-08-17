@@ -109,6 +109,7 @@ fn builder_elects_owned_shard_before_recovery_in_a_cluster_of_one() -> TestResul
         &dir,
         SHARD_COUNT,
         cluster_of_one("127.0.0.1:0".parse()?),
+        haematite::NodeCacheBudget::Unlimited,
     )?;
 
     // The store must NOT be the live owner yet — that is the builder's job.
