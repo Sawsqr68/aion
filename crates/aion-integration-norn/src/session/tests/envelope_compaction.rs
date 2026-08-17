@@ -23,7 +23,7 @@ fn instructions() -> String {
 }
 
 /// One `event/raw` notification carrying a full provider response envelope.
-fn envelope_note(kind: &str, status: &str, usage: serde_json::Value) -> JsonRpcNotification {
+fn envelope_note(kind: &str, status: &str, usage: &serde_json::Value) -> JsonRpcNotification {
     JsonRpcNotification::new(
         "event/raw",
         Some(json!({
@@ -48,16 +48,16 @@ fn envelope_note(kind: &str, status: &str, usage: serde_json::Value) -> JsonRpcN
 /// The three frames of one turn, in the order a provider streams them.
 fn turn() -> [JsonRpcNotification; 3] {
     [
-        envelope_note("response.created", "queued", serde_json::Value::Null),
+        envelope_note("response.created", "queued", &serde_json::Value::Null),
         envelope_note(
             "response.in_progress",
             "in_progress",
-            serde_json::Value::Null,
+            &serde_json::Value::Null,
         ),
         envelope_note(
             "response.completed",
             "completed",
-            json!({"input_tokens": 1200, "output_tokens": 7, "total_tokens": 1207}),
+            &json!({"input_tokens": 1200, "output_tokens": 7, "total_tokens": 1207}),
         ),
     ]
 }
