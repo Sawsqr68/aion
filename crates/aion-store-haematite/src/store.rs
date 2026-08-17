@@ -60,7 +60,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use haematite::db::respond_to_inbound_writes;
 use haematite::sync::membership::WriteMembership;
 use haematite::sync::{DistributionEndpoint, ProposeWrite, SyncNodeId};
-use haematite::{Database, DatabaseConfig, DatabaseError, Hash};
+use haematite::{Database, DatabaseConfig, DatabaseError, Hash, NodeCacheBudget};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{
@@ -232,11 +232,22 @@ impl HaematiteStore {
     /// The directory is created if absent. The store runs haematite with a single
     /// shard (see the module docs) and no TTL sweeper or distribution.
     ///
+    /// `node_cache_budget` is the byte ceiling the database's node caches may
+    /// hold. It is a REQUIRED parameter and there is deliberately no default
+    /// anywhere on this path: haematite 0.8.2 refuses a `DatabaseConfig` that
+    /// does not rule on it, because the right number is a deployment decision
+    /// (how much resident memory may this process spend on cached nodes?) that
+    /// neither the engine nor this crate can know. [`NodeCacheBudget::Unlimited`]
+    /// is how a caller says "no byte bound" out loud.
+    ///
     /// # Errors
     ///
     /// Returns [`StoreError::Backend`] when haematite cannot create the database.
-    pub fn create(data_dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
-        Self::create_with_shard_count(data_dir, 1)
+    pub fn create(
+        data_dir: impl Into<PathBuf>,
+        node_cache_budget: NodeCacheBudget,
+    ) -> Result<Self, StoreError> {
+        Self::create_with_shard_count(data_dir, 1, node_cache_budget)
     }
 
     /// Create a fresh single-node store with `shard_count` haematite shards.
@@ -251,12 +262,14 @@ impl HaematiteStore {
     pub fn create_with_shard_count(
         data_dir: impl Into<PathBuf>,
         shard_count: usize,
+        node_cache_budget: NodeCacheBudget,
     ) -> Result<Self, StoreError> {
         let database = Database::create(DatabaseConfig {
             data_dir: data_dir.into(),
             shard_count,
             executor_threads: None,
             distributed: None,
+            node_cache_budget: Some(node_cache_budget),
         })
         .map_err(|error| database_error(&error))?;
         Ok(Self::from_database(database))
@@ -407,11 +420,14 @@ impl HaematiteStore {
         data_dir: impl Into<PathBuf>,
         shard_count: usize,
         boot: ClusterBootstrap,
+        node_cache_budget: NodeCacheBudget,
     ) -> Result<(Self, ClusterResponder), StoreError> {
         let data_dir = data_dir.into();
         // Bind + dial run the endpoint's own runtime and must not see an entered
         // tokio runtime, so build the whole distributed store off-runtime.
-        run_off_runtime(move || Self::build_distributed(&data_dir, shard_count, &boot))
+        run_off_runtime(move || {
+            Self::build_distributed(&data_dir, shard_count, &boot, node_cache_budget)
+        })
     }
 
     /// Off-runtime body of [`Self::open_or_create_distributed`]: open/create the
@@ -420,8 +436,12 @@ impl HaematiteStore {
         data_dir: &std::path::Path,
         shard_count: usize,
         boot: &ClusterBootstrap,
+        node_cache_budget: NodeCacheBudget,
     ) -> Result<(Self, ClusterResponder), StoreError> {
         let database = if data_dir.join("config.json").exists() {
+            // An EXISTING database carries its own recorded budget in
+            // `config.json`; haematite reads it back on open, so the operator's
+            // current ruling does not silently re-cut an already-created store.
             Database::open(data_dir).map_err(|error| database_error(&error))?
         } else {
             Database::create(DatabaseConfig {
@@ -429,6 +449,7 @@ impl HaematiteStore {
                 shard_count,
                 executor_threads: None,
                 distributed: None,
+                node_cache_budget: Some(node_cache_budget),
             })
             .map_err(|error| database_error(&error))?
         };
@@ -3613,8 +3634,19 @@ mod tests {
         ))
     }
 
+    /// A generous node-cache byte budget (1 GiB) for the unit fixtures.
+    ///
+    /// Test databases are tiny and short-lived, so the number here is not a
+    /// measurement of anything — it is a deliberately roomy ceiling that no
+    /// fixture can reach, chosen so these tests exercise the budgeted path
+    /// without any test ever turning into a cache-eviction test by accident. It
+    /// is emphatically NOT a default: production callers state their own.
+    fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, StoreError> {
+        haematite::NodeCacheBudget::bytes(1 << 30).map_err(|error| StoreError::Backend(error.to_string()))
+    }
+
     fn store(name: &str) -> Result<HaematiteStore, StoreError> {
-        HaematiteStore::create(unique_dir(name))
+        HaematiteStore::create(unique_dir(name), test_node_cache_budget()?)
     }
 
     fn worker_deployment(name: &str) -> Result<WorkerDeployment, StoreError> {
@@ -3663,7 +3695,11 @@ mod tests {
     #[tokio::test]
     async fn multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names()
     -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("deployment-order"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(
+            unique_dir("deployment-order"),
+            4,
+            test_node_cache_budget()?,
+        )?;
         let decoded_names = worker_deployment_shard_inversion(&store, "decoded")?;
         let poisoned_names = worker_deployment_shard_inversion(&store, "poisoned")?;
 
@@ -4335,7 +4371,7 @@ mod tests {
         let fire_at = Utc::now();
 
         {
-            let store = HaematiteStore::create(&dir)?;
+            let store = HaematiteStore::create(&dir, test_node_cache_budget()?)?;
             let event = aion_core::Event::WorkflowStarted {
                 envelope: aion_core::EventEnvelope {
                     seq: 1,
@@ -4429,7 +4465,7 @@ mod tests {
     /// (any id is already local); a subset scope yields an id on an owned shard.
     #[test]
     fn remint_for_owned_shard_respects_scope() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("remint"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(unique_dir("remint"), 4, test_node_cache_budget()?)?;
         // Own-all: nothing to remint toward.
         assert!(store.remint_for_owned_shard(64).is_none());
 
@@ -4448,7 +4484,7 @@ mod tests {
     /// an id whose durable shard is exactly that target.
     #[test]
     fn mint_for_shard_lands_on_the_routing_key_shard() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("steered"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(unique_dir("steered"), 4, test_node_cache_budget()?)?;
         let target = store.shard_for_routing_key("tenant-7/order-42");
         // Stable: hashing the same key again yields the same shard.
         assert_eq!(target, store.shard_for_routing_key("tenant-7/order-42"));
@@ -4468,7 +4504,7 @@ mod tests {
     /// everything unconditionally).
     #[test]
     fn single_node_fence_seam_is_a_noop() -> Result<(), StoreError> {
-        let store = HaematiteStore::create_with_shard_count(unique_dir("noop"), 4)?;
+        let store = HaematiteStore::create_with_shard_count(unique_dir("noop"), 4, test_node_cache_budget()?)?;
         // Owns everything: scope is None and stays None through extend.
         assert_eq!(store.owned_shards(), None, "single-node owns all shards");
         store.acquire_owned_shard(2)?; // no election, Ok

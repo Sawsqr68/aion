@@ -90,7 +90,7 @@ fn started_event(workflow_id: &WorkflowId, seq: u64) -> Event {
 /// the workflows on the other shards.
 fn multishard_store_with_workflows(name: &str) -> (HaematiteStore, Vec<WorkflowId>) {
     let store =
-        HaematiteStore::create_with_shard_count(unique_dir(name), SHARD_COUNT).expect("create");
+        HaematiteStore::create_with_shard_count(unique_dir(name), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited).expect("create");
 
     let database = store.event_store().database();
     let mut workflows: Vec<WorkflowId> = Vec::new();
@@ -272,7 +272,7 @@ async fn outbox_claims_fan_out_across_shards() {
 /// `list_packages` returns all of them.
 #[tokio::test(flavor = "multi_thread")]
 async fn list_packages_fans_out_across_shards() {
-    let store = HaematiteStore::create_with_shard_count(unique_dir("packages"), SHARD_COUNT)
+    let store = HaematiteStore::create_with_shard_count(unique_dir("packages"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited)
         .expect("create");
     let database = store.event_store().database();
 

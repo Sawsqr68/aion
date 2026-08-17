@@ -173,7 +173,7 @@ fn two_workflows_on_different_shards(
 #[tokio::test(flavor = "multi_thread")]
 async fn per_workflow_records_land_on_the_workflow_shard() {
     let store =
-        HaematiteStore::create_with_shard_count(unique_dir("single"), SHARD_COUNT).expect("create");
+        HaematiteStore::create_with_shard_count(unique_dir("single"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited).expect("create");
     let database = store.event_store().database();
 
     let (workflow_id, dispatch_key) = stage_workflow(&store, 0).await;
@@ -216,7 +216,7 @@ async fn per_workflow_records_land_on_the_workflow_shard() {
 /// `transition_outbox` via complete/retry.
 #[tokio::test(flavor = "multi_thread")]
 async fn two_workflows_on_different_shards_stay_isolated() {
-    let store = HaematiteStore::create_with_shard_count(unique_dir("isolation"), SHARD_COUNT)
+    let store = HaematiteStore::create_with_shard_count(unique_dir("isolation"), SHARD_COUNT, haematite::NodeCacheBudget::Unlimited)
         .expect("create");
     let database = store.event_store().database();
 

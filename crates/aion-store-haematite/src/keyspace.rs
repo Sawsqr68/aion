@@ -584,6 +584,10 @@ mod tests {
             shard_count,
             executor_threads: None,
             distributed: None,
+            // Unlimited, stated out loud: this probe asserts key ROUTING and
+            // never reads a node twice, so a byte ceiling would measure nothing
+            // here. Saying it explicitly is the point of the type.
+            node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
         })?;
         for shard in 0..shard_count {
             let key = shard_owner_key(shard, |bytes| database.shard_for(bytes));

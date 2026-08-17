@@ -24,7 +24,12 @@
 //! use aion_store::{ReadableEventStore, WorkflowId};
 //! use aion_store_haematite::HaematiteStore;
 //!
-//! let store = HaematiteStore::create("/tmp/aion-haematite-store")?;
+//! use haematite::NodeCacheBudget;
+//!
+//! // The node cache's byte ceiling is always stated by the caller: haematite
+//! // has no default for it, and neither does this crate.
+//! let budget = NodeCacheBudget::bytes(256 * 1024 * 1024)?;
+//! let store = HaematiteStore::create("/tmp/aion-haematite-store", budget)?;
 //! let workflow_id = WorkflowId::new_v4();
 //! let history = store.read_history(&workflow_id).await?;
 //! assert!(history.is_empty());

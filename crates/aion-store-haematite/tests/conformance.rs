@@ -25,7 +25,7 @@ static DATABASE_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[tokio::test(flavor = "multi_thread")]
 async fn haematite_store_satisfies_event_store_conformance_suite() -> Result<(), StoreError> {
     run_event_store_suite(|| async {
-        let store = HaematiteStore::create(unique_temp_dir("conformance"));
+        let store = HaematiteStore::create(unique_temp_dir("conformance"), haematite::NodeCacheBudget::Unlimited);
         Arc::new(StoreCreateResult::new(store)) as Arc<dyn EventStore>
     })
     .await
@@ -38,7 +38,7 @@ async fn haematite_store_satisfies_event_store_conformance_suite() -> Result<(),
 #[tokio::test(flavor = "multi_thread")]
 async fn haematite_store_satisfies_outbox_settlement_conformance_suite() -> Result<(), StoreError> {
     run_outbox_settlement_suite(|| async {
-        HaematiteStore::create(unique_temp_dir("outbox-settlement"))
+        HaematiteStore::create(unique_temp_dir("outbox-settlement"), haematite::NodeCacheBudget::Unlimited)
     })
     .await
 }
@@ -46,7 +46,7 @@ async fn haematite_store_satisfies_outbox_settlement_conformance_suite() -> Resu
 #[tokio::test(flavor = "multi_thread")]
 async fn haematite_store_satisfies_worker_deployment_conformance_suite() -> Result<(), StoreError> {
     let data_dir = unique_temp_dir("worker-deployment");
-    let first = Arc::new(HaematiteStore::create(data_dir.clone())?);
+    let first = Arc::new(HaematiteStore::create(data_dir.clone(), haematite::NodeCacheBudget::Unlimited)?);
     let trait_store: Arc<dyn WorkerDeploymentStore> = first.clone();
     let raw_store = first.clone();
     drop(first);

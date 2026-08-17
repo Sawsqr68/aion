@@ -11,8 +11,14 @@ fn store(
     shard_count: usize,
 ) -> Result<(HaematiteStore, tempfile::TempDir), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
-    let store = HaematiteStore::create_with_shard_count(dir.path().join("db"), shard_count)
-        .map_err(|error: StoreError| format!("store create failed: {error}"))?;
+    // A generous 1 GiB node-cache ceiling: roomy enough that no fixture here can
+    // reach it, so these stay shard-routing tests rather than accidental
+    // cache-eviction tests. Not a default — production states its own.
+    let node_cache_budget = haematite::NodeCacheBudget::bytes(1 << 30)
+        .map_err(|error| format!("test node cache budget rejected: {error}"))?;
+    let store =
+        HaematiteStore::create_with_shard_count(dir.path().join("db"), shard_count, node_cache_budget)
+            .map_err(|error: StoreError| format!("store create failed: {error}"))?;
     Ok((store, dir))
 }
 

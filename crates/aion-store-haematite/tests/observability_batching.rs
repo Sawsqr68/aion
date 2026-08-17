@@ -100,7 +100,7 @@ fn key(activity_seq: u64) -> ActivityStreamKey {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_batched_append_costs_one_commit_of_blobs_not_n() -> TestResult {
     let data_dir = unique_temp_dir("obs-batch-cost");
-    let store = HaematiteStore::create(&data_dir)?;
+    let store = HaematiteStore::create(&data_dir, haematite::NodeCacheBudget::Unlimited)?;
 
     // Arm A: one event per append — one tree commit each.
     let before_single = node_blob_count(&data_dir)?;
@@ -180,7 +180,7 @@ async fn a_batched_append_costs_one_commit_of_blobs_not_n() -> TestResult {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_conflicted_batch_writes_nothing_and_costs_nothing() -> TestResult {
     let data_dir = unique_temp_dir("obs-batch-conflict");
-    let store = HaematiteStore::create(&data_dir)?;
+    let store = HaematiteStore::create(&data_dir, haematite::NodeCacheBudget::Unlimited)?;
     store.append_activity_event(0, &event(3, 0)).await?;
 
     let before = node_blob_count(&data_dir)?;
@@ -215,7 +215,7 @@ async fn a_conflicted_batch_writes_nothing_and_costs_nothing() -> TestResult {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_batch_that_mixes_streams_is_refused() -> TestResult {
     let data_dir = unique_temp_dir("obs-batch-mixed");
-    let store = HaematiteStore::create(&data_dir)?;
+    let store = HaematiteStore::create(&data_dir, haematite::NodeCacheBudget::Unlimited)?;
     let before = node_blob_count(&data_dir)?;
 
     let mixed = vec![event(4, 0), event(5, 1)];
@@ -241,7 +241,7 @@ async fn a_batch_that_mixes_streams_is_refused() -> TestResult {
 #[tokio::test(flavor = "multi_thread")]
 async fn an_empty_batch_commits_nothing() -> TestResult {
     let data_dir = unique_temp_dir("obs-batch-empty");
-    let store = HaematiteStore::create(&data_dir)?;
+    let store = HaematiteStore::create(&data_dir, haematite::NodeCacheBudget::Unlimited)?;
     store.append_activity_event(0, &event(6, 0)).await?;
     let before = node_blob_count(&data_dir)?;
 
