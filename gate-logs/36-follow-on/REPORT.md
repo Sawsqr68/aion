@@ -546,3 +546,39 @@ The base named in the header (`e05d3e3b4`) is the charter's dispatch base and
 still resolves on main; the branch's true fork point was `c58079469`. The
 post-rebase battery of record (with completion evidence) lives beside this
 report as `rebase-battery-*`.
+
+## Collector's battery of record — the rebased tree (2026-08-18)
+
+Two rounds, both by `rebase-battery.sh` (the wa-a collection script adapted:
+the three-leg extraction standard with per-leg stderr KEPT and `NORN_BIN` set
+on the nextest leg, so completion is provable and the agent gates execute).
+
+**Round 1** (head `b15ec4e8d`, artifacts `round1-rebase-*`): check rc=0,
+clippy rc=0, nextest `Summary [215.7s] 5135 tests run: 5130 passed, 5 failed`.
+
+- The two `issue36_pause_restart_resume_e2e` faces failed DETERMINISTICALLY —
+  a genuine rebase interaction, not a flake: the e2e predates wa-a, whose
+  `observability.max_batch_events` / `max_batch_hold_ms` are REQUIRED with no
+  default, so the isolated server refused to boot (exit 2, the required-key
+  error verbatim in the captured server log). Fixed in `db0555756` ("fix(36):
+  the incident gate's server config states the required flush policy") — the
+  test's config now states the same policy wa-a's own server tests use.
+  Both faces re-ran green solo (13.4s) before the final round.
+- `awl_bc4_differential covered_set_is_byte_identical` — the known #42
+  fork-ordering flake, FIFTH sighting, same `after_multi_diamond` shape.
+  Solo re-run PASS 71.52s (`rebase-solo-awl-bc4.txt`).
+- `worker_shell cancellation_reaps_the_entire_spawned_process_group`
+  (`ParseIntError { kind: Empty }`, its second sighting) and
+  `engine_lifecycle fixture_beam_registers_and_entry_function_resolves`
+  (`is_live` assertion, first sighting) — both solo re-run PASS.
+
+**Round 2 — FINAL** (head `db0555756`, artifacts `rebase-*`): check rc=0,
+clippy rc=0, nextest rc=0, extraction EMPTY, and the completion line:
+
+```text
+Summary [ 233.251s] 5135 tests run: 5135 passed (6 slow), 0 skipped
+```
+
+The `.gitignore` entry for the spawn-gate marker (closing F8 with a fix
+rather than a warning) landed after this round; a gitignore is not a build
+input to any gate, so the round stands for the landed tree.

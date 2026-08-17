@@ -50,3 +50,10 @@ aion-data/
 /.worktrees
 /.dev-flow
 /publish-*.log
+
+# The worker spawn gate's runtime lock marker. The norn e2es (NORN_BIN set)
+# drop one beside the crate under test; its pid is dead by the time anyone
+# sees it and the gate reaps dead markers on the next acquire, so it is
+# harmless in operation — but it must never be committed (report F8,
+# gate-logs/36-follow-on/REPORT.md).
+.aion-held-execution.json

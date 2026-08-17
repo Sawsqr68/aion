@@ -1,0 +1,9 @@
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/36-follow-on/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.41s
+────────────
+ Nextest run ID 81b0d6a6-ab9f-481a-8d6c-09fadaff19f1 with nextest profile: default
+    Starting 1 test across 1 binary (28 tests skipped)
+        SLOW [> 60.000s] (───) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+        PASS [  71.520s] (1/1) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+────────────
+     Summary [  71.523s] 1 test run: 1 passed (1 slow), 28 skipped
