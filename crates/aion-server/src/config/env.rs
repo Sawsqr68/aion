@@ -349,3 +349,68 @@ fn parse_bool(name: &str, value: &str) -> Result<bool, ServerError> {
         _ => config_error(format!("{name} must be a boolean")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_node_cache_budget;
+
+    /// `AION_STORE_NODE_CACHE_BUDGET` takes the TOML right-hand side verbatim,
+    /// in BOTH of haematite's spellings — the env override and the config file
+    /// are one spelling, decided by one parser (haematite's).
+    #[test]
+    fn the_env_override_accepts_both_haematite_spellings()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let name = "AION_STORE_NODE_CACHE_BUDGET";
+        assert_eq!(
+            parse_node_cache_budget(name, "{ bytes = 1073741824 }")?,
+            haematite::NodeCacheBudget::bytes(1 << 30)?,
+            "a 1 GiB ceiling written as it would be in config.toml"
+        );
+        assert_eq!(
+            parse_node_cache_budget(name, "\"unlimited\"")?,
+            haematite::NodeCacheBudget::Unlimited,
+            "the pre-budget behaviour, spelled out loud"
+        );
+        Ok(())
+    }
+
+    /// A zero ceiling is REFUSED, and the refusal is haematite's own — this
+    /// crate never re-decides what a budget may be. A ceiling of zero admits
+    /// nothing, which is "disable the cache", a different decision that must be
+    /// spelled differently.
+    #[test]
+    fn the_env_override_refuses_a_zero_ceiling() -> Result<(), Box<dyn std::error::Error>> {
+        let error = parse_node_cache_budget("AION_STORE_NODE_CACHE_BUDGET", "{ bytes = 0 }")
+            .err()
+            .ok_or("a zero byte ceiling must be refused, not accepted as 'no cache'")?;
+        let crate::error::ServerError::Config { message } = error else {
+            return Err("a bad env value must be a config refusal".into());
+        };
+        assert!(
+            message.contains("AION_STORE_NODE_CACHE_BUDGET"),
+            "the refusal must name the variable, got: {message}"
+        );
+        assert!(
+            message.contains("greater than zero"),
+            "the refusal must carry haematite's own reason, got: {message}"
+        );
+        Ok(())
+    }
+
+    /// Junk is refused with the variable named and the accepted spellings shown,
+    /// rather than silently falling back to any value at all.
+    #[test]
+    fn the_env_override_refuses_junk() -> Result<(), Box<dyn std::error::Error>> {
+        let error = parse_node_cache_budget("AION_STORE_NODE_CACHE_BUDGET", "1GiB")
+            .err()
+            .ok_or("`1GiB` is not a spelling haematite accepts and must be refused")?;
+        let crate::error::ServerError::Config { message } = error else {
+            return Err("a bad env value must be a config refusal".into());
+        };
+        assert!(
+            message.contains("unlimited") && message.contains("bytes"),
+            "the refusal must show the accepted spellings, got: {message}"
+        );
+        Ok(())
+    }
+}

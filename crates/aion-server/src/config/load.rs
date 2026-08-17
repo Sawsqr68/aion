@@ -1148,6 +1148,62 @@ mod tests {
         Ok(())
     }
 
+    /// The node cache budget parses in BOTH of haematite's spellings and
+    /// round-trips into the store view unchanged. There is no default, so what
+    /// a config states is exactly what the boot path sees.
+    #[test]
+    fn node_cache_budget_parses_both_spellings() -> Result<(), Box<dyn std::error::Error>> {
+        let bounded = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [store]
+                node_cache_budget = { bytes = 1073741824 }
+            ",
+        )?;
+        assert_eq!(
+            bounded.store.node_cache_budget,
+            Some(haematite::NodeCacheBudget::bytes(1 << 30)?),
+            "a 1 GiB ceiling arrives as a 1 GiB ceiling"
+        );
+
+        let unlimited = ServerConfig::from_slice(
+            br#"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [store]
+                node_cache_budget = "unlimited"
+            "#,
+        )?;
+        assert_eq!(
+            unlimited.store.node_cache_budget,
+            Some(haematite::NodeCacheBudget::Unlimited),
+            "`unlimited` is a stated choice, never collapsed to absent"
+        );
+        Ok(())
+    }
+
+    /// An omitted budget parses to `None` rather than to a guess. The refusal
+    /// happens where the value is USED (the haematite boot path), which
+    /// `state.rs`'s tests pin; here the point is that nothing invents one on the
+    /// way through — and that `unlimited` is distinguishable from absent.
+    #[test]
+    fn an_omitted_node_cache_budget_stays_absent() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [store]
+                shard_count = 8
+            ",
+        )?;
+        assert_eq!(config.store.node_cache_budget, None);
+        Ok(())
+    }
+
     /// An omitted flush policy parses to `None` rather than to a guess. The
     /// refusal happens where the value is used (the publisher build), which
     /// `state.rs`'s tests pin; here the point is that nothing invents a value on
