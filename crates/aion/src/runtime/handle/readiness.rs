@@ -7,13 +7,6 @@ use super::delivery::{
 };
 use super::{Pid, RuntimeHandle, runtime_error};
 
-/// Recovered readiness is a state transition, not a bounded operation. A fixed
-/// deadline can expire after the durable resume and resident registration have
-/// already succeeded, turning success into the false CLI error from #36.
-fn pending_await_deadline() -> Option<std::time::Instant> {
-    None
-}
-
 impl RuntimeHandle {
     pub(crate) fn wait_for_process_ready(&self, pid: Pid) -> Result<(), EngineError> {
         let deadline = std::time::Instant::now() + self.signal_delivery.ready_timeout;
@@ -47,9 +40,13 @@ impl RuntimeHandle {
 
     /// Wait until a recovered workflow has committed a suspending-await park.
     pub(crate) async fn wait_for_pending_await(&self, pid: Pid) -> Result<(), EngineError> {
-        debug_assert!(pending_await_deadline().is_none());
+        let budget = self
+            .signal_delivery
+            .ready_timeout
+            .saturating_mul(self.signal_delivery.max_enqueue_attempts.max(1));
+        let deadline = std::time::Instant::now() + budget;
         let mut backoff = self.signal_delivery.initial_backoff;
-        loop {
+        while std::time::Instant::now() < deadline {
             if self.nif_state.has_pending_await(pid) {
                 return Ok(());
             }
@@ -61,15 +58,51 @@ impl RuntimeHandle {
             yield_signal_delivery_backoff(backoff).await;
             backoff = next_signal_delivery_backoff(backoff, self.signal_delivery.max_backoff);
         }
+        if self.nif_state.has_pending_await(pid) {
+            Ok(())
+        } else {
+            Err(runtime_error(format!(
+                "recovered workflow process {pid} did not reach its pending await within {}ms",
+                budget.as_millis()
+            )))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::pending_await_deadline;
+    use std::sync::Arc;
 
-    #[test]
-    fn recovered_pending_await_has_no_false_error_deadline() {
-        assert_eq!(pending_await_deadline(), None);
+    use crate::runtime::RuntimeConfig;
+    use crate::runtime::nif_state::PendingAwait;
+
+    use super::RuntimeHandle;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_live_recovered_process_may_reach_its_await_after_the_old_deadline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::default())?);
+        let pid = runtime.spawn_test_process()?;
+        let old_budget = runtime
+            .signal_delivery
+            .ready_timeout
+            .saturating_mul(runtime.signal_delivery.max_enqueue_attempts.max(1));
+
+        let waiting_runtime = Arc::clone(&runtime);
+        let waiter = tokio::spawn(async move { waiting_runtime.wait_for_pending_await(pid).await });
+        tokio::time::sleep(old_budget + std::time::Duration::from_millis(50)).await;
+        assert!(
+            runtime.is_live(pid),
+            "fixture control: the recovered process must still be alive after the prior deadline"
+        );
+        runtime
+            .nif_state
+            .pending_awaits
+            .insert(pid, PendingAwait::Signal { index: 0 });
+
+        let readiness = waiter.await?;
+        runtime.terminate_test_process_with_error(pid)?;
+        runtime.shutdown()?;
+        readiness.map_err(Into::into)
     }
 }
