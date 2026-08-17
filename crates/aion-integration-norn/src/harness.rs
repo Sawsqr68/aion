@@ -802,11 +802,21 @@ mod tests {
         Ok(())
     }
 
-    /// #246 red: two dispatches for the same declared worktree currently both
-    /// spawn. The second must instead return a typed configuration refusal that
-    /// names the live sibling pid holding the tree.
+    /// #33 (was the #246 pin): the live-sibling exclusion is REAL — two
+    /// dispatches for one declared worktree must never both spawn — but the
+    /// refusal's CLASSIFICATION decides whether a healthy run survives a
+    /// server death. In the field (fleet run c1044802) recovery re-dispatched
+    /// builder legs whose original processes had SURVIVED the dead server;
+    /// the guard correctly refused the double-spawn, and the refusal — then a
+    /// `Configuration` error, deterministic by definition — was mapped to a
+    /// TERMINAL activity failure, killing a two-hour run whose work was
+    /// complete in the trees. Occupancy is transient: the holder exits or
+    /// dies, after which the next attempt cleans the marker and spawns (the
+    /// stale-marker test below). The refusal must therefore classify
+    /// RETRYABLE — a guard protecting against double-work must not convert a
+    /// live, healthy attempt into a dead workflow.
     #[tokio::test]
-    async fn second_spawn_in_one_declared_tree_is_refused_typed() -> TestResult {
+    async fn a_live_sibling_collision_is_retryable_not_terminal() -> TestResult {
         let tree = tempfile::tempdir()?;
         let binary = sleeping_binary(tree.path())?;
         let harness = NornHarness::with_binary(binary, fixed(tree.path()));
@@ -816,15 +826,23 @@ mod tests {
         let refusal = harness
             .spawn(&spec)
             .err()
-            .ok_or("today both sibling agents spawn into the same declared cwd")?;
+            .ok_or("two sibling agents must never share one declared cwd")?;
 
         assert!(
-            matches!(refusal, HarnessError::Configuration { .. }),
-            "spawn collision must be typed: {refusal:?}"
-        );
-        assert!(
             refusal.to_string().contains("live sibling pid"),
-            "{refusal}"
+            "the refusal names the holder the operator can inspect: {refusal}"
+        );
+        // The CLASSIFICATION is the load-bearing half, asserted the same way
+        // the cwd refusals above assert theirs: those are deterministic
+        // because a document value cannot change between attempts; this one
+        // is NOT, because nothing anybody wrote is wrong — the WORLD is
+        // momentarily occupied, and the occupancy ends when the holder
+        // finishes or dies.
+        assert!(
+            !refusal.is_deterministic(),
+            "live-sibling occupancy is transient, so the refusal must be \
+             retryable — a terminal refusal here is exactly the #33 kill: \
+             {refusal:?}"
         );
         drop(first);
         Ok(())
