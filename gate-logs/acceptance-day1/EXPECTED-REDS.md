@@ -82,3 +82,6 @@ Any cargo-leg red OUTSIDE these named shapes is a finding.
   (62-linux-tighten @ 51d754141, stacked on #57+#59, one battery).
 - test leg expected-red set FROM RUN 8 until the stack lands: exactly the 16
   named #62 tests. Everything else on the test leg is out of set.
+
+## Run 8 (f6bc40c0, 10:55Z, main eb485832a): Completed; reds EXACTLY the declared
+set (bun 4 / clippy lint / 16 named #62 tests / #59 fixture) — zero findings.
