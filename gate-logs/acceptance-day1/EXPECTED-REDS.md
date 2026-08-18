@@ -53,7 +53,7 @@ Any cargo-leg red OUTSIDE these named shapes is a finding.
   receipt: red gate results now route success and the workflow completes.
 - In-set reds confirmed: bun (4 named tests), clippy_workspace + clippy_server
   (the one #59 lint), gates_worker (the one #59 fixture test).
-- OUT-OF-SET finding (row #60): test leg RED — rustc ICE
+- OUT-OF-SET finding (row #60, since closed clean — see run 7): test leg RED — rustc ICE
   "incremental compilation error with exported_generic_symbols(beamr)"
   (aion-cli test awl_emit_beam) + rust-lld undefined-symbol where the
   suggested symbol EQUALS the missing one (symbol-hash mismatch,
@@ -65,3 +65,20 @@ Any cargo-leg red OUTSIDE these named shapes is a finding.
   discriminating measurement: clean ⇒ stale-artifact era closed; any fresh
   corruption shape ⇒ RAM indicted ⇒ memtester + relocation per the staged
   decision tree.
+
+## Run 7 (b976ad76, 10:07Z, main f2ec02a8e, purged target) — #60 DISCRIMINATOR
+- STATUS = Completed with failing verdict as data. NO corruption shape: full
+  compile, test leg ran 1143 tests to honest results. #60 CLOSED clean — the
+  run-6 ICE is attributed to the never-purged multi-era target. RAM remains
+  unexonerated in the record; a future corruption-shaped finding reopens the
+  memtester+relocation branch (pre-staged, Waffles seq=79 floor ruling).
+- In-set reds confirmed again: bun (4), clippy_workspace + clippy_server
+  (#59 lint), gates_worker (#59 fixture).
+- NEW out-of-set finding → row #62: test leg RED, 16 aion-server lib tests —
+  15 on one mechanism ("could not tighten it to 0700: Bad file descriptor"),
+  the 16th asserting on the variant that failure corrupts. fchmod(2) on
+  cap-std's O_PATH dir handle = EBADF on Linux; latent until run 7 because no
+  earlier test leg outlived compilation. Fix built same hour
+  (62-linux-tighten @ 51d754141, stacked on #57+#59, one battery).
+- test leg expected-red set FROM RUN 8 until the stack lands: exactly the 16
+  named #62 tests. Everything else on the test leg is out of set.
