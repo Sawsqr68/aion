@@ -40,3 +40,28 @@ Any cargo-leg red OUTSIDE these named shapes is a finding.
   NUL corruption), run-4 reds (rustc SIGSEGV) stay fenced as box-era; root
   cause for runs 3-4's corruption class = zram swap failure
   ("Decompression failed! err=-22"), zram now masked at the unit level.
+- RUN-5 "ZRAM-FREE" LABEL CORRECTED (10:05Z): root dmesg shows zram re-armed
+  itself at 09:24:40Z (2 min after the session swapoff) and stayed live until
+  the mask landed at 09:38:02Z — a window that covers run 5 entirely. Run 5
+  was NOT zram-free. #59's three findings are unaffected: each stands on its
+  own deterministic mechanism receipt (cfg-arm lint reasoning + post-fix Linux
+  clippy_rc=0; nofile 1024 read from /proc; fixture logic), not on run 5's
+  cleanliness. The first genuinely zram-free run is run 6.
+
+## Run 6 (de74088c, 09:54:51Z, main e98693d7, gates$06018b87 route-success)
+- STATUS = Completed WITH failing verdict as data — the aion#58 closure
+  receipt: red gate results now route success and the workflow completes.
+- In-set reds confirmed: bun (4 named tests), clippy_workspace + clippy_server
+  (the one #59 lint), gates_worker (the one #59 fixture test).
+- OUT-OF-SET finding (row #60): test leg RED — rustc ICE
+  "incremental compilation error with exported_generic_symbols(beamr)"
+  (aion-cli test awl_emit_beam) + rust-lld undefined-symbol where the
+  suggested symbol EQUALS the missing one (symbol-hash mismatch,
+  assistant_private_queue link). Corruption-shaped, first of its class in a
+  genuinely zram-free window. Confound: the 108G workspace target (incl.
+  incremental caches) spanned the zram + SIGSEGV eras and was never purged —
+  purged 10:03Z. btrfs root corruption_errs baseline at purge = 52683
+  (fresh error event logged 09:40:34Z). Run 7 on the purged target is the
+  discriminating measurement: clean ⇒ stale-artifact era closed; any fresh
+  corruption shape ⇒ RAM indicted ⇒ memtester + relocation per the staged
+  decision tree.
