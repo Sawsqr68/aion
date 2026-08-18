@@ -48,10 +48,14 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// freshness gate and its focused green prove the committed bytes match a fresh
 /// harvest; this checksum pins those shipped bytes rather than the pre-#241
 /// module. Repinned 2026-08-18 after the beamr 0.19.2 migration's full gate
-/// forced a fresh Gleam 1.18.1/OTP 27 closure harvest. The module set and SDK
+/// forced a fresh Gleam 1.18.1/OTP 27 closure harvest (box venue). Repinned
+/// again 2026-08-19 for the v0.18.1 landing: the closure was re-harvested on
+/// the landing gate's venue (Mac, Gleam 1.17.0/OTP 29) — BEAM bytes follow
+/// the host toolchain, so the freshness oracle is venue-bound; estate
+/// toolchain unification is tracked as its own issue. The module set and SDK
 /// version are unchanged; `committed_closure_matches_a_fresh_oracle_harvest`
 /// proves these are the current deterministic shipped bytes.
-const BUNDLE_CHECKSUM: &str = "74b3dc9043a66afb5975ad970d27b67eb509b84a98091a7d3e36fdc4f512bc3f";
+const BUNDLE_CHECKSUM: &str = "208007cf39b2d71e8c367b7688fdeb15d0eeea40da10ce4f65c34a09b8d193f7";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -157,11 +161,11 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// module, which is an input to every archive. The same-process determinism and
 /// fresh-closure tests are the controls: this pin moves with those intentional,
 /// deterministic shipped bytes. Repinned 2026-08-18 with the fresh Gleam
-/// 1.18.1/OTP 27 closure required by the beamr 0.19.2 migration gate; the
+/// landing-venue closure (see BUNDLE_CHECKSUM notes); the
 /// bundle checksum and freshness proof move in the same change, while the
 /// fixed-input assembly remains deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "7b7c9efc794a5eb10460375130d1d6bace753843d878591452c9d5be932dbe38";
+    "c98c1c087244c96661da53c137cd0b97ac78aba76c883699a981926cbb8c5b56";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
