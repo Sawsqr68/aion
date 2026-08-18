@@ -9,8 +9,10 @@
 //! each kind maps to one whole-cloth command sealed in the worker document's
 //! content hash. A caller can never choose which program runs — the language
 //! refuses parameter-as-program — so "run this local script" is not writable.
-//! An unknown kind refuses BY NAME before anything runs, because a skipped
-//! leg is indistinguishable from a green leg.
+//! An unknown kind becomes a NAMED red refusal probe in the results (a
+//! terminal route cannot leave a sequence region), so the verdict stays red
+//! and loud — a skipped leg is indistinguishable from a green leg, so no
+//! kind is ever skipped.
 //!
 //! RC AS RECORDED RESULT (classes 4, 5): every leg comes back exit-zero-always
 //! as a typed probe carrying its rc; the engine's history is the manifest.
@@ -39,9 +41,8 @@ workflow gate
   input lifecycle: String
   input legs: [LegSpec]
   input contention_rounds: Int
-  outcome measured:      type Measured,   route success
-  outcome unknown_leg:   type UnknownLeg, route failure
-  outcome unprovisioned: type NoTree,     route failure
+  outcome measured:      type Measured, route success
+  outcome unprovisioned: type NoTree,   route failure
 
 /// One requested leg. `kind` selects from the closed vocabulary; the other
 /// fields parameterize the kinds that need them and are ignored by the kinds
@@ -53,7 +54,14 @@ type LegSpec { kind: String, crate_name: String, jobs: Int, pattern: String }
 /// One measured leg: the kind echoed back, the rc as recorded fact, the
 /// contention classification derived from the leg's own log, and the log's
 /// path in the tree (the tree is the blackboard; the log is the evidence).
-type LegProbe { kind: String, rc: Int, contended: Bool, log_path: String, refusal: String }
+type LegProbe {
+  kind: String,
+  green: Bool,
+  rc: Int,
+  contended: Bool,
+  log_path: String,
+  refusal: String,
+}
 
 /// The tree's identity probe: refusal as data, and the head commit that pins
 /// every verdict this run emits to the exact tree it measured.
@@ -69,10 +77,6 @@ type Measured {
   provenance: String,
   lifecycle: String,
 }
-
-/// A leg kind outside the closed vocabulary, refused by name before anything
-/// runs. The reason names the accepted set so the remedy is in the refusal.
-type UnknownLeg { unknown_count: Int, reason: String }
 
 /// The tree was not there to measure.
 type NoTree { refusal: String, tree: String }
@@ -99,46 +103,46 @@ worker gate_ops
   /// authoring loop, not in the gate).
   action run_fmt_check(tree: String, kind: String) -> LegProbe
     timeout 30m, retry 2 every 30s
+  /// Refuse a leg kind outside the closed vocabulary — as a NAMED red probe
+  /// (green: false, refusal naming the accepted set), because a terminal
+  /// route cannot leave a sequence region and a silently skipped leg would
+  /// read as green. The refusal probe keeps the verdict red and loud.
+  action refuse_leg(kind: String) -> LegProbe
+    timeout 5m, retry 2 every 30s
   /// The lock witness: a dependency floor is proven at the RESOLVED LOCK,
   /// never at a manifest line — rows matching the refused-version pattern
   /// red the leg (a patch is witnessed at the lock).
   action run_lock_witness(tree: String, kind: String, crate_name: String, pattern: String) -> LegProbe
     timeout 5m, retry 2 every 30s
 
-/// Refuse any leg kind outside the closed vocabulary BY NAME, before anything
-/// is measured — a silently skipped leg would read as green.
-step admit
-  legs |> filter(.kind != "test_workspace" and .kind != "clippy_workspace" and .kind != "clippy_crate" and .kind != "test_crate_lib" and .kind != "fmt_check" and .kind != "lock_witness") -> unknown
-  unknown |> count -> unknown_count
-  outcome ok: when unknown_count == 0, route provision_check
-  outcome refused: otherwise,
-    route unknown_leg(unknown_count: unknown_count,
-      reason: "gate serves exactly: test_workspace, clippy_workspace, clippy_crate, test_crate_lib, fmt_check, lock_witness — an unknown kind is refused by name, never skipped")
-
 /// The tree must exist and identify itself before any verdict can be about it.
 step provision_check
   probe_tree(tree: tree) -> tree_probe
   outcome ok: when tree_probe.ok, route open
-  outcome missing: otherwise, route unprovisioned(refusal: tree_probe.refusal, tree: tree)
+  outcome missing: otherwise,
+    route unprovisioned(refusal: tree_probe.refusal, tree: tree)
 
 /// One leg at a time, in the caller's order — gate legs contend for the same
 /// box, so the sequence region is the honest shape.
 step open
   sequence leg in legs
 
-/// Select the leg's action from the closed vocabulary. The otherwise arm is
-/// unreachable by construction (admit validated every kind); it routes
-/// honestly rather than pretending totality.
-step dispatch
+/// Select the leg's action from the closed vocabulary. An unknown kind
+/// routes to the refusal action: a named red probe in the results, because
+/// a skipped leg is indistinguishable from a green one and a terminal route
+/// cannot leave the region.
+step dispatch after open
   outcome a: when leg.kind == "test_workspace", route leg_test_workspace
   outcome b: when leg.kind == "clippy_workspace", route leg_clippy_workspace
   outcome c: when leg.kind == "clippy_crate", route leg_clippy_crate
   outcome d: when leg.kind == "test_crate_lib", route leg_test_crate_lib
   outcome e: when leg.kind == "fmt_check", route leg_fmt_check
   outcome f: when leg.kind == "lock_witness", route leg_lock_witness
-  outcome ghost: otherwise,
-    route unknown_leg(unknown_count: 1,
-      reason: "a leg kind escaped admit validation — unreachable by construction, recorded rather than swallowed")
+  outcome unknown: otherwise, route leg_unknown
+
+step leg_unknown
+  refuse_leg(kind: leg.kind) -> probe
+  route settle
 
 step leg_test_workspace
   run_test_workspace(tree: tree, kind: leg.kind, jobs: leg.jobs) -> probe
@@ -169,18 +173,22 @@ step leg_lock_witness
 /// moves on — contention never launders a genuine red, because the rerun's
 /// own probe replaces the contended one and is judged on its own rc.
 step settle
-  outcome rerun: when probe.contended and probe.rc != 0 and visits < contention_rounds, route dispatch
+  outcome rerun: when probe.contended and not probe.green and visits < contention_rounds,
+    route dispatch
   outcome next: otherwise, route close
   max 9 visits
+
+/// Close the region: every leg's probe, in the caller's order.
+step close
+  collect probe -> probes
+  route verdict
 
 /// The verdict: green is the conjunction over every collected probe, and it
 /// travels WITH the probes and the head commit — a parent routes on the
 /// verdict but cites the evidence.
-step close
-  collect probe -> probes
-  probes |> filter(.rc != 0) -> reds
-  reds |> count -> red_count
-  outcome green: when red_count == 0,
+step verdict
+  probes |> all(.green) -> all_green
+  outcome green: when all_green,
     route measured(green: true, head_commit: tree_probe.head_commit, legs: probes,
       provenance: provenance, lifecycle: lifecycle)
   outcome red: otherwise,
