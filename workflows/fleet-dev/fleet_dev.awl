@@ -54,7 +54,6 @@
 //! charter but unverified. The landing re-gate and the landing itself stay
 //! at the operator's desk, after the pushed branch arrives.
 workflow fleet_dev
-  timeout 12h
   input workspace_root: String
   input run_name: String
   input repo_url: String
@@ -212,12 +211,12 @@ worker counsel
   /// `.fleet/plan.md` plus one complete builder brief per leg, and COMMITS
   /// them — an uncommitted plan fails `plan_check` by law.
   action plan(repo: String, prompt: String) -> Reply
-    agent, timeout 30m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
   /// The judge. Two duties, in its charter, carried in the prompt: the
   /// permitted-choice points first, the hard-wall audit second. Never the
   /// gates. Replies with exactly the admission token, or with its findings.
   action judge(repo: String, prompt: String) -> Reply
-    agent, timeout 30m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
 
 worker dev
   /// The builders' seat: queue `dev`, the same action seam as `norn_dev`'s
@@ -238,7 +237,7 @@ worker dev
     args "--account", "default"
     cwd from repo
   action delegate(repo: String, prompt: String) -> Reply
-    agent, timeout 90m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
 
 worker fleet_ops
   /// The mechanical half, served by `aion worker awl` on the box from
