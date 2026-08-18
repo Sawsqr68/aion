@@ -500,7 +500,7 @@ async fn signal_between_spawns_preserves_child_identities_across_restart() -> Te
 /// must name the parent — so a handoff chain is traversable backward from
 /// any run and the console can group an arc without scanning every parent
 /// history. Before the fix this recorded `parent_workflow_id: None` /
-/// `parent_run_id: None` (live exhibit 2026-08-18, handoff_b showing
+/// `parent_run_id: None` (live exhibit 2026-08-18, `handoff_b` showing
 /// `parent: None`), which is exactly the assertion below red.
 #[tokio::test]
 async fn spawned_child_records_its_parent_and_the_summary_names_it() -> TestResult {
