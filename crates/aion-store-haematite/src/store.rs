@@ -284,9 +284,11 @@ impl HaematiteStore {
     ///
     /// `node_cache_budget` is REQUIRED and has no default here for the same
     /// reason it has none on [`create`](HaematiteStore::create): the byte
-    /// ceiling is the caller's deployment decision. It is consumed only on the
-    /// creating generation — an existing database carries the budget it was
-    /// created with.
+    /// ceiling is the caller's deployment decision. On the creating generation
+    /// it is recorded into the new store; on an opening generation it is the
+    /// migration ruling [`open`](HaematiteStore::open) adopts into a store
+    /// that predates the field — a store that already rules on its budget
+    /// keeps its recorded ruling and this value is ignored.
     ///
     /// # Errors
     ///
@@ -304,7 +306,7 @@ impl HaematiteStore {
             // `tempfile::tempdir()` shape) down the `open` branch, where it
             // errors, from a constructor whose name promises creation.
             if data_dir.join("config.json").exists() {
-                Self::open(&data_dir)
+                Self::open(&data_dir, node_cache_budget)
             } else {
                 Self::create(data_dir, node_cache_budget)
             }
@@ -317,10 +319,27 @@ impl HaematiteStore {
 
     /// Open an existing single-node store rooted at `data_dir`.
     ///
+    /// `node_cache_budget` is the caller's ruling for stores that PREDATE the
+    /// budget field: haematite records the budget in the persisted
+    /// `config.json` and refuses to open a config that does not rule on it, so
+    /// a store written before the field existed would refuse forever after an
+    /// engine upgrade — an update presenting as data loss (aion#75). Before
+    /// opening, this constructor adopts the supplied ruling into such a config
+    /// once, atomically. A store that already rules on its budget is never
+    /// touched: the recorded ruling wins over this value, always, so a restart
+    /// cannot silently re-cut a ceiling the operator chose at creation.
+    ///
     /// # Errors
     ///
-    /// Returns [`StoreError::Backend`] when haematite cannot open the database.
-    pub fn open(data_dir: impl AsRef<std::path::Path>) -> Result<Self, StoreError> {
+    /// Returns [`StoreError::Backend`] when the persisted config cannot be
+    /// read or (when adoption is needed) atomically rewritten, or when
+    /// haematite cannot open the database.
+    pub fn open(
+        data_dir: impl AsRef<std::path::Path>,
+        node_cache_budget: NodeCacheBudget,
+    ) -> Result<Self, StoreError> {
+        let data_dir = data_dir.as_ref();
+        crate::config_migration::adopt_node_cache_budget(data_dir, node_cache_budget)?;
         let database = Database::open(data_dir).map_err(|error| database_error(&error))?;
         Ok(Self::from_database(database))
     }
@@ -482,6 +501,10 @@ impl HaematiteStore {
             // An EXISTING database carries its own recorded budget in
             // `config.json`; haematite reads it back on open, so the operator's
             // current ruling does not silently re-cut an already-created store.
+            // A store that PREDATES the budget field carries no ruling at all
+            // and would refuse to open forever (aion#75) — adopt the caller's
+            // ruling into it once before opening; a recorded ruling wins.
+            crate::config_migration::adopt_node_cache_budget(data_dir, node_cache_budget)?;
             Database::open(data_dir).map_err(|error| database_error(&error))?
         } else {
             Database::create(DatabaseConfig {
@@ -4653,7 +4676,7 @@ mod tests {
             // Drop closes the store; haematite committed each write durably.
         }
 
-        let reopened = HaematiteStore::open(&dir)?;
+        let reopened = HaematiteStore::open(&dir, test_node_cache_budget()?)?;
         assert_eq!(
             reopened.read_history(&workflow_id).await?.len(),
             1,
@@ -4683,6 +4706,81 @@ mod tests {
             reopened.list_package_routes().await?.len(),
             1,
             "package route survives reopen"
+        );
+        Ok(())
+    }
+
+    /// aion#75: a store whose persisted config PREDATES `node_cache_budget`
+    /// must open — with its data intact — when the caller supplies a ruling,
+    /// instead of refusing forever after an engine upgrade. The arrange
+    /// re-creates the exhibit's literal prior state: a genuinely created store
+    /// whose `config.json` has the budget field stripped back out, exactly the
+    /// file a pre-budget haematite wrote. Without the adoption migration this
+    /// reopen dies on haematite's `MissingNodeCacheBudget`; the migration must
+    /// turn that red green, record the ruling, and never touch the file again.
+    #[tokio::test]
+    async fn pre_budget_store_opens_by_adopting_the_callers_ruling()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = unique_dir("pre-budget-adopt");
+        let workflow_id = WorkflowId::new_v4();
+
+        {
+            let store = HaematiteStore::create(&dir, test_node_cache_budget()?)?;
+            let event = aion_core::Event::WorkflowStarted {
+                envelope: aion_core::EventEnvelope {
+                    seq: 1,
+                    recorded_at: Utc::now(),
+                    workflow_id: workflow_id.clone(),
+                },
+                workflow_type: String::from("checkout"),
+                input: Payload::new(ContentType::Json, b"{}".to_vec()),
+                run_id: aion_core::RunId::new_v4(),
+                parent_run_id: None,
+                package_version: aion_core::PackageVersion::new("a".repeat(64)),
+            };
+            store
+                .append(WriteToken::recorder(), &workflow_id, &[event], 0)
+                .await?;
+        }
+
+        // Strip the recorded ruling: the config file becomes the LITERAL shape
+        // a pre-budget haematite persisted (same fields, no budget key).
+        let config_path = dir.join("config.json");
+        let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+        let fields = config
+            .as_object_mut()
+            .ok_or("persisted config must be a JSON object")?;
+        assert!(
+            fields.remove("node_cache_budget").is_some(),
+            "the created store must have recorded a budget to strip"
+        );
+        std::fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
+
+        // The migration path: open with a ruling in hand — green, data intact.
+        let reopened = HaematiteStore::open(&dir, test_node_cache_budget()?)?;
+        assert_eq!(
+            reopened.read_history(&workflow_id).await?.len(),
+            1,
+            "event history survives the adopting reopen"
+        );
+        drop(reopened);
+
+        // The ruling was recorded durably: the config rules on the budget now.
+        let adopted: serde_json::Value = serde_json::from_slice(&std::fs::read(&config_path)?)?;
+        assert_eq!(
+            adopted.get("node_cache_budget"),
+            Some(&serde_json::json!({ "bytes": 1_073_741_824_u64 })),
+            "the adopting open must record the caller's ruling"
+        );
+
+        // And `open_or_create` routes an existing store through the same
+        // adoption, so the server's fixture path is covered too.
+        let via_open_or_create =
+            HaematiteStore::open_or_create(&dir, test_node_cache_budget()?).await?;
+        assert_eq!(
+            via_open_or_create.read_history(&workflow_id).await?.len(),
+            1,
+            "open_or_create reopens the adopted store"
         );
         Ok(())
     }

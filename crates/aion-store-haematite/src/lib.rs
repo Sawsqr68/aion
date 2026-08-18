@@ -37,6 +37,8 @@
 //! # }
 //! ```
 
+/// Pre-open adoption of `node_cache_budget` into stores that predate the field.
+mod config_migration;
 mod error;
 mod keyspace;
 /// Namespace-registry shard resolution ([`HaematiteStore::shard_for_namespace`]).
