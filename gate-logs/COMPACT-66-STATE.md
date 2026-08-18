@@ -5031,3 +5031,30 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
   .fleet/sessions/ capture leg; green gate logs die with teardown; leg branch refs
   not pushed.
 - Slot-6 battery still running (watcher bnfrb9gsa).
+
+## ZU-8d — 13:05Z night cycle rolling
+
+- **FIX ROUND LIVE (flight one)**: children home, fanin+report_check green, GATE RED exit 127
+  ("cargo: not found" — gate entry's $HOME PATH line didn't survive the worker run env; 6th
+  env-class bug today, MINE, caught by the machine). Findings committed to RED-LATEST.md,
+  workflow routed fixable, dev seat IN FIX ROUND (no intervention — this IS the clause-2 demo).
+  Waffles holds Tom's milestone DM for the round-2 verdict, whole-arc either way.
+- **INVESTIGATIONS 4/4 Reproduced-high-filed**: #63, #51 (5328273976), #53 (5328498187:
+  fill_home_defaults adopts ~/.aion/data), #13 (5328523850: term_to_payload err discarded
+  by .ok()). Dispatched next: investigate-9 (4f8ea267) + investigate-56 (1ef78cdb),
+  monitor bo080db2q. Dev-flight backlog order: hardening cargo → #51 → #53 → #13 fixes.
+- **Line-6 population audit ACCEPTED** (Waffles): #62 leg = aion-server unit population
+  (1143/1143, reconciles my old record), #59 leg = lane_gates_worker crate; gleam runtime
+  covered by Mac leg; lands with populations named. Battery (relaunched 12:50, tracked task
+  bv1v2gwhi) still running.
+- **Rulings**: rocketfish RAM = 2×16G IS the build ("it's the Galaxy") — dead-stick closed;
+  memtest = scheduled-downtime item. Rocketfish erl/gleam provisioning HELD until Artemis's
+  #64 loader verdict (my blast-radius argument accepted, overruled Waffles' tonight-ops).
+  Rocketfish census: gleam/erl/erlc ALL absent (clean never-provisioned).
+- **#64**: round-4 (bt full) artifacts on box hang-4/; round-5 loud loader RERUNNING (first
+  pass = non-run: empty CLI var, 2115 fake failures, killed by own law; binary is
+  target/debug/beamr). Census: box OTP27/gleam1.18.1 vs Mac OTP29/gleam1.17.0; rocketfish
+  never ran gleam tests (no erl) — "box class" was the toolchain.
+- **Scoping docs owed tonight**: rocketfish (RAM story closed, memtest downtime item, class
+  of work = gates-offload; dev seat = measurement question) + Dean-Mac (auth list for Tom's
+  docket: claude, norn, gh; python double-fork launch; which seats). Cron 47fabb1d ticks :43.
