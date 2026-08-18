@@ -170,6 +170,27 @@ asyncio.run(main())
 `Worker(...)` derives the descriptors at construction, so a handler that cannot
 advertise what it returns fails before the process dials.
 
+## Liveness
+
+Staying registered and staying dispatchable are the runtime's job, not your
+handler's. Three separate obligations, all discharged automatically, all on a
+cadence derived from the server's own heartbeat window (carried to the worker
+on the `RegisterAck`) — there is no knob for any of them, because the window is
+the server operator's contract and a second copy of it here would be free to
+disagree with it. The Rust SDK implements the same three.
+
+| The server asks | The worker answers | If it does not |
+| --- | --- | --- |
+| Is this connection still alive? | one heartbeat with no task ids, every quarter-window, **even when nothing is in flight** | the connection lease expires, the worker is deregistered, and it must redial |
+| Is this activity still progressing? | one heartbeat per in-flight activity, every quarter-window | the activity is treated as lost and re-dispatched |
+| Can I still reach this worker? | `LivenessAnswer` echoing the ping's sequence, the moment it arrives | dispatch eligibility is withdrawn: the worker looks connected but selection reports no eligible worker |
+
+A wedged Python event loop stops all three, which is correct — that is exactly
+the process the server needs to expire.
+
+`ActivityContext.heartbeat(detail)` stays the way to attach **progress** to an
+activity. It is never required to keep a worker alive.
+
 ## Failure classification
 
 - Raise `TerminalError` for something a retry cannot change. Subclassing works

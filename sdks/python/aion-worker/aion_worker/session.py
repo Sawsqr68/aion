@@ -325,7 +325,37 @@ class DrainReceived:
     """
 
 
-WorkerSessionEvent: TypeAlias = TaskReceived | ActivityCancelled | ResultAcknowledged | DrainReceived
+@dataclass(frozen=True)
+class LivenessPingReceived:
+    """The server is asking whether it can still reach this worker (#197).
+
+    The probe pings every gRPC-delivered worker over its own task stream and
+    withdraws dispatch eligibility from any worker that does not answer within
+    the cadence — it is spawned wherever the liminal listener boots and is not
+    opt-in, so a worker that cannot answer is excluded from dispatch on any
+    such server while looking perfectly healthy from the outside.
+
+    Answering is a RUNTIME obligation, discharged by the serve loop through
+    :meth:`WorkerSession.answer_liveness_ping`. No handler is consulted: the
+    question is about the transport, not about the work.
+    """
+
+    sequence: int
+    """The ping's monotonic sequence, echoed VERBATIM on the answer.
+
+    The server correlates the answer against the ping it actually sent, so a
+    stale or reordered answer cannot be mistaken for a fresh one — and a
+    sequence the worker invented would prove nothing while looking like proof.
+    """
+    silence_window_ms: int
+    """How long this worker may hear NOTHING on this stream before it should
+    treat the link as dead — the server's own configured heartbeat window,
+    carried on the wire so the worker never holds a second copy of it."""
+
+
+WorkerSessionEvent: TypeAlias = (
+    TaskReceived | ActivityCancelled | ResultAcknowledged | DrainReceived | LivenessPingReceived
+)
 
 
 @dataclass(frozen=True)
@@ -381,6 +411,33 @@ class WorkerSession(Protocol):
         progress: Payload | None,
     ) -> None:
         """Send cooperative activity progress."""
+
+    async def send_connection_heartbeat(self) -> None:
+        """Beat the worker CONNECTION's lease, with no task identifiers.
+
+        A separate obligation from :meth:`send_heartbeat`, and not satisfiable
+        by it: the server holds a connection-level lease that every inbound
+        frame advances and that expires the worker outright when a whole
+        heartbeat window passes without one, so a worker with nothing in flight
+        has no task beat to ride on and must send this instead. The gRPC
+        transport encodes it on the existing heartbeat path with neither task
+        id set, which the server accepts as exactly this
+        (``aion-server/src/api/worker_grpc.rs``).
+
+        Required rather than optional: a session that advertises a server
+        heartbeat window and then cannot beat the lease it was given would be
+        deregistered on a schedule with nothing in the SDK to say why.
+        """
+
+    async def answer_liveness_ping(self, sequence: int) -> None:
+        """Answer a :class:`LivenessPingReceived`, echoing ``sequence`` verbatim.
+
+        A RUNTIME obligation the serve loop discharges directly, mirroring
+        ``aion_worker::runtime::loop_::answer_ping`` in the Rust SDK: no
+        handler is consulted and no concurrency permit is taken, because the
+        server is asking whether it can REACH this worker and a worker that is
+        busy is reachable.
+        """
 
 
 class GrpcWorkerSession:
@@ -508,6 +565,27 @@ class GrpcWorkerSession:
             heartbeat.progress.CopyFrom(progress)
         await self._send_to_server(worker_pb2.WorkerToServer(heartbeat=heartbeat))
 
+    async def send_connection_heartbeat(self) -> None:
+        """Send a `Heartbeat` with NEITHER task id set.
+
+        The empty ids are the whole message: the server advances the
+        connection lease on the frame's arrival and then, finding no task
+        identifiers, records no per-task liveness — which is correct, because
+        this beat says "the process is alive and the link carries", not
+        "some activity is progressing". Setting either id would make the
+        server look for an in-flight task that does not exist and reject the
+        frame as a heartbeat for an untracked activity.
+        """
+
+        await self._send_to_server(worker_pb2.WorkerToServer(heartbeat=worker_pb2.Heartbeat()))
+
+    async def answer_liveness_ping(self, sequence: int) -> None:
+        """Echo ``sequence`` back on `WorkerToServer.liveness_answer` (#197)."""
+
+        await self._send_to_server(
+            worker_pb2.WorkerToServer(liveness_answer=worker_pb2.LivenessAnswer(liveness_ping=sequence))
+        )
+
     async def close(self) -> None:
         outbound = self._outbound
         if outbound is not None:
@@ -631,6 +709,18 @@ def decode_server_message(message: Message) -> WorkerSessionEvent:
     if which == "result_ack":
         ack = message.result_ack
         return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+    if which == "liveness_ping":
+        # #197: answered by the serve loop, never by action code. Decoded here
+        # rather than answered here so the answer stays on the runtime's own
+        # path — and so a frame the runtime cannot answer becomes an
+        # unanswered ping (an honest verdict about the link) instead of an
+        # exception out of the receive generator, which would tear the whole
+        # session down over a question about it.
+        ping = message.liveness_ping
+        return LivenessPingReceived(sequence=ping.liveness_ping, silence_window_ms=ping.silence_window_ms)
+    if which == "cancel_activity":
+        cancel = message.cancel_activity
+        return ActivityCancelled(workflow_id=cancel.workflow_id, activity_id=cancel.activity_id)
     if which == "register_ack":
         # The ack is consumed inside register(); a second one mid-stream is a
         # server ordering bug that must surface.

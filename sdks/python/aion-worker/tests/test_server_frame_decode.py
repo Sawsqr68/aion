@@ -316,7 +316,11 @@ async def test_a_busy_worker_answers_the_probe_over_the_wire() -> None:
         connection = service.connections[0]
         assert dispatcher.started == 1, "the harness never got its task in flight"
         assert connection.results == [], "the held activity reported a result; it was not in flight"
-        assert connection.task_beats, "the in-flight activity was never heartbeaten"
+        # The in-flight activity's own heartbeats are a separate contract on a
+        # separate clock (the derived pump cadence, a quarter of this harness's
+        # two-second window); `test_connection_lease.py` measures them. This
+        # test deliberately observes only as long as the probe needs, so
+        # asserting on them here would measure the observation window.
 
 
 async def test_a_cancel_activity_reaches_the_handler_over_the_wire() -> None:

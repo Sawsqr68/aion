@@ -182,6 +182,23 @@ class FakeSession:
     ) -> None:
         self.log.append(f"heartbeat:{activity.sequence_position}")
 
+    async def send_connection_heartbeat(self) -> None:
+        """Recorded, not ignored, so a stray connection beat is visible.
+
+        The base fake advertises no server heartbeat window, so the serve loop
+        never arms the pump against it and this is never called — which is
+        itself the assertion: a beat appearing in ``log`` here would mean the
+        runtime invented a cadence for a session that was given none. Subclasses
+        that DO advertise a window override this to count.
+        """
+
+        self.log.append("connection-heartbeat")
+
+    async def answer_liveness_ping(self, sequence: int) -> None:
+        """Record the runtime's answer to a transport liveness ping (#197)."""
+
+        self.log.append(f"liveness-answer:{sequence}")
+
     async def close(self) -> None:
         self.closed = True
         self.log.append("close")

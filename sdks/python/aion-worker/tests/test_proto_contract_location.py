@@ -147,14 +147,25 @@ def test_the_hand_written_service_stub_describes_the_generated_service() -> None
     from aion_worker.proto import worker_pb2_grpc
 
     stub_source = (COMMITTED_STUBS / "worker_pb2_grpc.pyi").read_text()
-    for declared in ("WorkerProtocolStub", "StreamWorker"):
+    declarations = (
+        "WorkerProtocolStub",
+        "StreamWorker",
+        # The SERVER half of the same hand-written stub. Declared because the
+        # SDK's own wire-level tests stand up a real `WorkerProtocol` service
+        # to exercise the connection lease and the liveness probe, and an
+        # undeclared servicer would be a second silent-drift surface of exactly
+        # the shape this test exists to close.
+        "WorkerProtocolServicer",
+        "add_WorkerProtocolServicer_to_server",
+    )
+    for declared in declarations:
         assert declared in stub_source, f"the hand-written service stub no longer declares {declared!r}"
 
-    assert hasattr(worker_pb2_grpc, "WorkerProtocolStub"), (
-        "the hand-written stub declares WorkerProtocolStub but the generated "
-        "module does not define it; the service was renamed in worker.proto and "
-        "the stub was not updated"
-    )
+    for declared in ("WorkerProtocolStub", "WorkerProtocolServicer", "add_WorkerProtocolServicer_to_server"):
+        assert hasattr(worker_pb2_grpc, declared), (
+            f"the hand-written stub declares {declared!r} but the generated module does not "
+            "define it; the service was renamed in worker.proto and the stub was not updated"
+        )
 
     # Build the generated stub for real. Its `__init__` binds each RPC as an
     # INSTANCE attribute via the channel, so `hasattr` on the class proves

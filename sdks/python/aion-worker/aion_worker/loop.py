@@ -31,6 +31,7 @@ from .session import (
     ActivityId,
     ActivityTask,
     DrainReceived,
+    LivenessPingReceived,
     Payload,
     ResultAcknowledged,
     TaskReceived,
@@ -155,13 +156,14 @@ async def serve(
     running: set[asyncio.Task[None]] = set()
     in_flight: dict[_InFlightKey, _InFlightEntry] = {}
     stream = session.receive_tasks().__aiter__()
-    # The RUNTIME owns liveness (#176): a session registered against a server
-    # heartbeat window automatically heartbeats every in-flight activity at a
-    # quarter-window cadence, so the server's heartbeat sweeper only ever
-    # expires a genuinely dead/wedged process — never a healthy worker running
-    # a legitimately long activity. Sessions without a window (fakes, tests)
-    # never pump. Explicit `ActivityContext.heartbeat` calls remain the way to
-    # attach PROGRESS payloads.
+    # The RUNTIME owns liveness (#176, #26): a session registered against a
+    # server heartbeat window automatically beats its CONNECTION lease and
+    # every in-flight activity at a quarter-window cadence, so the server's
+    # sweepers only ever expire a genuinely dead/wedged process — never a
+    # healthy worker running a legitimately long activity, and never a healthy
+    # worker that simply has nothing to do. Sessions without a window (fakes,
+    # tests) never pump. Explicit `ActivityContext.heartbeat` calls remain the
+    # way to attach PROGRESS payloads.
     window_seconds = _heartbeat_window_seconds(session)
     pump: asyncio.Task[None] | None = None
     if window_seconds is not None:
@@ -185,6 +187,14 @@ async def serve(
                 # Acks are bookkeeping, not work: handled without acquiring
                 # a concurrency slot. An unknown ack is a logged no-op.
                 _acknowledge_result(event, unacked)
+            elif isinstance(event, LivenessPingReceived):
+                # #197: the RUNTIME answers, inline and without acquiring a
+                # concurrency permit. The server is asking whether it can
+                # reach this worker's dispatch path, and a worker at full
+                # concurrency is reachable — an answer that waited for a
+                # permit would withdraw eligibility from exactly the workers
+                # doing the most work.
+                await _answer_liveness_ping(session, event)
             elif isinstance(event, DrainReceived):
                 logger.info("Server drain received; finishing in-flight work before reconnect")
                 if health is not None:
@@ -598,6 +608,23 @@ async def _report_outcome(
     logger.info("reported activity failure", extra=_log_fields(task.workflow_id, task.activity_id, task.activity_type))
 
 
+async def _answer_liveness_ping(session: WorkerSession, event: LivenessPingReceived) -> None:
+    """Echo one transport liveness ping back to the server (#197).
+
+    A failure here is NOT swallowed: it propagates out of the serve loop, where
+    the reconnect machinery classifies it exactly as any other send failure on
+    this session. A worker that cannot answer is a worker the server cannot
+    prove it reaches, and pretending otherwise would leave it apparently
+    healthy and permanently undispatchable.
+    """
+
+    logger.debug(
+        "answering the server's transport liveness ping",
+        extra={"liveness_ping": event.sequence, "silence_window_ms": event.silence_window_ms},
+    )
+    await session.answer_liveness_ping(event.sequence)
+
+
 def _handle_control_event(event: WorkerSessionEvent, in_flight: dict[_InFlightKey, _InFlightEntry]) -> None:
     if isinstance(event, ActivityCancelled):
         logger.info(
@@ -630,34 +657,63 @@ def _heartbeat_window_seconds(session: WorkerSession) -> float | None:
     return float(seconds)
 
 
+def _liveness_pump_interval(window_seconds: float) -> float:
+    """Automatic liveness cadence derived from the server-assigned window.
+
+    A quarter of the window, floored at a millisecond. Roughly four beats fit
+    in every window, so an individual beat delayed by a busy loop iteration
+    still lands well inside the contract the server judges this worker against.
+
+    Deliberately DERIVED and not configurable: the window is the server
+    operator's contract, carried to this worker on the ``RegisterAck``, and the
+    pump cadence is an implementation detail of honouring it. A knob here would
+    be a second copy of somebody else's number, free to disagree with it.
+    Mirrors ``aion_worker::runtime::loop_::liveness_pump_interval``.
+    """
+
+    return max(window_seconds / 4.0, 0.001)
+
+
 async def _pump_liveness(
     session: WorkerSession,
     in_flight: dict[_InFlightKey, _InFlightEntry],
     window_seconds: float,
 ) -> None:
-    """Automatically heartbeat every in-flight activity at a quarter-window cadence.
+    """Beat the connection lease, then every in-flight activity, per tick.
 
-    The server's heartbeat sweeper expires any worker whose in-flight task
-    goes a full window without a heartbeat — that is dead/wedged-PROCESS
-    detection, and a healthy process running a legitimately long handler must
-    never trip it, so keeping tasks beating is the runtime's job, not each
-    handler's (#176). A wedged event loop stops this pump and is correctly
-    expired. Automatic beats never carry progress; explicit
+    Two distinct server-side expiries, and one beat does not cover the other:
+
+    * the CONNECTION lease is advanced by any inbound frame and expires the
+      whole worker after one window of silence, so the empty-id beat goes out
+      on every tick whether or not anything is in flight (#26 — an idle worker
+      that sent nothing was deregistered every window and redialled, using
+      reconnection as a keepalive);
+    * the per-TASK liveness sweeper expires an in-flight activity that goes a
+      window without a heartbeat, which is dead/wedged-PROCESS detection a
+      healthy worker running a legitimately long handler must never trip
+      (#176), so keeping tasks beating is the runtime's job and not each
+      handler's.
+
+    A wedged event loop stops this pump and is correctly expired by both.
+    Automatic beats never carry progress; explicit
     :meth:`aion_worker.ActivityContext.heartbeat` calls own that channel.
     """
 
-    interval = max(window_seconds / 4.0, 0.001)
+    interval = _liveness_pump_interval(window_seconds)
     while True:
         await asyncio.sleep(interval)
-        for entry in list(in_flight.values()):
-            try:
+        try:
+            # The connection lease first, and unconditionally: it is the beat
+            # an idle worker's registration depends on.
+            await session.send_connection_heartbeat()
+            for entry in list(in_flight.values()):
                 await session.send_heartbeat(entry.workflow_id, entry.activity_id, None)
-            except Exception as exc:
-                # The session's send path is broken; the receive stream is
-                # about to surface the same transport failure and end the
-                # serve loop, so stop pumping rather than spamming failures.
-                logger.warning("automatic liveness heartbeat failed; pump stopped: %s", exc)
-                return
+        except Exception as exc:
+            # The session's send path is broken; the receive stream is about
+            # to surface the same transport failure and end the serve loop, so
+            # stop pumping rather than spamming failures.
+            logger.warning("automatic liveness heartbeat failed; pump stopped: %s", exc)
+            return
 
 
 def _in_flight_key(workflow_id: WorkflowId, activity_id: ActivityId) -> _InFlightKey:

@@ -29,6 +29,8 @@ class RecordingSession:
     results: list[tuple[int, common_pb2.Payload]] = field(default_factory=list)
     failures: list[tuple[int, worker_pb2.ActivityError]] = field(default_factory=list)
     heartbeats: list[tuple[int, common_pb2.Payload | None]] = field(default_factory=list)
+    connection_heartbeats: int = 0
+    liveness_answers: list[int] = field(default_factory=list)
 
     async def handshake(self, worker_config: WorkerConfig) -> None:
         self.handshakes.append((worker_config.task_queue, worker_config.identity))
@@ -81,6 +83,12 @@ class RecordingSession:
     ) -> None:
         del workflow
         self.heartbeats.append((activity.sequence_position, progress))
+
+    async def send_connection_heartbeat(self) -> None:
+        self.connection_heartbeats += 1
+
+    async def answer_liveness_ping(self, sequence: int) -> None:
+        self.liveness_answers.append(sequence)
 
     async def _receive(self) -> AsyncIterator[aion_worker.WorkerSessionEvent]:
         while True:
