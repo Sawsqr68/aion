@@ -435,6 +435,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -948,6 +949,7 @@ mod tests {
                 input: payload("first")?,
                 run_id: first.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowContinuedAsNew {
@@ -962,6 +964,7 @@ mod tests {
                 input: payload("next")?,
                 run_id: second.clone(),
                 parent_run_id: Some(first),
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         ];

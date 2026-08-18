@@ -92,6 +92,7 @@ fn parent_run_started(seq: u64, run_id: u128) -> Option<Event> {
         input: Payload::from_json(&json!({})).ok()?,
         run_id: RunId::new(uuid::Uuid::from_u128(run_id)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     })
 }
@@ -121,6 +122,7 @@ fn child_run_started() -> Option<Event> {
         input: Payload::from_json(&json!({})).ok()?,
         run_id: RunId::new(uuid::Uuid::from_u128(CHILD_RUN)),
         parent_run_id: Some(RunId::new(uuid::Uuid::from_u128(PARENT_RUN))),
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     })
 }

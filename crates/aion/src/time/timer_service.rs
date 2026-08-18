@@ -467,6 +467,7 @@ mod tests {
             input: aion_core::Payload::new(aion_core::ContentType::Json, b"null".to_vec()),
             run_id: aion_core::RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         }
     }

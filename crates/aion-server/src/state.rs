@@ -2655,6 +2655,7 @@ mod tests {
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: PackageVersion::new("a".repeat(64)),
         };
         event_store

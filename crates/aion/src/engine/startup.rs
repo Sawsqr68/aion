@@ -192,6 +192,7 @@ async fn seed_schedule_coordinator_history(store: Arc<dyn EventStore>) -> Result
                 input,
                 run_id,
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: schedule_coordinator_package_version(),
             },
         )

@@ -84,6 +84,7 @@ fn colliding_chain() -> Vec<Event> {
             input: payload(),
             run_id: first_run(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: PackageVersion::new("a".repeat(64)),
         },
         Event::ActivityScheduled {
@@ -117,6 +118,7 @@ fn colliding_chain() -> Vec<Event> {
             input: payload(),
             run_id: second_run(),
             parent_run_id: Some(first_run()),
+            parent_workflow_id: None,
             package_version: PackageVersion::new("a".repeat(64)),
         },
         Event::ActivityScheduled {

@@ -39,6 +39,7 @@ fn started(
         input: input_payload()?,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new(hash.to_owned()),
     })
 }

@@ -92,6 +92,7 @@ async fn a_durably_paused_run_refuses_the_unload_of_its_version() -> TestResult 
                 input: Payload::from_json(&serde_json::json!({ "amount": 1 }))?,
                 run_id: paused_run.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new(v1_hash.to_string()),
             },
         )

@@ -127,6 +127,7 @@ pub async fn continue_as_new(
             // Continue-as-new reuses the existing id; steering does not apply.
             routing_key: None,
             parent_run_id: Some(run.clone()),
+            parent_workflow_id: None,
             // D1: continue-as-new is the upgrade path for long-lived
             // workflows — the successor resolves the latest loaded version
             // at record time and pins it durably in its own WorkflowStarted.
@@ -331,6 +332,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )

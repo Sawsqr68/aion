@@ -178,6 +178,17 @@ impl ChildNifBridge {
         // follows the execution tree.
         let parent_history = self.store.read_history(parent_workflow_id).await?;
         let inherited = aion_core::search_attributes_from_events(&parent_history);
+        // The child wears its parent (aion#77): the parent's workflow id and
+        // its CURRENT run id (the latest recorded start in the history this
+        // spawn already reads) travel into the child's own WorkflowStarted,
+        // so a handoff chain is traversable backward from any run.
+        let parent_run_id = parent_history.iter().rev().find_map(|event| {
+            if let aion_core::Event::WorkflowStarted { run_id, .. } = event {
+                Some(run_id.clone())
+            } else {
+                None
+            }
+        });
         let loaded_version =
             crate::loader::parse_package_version(&request.workflow_type, &request.package_version)?;
         start_workflow_with_options(
@@ -205,6 +216,8 @@ impl ChildNifBridge {
                 loaded_version: Some(loaded_version),
                 search_attributes: inherited,
                 namespace: Some(parent_namespace.to_owned()),
+                parent_run_id,
+                parent_workflow_id: Some(request.parent_workflow_id.clone()),
                 ..StartWorkflowOptions::default()
             },
         )

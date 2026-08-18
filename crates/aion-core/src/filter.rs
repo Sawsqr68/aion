@@ -110,8 +110,9 @@ impl WorkflowSummary {
     /// Returns [`None`] when the history does not contain a
     /// [`Event::WorkflowStarted`] event. The projected status and end timestamp
     /// are derived from the current run in the history, matching
-    /// [`status_from_events`]. Parent linkage is not present in a child
-    /// workflow's own history, so this helper leaves `parent` unset.
+    /// [`status_from_events`]. Parent linkage (aion#77) is projected from the
+    /// current run's own recorded `parent_workflow_id` — the child wears its
+    /// parent; histories recorded before the field decode to `None`.
     ///
     /// `failed_step` and `failure_reason` are populated ONLY when the current
     /// lease's terminal event is [`Event::WorkflowFailed`] (see
@@ -126,22 +127,25 @@ impl WorkflowSummary {
     /// name its predecessor was wearing, until something renames it.
     #[must_use]
     pub fn from_history(events: &[Event]) -> Option<Self> {
-        let (workflow_id, workflow_type, started_at) = events.iter().rev().find_map(|event| {
-            if let Event::WorkflowStarted {
-                envelope,
-                workflow_type,
-                ..
-            } = event
-            {
-                Some((
-                    envelope.workflow_id.clone(),
-                    workflow_type.clone(),
-                    envelope.recorded_at,
-                ))
-            } else {
-                None
-            }
-        })?;
+        let (workflow_id, workflow_type, started_at, parent) =
+            events.iter().rev().find_map(|event| {
+                if let Event::WorkflowStarted {
+                    envelope,
+                    workflow_type,
+                    parent_workflow_id,
+                    ..
+                } = event
+                {
+                    Some((
+                        envelope.workflow_id.clone(),
+                        workflow_type.clone(),
+                        envelope.recorded_at,
+                        parent_workflow_id.clone(),
+                    ))
+                } else {
+                    None
+                }
+            })?;
 
         let (failed_step, failure_reason) = failure_projection(events);
         Some(Self {
@@ -150,7 +154,7 @@ impl WorkflowSummary {
             status: status_from_events(events),
             started_at,
             ended_at: current_lease_terminal(events).map(|event| *event.recorded_at()),
-            parent: None,
+            parent,
             failed_step,
             failure_reason,
             display_name: crate::display_name(events),
@@ -511,6 +515,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::SearchAttributesUpdated {
@@ -565,6 +570,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             name_event(2, "Nightly settlement"),
@@ -602,6 +608,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             // Named while the FIRST run was live.
@@ -626,6 +633,7 @@ mod tests {
                 input: payload("continued-input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(3)),
                 parent_run_id: Some(parent_run_id),
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
         ];
@@ -664,6 +672,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowCompleted {
@@ -695,6 +704,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::ScheduleTriggered {
@@ -725,6 +735,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowContinuedAsNew {
@@ -756,6 +767,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowContinuedAsNew {
@@ -770,6 +782,7 @@ mod tests {
                 input: payload("continued-input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: Some(parent_run_id),
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
         ];
@@ -793,6 +806,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: crate::PackageVersion::new("a".repeat(64)),
         })
     }

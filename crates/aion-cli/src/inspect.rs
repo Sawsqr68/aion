@@ -307,6 +307,7 @@ mod tests {
             input: Payload::from_json(&json!(null))?,
             run_id: RunId::new(Uuid::from_u128(run)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         })
     }
@@ -441,6 +442,7 @@ mod tests {
                 input: Payload::from_json(&json!(null))?,
                 run_id: run_id_value(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowCompleted {

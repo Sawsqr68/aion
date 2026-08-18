@@ -37,6 +37,7 @@ fn started() -> Event {
         input: payload(),
         run_id: run(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     }
 }

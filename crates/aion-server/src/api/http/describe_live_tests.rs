@@ -63,6 +63,7 @@ fn started(at: DateTime<Utc>) -> Result<Event, aion_core::PayloadError> {
         input: payload()?,
         run_id: run_id(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     })
 }

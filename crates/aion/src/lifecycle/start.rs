@@ -92,6 +92,9 @@ pub struct StartWorkflowOptions {
     pub routing_key: Option<String>,
     /// Parent run that continued into this run, when applicable.
     pub parent_run_id: Option<RunId>,
+    /// The parent WORKFLOW that spawned this run as a child (aion#77);
+    /// `None` for operator starts and continue-as-new successors.
+    pub parent_workflow_id: Option<WorkflowId>,
     /// Exact loaded package version to spawn; omitted to use the latest version.
     pub loaded_version: Option<ContentHash>,
     /// Initial search attributes recorded atomically with `WorkflowStarted`.
@@ -175,6 +178,7 @@ pub async fn start_workflow_with_options(
                 input: input.clone(),
                 run_id: run_id.clone(),
                 parent_run_id: options.parent_run_id,
+                parent_workflow_id: options.parent_workflow_id.clone(),
                 package_version: crate::loader::package_version_of(loaded.version()),
             },
             options.search_attributes,

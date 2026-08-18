@@ -171,6 +171,7 @@ mod tests {
             input: payload()?,
             run_id: run_id.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version(),
         })
     }

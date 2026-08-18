@@ -4418,6 +4418,7 @@ mod tests {
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             run_id: aion_core::RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         };
         let row = pending_row(&workflow_id, 0, "charge", Utc::now() - Duration::hours(1));
@@ -4615,6 +4616,7 @@ mod tests {
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             run_id: aion_core::RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         };
         let row = pending_row(&workflow_id, 0, "charge", Utc::now() - Duration::hours(1));
@@ -4657,6 +4659,7 @@ mod tests {
                 input: Payload::new(ContentType::Json, b"{}".to_vec()),
                 run_id: aion_core::RunId::new_v4(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             };
             store
@@ -4736,6 +4739,7 @@ mod tests {
                 input: Payload::new(ContentType::Json, b"{}".to_vec()),
                 run_id: aion_core::RunId::new_v4(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             };
             store
@@ -5144,6 +5148,7 @@ mod tests {
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             run_id: aion_core::RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         }
     }

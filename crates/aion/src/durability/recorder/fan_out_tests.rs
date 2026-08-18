@@ -386,6 +386,7 @@ async fn fan_out_dispatch_sequence_conflict_surfaces_without_advancing()
         input: payload("rogue")?,
         run_id: RunId::new(uuid::Uuid::from_u128(1)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     };
     store
@@ -817,6 +818,7 @@ async fn fan_out_completion_sequence_conflict_surfaces_without_advancing()
         input: payload("rogue")?,
         run_id: RunId::new(uuid::Uuid::from_u128(1)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     };
     store

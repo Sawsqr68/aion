@@ -892,6 +892,7 @@ mod tests {
                     input: Payload::from_json(&serde_json::json!({ "cart": [] }))?,
                     run_id: RunId::new(uuid::Uuid::from_u128(7)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1015,6 +1016,7 @@ mod tests {
                     input: Payload::from_json(&serde_json::json!({ "cart": [] }))?,
                     run_id: RunId::new(uuid::Uuid::from_u128(11)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("b".repeat(64)),
                 },
             )

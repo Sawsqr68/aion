@@ -70,6 +70,7 @@ fn started(workflow_id: &WorkflowId, seq: u64) -> Event {
         input: empty_payload(),
         run_id: RunId::new_v4(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("sha256:test"),
     }
 }

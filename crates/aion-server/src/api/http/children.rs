@@ -305,6 +305,7 @@ mod tests {
                 input: Payload::from_json(&json!(null))?,
                 run_id,
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: PackageVersion::new("a".repeat(64)),
             },
             Event::ActivityStarted {

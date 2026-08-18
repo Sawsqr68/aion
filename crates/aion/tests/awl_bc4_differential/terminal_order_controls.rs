@@ -77,6 +77,7 @@ fn started(seq: u64) -> Result<Event, Box<dyn std::error::Error>> {
         input: Payload::from_json(&serde_json::json!({}))?,
         run_id: RunId::new_v4(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     })
 }

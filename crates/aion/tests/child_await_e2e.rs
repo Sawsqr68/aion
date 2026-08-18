@@ -592,6 +592,7 @@ async fn synthesize_parent_with_recorded_spawn(
                     input: parent_input()?,
                     run_id: parent_run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: fixture_version(PLAIN_PARENT_MODULE, PLAIN_PARENT_BEAM)?,
                 },
                 Event::ChildWorkflowStarted {
@@ -634,6 +635,7 @@ async fn synthesize_completed_child(
                     input: Payload::new(ContentType::Json, br#""child-input""#.to_vec()),
                     run_id: RunId::new_v4(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: fixture_version(CHILD_MODULE, CHILD_BEAM)?,
                 },
                 Event::WorkflowCompleted {
@@ -911,6 +913,7 @@ async fn synthesize_child_mid_continue_as_new(
                     input: Payload::new(ContentType::Json, br#""child-input""#.to_vec()),
                     run_id: first_run.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: fixture_version(CHILD_MODULE, CHILD_BEAM)?,
                 },
                 Event::WorkflowContinuedAsNew {

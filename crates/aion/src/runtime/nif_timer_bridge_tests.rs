@@ -225,6 +225,7 @@ async fn deadline_fire_retries_through_a_store_outage_spanning_both_reads() -> T
                 input: Payload::from_json(&serde_json::json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: PackageVersion::new("a".repeat(64)),
             },
         )
@@ -974,6 +975,7 @@ async fn seed_unfinished_timeout(
                 input: Payload::from_json(&serde_json::json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: PackageVersion::new("a".repeat(64)),
             },
         )
@@ -1064,6 +1066,7 @@ async fn seed_running_workflow(
         input: Payload::from_json(&serde_json::json!({}))?,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     };
     store

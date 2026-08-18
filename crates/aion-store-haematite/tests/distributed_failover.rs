@@ -226,6 +226,7 @@ fn lifecycle(workflow_id: &WorkflowId) -> Vec<Event> {
         input: Payload::new(ContentType::Json, b"{\"cart\":42}".to_vec()),
         run_id: RunId::new_v4(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     };
     let fired = Event::TimerFired {

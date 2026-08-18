@@ -178,6 +178,7 @@ mod tests {
             input: empty_input(),
             run_id: run_id.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: PackageVersion::new("hash"),
         }
     }

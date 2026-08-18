@@ -198,6 +198,7 @@ async fn child_spawn_recovery_sweep_starts_the_recorded_version() -> TestResult 
                     input: input()?,
                     run_id: parent_run.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: version_of(&v1_park),
                 },
                 Event::ChildWorkflowStarted {
@@ -269,6 +270,7 @@ async fn continue_as_new_sweep_starts_the_routed_version_and_records_it() -> Tes
                     input: input()?,
                     run_id: first_run.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: version_of(&v1),
                 },
                 Event::WorkflowContinuedAsNew {

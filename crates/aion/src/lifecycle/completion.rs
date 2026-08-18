@@ -603,6 +603,7 @@ async fn start_continuation_replacement(
             // Continue-as-new reuses the existing id; steering does not apply.
             routing_key: None,
             parent_run_id: Some(parent_run_id),
+            parent_workflow_id: None,
             // D1: the continue-as-new successor resolves the latest loaded
             // version at record time, identically to the startup sweep.
             loaded_version: None,
@@ -772,6 +773,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -875,6 +877,7 @@ mod tests {
                 input: payload("first")?,
                 run_id: old_run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowContinuedAsNew {
@@ -889,6 +892,7 @@ mod tests {
                 input,
                 run_id: new_run_id.clone(),
                 parent_run_id: Some(old_run_id.clone()),
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowCompleted {

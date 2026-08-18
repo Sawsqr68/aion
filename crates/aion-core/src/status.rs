@@ -222,6 +222,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: crate::PackageVersion::new("a".repeat(64)),
         })
     }
@@ -256,6 +257,7 @@ mod tests {
                 input: payload("replacement")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: Some(parent_run_id),
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
         ];
@@ -622,6 +624,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: first_run.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowContinuedAsNew {
@@ -636,6 +639,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: second_run.clone(),
                 parent_run_id: Some(first_run.clone()),
+                parent_workflow_id: None,
                 package_version: crate::PackageVersion::new("a".repeat(64)),
             },
             Event::WorkflowCompleted {
