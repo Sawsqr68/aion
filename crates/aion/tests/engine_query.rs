@@ -694,10 +694,19 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
 
+    // Every fallible step below names its stage and iteration: this race has
+    // fired intermittently in full-suite runs, and a bare `?` admits nothing
+    // about WHERE the iteration died when it does.
     for iteration in 0_u32..12 {
-        let (workflow_id, run_id) = start(&engine).await?;
+        let (workflow_id, run_id) = start(&engine)
+            .await
+            .map_err(|error| format!("iteration {iteration}: start: {error}"))?;
         // Warm up: registration finished and the workflow is parked.
-        state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+        let warmup = query_when_registered(&engine, &workflow_id, &run_id, "state")
+            .await
+            .map_err(|error| format!("iteration {iteration}: warm-up query: {error}"))?;
+        state_reply(&warmup)
+            .map_err(|error| format!("iteration {iteration}: warm-up decode: {error}"))?;
 
         // Stagger the query later and later relative to the completion
         // signal so the iterations sweep the whole race window: query
@@ -714,10 +723,12 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
             },
         );
 
-        signal_outcome?;
+        signal_outcome
+            .map_err(|error| format!("iteration {iteration}: release signal: {error}"))?;
         match query_outcome {
             Ok(reply) => {
-                let (answer, _) = state_reply(&reply)?;
+                let (answer, _) = state_reply(&reply)
+                    .map_err(|error| format!("iteration {iteration}: race decode: {error}"))?;
                 assert_eq!(answer, 1, "iteration {iteration}");
             }
             Err(EngineError::Query(QueryError::NotRunning(id))) => {
@@ -735,11 +746,17 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
 
         let result = engine
             .result(&workflow_id, &run_id)
-            .await?
+            .await
+            .map_err(|error| format!("iteration {iteration}: result await: {error}"))?
             .map_err(|error| format!("iteration {iteration}: workflow failed: {error:?}"))?;
-        assert_eq!(result_json(&result)?, json!(42));
+        let decoded = result_json(&result)
+            .map_err(|error| format!("iteration {iteration}: result decode: {error}"))?;
+        assert_eq!(decoded, json!(42), "iteration {iteration}");
         // The query path appended nothing, win or lose.
-        let terminal = store.read_history(&workflow_id).await?;
+        let terminal = store
+            .read_history(&workflow_id)
+            .await
+            .map_err(|error| format!("iteration {iteration}: terminal read: {error}"))?;
         assert_eq!(
             event_kinds(&terminal),
             vec!["workflow_started", "signal_received", "workflow_completed"],
