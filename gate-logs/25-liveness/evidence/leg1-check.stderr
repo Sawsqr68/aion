@@ -1,0 +1,100 @@
+   Compiling libc v0.2.186
+   Compiling serde_json v1.0.150
+    Checking bytes v1.11.1
+    Checking hashbrown v0.14.5
+   Compiling either v1.16.0
+   Compiling regex-syntax v0.8.10
+    Checking security-framework-sys v2.17.0
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-server)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/xtask)
+   Compiling itertools v0.14.0
+    Checking security-framework v3.7.0
+    Checking tokio v1.52.3
+    Checking http v1.4.1
+    Checking dashmap v6.2.1
+   Compiling regex-automata v0.4.14
+    Checking http-body v1.0.1
+    Checking tungstenite v0.30.0
+    Checking http-body-util v0.1.3
+   Compiling prost-derive v0.14.3
+   Compiling jobserver v0.1.34
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-core)
+    Checking referencing v0.46.6
+   Compiling errno v0.3.14
+   Compiling getrandom v0.4.2
+    Checking axum-core v0.5.6
+    Checking tracing-subscriber v0.3.23
+   Compiling cc v1.2.63
+   Compiling rustix v1.1.4
+   Compiling regex v1.12.3
+    Checking jsonschema v0.46.6
+   Compiling cmake v0.1.58
+   Compiling prost v0.14.3
+    Checking tokio-util v0.7.18
+   Compiling tempfile v3.27.0
+    Checking tokio-stream v0.1.18
+    Checking schemars v1.2.1
+   Compiling cpufeatures v0.2.17
+   Compiling sha2 v0.10.9
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling blake3 v1.8.5
+   Compiling aws-lc-sys v0.41.0
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+   Compiling prost-types v0.14.3
+   Compiling rust-embed-utils v8.11.0
+    Checking serde_with v3.21.0
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-mcp)
+   Compiling rust-embed-impl v8.11.0
+   Compiling prost-build v0.14.3
+    Checking tower-http v0.6.11
+    Checking rust-embed v8.11.0
+   Compiling tonic-prost-build v0.14.5
+    Checking lsp-server v0.8.0
+    Checking agent-client-protocol-schema v1.5.0
+    Checking lsp-types v0.97.0
+    Checking hyper v1.10.1
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-store)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-integrations)
+   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-proto-generated)
+    Checking hyper-util v0.1.20
+    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-integration-norn)
+    Checking aion-integration-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-integration-cli)
+    Checking hyper-timeout v0.5.2
+    Checking aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-integration-acp)
+   Compiling zstd-safe v7.2.4
+    Checking zstd v0.13.3
+    Checking zip v8.6.0
+   Compiling beamr v0.18.2
+   Compiling beamr v0.17.1
+   Compiling beamr v0.16.3
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-package)
+    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-toolchain)
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-awl)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion)
+    Checking haematite v0.8.3
+    Checking haematite v0.7.0
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-store-haematite)
+    Checking liminal-rs v0.5.0
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-awl-lsp)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+   Compiling aws-lc-rs v1.17.0
+   Compiling rustls v0.23.40
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/benchmarks/million-processes)
+    Checking rustls-webpki v0.103.13
+    Checking tokio-rustls v0.26.4
+    Checking tungstenite v0.29.0
+    Checking hyper-rustls v0.27.9
+    Checking rustls-platform-verifier v0.7.0
+    Checking tokio-tungstenite v0.29.0
+    Checking reqwest v0.13.4
+    Checking axum v0.8.9
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.5
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-proto)
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-worker)
+    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-client)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 12s
