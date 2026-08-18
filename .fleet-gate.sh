@@ -6,10 +6,16 @@
 # beams). beamr >=0.19.2 carries the validator fix, so this gate runs the FULL
 # workspace suite with NO exclusions: runtime_codecs going green on this box's
 # own mix is the migration's proof, measured where the refusal lived.
-PATH="$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+# HOME can be EMPTY in the workflow gate context (learned 2026-08-18: fleet-53
+# round 1-3 red on "cargo not found on PATH (/.cargo/bin:...)"). Absolute box
+# path first; $HOME fallback kept for other hosts.
+PATH="/home/aion/.cargo/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 # cargo itself resolves ~/.cargo and ~/.rustup through HOME — default it too.
 if [ -z "${HOME:-}" ]; then HOME=/home/aion; export HOME; fi
+# Concurrent flights exhaust the 1024-fd soft limit (EMFILE reds, 2026-08-18);
+# the hard limit is 524288 — raise within it so contention cannot fake a red.
+ulimit -n 65536 2>/dev/null || true
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "FAIL: cargo not found on PATH ($PATH)" >&2
