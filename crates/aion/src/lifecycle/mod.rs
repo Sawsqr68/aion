@@ -18,6 +18,9 @@ pub mod rename;
 pub mod reopen;
 /// Workflow start request and initialization helpers.
 pub mod start;
+/// A runtime-armed hold between the completion doorbell and terminal registry
+/// reconciliation, used to pin issue #51 deterministically.
+mod terminal_reconcile_gate;
 /// Terminal workflow transitions: complete, fail, and cancel.
 pub mod terminate;
 /// Runtime suspend and resume transition helpers.
