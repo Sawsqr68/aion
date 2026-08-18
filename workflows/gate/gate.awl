@@ -37,6 +37,10 @@
 //! spec routes on `contended` greens rather than this workflow quietly
 //! re-running them.
 //!
+//! FORMAT IS NOT A GATE (STANDING ORDER 9, Tom 2026-08-18): formatting is
+//! mechanical — applied in the authoring loop before push, never measured.
+//! No fmt leg exists in this vocabulary and none may be added.
+//!
 //! LOGS LIVE IN THE TREE at `<tree>/.gate/` — the tree is the blackboard.
 //! OBLIGATION ON EVERY LANDING CONSUMER: `.gate/` never rides a landing
 //! commit; the land workflow stages by explicit pathspec and carries this
@@ -114,10 +118,6 @@ worker gate_ops
   /// One crate's lib unit population.
   action run_test_crate_lib(tree: String, kind: String, crate_name: String) -> LegProbe
     timeout 2h, retry 2 every 30s
-  /// Formatting check (measurement only; the autoformat law lives in the
-  /// authoring loop, not in the gate).
-  action run_fmt_check(tree: String, kind: String) -> LegProbe
-    timeout 30m, retry 2 every 30s
   /// Refuse a leg kind outside the closed vocabulary — as a NAMED red probe
   /// (green: false, refusal naming the accepted set), because a terminal
   /// route cannot leave a sequence region and a silently skipped leg would
@@ -151,8 +151,7 @@ step dispatch after open
   outcome b: when leg.kind == "clippy_workspace", route leg_clippy_workspace
   outcome c: when leg.kind == "clippy_crate", route leg_clippy_crate
   outcome d: when leg.kind == "test_crate_lib", route leg_test_crate_lib
-  outcome e: when leg.kind == "fmt_check", route leg_fmt_check
-  outcome f: when leg.kind == "lock_witness", route leg_lock_witness
+  outcome e: when leg.kind == "lock_witness", route leg_lock_witness
   outcome unknown: otherwise, route leg_unknown
 
 step leg_unknown
@@ -173,10 +172,6 @@ step leg_clippy_crate
 
 step leg_test_crate_lib
   run_test_crate_lib(tree: tree, kind: leg.kind, crate_name: leg.crate_name) -> probe
-  route settle
-
-step leg_fmt_check
-  run_fmt_check(tree: tree, kind: leg.kind) -> probe
   route settle
 
 step leg_lock_witness

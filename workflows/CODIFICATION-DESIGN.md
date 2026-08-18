@@ -34,9 +34,12 @@ committed to the branch. No branch carries executable process artifacts.
 ### 1.3 `gate`
 Input: repo, ref (or in-place tree handle from a parent), and a gate spec: an ordered list
 of legs drawn from a CLOSED kind vocabulary (authored: test_workspace, clippy_workspace,
-clippy_crate, test_crate_lib, fmt_check, lock_witness), each kind mapping to one
+clippy_crate, test_crate_lib, lock_witness), each kind mapping to one
 whole-cloth command in the worker document with an authored per-action timeout
-(4h tests / 2h clippy / 30m fmt / 5m probes — hung cargo is a real face). Output: typed per-leg results `{ name, rc, log_artifact }` — the rc is
+(4h tests / 2h clippy / 5m probes — hung cargo is a real face). STANDING ORDER 9
+(Tom, 2026-08-18 23:02Z): format checks are not gates — fmt_check was struck from
+the vocabulary; formatting is applied mechanically in fix_flight's authoring loop
+(cargo fmt before push), never measured. Output: typed per-leg results `{ name, rc, log_artifact }` — the rc is
 the step's recorded result in workflow history, which IS the exit-file discipline expressed
 as vocabulary: no shell writes `rc=$?` to a manifest file, the engine records the activity
 result. Contended-red-is-not-red is authored policy: the worker

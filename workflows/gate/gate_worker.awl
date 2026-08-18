@@ -45,9 +45,6 @@ worker gate_ops
   /// One crate's lib unit population.
   action run_test_crate_lib(tree: String, kind: String, crate_name: String) -> LegProbe
     run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; ulimit -n 65536 2>/dev/null || true; t=\"$1\"; k=\"$2\"; n=\"$3\"; mkdir -p \"$t/.gate\" 2>/dev/null; l=\"$t/.gate/$k-$n.log\"; ( cd \"$t\" && cargo test -p \"$n\" --lib ) > \"$l\" 2>&1; rc=$?; g=false; [ \"$rc\" = \"0\" ] && g=true; c=false; grep -qE \"Too many open files|LLVM ERROR|signal: 11|SIGSEGV\" \"$l\" 2>/dev/null && c=true; printf \"{\\\"kind\\\":\\\"%s\\\",\\\"green\\\":%s,\\\"rc\\\":%d,\\\"contended\\\":%s,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"\\\"}\" \"$k\" \"$g\" \"$rc\" \"$c\" \"$l\"' -- $tree $kind $crate_name"
-  /// Formatting check — measurement only; the autoformat law lives upstream.
-  action run_fmt_check(tree: String, kind: String) -> LegProbe
-    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; t=\"$1\"; k=\"$2\"; mkdir -p \"$t/.gate\" 2>/dev/null; l=\"$t/.gate/$k.log\"; ( cd \"$t\" && cargo fmt --check ) > \"$l\" 2>&1; rc=$?; g=false; [ \"$rc\" = \"0\" ] && g=true; printf \"{\\\"kind\\\":\\\"%s\\\",\\\"green\\\":%s,\\\"rc\\\":%d,\\\"contended\\\":false,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"\\\"}\" \"$k\" \"$g\" \"$rc\" \"$l\"' -- $tree $kind"
   /// The lock witness: rows for `crate_name` in the RESOLVED lock whose
   /// version matches the refused `pattern` red the leg — a floor is proven
   /// at the lock, never at a manifest line.
@@ -56,7 +53,7 @@ worker gate_ops
   /// Refuse a leg kind outside the closed vocabulary — a NAMED red probe in
   /// the results (never a skip), naming the accepted vocabulary as the remedy.
   action refuse_leg(kind: String) -> LegProbe
-    run json "sh -c 'set -u; k=\"$1\"; printf \"{\\\"kind\\\":\\\"%s\\\",\\\"green\\\":false,\\\"rc\\\":91,\\\"contended\\\":false,\\\"log_path\\\":\\\"\\\",\\\"refusal\\\":\\\"unknown leg kind — gate serves exactly: test_workspace, clippy_workspace, clippy_crate, test_crate_lib, fmt_check, lock_witness\\\"}\" \"$k\"' -- $kind"
+    run json "sh -c 'set -u; k=\"$1\"; printf \"{\\\"kind\\\":\\\"%s\\\",\\\"green\\\":false,\\\"rc\\\":91,\\\"contended\\\":false,\\\"log_path\\\":\\\"\\\",\\\"refusal\\\":\\\"unknown leg kind — gate serves exactly: test_workspace, clippy_workspace, clippy_crate, test_crate_lib, lock_witness\\\"}\" \"$k\"' -- $kind"
 
 type TreeProbe { ok: Bool, refusal: String, head_commit: String }
 
