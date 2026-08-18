@@ -1,0 +1,33 @@
+
+running 4 tests
+test an_empty_round_clears_a_stale_verdict_it_cannot_re_measure ... FAILED
+test a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone ... FAILED
+test the_same_verdict_still_excludes_an_unreachable_worker_of_a_covered_transport ... ok
+test a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds ... FAILED
+
+failures:
+
+---- an_empty_round_clears_a_stale_verdict_it_cannot_re_measure stdout ----
+
+thread 'an_empty_round_clears_a_stale_verdict_it_cannot_re_measure' (14095096) panicked at crates/aion-server/tests/liveness_verdict_transport_scope.rs:338:5:
+an empty liminal round measured nothing about a gRPC worker, so it must not leave a stale exclusion standing over one — nothing this probe can do would ever lift it: {WorkerId(1)}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone stdout ----
+
+thread 'a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone' (14095095) panicked at crates/aion-server/tests/liveness_verdict_transport_scope.rs:248:5:
+a probe with no liminal notifier has no path to ping a liminal worker, so it must not publish an exclusion for one — that exclusion could never be lifted by any answer, and a healthy worker would be withheld from dispatch for the life of the process: {WorkerId(2)}
+
+---- a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds stdout ----
+
+thread 'a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds' (14095094) panicked at crates/aion-server/tests/liveness_verdict_transport_scope.rs:409:5:
+the liminal probe published its verdict over a gRPC worker it never pinged and could never ping: the worker is registered, healthy and beating, and has been withdrawn from dispatch by a mechanism with no path to test it
+
+
+failures:
+    a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds
+    a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone
+    an_empty_round_clears_a_stale_verdict_it_cannot_re_measure
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.12s
+

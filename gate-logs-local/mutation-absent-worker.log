@@ -1,0 +1,26 @@
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.07s
+     Running tests/liveness_verdict_transport_scope.rs (target/debug/deps/liveness_verdict_transport_scope-58acd1d23f492396)
+
+running 5 tests
+test an_empty_round_clears_a_stale_verdict_it_cannot_re_measure ... ok
+test a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone ... ok
+test the_same_verdict_still_excludes_an_unreachable_worker_of_a_covered_transport ... ok
+test a_worker_that_left_the_registry_is_named_by_no_verdict ... FAILED
+test a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds ... ok
+
+failures:
+
+---- a_worker_that_left_the_registry_is_named_by_no_verdict stdout ----
+
+thread 'a_worker_that_left_the_registry_is_named_by_no_verdict' (14318681) panicked at crates/aion-server/tests/liveness_verdict_transport_scope.rs:400:5:
+a departed worker has no transport, so no probe is entitled to judge it and no verdict may name it: {WorkerId(2)}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_worker_that_left_the_registry_is_named_by_no_verdict
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.27s
+
+error: test failed, to rerun pass `-p aion-server --test liveness_verdict_transport_scope`

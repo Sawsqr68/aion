@@ -1,0 +1,12 @@
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.74s
+     Running tests/liveness_verdict_transport_scope.rs (target/debug/deps/liveness_verdict_transport_scope-58acd1d23f492396)
+
+running 4 tests
+test an_empty_round_clears_a_stale_verdict_it_cannot_re_measure ... ok
+test a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone ... ok
+test the_same_verdict_still_excludes_an_unreachable_worker_of_a_covered_transport ... ok
+test a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.26s
+

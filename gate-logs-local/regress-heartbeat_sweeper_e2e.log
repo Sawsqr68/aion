@@ -1,0 +1,13 @@
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-25-liveness/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.02s
+     Running tests/heartbeat_sweeper_e2e.rs (target/debug/deps/heartbeat_sweeper_e2e-2c0d49ab15536313)
+
+running 5 tests
+test no_catalog_registration_still_refuses_malformed_descriptor ... ok
+test sweeper_exits_promptly_on_shutdown_between_ticks ... ok
+test silent_worker_with_open_stream_is_expired_and_deregistered_by_the_sweeper ... ok
+test heartbeating_worker_survives_the_sweeper_and_completes ... ok
+test real_worker_runtime_survives_activity_three_windows_long ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.72s
+
