@@ -171,10 +171,10 @@ type Unreported { plan: String, reports: [String], check_exit: Int, stdout: Stri
 /// of every round is committed in the kept tree under `.fleet/gates/`.
 type GatesRed { plan: String, reports: [String], gate_exit: Int, stdout: String, stderr: String, kept_root: String }
 
-/// The delivery gated green and the judge refused it anyway — or answered
-/// anything other than the exact admission token. The whole verdict text
-/// travels with the refusal; the mismatch direction is deliberate: this
-/// document can produce a false flag, never a false clear.
+/// The delivery gated green and the judge refused it anyway — its final
+/// answer was anything other than the exact admission token. The whole
+/// verdict text travels with the refusal; the mismatch direction is
+/// deliberate: this document can produce a false flag, never a false clear.
 type JudgeFlagged { plan: String, reports: [String], verdict: String, kept_root: String }
 
 /// Judged clear but the push home was refused. The verdict and the named
@@ -273,7 +273,7 @@ step provision
 /// resident ACP worker.
 step counsel_control
   plan(repo: repo, prompt: counsel_control_prompt) -> counsel_control
-  outcome proven: when counsel_control.text == counsel_control_expect, route dev_control
+  outcome proven: when counsel_control.final_message == counsel_control_expect, route dev_control
   outcome broken: otherwise,
     route unmeasured(control_expect: counsel_control_expect, control_reply: counsel_control.text,
       reason: "the counsel control did not return the expected reply, so the planning and judging pipeline cannot be shown to read the tree or follow instructions — nothing was planned",
@@ -283,7 +283,7 @@ step counsel_control
 /// brief for it.
 step dev_control
   delegate(repo: repo, prompt: control_prompt) -> control
-  outcome proven: when control.text == control_expect, route plan_legs
+  outcome proven: when control.final_message == control_expect, route plan_legs
   outcome broken: otherwise,
     route unmeasured(control_expect: control_expect, control_reply: control.text,
       reason: "the builder control did not return the expected reply, so the delegation pipeline cannot be shown to read the tree or follow instructions — nothing was planned or built",
@@ -368,11 +368,14 @@ step fix_round
   route gate
 
 /// The judge rules on the delivery that gated green. Exact admission only:
-/// anything other than the dispatcher's `judge_pass` token — a hedge, a
-/// preamble, a finding — routes to `judge_flagged` with the verdict whole.
+/// the FINAL answer must be the dispatcher's `judge_pass` token, nothing
+/// else — a hedge, a qualification, a finding in the last message routes to
+/// `judge_flagged` with the verdict whole. The stream (`text`) may narrate;
+/// the admission is `final_message`, the canonical last completed answer —
+/// flight one was flagged on its own passing verdict by a `text` compare.
 step judgement
   judge(repo: repo, prompt: judge_prompt) -> judged
-  outcome clear: when judged.text == judge_pass, route push_result
+  outcome clear: when judged.final_message == judge_pass, route push_result
   outcome flagged: otherwise,
     route judge_flagged(plan: planned.text, reports: reports, verdict: judged.text,
       kept_root: cloned.root)
