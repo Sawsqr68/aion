@@ -4,5 +4,5 @@ leg3_nextest_rc=0
 findings_leg1_check=0
 findings_leg2_clippy=0
 findings_leg3_nextest=0
-nextest_summary=     Summary [ 465.673s] 5169 tests run: 5169 passed (7 slow), 0 skipped
+nextest_summary=     Summary [ 364.191s] 5099 tests run: 5099 passed (7 slow), 0 skipped
 nextest_binaries=1

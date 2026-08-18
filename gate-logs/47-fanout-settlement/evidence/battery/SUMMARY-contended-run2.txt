@@ -1,0 +1,20 @@
+leg1_check_rc=0
+leg2_clippy_rc=0
+leg3_nextest_rc=100
+findings_leg1_check=0
+findings_leg2_clippy=0
+findings_leg3_nextest=4
+nextest_summary=     Summary [2137.077s] 5099 tests run: 5095 passed (16 slow, 6 leaky), 4 failed, 0 skipped
+nextest_binaries=1
+# CONTENDED RUN 2 — not citable as red or green.
+# Ran 15:49-16:35 concurrently with the #26 builder's own full battery
+# (aion-wt-26-py-heartbeat, nextest pid 29644) — steward scheduling error.
+# 4 failures, all off the lane's diff (lane touches only fan-out settlement
+# collect: fan_out.rs, nif_collect_settlement.rs + tests):
+#  1. activity_retry_e2e exhausted_retries...: reopen refused as "concurrent
+#     reopen" — pre-existing race: reconcile_terminal_registry lags the result
+#     future under load, cached status still non-terminal when reopen arrives
+#     (reopen.rs:109-118). MINT AS ISSUE ROW.
+#  2. recovery_declared_body_e2e: "timed out waiting for shard actor 1" (load).
+#  3-4. run_server_outbox_e2e x2: "timed out waiting for run_server readiness".
+# Run 3 fires after the box goes quiet.
