@@ -180,7 +180,16 @@ impl ConfinedDir {
     pub(crate) fn backend_path(&self) -> io::Result<PathBuf> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            Ok(Path::new("/proc/self/fd").join(self.dir.as_raw_fd().to_string()))
+            // The descriptor bridge only exists where procfs is mounted and
+            // readable — containers with a hidden or absent /proc would
+            // otherwise hand the backend a path that resolves to nothing.
+            // This probe is the arm's real fallibility (aion#59): without it
+            // the compiled Linux body was infallible inside the `io::Result`
+            // the macOS arm genuinely needs, and the workspace was
+            // clippy-red on Linux (`unnecessary_wraps`).
+            let bridge = Path::new("/proc/self/fd").join(self.dir.as_raw_fd().to_string());
+            std::fs::symlink_metadata(&bridge)?;
+            Ok(bridge)
         }
         #[cfg(target_os = "macos")]
         {

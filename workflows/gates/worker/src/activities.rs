@@ -568,11 +568,45 @@ mod tests {
     /// BROKEN MEASUREMENT, not a red result. `/usr/bin:/bin` genuinely lacks
     /// cargo, and `zsh -f` keeps it that way (no `~/.zshenv` re-widening —
     /// the exact false-green fixture the r1 review caught).
+    /// A PATH that PROVABLY lacks cargo: every binary from the ambient PATH's
+    /// directories is mirrored into one temp dir by symlink, except `cargo`
+    /// itself. The old fixture handed the runner `/usr/bin:/bin` and ASSUMED
+    /// cargo was not there — true on macOS, false on any distro whose system
+    /// cargo lives in /usr/bin (aion#59: on Arch the "absent" tool was
+    /// present and the test exercised a different failure entirely). Absence
+    /// is constructed here, never assumed about a platform.
+    fn path_without_cargo(fixture: &Path) -> Result<String, Box<dyn std::error::Error>> {
+        let mirror = fixture.join("path-without-cargo");
+        fs::create_dir(&mirror)?;
+        let ambient = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".to_owned());
+        for dir in ambient.split(':').filter(|dir| !dir.is_empty()) {
+            let Ok(entries) = fs::read_dir(dir) else {
+                continue;
+            };
+            for entry in entries {
+                let entry = entry?;
+                let name = entry.file_name();
+                if name.to_string_lossy().starts_with("cargo") {
+                    continue;
+                }
+                let target = mirror.join(&name);
+                // A duplicate name later in PATH loses, matching real
+                // resolution order.
+                if let Err(error) = std::os::unix::fs::symlink(entry.path(), &target)
+                    && error.kind() != std::io::ErrorKind::AlreadyExists
+                {
+                    return Err(error.into());
+                }
+            }
+        }
+        Ok(mirror.to_string_lossy().into_owned())
+    }
+
     #[tokio::test]
     async fn an_absent_gate_tool_is_a_broken_measurement_not_a_result() -> TestResult {
         let fixture = fixture_workspace(false)?;
         let bare = RunnerEnvironment {
-            tool_path: "/usr/bin:/bin".to_owned(),
+            tool_path: path_without_cargo(fixture.path())?,
         };
         let (context, _handle) = test_context();
         let result = run_gate(

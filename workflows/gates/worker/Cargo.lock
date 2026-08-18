@@ -44,7 +44,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "aion-package",
  "beamr 0.18.2",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "aion-core"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "chrono",
  "serde",
@@ -67,20 +67,22 @@ dependencies = [
 
 [[package]]
 name = "aion-integrations"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "aion-core",
  "async-trait",
  "futures",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
 name = "aion-package"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "aion-core",
  "jsonschema",
@@ -94,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "aion-core",
  "aion-proto-generated",
@@ -110,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto-generated"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -123,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "aion-worker"
-version = "0.15.0"
+version = "0.17.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -131,6 +133,7 @@ dependencies = [
  "aion-proto",
  "async-trait",
  "chrono",
+ "dashmap",
  "futures",
  "hostname",
  "liminal-rs",
