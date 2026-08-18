@@ -49,12 +49,21 @@ pub(in crate::worker) enum ProbedTransport {
 }
 
 impl ProbedTransport {
-    /// The word an operator sees in the log line.
-    pub(in crate::worker) const fn name(self) -> &'static str {
+    /// The wire this probe rode, without the connection handle.
+    pub(in crate::worker) const fn kind(self) -> aion_core::WorkerTransport {
         match self {
-            Self::Liminal { .. } => "liminal",
-            Self::Grpc => "grpc",
+            Self::Liminal { .. } => aion_core::WorkerTransport::Liminal,
+            Self::Grpc => aion_core::WorkerTransport::Grpc,
         }
+    }
+
+    /// The word an operator sees in the log line.
+    ///
+    /// Delegated rather than restated: the probe's withdrawal lines and the
+    /// registry's cluster events must name the same link the same way, and a
+    /// second table is how they stop doing that.
+    pub(in crate::worker) const fn name(self) -> &'static str {
+        self.kind().name()
     }
 
     /// The connection pid, when the transport has one. `None` for gRPC, whose

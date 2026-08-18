@@ -58,6 +58,33 @@ pub enum WorkerDelivery {
     Liminal(crate::worker::liminal_transport::LiminalWorkerDelivery),
 }
 
+impl WorkerDelivery {
+    /// Which transport this delivery rides, stripped of the handle that
+    /// addresses it.
+    ///
+    /// The liveness probe needs to know a worker's transport WITHOUT holding its
+    /// connection handle, because the question it asks is not "how do I reach
+    /// this worker" but "do I carry any wire on which this worker could be
+    /// asked" (#25). Answering that from a cloned sender or a connection pid
+    /// would tie a coverage decision to a live handle it does not need.
+    ///
+    /// This is the ONE mapping from a held delivery to its wire discriminant.
+    /// Two byte-identical private copies of it existed — one here for the
+    /// cluster-event emitter, one in
+    /// [`cluster_stream`](crate::stream::cluster_stream) for the snapshot — and
+    /// a third was nearly written for the liveness verdict. A discriminant table
+    /// kept in three places is three chances for a transport to be added to two
+    /// of them.
+    #[must_use]
+    pub const fn transport(&self) -> WorkerTransport {
+        match self {
+            Self::Grpc(_) => WorkerTransport::Grpc,
+            #[cfg(feature = "liminal-transport")]
+            Self::Liminal(_) => WorkerTransport::Liminal,
+        }
+    }
+}
+
 /// Message queued from server-side dispatch/shutdown into a worker stream writer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkerMessage {
@@ -828,7 +855,7 @@ impl ConnectedWorkerRegistry {
                     .insert(worker_id, handle.clone());
             }
         }
-        let transport = transport_of(&handle.delivery);
+        let transport = handle.delivery.transport();
         state.workers.insert(worker_id, handle);
         drop(state);
 
@@ -1110,6 +1137,39 @@ impl ConnectedWorkerRegistry {
     ) -> Result<(), ServerError> {
         self.state()?.dispatch_ineligible = unreachable;
         Ok(())
+    }
+
+    /// The transport each named worker is delivered over, for the workers still
+    /// registered (#25).
+    ///
+    /// A worker absent from the result has LEFT the registry — the caller must
+    /// treat that as "no transport", never as a default one. That distinction is
+    /// the whole reason this returns a map rather than a vector in the caller's
+    /// order: the liveness probe scopes its verdict by transport coverage, and a
+    /// departed worker whose transport was guessed would be judged by a probe
+    /// that never had a wire to it.
+    ///
+    /// Read under ONE lock acquisition rather than one per worker, so the
+    /// answer describes a single registry state instead of a smear across a
+    /// round of registrations and disconnects.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn transports_of(
+        &self,
+        workers: impl IntoIterator<Item = WorkerId>,
+    ) -> Result<BTreeMap<WorkerId, WorkerTransport>, ServerError> {
+        let state = self.state()?;
+        Ok(workers
+            .into_iter()
+            .filter_map(|worker_id| {
+                state
+                    .workers
+                    .get(&worker_id)
+                    .map(|worker| (worker_id, worker.delivery.transport()))
+            })
+            .collect())
     }
 
     /// Whether a worker is currently excluded from dispatch selection for
@@ -1409,16 +1469,6 @@ impl ConnectedWorkerRegistry {
         self.inner
             .lock()
             .map_err(|_| ServerError::lock_poisoned("connected worker registry"))
-    }
-}
-
-/// Map a held [`WorkerDelivery`] to the wire [`WorkerTransport`] discriminant for
-/// the WS3 `WorkerConnected` delta.
-const fn transport_of(delivery: &WorkerDelivery) -> WorkerTransport {
-    match delivery {
-        WorkerDelivery::Grpc(_) => WorkerTransport::Grpc,
-        #[cfg(feature = "liminal-transport")]
-        WorkerDelivery::Liminal(_) => WorkerTransport::Liminal,
     }
 }
 

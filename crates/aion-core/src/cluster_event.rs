@@ -81,6 +81,21 @@ pub enum WorkerTransport {
     Liminal,
 }
 
+impl WorkerTransport {
+    /// The word an operator sees for this transport in a log line.
+    ///
+    /// Lives beside the discriminants rather than in the server, so the name a
+    /// liveness withdrawal prints and the name a cluster event carries cannot
+    /// disagree about which link an operator should go and look at.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Grpc => "grpc",
+            Self::Liminal => "liminal",
+        }
+    }
+}
+
 /// Why a worker left the connected set.
 ///
 /// NOTE (wiring honesty): the single registry deregistration site

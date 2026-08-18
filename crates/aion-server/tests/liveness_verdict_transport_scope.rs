@@ -101,8 +101,9 @@ struct Fleet {
     grpc_worker: WorkerId,
     liminal_worker: WorkerId,
     grpc_stream: tokio::sync::mpsc::Receiver<WorkerMessage>,
-    /// Registrations, held so the workers stay in the registry.
-    _registrations: Vec<WorkerRegistration>,
+    /// Registrations, held so the workers stay in the registry — and dropped one
+    /// at a time by [`Fleet::deregister_liminal`] to make a worker DEPART.
+    registrations: Vec<WorkerRegistration>,
 }
 
 impl Fleet {
@@ -163,7 +164,7 @@ impl Fleet {
             grpc_worker,
             liminal_worker,
             grpc_stream,
-            _registrations: registrations,
+            registrations,
         })
     }
 
@@ -178,6 +179,14 @@ impl Fleet {
             self.registry.clone(),
             HEARTBEAT_WINDOW,
         )
+    }
+
+    /// Drop the liminal worker's registration, deregistering it while its
+    /// tracker entry survives — a worker that has LEFT, whose transport is
+    /// therefore no longer knowable.
+    fn deregister_liminal(&mut self) {
+        // The liminal registration is pushed last by `build`, so this is it.
+        drop(self.registrations.pop());
     }
 
     /// Drive one round while the gRPC worker answers its ping, exactly as a
@@ -276,8 +285,8 @@ async fn a_probe_that_cannot_reach_a_transport_leaves_its_workers_alone() -> Tes
 /// silently re-admit a worker with no reachable dispatch path, which is a worse
 /// defect than the one being fixed.
 #[tokio::test]
-async fn the_same_verdict_still_excludes_an_unreachable_worker_of_a_covered_transport()
--> TestResult {
+async fn the_same_verdict_still_excludes_an_unreachable_worker_of_a_covered_transport() -> TestResult
+{
     let mut fleet = Fleet::build(true)?;
     let probe = fleet.probe(true, true);
 
@@ -361,6 +370,51 @@ async fn an_empty_round_clears_a_stale_verdict_it_cannot_re_measure() -> TestRes
     Ok(())
 }
 
+/// A worker that has LEFT the registry has no transport, and a verdict must not
+/// name it.
+///
+/// The scoping question is "does this probe hold a wire to this worker's
+/// transport"; a departed worker has no transport to answer it with. Guessing
+/// one — treating absence as covered — would put a name selection can no longer
+/// see into an operator-facing set, and would make the departure look like an
+/// exclusion the operator should act on. The tracker's own entry is untouched:
+/// this is a scope on the VERDICT, not a second reaper.
+#[tokio::test]
+async fn a_worker_that_left_the_registry_is_named_by_no_verdict() -> TestResult {
+    let mut fleet = Fleet::build(true)?;
+    let probe = fleet.probe(true, true);
+
+    fleet.round_with_grpc_answering(&probe, 1).await?;
+    assert!(
+        fleet
+            .registry
+            .dispatch_ineligible()?
+            .contains(&fleet.liminal_worker),
+        "precondition: while it was registered, the unreachable liminal worker was excluded — so \
+         the change below is a change and not a standing condition"
+    );
+
+    fleet.deregister_liminal();
+    fleet.round_with_grpc_answering(&probe, 2).await?;
+
+    let excluded = fleet.registry.dispatch_ineligible()?;
+    assert!(
+        !excluded.contains(&fleet.liminal_worker),
+        "a departed worker has no transport, so no probe is entitled to judge it and no verdict \
+         may name it: {excluded:?}"
+    );
+    assert!(
+        fleet
+            .tracker
+            .unreachable_workers(Instant::now())?
+            .iter()
+            .any(|entry| entry.worker_id == fleet.liminal_worker),
+        "and the tracker still holds its standing evidence — the scope is on the verdict, not a \
+         second reaper quietly rewriting what was measured"
+    );
+    Ok(())
+}
+
 // --------------------------------------------------- the real-transport pin --
 
 /// 🔴 THE LIVE SHAPE, over real sockets. A registered gRPC worker must stay
@@ -431,6 +485,16 @@ fn a_grpc_worker_stays_dispatchable_across_real_liminal_probe_rounds() -> TestRe
         harness.liminal_worker(),
         "the real liminal worker answered its pings and must be selectable too"
     );
+    // And the eligibility above was NOT bought by quietly probing the gRPC
+    // worker after all: this probe carries no gRPC answer registry, so nothing
+    // may have gone down that stream. Without this, a probe that had grown a
+    // gRPC arm would satisfy every assertion here and the pin would no longer
+    // be about scoping at all.
+    assert_eq!(
+        harness.grpc_frames_pushed(),
+        0,
+        "a probe with no gRPC wire pushed a frame down the gRPC worker's stream"
+    );
 
     beater.stop();
     worker.stop();
@@ -450,8 +514,10 @@ struct Harness {
     shutdown: tokio::sync::watch::Sender<bool>,
     /// The gRPC registration, held so the worker stays registered.
     grpc_registration: Option<WorkerRegistration>,
-    /// The gRPC worker's stream, held open so its delivery channel stays live.
-    _grpc_stream: Option<tokio::sync::mpsc::Receiver<WorkerMessage>>,
+    /// The gRPC worker's stream, held open so its delivery channel stays live —
+    /// and read at the end of the pin, because a probe with no gRPC wire must
+    /// have pushed NOTHING down it.
+    grpc_stream: Option<tokio::sync::mpsc::Receiver<WorkerMessage>>,
 }
 
 impl Harness {
@@ -521,7 +587,7 @@ impl Harness {
             runtime: Some(runtime),
             shutdown,
             grpc_registration: None,
-            _grpc_stream: None,
+            grpc_stream: None,
         })
     }
 
@@ -541,10 +607,27 @@ impl Harness {
         let worker_id = registration
             .worker_id()
             .ok_or_else(|| test_error("gRPC registration assigned no worker id"))?;
-        self.tracker.register_connection(worker_id, Instant::now())?;
+        self.tracker
+            .register_connection(worker_id, Instant::now())?;
         self.grpc_registration = Some(registration);
-        self._grpc_stream = Some(stream);
+        self.grpc_stream = Some(stream);
         Ok(worker_id)
+    }
+
+    /// How many frames this server has pushed down the gRPC worker's stream.
+    ///
+    /// Counted by draining what is queued rather than by watching the push: the
+    /// stream has no other consumer in this pin, so anything the server sent is
+    /// still sitting there.
+    fn grpc_frames_pushed(&mut self) -> usize {
+        let Some(stream) = self.grpc_stream.as_mut() else {
+            return 0;
+        };
+        let mut pushed = 0;
+        while stream.try_recv().is_ok() {
+            pushed += 1;
+        }
+        pushed
     }
 
     /// The liminal worker's registry id, once it has connected.

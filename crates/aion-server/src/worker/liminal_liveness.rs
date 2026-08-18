@@ -99,11 +99,32 @@
 //! instantaneous. That is deliberate — a special-case fast path for stream
 //! death would be a second, softer route into the eligibility verdict, and the
 //! registry's own disconnect teardown already owns deregistration.
+//!
+//! # A verdict reaches only the transports this probe CARRIES (#25)
+//!
+//! The probation is transport-blind; the verdict's REACH is not. A probe
+//! publishes an exclusion for a worker only if it holds a wire on which that
+//! worker could have been asked — a liminal notifier for a liminal worker, a
+//! gRPC answer registry for a gRPC one ([`LivenessProbe::covers`]). Without
+//! that scope the verdict was formed from the whole of
+//! [`HeartbeatTracker::unreachable_workers`], so a worker of an uncarried
+//! transport could never bank an answer, never serve its probation, and never
+//! leave the exclusion set: registered, healthy, and withheld from dispatch for
+//! the life of the process. That was reported live against a server whose probe
+//! covered liminal only, and it is what [`LivenessProbe::new`] would still do to
+//! a gRPC fleet if the reach were left unscoped.
+//!
+//! Coverage is STRUCTURAL — which wires the probe holds — and never the set of
+//! targets a round happened to enumerate. The difference is load-bearing: a
+//! liminal worker whose connection has closed appears in no round's target list,
+//! and it is exactly the worker that must stay excluded. Scoping by enumeration
+//! would re-admit it, which is a worse defect than the one being cured.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use aion_core::WorkerTransport;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tracing::{info, warn};
@@ -114,7 +135,7 @@ use super::heartbeat::{
 };
 use super::liminal_transport::{LiminalConnectionNotifier, LiminalWorkerDelivery};
 use super::liveness::{PingFailure, ProbedTransport};
-use super::registry::{ConnectedWorkerRegistry, WorkerDelivery, WorkerId};
+use super::registry::{ConnectedWorkerRegistry, WorkerId};
 
 /// Wire liveness ping the server pushes on an established liminal connection.
 ///
@@ -308,10 +329,17 @@ impl LivenessProbe {
     /// The two transports are pinged over their own wires, CONCURRENTLY with
     /// each other, and are otherwise indistinguishable from here down: the same
     /// probation, the same tracker, the same single
-    /// [`Self::publish_reachability_verdict`] call. A round with
-    /// no target of either kind publishes nothing — there is no verdict to form
-    /// about an empty fleet, and publishing an empty exclusion set would be
-    /// indistinguishable from clearing one.
+    /// [`Self::publish_reachability_verdict`] call.
+    ///
+    /// EVERY round publishes, including one that found no target to ping. This
+    /// module used to skip publication for an empty round, reasoning that
+    /// "publishing an empty exclusion set would be indistinguishable from
+    /// clearing one". They are the same act, and skipping it is what left a
+    /// stale verdict standing: a verdict is published by REPLACEMENT, so a round
+    /// that publishes nothing leaves the previous round's exclusions in force
+    /// over a fleet this round measured afresh. The set is derived from the
+    /// tracker's standing evidence rather than from this round's targets, so it
+    /// is well defined whether or not anything was pinged (#25).
     ///
     /// Public because it is the whole unit of work: [`Self::run`] is a timer
     /// around it and adds nothing but the schedule. Driving rounds directly is
@@ -328,9 +356,6 @@ impl LivenessProbe {
             .as_ref()
             .map_or_else(Vec::new, |notifier| notifier.liveness_targets());
         let grpc = self.grpc_targets();
-        if liminal.is_empty() && grpc.is_empty() {
-            return;
-        }
         let silence_window_ms = u64::try_from(self.silence_window.as_millis()).unwrap_or(u64::MAX);
         // Joined, not sequenced. Each half bounds its own pings by the cadence,
         // so awaiting them in turn would let a round of unanswered gRPC pings
@@ -505,17 +530,26 @@ impl LivenessProbe {
     /// nothing from them.
     fn publish_reachability_verdict(&self, sequence: u64) {
         let now = Instant::now();
-        let unreachable = match self.tracker.unreachable_workers(now) {
+        let measured = match self.tracker.unreachable_workers(now) {
             Ok(workers) => workers,
             Err(error) => {
                 warn!(
                     %error,
                     liveness_ping = sequence,
-                    "could not read liminal worker reachability; leaving the previous dispatch \
+                    "could not read worker reachability; leaving the previous dispatch \
                      eligibility verdict in place rather than guessing"
                 );
                 return;
             }
+        };
+        let Some(unreachable) = self.within_reach(&measured) else {
+            warn!(
+                liveness_ping = sequence,
+                "could not read which transport each unreachable worker is delivered over, so \
+                 this round cannot tell an exclusion it is entitled to publish from one it has \
+                 no wire to test; the previous verdict stands unchanged"
+            );
+            return;
         };
         let excluded_now: BTreeSet<WorkerId> = unreachable
             .iter()
@@ -547,9 +581,56 @@ impl LivenessProbe {
             warn!(
                 %error,
                 liveness_ping = sequence,
-                "could not publish liminal worker dispatch eligibility; selection keeps the \
+                "could not publish worker dispatch eligibility; selection keeps the \
                  previous verdict"
             );
+        }
+    }
+
+    /// Narrow the tracker's evidence to the workers this probe is ENTITLED to
+    /// judge: those delivered over a transport it carries a wire for (#25).
+    ///
+    /// A worker of an uncarried transport is dropped — not because it is
+    /// reachable (nothing here knows that) but because this probe has no way to
+    /// find out, and an exclusion it could never lift is a permanent withdrawal
+    /// dressed as a measurement. A worker that has left the registry is dropped
+    /// for the same reason: it has no transport at all, selection can no longer
+    /// see it, and naming it would put a fabricated fact in an operator-facing
+    /// set.
+    ///
+    /// `None` when the registry cannot be read: the caller must then publish
+    /// NOTHING. Falling back to the unscoped set would reinstate the defect at
+    /// exactly the moment the server is least able to explain itself.
+    fn within_reach(&self, measured: &[ExcludedWorker]) -> Option<Vec<ExcludedWorker>> {
+        let transports = self
+            .registry
+            .transports_of(measured.iter().map(|excluded| excluded.worker_id))
+            .map_err(|error| warn!(%error, "could not read worker transports"))
+            .ok()?;
+        Some(
+            measured
+                .iter()
+                .filter(|excluded| {
+                    transports
+                        .get(&excluded.worker_id)
+                        .is_some_and(|transport| self.covers(*transport))
+                })
+                .copied()
+                .collect(),
+        )
+    }
+
+    /// Whether this probe holds a wire on which a worker of `transport` could be
+    /// asked its liveness question.
+    ///
+    /// Structural, and deliberately not a function of how many targets a round
+    /// enumerated: a liminal worker whose connection has closed is enumerated by
+    /// nothing and is precisely the worker a liminal-carrying probe must keep
+    /// excluded.
+    const fn covers(&self, transport: WorkerTransport) -> bool {
+        match transport {
+            WorkerTransport::Grpc => self.grpc.is_some(),
+            WorkerTransport::Liminal => self.notifier.is_some(),
         }
     }
 
@@ -648,11 +729,7 @@ impl LivenessProbe {
     /// here, and naming one would be a fabrication.
     fn transport_of(&self, worker_id: WorkerId) -> &'static str {
         match self.registry.worker_by_id(worker_id) {
-            Ok(Some(handle)) => match handle.delivery() {
-                WorkerDelivery::Grpc(_) => ProbedTransport::Grpc.name(),
-                #[cfg(feature = "liminal-transport")]
-                WorkerDelivery::Liminal(_) => ProbedTransport::Liminal { pid: 0 }.name(),
-            },
+            Ok(Some(handle)) => handle.delivery().transport().name(),
             Ok(None) | Err(_) => "<unregistered>",
         }
     }
@@ -902,7 +979,7 @@ mod tests {
     use super::super::registry::{ConnectedWorkerRegistry, WorkerId};
     use super::{
         Announcement, DispatchExclusion, LivenessPing, LivenessPong, LivenessProbe, PingFailure,
-        transition,
+        WorkerTransport, transition,
     };
 
     /// The WHOLE truth table, enumerated. Four inputs, and every one of them is
@@ -952,6 +1029,59 @@ mod tests {
             None,
             "an eligible worker that stayed eligible is not news"
         );
+    }
+
+    /// THE WHOLE COVERAGE TABLE, enumerated (#25). Two transports by two
+    /// wire-holdings, and every cell asserted.
+    ///
+    /// Coverage is what decides whether this probe may publish an exclusion for
+    /// a worker at all, so a cell that silently answered `true` would hand a
+    /// permanent withdrawal to a fleet the probe has no way to ask — the whole
+    /// injury. Enumerating it here is the only way to be sure the deny half and
+    /// the admit half are BOTH reachable: a `covers` that returned `true`
+    /// unconditionally is exactly the pre-fix behaviour, and it satisfies any
+    /// test that only checks the admitting direction.
+    #[test]
+    fn a_probe_covers_exactly_the_transports_it_holds_a_wire_for() {
+        let window = Duration::from_secs(30);
+        let registry = ConnectedWorkerRegistry::default();
+        let tracker = HeartbeatTracker::new(window);
+        let notifier = || Arc::new(LiminalConnectionNotifier::new(registry.clone()));
+        let build = |liminal: bool, grpc: bool| {
+            LivenessProbe::across_transports(
+                liminal.then(notifier),
+                grpc.then(super::GrpcLivenessWaiters::new),
+                tracker.clone(),
+                registry.clone(),
+                window,
+            )
+        };
+
+        let both = build(true, true);
+        assert!(both.covers(WorkerTransport::Liminal));
+        assert!(both.covers(WorkerTransport::Grpc));
+
+        let liminal_only = build(true, false);
+        assert!(liminal_only.covers(WorkerTransport::Liminal));
+        assert!(
+            !liminal_only.covers(WorkerTransport::Grpc),
+            "a probe holding no gRPC answer registry cannot hear a gRPC answer, so it must not \
+             judge a gRPC worker: the exclusion it would publish could never be lifted"
+        );
+
+        let grpc_only = build(false, true);
+        assert!(
+            !grpc_only.covers(WorkerTransport::Liminal),
+            "and the same in the other direction — the reach follows the wire, not the fleet"
+        );
+        assert!(grpc_only.covers(WorkerTransport::Grpc));
+
+        // Not constructible in production (the composition root always supplies
+        // at least the liminal notifier), but the fourth cell of a truth table
+        // is not optional: a probe with no wire at all judges nobody.
+        let neither = build(false, false);
+        assert!(!neither.covers(WorkerTransport::Liminal));
+        assert!(!neither.covers(WorkerTransport::Grpc));
     }
 
     /// The ping/pong pair round-trips with stable field names — the cross-crate

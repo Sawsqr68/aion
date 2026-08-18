@@ -20,9 +20,7 @@
 //! reads supervisor/registry/store state, never a namespace engine), sidestepping
 //! the `guard.scope(...).engine()?` requirement the workflow path has.
 
-use aion_core::{
-    ClusterDeployment, ClusterSnapshot, ClusterStreamError, ClusterWorker, WorkerTransport,
-};
+use aion_core::{ClusterDeployment, ClusterSnapshot, ClusterStreamError, ClusterWorker};
 use aion_proto::{StreamedClusterEvent, StreamedClusterSnapshot, WireError};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures::{SinkExt, StreamExt};
@@ -31,7 +29,6 @@ use crate::cluster_publisher::ClusterStreamLagged;
 use crate::error::ServerError;
 use crate::namespace::CallerIdentity;
 use crate::state::ServerState;
-use crate::worker::WorkerDelivery;
 
 /// Serve a cluster subscription on an already-upgraded socket.
 ///
@@ -170,7 +167,7 @@ pub(crate) async fn build_snapshot(
             worker_id: handle.id().value().to_string(),
             namespaces: handle.namespaces().iter().cloned().collect(),
             task_queue: handle.task_queue().to_owned(),
-            transport: transport_of(handle.delivery()),
+            transport: handle.delivery().transport(),
             node: handle.node().map(str::to_owned),
             deployment_association: handle.instance().map(|instance| instance.association),
         })
@@ -209,15 +206,6 @@ pub(crate) async fn build_snapshot(
 /// Self-label reported as the snapshot `node` on a single-node boot that carries
 /// no configured cluster distribution name.
 const STANDALONE_NODE_LABEL: &str = "standalone";
-
-/// Map a registry [`WorkerDelivery`] to the wire [`WorkerTransport`] discriminant.
-const fn transport_of(delivery: &WorkerDelivery) -> WorkerTransport {
-    match delivery {
-        WorkerDelivery::Grpc(_) => WorkerTransport::Grpc,
-        #[cfg(feature = "liminal-transport")]
-        WorkerDelivery::Liminal(_) => WorkerTransport::Liminal,
-    }
-}
 
 /// Send the typed cluster terminal error frame + close, then surface it typed.
 async fn deliver_cluster_terminal<Tx>(
