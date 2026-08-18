@@ -1,0 +1,1 @@
+{"type":"nextest","test":"aion-cli::aion$instrument_proof_tests::instrument_proof_deliberate_failure","message":"test failed"}

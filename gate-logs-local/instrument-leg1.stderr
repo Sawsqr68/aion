@@ -1,0 +1,6 @@
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/crates/aion-server)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/crates/aion-cli)
+error: could not compile `aion-cli` (bin "aion") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `aion-cli` (bin "aion" test) due to 1 previous error
+LEG1-ARM-DONE

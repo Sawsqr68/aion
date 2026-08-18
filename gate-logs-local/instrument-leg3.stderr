@@ -1,0 +1,41 @@
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: function `instrument_proof_unwrap` is never used
+    --> crates/aion-cli/src/main.rs:2743:4
+     |
+2743 | fn instrument_proof_unwrap() -> usize {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+────────────
+ Nextest run ID 55efcebe-1d6f-4b5a-a89a-b2294eb2345c with nextest profile: default
+    Starting 1 test across 257 binaries (5089 tests skipped)
+        FAIL [   0.020s] (1/1) aion-cli::bin/aion instrument_proof_tests::instrument_proof_deliberate_failure
+  output ───
+
+    running 1 test
+
+    thread 'instrument_proof_tests::instrument_proof_deliberate_failure' (19168941) panicked at crates/aion-cli/src/main.rs:2752:9:
+    assertion `left == right` failed: deliberate instrument-proof failure
+      left: 1
+     right: 2
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    test instrument_proof_tests::instrument_proof_deliberate_failure ... FAILED
+
+    failures:
+
+    failures:
+        instrument_proof_tests::instrument_proof_deliberate_failure
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 293 filtered out; finished in 0.00s
+
+
+────────────
+     Summary [   0.035s] 1 test run: 0 passed, 1 failed, 5089 skipped
+        FAIL [   0.020s] (1/1) aion-cli::bin/aion instrument_proof_tests::instrument_proof_deliberate_failure
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)
+LEG3-ARM-DONE

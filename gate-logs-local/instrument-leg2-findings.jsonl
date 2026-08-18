@@ -1,0 +1,5 @@
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2743,"lint":"dead_code","message":"function `instrument_proof_unwrap` is never used"}
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2745,"lint":"clippy::unnecessary_literal_unwrap","message":"used `unwrap()` on `Some` value"}
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2745,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2745,"lint":"clippy::unnecessary_literal_unwrap","message":"used `unwrap()` on `Some` value"}
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2745,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}

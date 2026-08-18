@@ -1,0 +1,2 @@
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2742,"lint":"E0308","message":"mismatched types"}
+{"type":"clippy","level":"error","file":"crates/aion-cli/src/main.rs","line":2742,"lint":"E0308","message":"mismatched types"}

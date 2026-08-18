@@ -1,0 +1,14 @@
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+────────────
+ Nextest run ID 64353a5d-56d6-4e99-be37-9bf336dab654 with nextest profile: default
+    Starting 5 tests across 257 binaries (5084 tests skipped)
+        PASS [   0.313s] (1/5) aion-server::noi5b_noi6_live_agent_e2e live_agent_streams_transcript_and_takes_intervention
+        PASS [   1.091s] (2/5) aion-server::outbox_delivery_contract_e2e dead_letter_is_genuine_and_loud
+        PASS [  10.835s] (3/5) aion-server::run_server_outbox_e2e run_server_outbox_happy_path_fan_out_completes_once
+        LEAK [  10.991s] (4/5) aion-server::run_server_outbox_e2e run_server_outbox_restart_rearms_stranded_rows
+        PASS [  22.390s] (5/5) aion-server::recovery_declared_body_e2e adopted_declared_body_dispatch_executes_after_recovery
+────────────
+     Summary [  22.407s] 5 tests run: 5 passed (1 leaky), 5084 skipped
