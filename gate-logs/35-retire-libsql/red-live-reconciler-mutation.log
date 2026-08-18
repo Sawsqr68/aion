@@ -1,0 +1,8 @@
+ Nextest run ID 8d6fd26d-31b5-4589-b3c0-d03ad519a773 with nextest profile: default
+    Starting 4 tests across 1 binary
+        PASS [   0.020s] (1/4) aion-server::run_server_outbox_e2e run_server_child_process
+        PASS [  11.187s] (2/4) aion-server::run_server_outbox_e2e run_server_outbox_happy_path_fan_out_completes_once
+        PASS [  11.368s] (3/4) aion-server::run_server_outbox_e2e run_server_outbox_restart_rearms_stranded_rows
+        PASS [  11.744s] (4/4) aion-server::run_server_outbox_e2e run_server_outbox_live_reconciliation_rearms_stranded_claims_once
+────────────
+     Summary [  11.746s] 4 tests run: 4 passed, 0 skipped

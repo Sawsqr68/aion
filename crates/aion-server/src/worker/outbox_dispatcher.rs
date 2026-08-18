@@ -987,9 +987,22 @@ mod tests {
         config.backoff_base = Duration::from_secs(30);
         let before = Utc::now();
         let dispatch = Arc::new(RecordingDispatch::new(false));
-        let dispatcher = OutboxDispatcher::new(store.clone(), config).with_dispatch(dispatch);
+        let seam: Arc<dyn OutboxRowDispatch> = Arc::clone(&dispatch) as Arc<dyn OutboxRowDispatch>;
+        let dispatcher = OutboxDispatcher::new(store.clone(), config).with_dispatch(seam);
         let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
+
+        // The sweep CLAIMED the staged row and took it to the dispatch seam, even
+        // though that seam could not deliver it. This is what "the dispatcher
+        // works the table while no worker can receive" means: a connected worker
+        // is not a precondition for claiming. `OutboxRowDispatch::dispatch`
+        // reports no-worker as an ordinary dispatch error, which is exactly what
+        // this double returns, so the production no-worker path lands here too.
+        assert_eq!(
+            dispatch.count()?,
+            1,
+            "the sweep must claim the staged row and offer it to the dispatch seam"
+        );
 
         let state = store
             .outbox_row_state(&row.dispatch_key)

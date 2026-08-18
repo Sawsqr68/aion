@@ -185,8 +185,43 @@ impl ServerProcess {
         }
     }
 
+    /// Kill the server and WAIT for the process to exit.
+    ///
+    /// An abrupt death is the production way an in-flight dispatch is stranded,
+    /// so this is the right stop for a test whose subject is recovery. The
+    /// `wait` is also the barrier the caller needs before opening the durable
+    /// store: haematite holds an exclusive writer lock on the data directory for
+    /// the life of the process, and the OS releases it at exit — so a store
+    /// opened after `wait` returns is opening an unlocked directory, with no
+    /// sleep anywhere in the argument.
     pub fn stop(mut self) -> Result<(), TestError> {
         self.kill_and_wait()
+    }
+
+    /// Ask the server to drain and WAIT for it to exit.
+    ///
+    /// `run_server` treats the first termination signal as a graceful drain, so
+    /// this exercises the production shutdown path and leaves nothing in flight.
+    /// Like [`Self::stop`], the `wait` is the barrier that releases haematite's
+    /// writer lock; unlike it, nothing is stranded by the stop itself.
+    pub fn stop_gracefully(mut self) -> Result<(), TestError> {
+        if self.child.try_wait()?.is_none() {
+            let delivered = Command::new("kill")
+                .args(["-TERM", &self.child.id().to_string()])
+                .status()?;
+            if !delivered.success() {
+                return Err(test_error(format!(
+                    "failed to deliver SIGTERM to the run_server child: {delivered}"
+                )));
+            }
+        }
+        let status = self.child.wait()?;
+        if !status.success() {
+            return Err(test_error(format!(
+                "the run_server child did not drain cleanly: {status}"
+            )));
+        }
+        Ok(())
     }
 
     fn kill_and_wait(&mut self) -> Result<(), TestError> {
@@ -282,6 +317,109 @@ pub fn count_completed_for(history: &[Event], ordinal: u64) -> usize {
         Event::ActivityCompleted { activity_id, .. } => activity_id.sequence_position() == ordinal,
         _ => false,
     })
+}
+
+/// Read a workflow's history through the operator HTTP door.
+///
+/// The LIVE phases of these tests may not open the durable store: the server is
+/// a separate process and haematite holds an exclusive writer lock on the data
+/// directory for its whole life. Synchronisation before a stop therefore goes
+/// through `POST /workflows/history` — the same endpoint the ops console reads.
+///
+/// `payload_limit_bytes = 0` disables payload elision, so each projected event
+/// is the plain serde encoding of [`aion_core::Event`] and round-trips back into
+/// one. The counting helpers in this module then apply unchanged to both doors,
+/// and a history read over HTTP cannot silently mean something different from a
+/// history read at the bytes.
+pub async fn fetch_history_over_http(
+    address: SocketAddr,
+    workflow_id: &aion_core::WorkflowId,
+) -> Result<Vec<Event>, TestError> {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("http://{address}/workflows/history"))
+        .header("content-type", "application/json")
+        .header("x-aion-subject", "ci")
+        .header("x-aion-namespaces", NAMESPACE)
+        .json(&json!({
+            "namespace": NAMESPACE,
+            "workflow_id": workflow_id.to_string(),
+            "limit": 1000,
+            "payload_limit_bytes": 0,
+        }))
+        .send()
+        .await?;
+    let status = response.status();
+    let body = response.text().await?;
+    if !status.is_success() {
+        return Err(test_error(format!(
+            "history fetch failed with {status}: {body}"
+        )));
+    }
+    let body: serde_json::Value = serde_json::from_str(&body)?;
+    let events = body
+        .get("events")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| test_error(format!("history response carried no events array: {body}")))?;
+    events
+        .iter()
+        .map(|event| {
+            serde_json::from_value::<Event>(event.clone()).map_err(|error| {
+                test_error(format!("history event did not decode as an Event: {error}"))
+            })
+        })
+        .collect()
+}
+
+/// Poll the HTTP history door until `predicate` holds, or fail naming what it saw.
+///
+/// This is SYNCHRONISATION, not an assertion: it establishes that the state a
+/// later byte-level assertion is about has been reached, so the server can be
+/// stopped. The assertions themselves run against the durable store after the
+/// process has exited.
+pub async fn wait_for_history_over_http<F>(
+    address: SocketAddr,
+    workflow_id: &aion_core::WorkflowId,
+    description: &str,
+    predicate: F,
+) -> Result<Vec<Event>, TestError>
+where
+    F: Fn(&[Event]) -> bool,
+{
+    let deadline = Instant::now() + POLL_DEADLINE;
+    loop {
+        let history = fetch_history_over_http(address, workflow_id).await?;
+        if predicate(&history) {
+            return Ok(history);
+        }
+        if Instant::now() > deadline {
+            return Err(test_error(format!(
+                "timed out waiting for {description}: {history:#?}"
+            )));
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+/// Every outbox row's durable lifecycle state, read at the bytes.
+///
+/// Only legitimate once the owning server process has exited — see
+/// [`ServerProcess::stop`] for why the exit is the barrier.
+pub async fn row_states(
+    store: &HaematiteStore,
+    workflow_id: &aion_core::WorkflowId,
+    ordinals: &[u64],
+) -> Result<Vec<aion_store_haematite::OutboxRowState>, TestError> {
+    let mut states = Vec::with_capacity(ordinals.len());
+    for ordinal in ordinals {
+        let key = OutboxRow::dispatch_key_for(workflow_id, *ordinal);
+        let state = store
+            .outbox_row_state(&key)
+            .await?
+            .ok_or_else(|| test_error(format!("no outbox row for ordinal {ordinal}")))?;
+        states.push(state);
+    }
+    Ok(states)
 }
 
 pub async fn wait_for_history<F>(
@@ -471,6 +609,9 @@ grpc_address = "{grpc}"
 [store]
 backend = "haematite"
 data_dir = {db}
+# Required, no default: the haematite boot path refuses a config that does not
+# rule on the node cache's byte ceiling.
+node_cache_budget = "unlimited"
 
 [runtime]
 scheduler_threads = 1

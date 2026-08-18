@@ -1,0 +1,16 @@
+  stderr ───
+    Error: Custom { kind: Other, error: "timed out waiting for worker activity task" }
+
+────────────
+     Summary [  29.227s] 2 tests run: 1 passed, 1 failed, 2 skipped
+        FAIL [  29.220s] (2/2) aion-server::run_server_outbox_e2e run_server_outbox_restart_rearms_stranded_rows
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)
+  stderr ───
+    Error: Custom { kind: Other, error: "no outbox row for ordinal 0" }
+
+────────────
+     Summary [   5.221s] 1 test run: 0 passed, 1 failed, 3 skipped
+        FAIL [   5.219s] (1/1) aion-server::run_server_outbox_e2e run_server_outbox_happy_path_fan_out_completes_once
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)
