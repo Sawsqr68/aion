@@ -1,12 +1,5 @@
     Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-store-haematite)
-    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion)
-    Checking aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-proto-generated)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-server)
-    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-proto)
-    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-worker)
-    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-awl)
-    Checking aion-integration-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-integration-cli)
-    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-client)
-    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/benchmarks/million-processes)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion)
     Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 23s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 59.93s

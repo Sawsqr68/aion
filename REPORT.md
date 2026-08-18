@@ -376,18 +376,128 @@ workflow-visible time from moving backwards.
 | `crates/aion/src/lifecycle/completion_retry.rs` | the demanded re-derivation |
 | `crates/aion/tests/replay_now_position_e2e.rs` | new recovery-replay e2e |
 | `crates/aion/tests/fixtures/aion_fixture_workflow.erl` / `.beam` / `README.md` | `now_span/1` |
+| `crates/aion-cli/tests/issue36_pause_restart_resume_e2e.rs` | out-of-lane: the required `store.node_cache_budget` key (see §8) |
 
 ---
 
 ## 8. Gates
 
+### The extraction battery (`ablative/docs/GATE-EXTRACTION-STANDARD.md`)
+
+Three legs, verbatim jq, `--keep-going` / `--no-fail-fast`, `NORN_BIN` exported.
+Script and filters committed at `gate-logs-local/battery/run-battery.sh`,
+`extract-compiler.jq`, `extract-nextest.jq`.
+
+**Final run — empty extraction, all three legs.**
+
+```
+leg1_check_rc=0        findings_leg1_check=0
+leg2_clippy_rc=0       findings_leg2_clippy=0
+leg3_nextest_rc=0      findings_leg3_nextest=0
+Summary [ 332.484s] 5159 tests run: 5159 passed (7 slow), 0 skipped
+```
+
+Per-leg stderr kept beside the findings (caveat 1 of the standard): legs 1 and 2
+each end on a `Finished` line, and leg 3's Summary reconciles with its finding
+count (0 findings ↔ 0 failed ↔ 5159 of 5159 run). Empty here is provably
+"everything passed", not "died at test 400".
+
+**The instrument was proven able to go red first**, on this tree, before it was
+trusted:
+
+- Compiler-message extractor (legs 1 and 2 share it): a deliberate defect
+  (`unused` binding + `.unwrap()` + dead function) yielded **6 finding lines**
+  with file/line/lint, including `clippy::unwrap_used` —
+  `gate-logs-local/battery/PROOF-clippy-findings.jsonl`.
+- Nextest extractor: one flipped assertion yielded **1 finding line** with the
+  test name and its panic stdout —
+  `gate-logs-local/battery/PROOF-nextest-findings.jsonl`.
+
+Both mutants were restored by writing bytes back (`git checkout --`), and every
+verdict above was measured on the rebuilt tree.
+
+### What the battery caught, and how each finding was attributed
+
+The first two contended runs were NOT clean. Every finding was chased to a
+mechanism rather than re-run until green.
+
+| Finding | Runs | Verdict |
+| --- | --- | --- |
+| `aion-cli::issue36_pause_restart_resume_e2e` × 2 | both | **Real, pre-existing, fixed** (commit `fc8a85fbb`). |
+| `aion-rs::awl_bc4_differential covered_set_is_byte_identical` | run 1 only | Contention artefact. |
+| `aion-rs::nif_query delivery_queues_pending_query_and_wakes_the_workflow_process` | run 2 only | Contention artefact. |
+
+**The `issue36` pair.** `aion server` refused at config resolution —
+`store.node_cache_budget is required and has no default` — before any engine
+code ran. The 0.8.3 budget landing (`fa76009d5`) taught the key to the two
+config templates and to `aion-server/tests/haematite_backend.rs`, but this test
+hand-builds its own server config and was missed. It was invisible to the base
+tree's battery because both tests are gated on `NORN_BIN`, which this lane's
+charter told me to export. `git diff d4317268f..HEAD -- crates/aion-cli
+crates/aion-server` was empty at the time, and the refusal is upstream of
+`aion-rs` entirely. Fixed with that commit's own remedy verbatim
+(`node_cache_budget = "unlimited"`); with the key, `2 passed, 0 failed` in
+30.46s.
+
+**The two singletons.** Neither recurred, and each run produced a *different*
+one — the signature of a flake population under load, not a defect. Both were
+chased to a mechanism and then measured:
+
+- `covered_set_is_byte_identical` reported
+  `loop_without_counting event[6] /(trail length): reference=7 direct=6` with
+  **no per-event difference** in the six events both trails shared: one side
+  captured one event MORE, not different. `awl_bc4_differential/run.rs` polls
+  `read_history` every 20 ms and breaks on the FIRST read containing a terminal,
+  with no stability requirement on that read (parks get one — `STABLE_READS`,
+  terminals do not). Whether a post-terminal append lands inside that read is
+  pure scheduling. Neither side was `Stuck` (the report shows `0 INFRA`), so the
+  15 s deadline is not implicated. This fixture is in the covered set, which by
+  construction contains no durable timer, so the `recorded_now` change cannot
+  reach it.
+- `delivery_queues_pending_query_and_wakes_the_workflow_process` failed with
+  `query wake marker delivery failed: runtime error: process 1 is not ready` —
+  a beamr scheduler-readiness race, in a path this lane does not touch.
+
+Isolation controls on the final tree: the differential **3/3 green**
+(`0 DIVERGENCES` each), the query test **3/3 green**. Both then passed in the
+clean full run above.
+
+🔴 Named for the steward, not fixed here: `awl_bc4_differential/run.rs`'s
+terminal snapshot should require a stable read exactly as its park detection
+already does. That is a harness defect in another lane's suite, and it will keep
+producing this exact one-event divergence on a loaded box until it is closed.
+
+### The named gates
+
 | Gate | Result |
 | --- | --- |
-| `cargo test -p aion-rs` (63 binaries) | **1187 passed, 0 failed, 0 ignored**, exit 0 — `gate-logs-local/green-aion-rs-full.log` |
-| `cargo clippy --workspace --all-targets -- -D warnings` | exit 0 — `gate-logs-local/clippy-workspace.log` |
-| `cargo clippy -p aion-rs --all-targets -- -D warnings` | `gate-logs-local/clippy-aion-rs.log` |
-| `cargo fmt` (autoformat, never `--check`) | applied to the whole tree |
-| Extraction battery (`ablative/docs/GATE-EXTRACTION-STANDARD.md`) | `gate-logs-local/battery/` |
+| `cargo test -p aion-rs` | **exit 0 — 63 binaries, 1188 passed, 0 failed, 0 ignored** (`gate-logs-local/green-aion-rs-full.log`) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** (`gate-logs-local/clippy-workspace.log`) |
+| `cargo clippy -p aion-rs --all-targets -- -D warnings` | **exit 0** (`gate-logs-local/clippy-aion-rs.log`) |
+| `cargo fmt` (autoformat, never `--check`) | applied; pre-existing drift in `aion-server`, `aion-store-haematite` and `ss1_owned_shards_builder.rs` reverted so this lane's diff carries no unrelated churn |
+
+1188 is 1187 + the one new collect test — the count reconciles with the diff.
+
+**One further contention artefact, recorded rather than buried.** The FIRST
+`cargo test -p aion-rs` on the final tree stopped at
+`outbox_e2e::outbox_late_completion_for_cancelled_ordinal_is_dropped` with
+
+    Error: Store(Backend("SQLite failure: `bad parameter or other API misuse`"))
+
+— a libSQL DRIVER error, not an assertion, on the suite's only real persistent
+`LibSqlStore`. `cargo test` is fail-fast per binary, so that run reported only
+39 of 63 binaries: the tail never ran, which is precisely the truncation the
+battery's `--no-fail-fast` legs exist to prevent. Base rate on this tree: green
+in the full 5159-test battery run, green 5/5 in isolation, and green in the
+re-run above — one observation in eight. The only change this lane makes on that
+path is an atomic `fetch_max`; `observed_terminal` reads the in-memory history
+snapshot, so no store call was added, removed, or reordered.
+
+Both clippy resolutions are required and both were run: the first pass of this
+work was clean under `--workspace` and red under `-p aion-rs`
+(`clippy::single_match_else`, `clippy::doc_markdown`). Both were fixed in the
+code, not silenced.
 
 No `#[allow]`, no `#[expect]`, no `#[ignore]`, no `_var` renames, no
-`#[cfg(any())]`, no weakened assertion. No `unwrap`/`expect`/`panic` added.
+`#[cfg(any())]`, no weakened assertion. No `unwrap`/`expect`/`panic` added —
+verified by grepping the whole diff for each.
