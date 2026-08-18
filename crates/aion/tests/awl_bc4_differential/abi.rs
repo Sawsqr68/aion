@@ -405,8 +405,9 @@ fn failed_details(trail: &[Event]) -> Option<serde_json::Value> {
 }
 
 /// Asserts the writer chunk contract over `bytes`: canonical order, `AtU8` and
-/// `Code` always present, every optional chunk present IFF its decoded table is
-/// non-empty, and no foreign chunk.
+/// `Code` plus OTP-required `ImpT`, `ExpT`, and `StrT` always present, every
+/// genuinely optional chunk present IFF its decoded table is non-empty, and no
+/// foreign chunk.
 fn assert_writer_contract(bytes: &[u8]) -> TestResult {
     let chunks = parse_beam_chunks(bytes)?;
     let names: Vec<[u8; 4]> = chunks.iter().map(|(id, _)| *id).collect();
@@ -428,19 +429,14 @@ fn assert_writer_contract(bytes: &[u8]) -> TestResult {
         "chunks out of canonical order: {:?}",
         render_chunks(&names)
     );
-    // Optional chunk present IFF its decoded table is non-empty.
+    // OTP tools require these table chunks even when their decoded table is
+    // empty; beamr 0.19.2 deliberately emits all three unconditionally.
     let (_table, parsed) = decode(bytes)?;
     let present = |id: &[u8; 4]| names.iter().any(|name| name == id);
-    assert_eq!(
-        present(b"ImpT"),
-        !parsed.imports.is_empty(),
-        "ImpT vs imports"
-    );
-    assert_eq!(
-        present(b"ExpT"),
-        !parsed.exports.is_empty(),
-        "ExpT vs exports"
-    );
+    assert!(present(b"ImpT"), "ImpT must be present");
+    assert!(present(b"ExpT"), "ExpT must be present");
+    assert!(present(b"StrT"), "StrT must be present");
+    // Genuinely optional chunks remain present IFF their table is non-empty.
     assert_eq!(
         present(b"FunT"),
         !parsed.lambdas.is_empty(),
@@ -450,11 +446,6 @@ fn assert_writer_contract(bytes: &[u8]) -> TestResult {
         present(b"LitT"),
         !parsed.literals.is_empty(),
         "LitT vs literals"
-    );
-    assert_eq!(
-        present(b"StrT"),
-        !parsed.string_table.is_empty(),
-        "StrT vs string table"
     );
     assert_eq!(
         present(b"Line"),
