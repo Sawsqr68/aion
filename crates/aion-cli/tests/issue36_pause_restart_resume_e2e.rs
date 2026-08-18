@@ -260,9 +260,10 @@ fn probe_live(http_port: u16) -> Option<String> {
 
 /// The server config: reserved ports, the durable store under this run's own
 /// home, the liminal worker channel the agent worker dials, deploy enabled
-/// so `aion deploy` can reach it, and the transcript flush policy
-/// (`observability.max_batch_events` / `max_batch_hold_ms`), which is
-/// required with no default — the server refuses to boot without it.
+/// so `aion deploy` can reach it, and the two keys that are required with no
+/// default — the server refuses to boot without either: the transcript flush
+/// policy (`observability.max_batch_events` / `max_batch_hold_ms`) and the
+/// haematite node-cache ceiling (`store.node_cache_budget`).
 fn server_config(http: u16, grpc: u16, liminal: u16) -> String {
     format!(
         "[server]\n\
@@ -270,6 +271,8 @@ fn server_config(http: u16, grpc: u16, liminal: u16) -> String {
          grpc_address = \"127.0.0.1:{grpc}\"\n\
          \n[store]\n\
          backend = \"haematite\"\n\
+         # Unlimited: this e2e measures adoption across a server death, never caching.\n\
+         node_cache_budget = \"unlimited\"\n\
          \n[runtime]\n\
          query_timeout_ms = 10000\n\
          \n[outbox]\n\

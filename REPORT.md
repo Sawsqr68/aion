@@ -143,6 +143,14 @@ choice and the compiler refuses a default:
   `ResumeLive { recorded_at: Some(_) }`).
 - `resolve_command_unobserved` — resolves without moving the position.
 
+Stated plainly rather than left to read as coverage: the
+`ResumeLive { recorded_at: Some(_) }` arm is **dormant today**. All three
+`ResumeLive` constructions in `Resolver::resolve_with_consumed` pass `None`, so
+the resolver never reports a partially-consumed handoff. The arm is carried
+because the charter directs mirroring `Replay::step` rather than forking it, and
+because a resolver that later reports a consumed anchor on handoff must move the
+position. No test exercises it, and none can until the resolver produces it.
+
 `NifContext::observe_recorded_at` (line 277) is the live counterpart, called at
 the moment a seam records the outcome it is about to return.
 
@@ -234,6 +242,20 @@ This parity is exactly as strong as the settlement decision's own determinism �
 same snapshot, same first-match scan, both sides — and no stronger. It
 introduces no new divergence source. See §6.2 for a pre-existing hazard found
 while deriving this.
+
+**A hole the first cut of this seam had, found in my own re-read and fixed
+(commit `9cac862bd`).** `settle_race` skipped the winner ordinal entirely in the
+loop that observes recorded terminals. A winner found by `recorded_race_winner`
+— one recorded by an EARLIER pass — was therefore never advanced to on replay,
+while live had advanced to it when `take_and_record` wrote it. The loser
+cancellations usually cover the gap (they are recorded after the winner, and the
+position is a maximum), but not always: a one-member race has no losers to
+cancel, and a batch whose losers already carried earlier terminals records none
+either. Every member is now observed before the winner-only skip.
+`race_settlement_advances_now_over_the_recorded_winner` pins the one-member
+shape; against the literal prior text it fails `left: None` /
+`right: Some(1787010977880)`, and the restored tree is green on the rebuilt
+binary (23 collect tests).
 
 ### E. Asynchronous arrivals stay invisible
 
@@ -349,7 +371,8 @@ workflow-visible time from moving backwards.
 | `crates/aion/src/runtime/nif_activity_in_vm.rs` | in-VM dispatch unobserved (`:157`) |
 | `crates/aion/src/runtime/nif_signal.rs` | receive/send observed (`:334`, `:427`); live send observe (`:460`) |
 | `crates/aion/src/runtime/nif_child.rs` | spawn/await observed (`:103`, `:343`); live spawn observe (`:144`) |
-| `crates/aion/src/runtime/nif_collect_settlement.rs` | `recorded_terminal_event` / `terminal_state` split; `observed_terminal` (`:362`) at 5 settlement reads; live observes (`:222`, `:249`, `:281`) |
+| `crates/aion/src/runtime/nif_collect_settlement.rs` | `recorded_terminal_event` / `terminal_state` split; `observed_terminal` at 5 settlement reads; live observes; the winner is observed before the winner-only skip in `settle_race` |
+| `crates/aion/src/runtime/nif_collect_tests/settlement.rs` | `race_settlement_advances_now_over_the_recorded_winner` |
 | `crates/aion/src/lifecycle/completion_retry.rs` | the demanded re-derivation |
 | `crates/aion/tests/replay_now_position_e2e.rs` | new recovery-replay e2e |
 | `crates/aion/tests/fixtures/aion_fixture_workflow.erl` / `.beam` / `README.md` | `now_span/1` |

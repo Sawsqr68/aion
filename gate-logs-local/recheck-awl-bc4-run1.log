@@ -1,0 +1,19 @@
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-1-replay-now/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.75s
+     Running tests/awl_bc4_differential.rs (target/debug/deps/awl_bc4_differential-5f4fabef11862d68)
+
+running 1 test
+COMPILED 109 module(s) under real `gleam build` in 1 attempt(s): acp_harness_launch, action_param_hygiene, after_single, analyze_snapshot, announce_and_build, ask_the_agent, ask_the_agent_control, awl_hello, bounded_region_close, build_once, calls_and_side_effects, chained_polish, child_collection_fork, child_collection_fork_sequential, child_spawn_combo, collection_predicates, combinators, comma_tolerance, compensate_to_outcome, compensate_to_step, confirm_gate, counter_hygiene, dev_brief, dev_flow, diamond_report, drafting, empty_fork_collection, fall_through_chain, fallible_all_short_circuit, fallible_any_short_circuit, fallible_collection_predicates, fan_children, fan_children_tolerant, fan_scores, fetch_upstream, fixed_ping, float_threshold_guard, flow_vocab_b1, fork_action_fanout, fork_collection_join, fork_in_loop_live_ins, fork_named_branches, fork_named_homogeneous, fork_sequential_route, gated_review, general_concat, grade_essay, greet_by_hand, guard_chain_carries_every_proof, guard_narrows_a_deep_optional_field, guard_narrows_an_optional_field, import_constraints, import_nested_defs, import_ticket, index_and_concat, inline_schema_round, inline_verbatim_constraints, layer_hygiene, literal_forms, max_arity_record, measure_widths, mixed_doors, nested_handlers, nested_region_locals, nested_subflows, norn_harness_launch, norn_harness_launch_control, norn_harness_minimal_launch, notify_once, optional_shorthand, ordered_tolerant, ping_host, pipe_chain_stages, poll_job, predicates_and_operators, prepare_dataset, process_order, publish_assets, publish_with_cleanup, refresh_cache, region_decision, release_pipeline, release_pipeline_combined, render_scene, review_a_tree, rollout, runtime_sized_fork, scoped_names, sequential_migrations, settle_draft, ship_release, short_circuit_optional, sibling_region_locals, sit_one, step_bodies_combined, substep_cleanup, summarize, summarize_document, temporary_hygiene, timed_report, timeout_inside_retry, transcribe_and_summarize, triage_message, triage_ticket, unicode_payloads, value_route, wait_and_sleep, wait_timeout_optional, workflow_id
+test covered::covered_set_is_byte_identical has been running for over 60 seconds
+differential report: 68 succeeded, 38 failed-path, 0 cancelled, 3 timer-parked, 3 excluded, 0 refused, 0 AGREED-REFUSAL, 0 DIVERGENCES, 0 INFRA
+  timer-parked loop-outcomes/valid/guard_optional_wait on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_and_sleep on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_timeout_optional on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  excluded header-types/valid/combined
+  excluded header-types/valid/signal_wait
+  excluded step-bodies/valid/send_signal
+
+test covered::covered_set_is_byte_identical ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 35 filtered out; finished in 69.95s
+
