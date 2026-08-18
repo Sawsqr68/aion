@@ -44,7 +44,7 @@ use crate::engine::startup::{
     RecoveredResident, StartupRecoveryContext, recover_active_workflow, register_recovered_resident,
 };
 use crate::loader::WorkflowCatalog;
-use crate::registry::{Registry, WorkflowHandle};
+use crate::registry::{HandleRemoval, Registry, WorkflowHandle};
 use crate::runtime::RuntimeHandle;
 use crate::supervision::SupervisionTree;
 
@@ -77,14 +77,21 @@ pub struct ReopenWorkflowContext<'a> {
 /// Returns [`EngineError::WorkflowNotFound`] when no history exists for
 /// `(id, run)`, and [`EngineError::InvalidState`] when the run is not currently
 /// terminal, terminal for a non-reopenable reason (Completed/`TimedOut`), or
-/// already Running. A double-write race surfaces as a hard durability error via
-/// the recorder's expected-sequence discipline. Recorder, runtime, supervision,
-/// and registry failures surface as their typed [`EngineError`] variants.
+/// a different lease is already driving it. A double-write race surfaces as a
+/// hard durability error via the recorder's expected-sequence discipline.
+/// Recorder, runtime, supervision, and registry failures surface as their typed
+/// [`EngineError`] variants.
 pub async fn reopen(
     context: ReopenWorkflowContext<'_>,
     id: &WorkflowId,
     run: &RunId,
 ) -> Result<WorkflowHandle, EngineError> {
+    // Capture the exact lease this caller observed BEFORE reading history. The
+    // history read is still the first authority consulted for admission, but
+    // retaining this identity closes the other side of the race: a winner can
+    // append and register between the read and cleanup, and a later `get` would
+    // mistake that fresh winner for the terminal leftover it needs to clear.
+    let observed_handle = context.registry.get(id, run)?;
     let history = context.store.read_history(id).await?;
     if history.is_empty() {
         return Err(crate::engine::api::workflow_not_found(id, run));
@@ -97,24 +104,42 @@ pub async fn reopen(
     let segment = run_segment(&history, run);
     let reopened = validate_and_compute_reopened(id, run, segment)?;
 
-    // History says reopenable-terminal, but a live handle can mean two things.
-    // A run that fails while resident keeps its suspended handle registered —
-    // `reconcile_terminal_registry` reconciles the cached status to the
-    // terminal and suspends residency without removing the entry — so a
-    // terminal-cached handle is that leftover, not a live run: clear it and
-    // proceed. Only a non-terminal cached status means a concurrent reopen
-    // already won the race and is driving the run. Two reopens racing past
-    // this check are still serialized by the recorder's expected-sequence
-    // discipline (the loser's `WorkflowReopened` append fails).
-    if let Some(existing) = context.registry.get(id, run)? {
-        if existing.cached_status().is_terminal() {
-            context.registry.remove(id, run)?;
-        } else {
-            return Err(EngineError::InvalidState {
-                reason: format!(
-                    "workflow {id} run {run} was already reopened and is Running (concurrent reopen)"
-                ),
-            });
+    // History has already said reopenable-terminal, and history is the authority.
+    // The handle is NOT: a run that fails while resident keeps its registered
+    // handle, and `reconcile_terminal_registry` reconciles that handle's cached
+    // status only AFTER the completion doorbell has already released
+    // `Engine::result`. In that window a prompt, single, legitimate reopen sees a
+    // handle still caching `Running` over a durably `Failed` history — and a
+    // check keyed on the cached status refuses it as a concurrent reopen (#51).
+    //
+    // What matters is IDENTITY, not status: is the entry still the one this
+    // caller observed? Clearing by key instead would evict a winner that appended
+    // `WorkflowReopened` and registered a fresh handle between the history read
+    // above and this line.
+    //
+    // Two callers that both pass here are still serialized by the recorder: both
+    // built at the same head, so both compute the same `expected_seq`, and
+    // `Recorder::append_one` lets exactly one `WorkflowReopened` land — the loser
+    // gets `SequenceConflict`. And a caller whose own history read already
+    // contained `WorkflowReopened` never reaches this line at all:
+    // `validate_and_compute_reopened` rejected it as Running.
+    if let Some(existing) = observed_handle {
+        match context.registry.remove_if_pid(id, run, existing.pid())? {
+            // The leftover lease this caller observed, cleared by identity — or
+            // already cleared by an overlapping caller in the same pre-append
+            // window. Either way nothing live was disturbed: proceed.
+            HandleRemoval::Removed(_) | HandleRemoval::Absent => {}
+            // A DIFFERENT lease now holds the slot: another reopen won and is
+            // driving the run. Refuse without touching it.
+            HandleRemoval::Replaced(winner) => {
+                return Err(EngineError::InvalidState {
+                    reason: format!(
+                        "workflow {id} run {run} was already reopened by another caller \
+                         (concurrent reopen): run is now driven by pid {}",
+                        winner.pid()
+                    ),
+                });
+            }
         }
     }
 

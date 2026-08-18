@@ -14,6 +14,6 @@ pub use handle::{
     CompletionNotifier, HandleResidency, Residency, TerminalOutcome, WorkflowHandle,
     WorkflowHandleParts,
 };
-pub use table::Registry;
+pub use table::{HandleRemoval, Registry};
 pub use terminal_writer::TerminalWriterReservation;
 pub use unrecoverable::{UnrecoverableRun, UnrecoverableRuns};

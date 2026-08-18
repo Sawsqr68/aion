@@ -518,6 +518,14 @@ pub(super) async fn handle_process_exit_attempt(
     };
     handle.completion().notify(terminal);
 
+    // A test-armed hold, and nothing at all in production: the gate map is empty
+    // unless a test armed this exact run, so this is one map miss. It exists
+    // because the interval that follows — doorbell rung, `Engine::result`
+    // already released, registry not yet reconciled — is where #51 lives, and
+    // holding it open is the only way to pin that deterministically rather than
+    // by racing.
+    crate::lifecycle::terminal_reconcile_gate::hold(handle.workflow_id(), handle.run_id()).await;
+
     // 🔴 Below this line the recorder lock has dropped and the epoch gate above
     // no longer covers anything. That is correct and deliberate — neither call
     // appends to history, so neither can be the second writer the gate exists to

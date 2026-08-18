@@ -63,6 +63,25 @@ impl Slots {
 /// [`remove`]: Registry::remove
 type LivePidIndex = HashMap<WorkflowId, (RunId, u64)>;
 
+/// The outcome of an identity-checked handle removal.
+///
+/// Reopen admission needs three answers, not two. A caller that read history,
+/// found a reopenable terminal, and then observed a registered handle must know
+/// whether the entry it is about to clear is still the one it looked at — a
+/// concurrent reopen can append `WorkflowReopened` and register a fresh handle
+/// in that window, and clearing by key would evict the winner.
+#[derive(Debug)]
+pub enum HandleRemoval {
+    /// The observed handle was still registered and has been removed.
+    Removed(WorkflowHandle),
+    /// No handle is registered for the pair. Another caller in the same
+    /// pre-append window already cleared it; nothing has been disturbed.
+    Absent,
+    /// A different handle occupies the slot. It is left untouched, and returned
+    /// so the caller can name it in its refusal.
+    Replaced(WorkflowHandle),
+}
+
 /// Concurrency-safe registry of live workflow process handles.
 ///
 /// The `index` is a `WorkflowId -> (RunId, pid)` secondary index maintained
@@ -174,16 +193,59 @@ impl Registry {
         // Lock ordering: slots first, then index. Never the reverse.
         let mut slots = self.slots()?;
         let removed = slots.handles.remove(&(id.clone(), run.clone()));
-        // Compare-and-delete: only drop the index entry when it still points
-        // at the run being removed. During continue-as-new a newer run already
-        // overwrote the entry, and that newer run must survive this removal.
+        drop(slots);
+        self.forget_live_index_entry(id, run)?;
+        Ok(removed)
+    }
+
+    /// Removes the handle for `(id, run)` only if it is still the instance the
+    /// caller observed, identified by `expected_pid`.
+    ///
+    /// The compare and the delete happen under one `slots` lock, which is what
+    /// distinguishes this from a `get` followed by a `remove`: between those two
+    /// calls a concurrent reopen can register its own handle, and removing by
+    /// key would evict it. See [`HandleRemoval`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
+    pub fn remove_if_pid(
+        &self,
+        id: &WorkflowId,
+        run: &RunId,
+        expected_pid: u64,
+    ) -> Result<HandleRemoval, EngineError> {
+        // Lock ordering: slots first, then index. Never the reverse.
+        let mut slots = self.slots()?;
+        let key = (id.clone(), run.clone());
+        let Some(occupant) = slots.handles.get(&key) else {
+            return Ok(HandleRemoval::Absent);
+        };
+        if occupant.pid() != expected_pid {
+            return Ok(HandleRemoval::Replaced(occupant.clone()));
+        }
+        let removed = slots.handles.remove(&key);
+        drop(slots);
+        self.forget_live_index_entry(id, run)?;
+        match removed {
+            Some(handle) => Ok(HandleRemoval::Removed(handle)),
+            // Unreachable: the occupant was observed under the lock just held.
+            // Reported rather than asserted — no `unwrap`/`expect` in library code.
+            None => Ok(HandleRemoval::Absent),
+        }
+    }
+
+    /// Drops the live-pid index entry for `id`, but only while it still points at
+    /// `run`. During continue-as-new a newer run has already overwritten the
+    /// entry, and that newer run must survive this removal.
+    fn forget_live_index_entry(&self, id: &WorkflowId, run: &RunId) -> Result<(), EngineError> {
         let mut index = self.index()?;
         if let std::collections::hash_map::Entry::Occupied(entry) = index.entry(id.clone()) {
             if entry.get().0 == *run {
                 entry.remove();
             }
         }
-        Ok(removed)
+        Ok(())
     }
 
     /// Returns a snapshot of all live handles without holding the registry lock.
@@ -414,7 +476,7 @@ mod tests {
         CompletionNotifier, HandleResidency, WorkflowHandle, WorkflowHandleParts,
     };
 
-    use super::Registry;
+    use super::{HandleRemoval, Registry};
 
     type TestResult = Result<(), TestError>;
 
@@ -557,6 +619,64 @@ mod tests {
         assert_eq!(registry.remove(&workflow_id, &first_run)?, Some(first));
         assert_eq!(registry.get(&workflow_id, &first_run)?, None);
         assert_eq!(registry.get(&workflow_id, &second_run)?, Some(second));
+        Ok(())
+    }
+
+    #[test]
+    fn remove_if_pid_removes_matching_handle_and_clears_index() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+        let registered = handle(51, 1, WorkflowStatus::Failed);
+        registry.insert((workflow_id.clone(), run_id.clone()), registered.clone())?;
+
+        let removed = registry.remove_if_pid(&workflow_id, &run_id, 51)?;
+        assert!(
+            matches!(removed, HandleRemoval::Removed(handle) if handle.pid() == 51),
+            "a matching pid removes and returns the observed handle"
+        );
+        assert_eq!(registry.get(&workflow_id, &run_id)?, None);
+        assert_eq!(registry.live_pid(&workflow_id)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn remove_if_pid_reports_absent_for_an_empty_slot() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+
+        assert!(matches!(
+            registry.remove_if_pid(&workflow_id, &run_id, 51)?,
+            HandleRemoval::Absent
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn remove_if_pid_returns_replacement_without_disturbing_it_or_the_index()
+    -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+        let replacement = handle(52, 2, WorkflowStatus::Running);
+        registry.insert((workflow_id.clone(), run_id.clone()), replacement.clone())?;
+
+        let outcome = registry.remove_if_pid(&workflow_id, &run_id, 51)?;
+        assert!(
+            matches!(outcome, HandleRemoval::Replaced(handle) if handle.pid() == 52),
+            "a different occupant is returned rather than evicted"
+        );
+        assert_eq!(
+            registry.get(&workflow_id, &run_id)?,
+            Some(replacement),
+            "the replacement remains registered"
+        );
+        assert_eq!(
+            registry.live_pid(&workflow_id)?,
+            Some(52),
+            "a replacement refusal preserves the live-pid index"
+        );
         Ok(())
     }
 
