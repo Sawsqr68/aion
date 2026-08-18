@@ -1,0 +1,299 @@
+//! investigate — one threshold-crossing issue, investigated by an agent on a
+//! remote worker box, filed back to the tracker as a typed report — on the
+//! engine's own durability, with the pipeline proven against a known answer
+//! before any real judgement is spent, and the tree torn down on every route
+//! that owns one.
+//!
+//! This is the issue-investigation workflow of the ratified design
+//! (`docs/design/issue-investigation-workflow-20260818.md` in the estate docs
+//! repo). Its architecture is deliberately stock: the mechanical legs (clone,
+//! report read-back, filing, teardown) are served by `aion worker awl` from
+//! this folder's worker document, and the agent seam is served by
+//! `aion worker agent` from THIS document's `investigator` harness section —
+//! no bespoke crate. The estate server orchestrates; the workers live on the
+//! investigation box; every run is visible in the operator's console.
+//!
+//! THE TREE IS THE BLACKBOARD, exactly as fleet_dev records: AWL composes no
+//! strings at runtime, so every mechanical action takes (workspace_root,
+//! workflow_id) and derives its own paths from them by one shared rule —
+//! the run's tree is `<workspace_root>/<workflow_id>/repo`, the agent's
+//! deliverable is `<tree>/.investigation/report.json` — and the
+//! investigator's prompt is an ADDRESS the dispatcher builds, naming that
+//! report path as the deliverable. The report the workflow returns is READ
+//! BACK FROM THE TREE and parsed into the declared type: a reply that
+//! claimed a report the tree does not carry routes to `unreported`, because
+//! a reply is a claim and the tree is the fact.
+//!
+//! CONTROL-FIRST, against the CLONED tree: before the investigator sees the
+//! issue, the probe action asks a question whose answer the dispatcher
+//! already knows — quote a literal at a known path in the clone — and the
+//! whole run refuses to `unmeasured` on any other reply. An investigator
+//! that cannot read the tree returns confident verdicts indistinguishable
+//! from real ones; the control is the only thing that can tell.
+//!
+//! VERDICT IS DATA, NEVER WORKFLOW FAILURE (aion#58, from birth): a filed
+//! investigation completes on route `filed` whatever its verdict says —
+//! `NotReproduced` is a successful investigation, not a failed workflow.
+//! The failure routes are reserved for could-not-measure faces, each named:
+//! `unsupported_tracker` (github-only v1, refused BY NAME — a skipped issue
+//! is indistinguishable from a swept-and-clean issue), `unprovisioned` (the
+//! clone refused; a leftover tree is a fact to surface, never to delete in
+//! passing), `unmeasured` (control mismatch), `unanswered` (the agent's stop
+//! reason was not end_turn), `unreported` (report absent or unparseable),
+//! `unfiled` (the tracker write failed — the typed report SURVIVES in the
+//! payload; evidence is never lost to a tracker hiccup).
+//!
+//! THE WORKFLOW NEVER CLOSES, LABELS-AS-RESOLVED, OR ASSIGNS the issue. Its
+//! terminal is `filed`; the lead's review is a human step outside the run.
+//!
+//! STATED GAPS, not latent ones: (1) the design's deterministic-id
+//! idempotency clause (`investigate/<repo>/<issue>/<threshold>`) is not
+//! expressible on today's start surface — `aion start` mints the id and
+//! takes only a display `--name`; dispatchers carry the deterministic string
+//! as the name until the start surface takes an id. (2) the harness
+//! `--workspace-root` argument is a static document value, so this document
+//! is authored PER DEPLOYMENT (this one: the aion-workflows box,
+//! `/home/aion/fleet/runs`); the `workspace_root` input must name the same
+//! root, and the worker document's scripts refuse teardown outside it.
+//! (3) node pinning is by queue occupancy in v1 — one box serves both
+//! queues; the `node` input is carried as record, not enforcement.
+//!
+//! WHAT THIS DOES NOT PROVE: a filed report is one model's unverified
+//! reading of the tree, control-proven but not fact-checked. Every citation
+//! must be read by hand before anything acts on it — the filed comment says
+//! exactly that, where the reader is.
+workflow investigate
+  timeout 4h
+  input issue: IssueRef
+  input threshold: String
+  input node_label: String
+  input repo_url: String
+  input workspace_root: String
+  input control_prompt: String
+  input control_expect: String
+  input investigate_prompt: String
+  outcome filed:               type Filed,              route success
+  outcome unsupported_tracker: type UnsupportedTracker, route failure
+  outcome unprovisioned:       type CloneRefused,       route failure
+  outcome unmeasured:          type Refused,            route failure
+  outcome unanswered:          type Unanswered,         route failure
+  outcome unreported:          type Unreported,         route failure
+  outcome unfiled:             type Unfiled,            route failure
+
+/// The issue under investigation. `tracker` names the seam: v1 serves
+/// `github` and refuses anything else by name. `number` is a string because
+/// it is an argument to the tracker's CLI, never arithmetic.
+type IssueRef { tracker: String, repo: String, number: String, title: String }
+
+/// The canonical agent-outcome record every dispatch of an agent seam
+/// returns: accumulated `text`, the last answer alone as `final_message`,
+/// the canonical `stop_reason`, and the `session_id` audit handle.
+type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
+
+/// The clone's answer, exit-zero always: a refusal is data with its reason
+/// named, because a nonzero exit would be a retryable-then-terminal activity
+/// failure and a leftover tree must route, not crash. `head_commit` pins
+/// what tree the evidence is about; `clone_bytes` feeds the census audit.
+type CloneProbe { ok: Bool, refusal: String, path: String, head_commit: String, clone_bytes: Int }
+
+/// The read-back's answer: the report parsed into the declared type when the
+/// tree carries one, and the parse failure verbatim when it does not.
+/// `report` is optional rather than empty-but-present — "nothing went wrong"
+/// and "nobody wrote it" must not arrive as the same value.
+type ReportProbe { parse_error: String, report: InvestigationReport? }
+
+/// One piece of evidence: file:line or it isn't evidence.
+type Evidence { path: String, line: Int, excerpt: String }
+
+/// The investigator's deliverable, authored INTO THE TREE and read back
+/// typed. These are the agent-authored fields only: `session_id` and the
+/// control proof are workflow-known facts the FILING carries beside the
+/// report, because the session cannot know its own audit handle.
+type InvestigationReport {
+  schema_version: String,
+  issue: String,
+  repo: String,
+  head_commit: String,
+  verdict: Verdict,
+  summary: String,
+  evidence: [Evidence],
+  repro: String?,
+  proposed_fix: String?,
+  confidence: String,
+}
+
+/// No free-text verdicts. `NotReproduced` says "I could not make it happen
+/// at head_commit"; `AlreadyFixed` says "here is the commit that closed it"
+/// and requires an evidence entry naming that commit.
+type Verdict = Reproduced | NotReproduced | AlreadyFixed | NeedsInfo | WrongRepo
+
+/// The tracker write's answer, exit-zero always for the same reason as the
+/// clone's: a red filing routes `unfiled` with the report intact.
+type FilingProbe { ok: Bool, exit_code: Int, stderr: String, url: String }
+
+/// The teardown's answer. A refusal (path outside the run root, tree
+/// already gone) is data; the census sweeper owns whatever a refusal
+/// leaves behind.
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
+
+/// A filed investigation: the typed report, where it landed, the audit
+/// handle, the control's own evidence, and whether the tree came down.
+type Filed {
+  report: InvestigationReport,
+  filing_url: String,
+  session_id: String,
+  control_reply: String,
+  teardown_ok: Bool,
+}
+
+/// v1 is github-only and any other tracker is refused BY NAME — never
+/// silently skipped, never best-effort.
+type UnsupportedTracker { tracker: String, reason: String }
+
+/// The clone refused — including a leftover tree from a collided id, which
+/// is the dispatcher's to inspect, never a script's to delete.
+type CloneRefused { refusal: String, node: String }
+
+/// An investigation that did not investigate, said out loud: the control's
+/// expected and actual replies travel with the refusal.
+type Refused { control_expect: String, control_reply: String, reason: String, teardown_ok: Bool }
+
+/// The agent seam ended without a completed answer; the whole agent record's
+/// identifying fields travel for the audit.
+type Unanswered { stop_reason: String, session_id: String, final_message: String, teardown_ok: Bool }
+
+/// The agent answered but the tree carries no parseable report — the reply
+/// was a claim the tree does not back.
+type Unreported { parse_error: String, session_id: String, final_message: String, teardown_ok: Bool }
+
+/// The tracker write failed. The typed report SURVIVES here — evidence is
+/// never lost to a tracker hiccup — beside the filing's own streams.
+type Unfiled { report: InvestigationReport, filing_exit: Int, filing_stderr: String, session_id: String, teardown_ok: Bool }
+
+worker investigate_ops
+  /// Clone `repo_url` to `<workspace_root>/<workflow_id>/repo`. Refuses (as
+  /// data) when the destination already exists. Implemented by this
+  /// folder's worker document, served with `aion worker awl` on the
+  /// investigation box.
+  action clone(repo_url: String, workspace_root: String, workflow_id: String) -> CloneProbe
+    timeout 15m, retry 2 every 30s
+  /// Read `<tree>/.investigation/report.json` back into the declared type.
+  action read_report(workspace_root: String, workflow_id: String) -> ReportProbe
+    timeout 5m, retry 2 every 30s
+  /// Render the report mechanically and comment it onto the issue. The
+  /// agent's prose never reaches the tracker except through the report
+  /// schema; the comment leads with the read-by-hand law.
+  action file_report(workspace_root: String, workflow_id: String, repo: String, number: String, session_id: String, control_reply: String) -> FilingProbe
+    timeout 5m, retry 3 backoff 30s..5m
+  /// Remove the run's tree, refusing any path outside the run root.
+  action teardown(workspace_root: String, workflow_id: String) -> TeardownProbe
+    timeout 5m, retry 2 every 30s
+
+worker investigator
+  /// The investigation seat: a norn-backed agent worker started from this
+  /// document with `aion worker agent`, dialing the estate server over
+  /// liminal. `--workspace-root` confines norn to the run's own tree (the
+  /// adapter expands `{workflow_id}` per dispatch); `cwd from repo` puts
+  /// the session in the clone the mechanical legs provisioned. There is no
+  /// sandbox beyond that — this runs under the box's own credentials, a
+  /// standing risk accepted at the operator's explicit word (design paper
+  /// §6.3).
+  harness
+    kind norn
+    concurrency 1
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME", "USER", "LOGNAME"
+    args "--workspace-root", "/home/aion/fleet/runs/{workflow_id}", "--account", "default"
+    cwd from repo
+  /// The control seat: quote a literal at a known path, nothing else.
+  action probe(repo: String, prompt: String) -> Reply
+    agent, timeout 10m, retry 3 backoff 30s..5m
+  /// The investigation itself. The prompt is complete and self-contained:
+  /// the issue, the threshold that fired, the report path to write, and the
+  /// schema to write it in — the session sees nothing but this string and
+  /// the tree.
+  action investigate(repo: String, prompt: String) -> Reply
+    agent, timeout 90m, retry 2 backoff 1m..10m
+
+/// v1 serves the GitHub tracker only; any other tracker is refused by name
+/// before anything is provisioned.
+step admit
+  outcome github: when issue.tracker == "github", route provision
+  outcome other: otherwise,
+    route unsupported_tracker(tracker: issue.tracker,
+      reason: "v1 files and reads through gh; an IssueRef naming any other tracker is refused by name, never silently skipped")
+
+/// Provision the run's own tree. A refusal — including a leftover tree from
+/// a collided dispatch — routes with its reason; nothing is deleted to make
+/// room.
+step provision
+  clone(repo_url: repo_url, workspace_root: workspace_root, workflow_id: workflow.id) -> cloned
+  outcome ok: when cloned.ok, route prove
+  outcome refused: otherwise, route unprovisioned(refusal: cloned.refusal, node: node_label)
+
+/// Prove the pipeline against the CLONED tree before spending judgement: a
+/// judge that cannot read the tree or follow an exact-reply instruction
+/// produces confident verdicts indistinguishable from real ones.
+step prove
+  probe(repo: cloned.path, prompt: control_prompt) -> control
+  outcome proven: when control.text == control_expect, route investigation
+  outcome broken: otherwise, route teardown_unmeasured
+
+step investigation
+  investigate(repo: cloned.path, prompt: investigate_prompt) -> reply
+  outcome answered: when reply.stop_reason == "end_turn", route harvest
+  outcome broken: otherwise, route teardown_unanswered
+
+/// The reply is a claim; the tree is the fact. Read the deliverable back
+/// into the declared type and route on what the tree actually carries.
+step harvest
+  read_report(workspace_root: workspace_root, workflow_id: workflow.id) -> probe_result
+  outcome present: when probe_result.report is present, route file_it
+  outcome absent: otherwise, route teardown_unreported
+
+step file_it
+  file_report(workspace_root: workspace_root, workflow_id: workflow.id,
+    repo: issue.repo, number: issue.number,
+    session_id: reply.session_id, control_reply: control.text) -> filing
+  outcome ok: when filing.ok, route teardown_filed
+  outcome red: otherwise, route teardown_unfiled
+
+/// Teardown is reached from every route that owns a tree; its receipt
+/// travels in the payload. The re-proof guards on `probe_result.report` are
+/// demanded by narrowing scope (a proof never escapes its arm), and their
+/// impossible arms route honestly rather than pretending totality.
+step teardown_filed
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome done: when probe_result.report is present,
+    route filed(report: probe_result.report, filing_url: filing.url,
+      session_id: reply.session_id, control_reply: control.text, teardown_ok: cleaned.ok)
+  outcome ghost: otherwise,
+    route unreported(parse_error: "the report present at filing time was absent at teardown — unreachable by construction, recorded rather than swallowed",
+      session_id: reply.session_id, final_message: reply.final_message, teardown_ok: cleaned.ok)
+
+step teardown_unfiled
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome carried: when probe_result.report is present,
+    route unfiled(report: probe_result.report, filing_exit: filing.exit_code,
+      filing_stderr: filing.stderr, session_id: reply.session_id, teardown_ok: cleaned.ok)
+  outcome ghost: otherwise,
+    route unreported(parse_error: "the report present at filing time was absent at teardown — unreachable by construction, recorded rather than swallowed",
+      session_id: reply.session_id, final_message: reply.final_message, teardown_ok: cleaned.ok)
+
+step teardown_unmeasured
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  route unmeasured(control_expect: control_expect, control_reply: control.text,
+    reason: "the control did not return the expected reply, so the pipeline cannot be shown to read the tree or follow instructions — nothing was investigated",
+    teardown_ok: cleaned.ok)
+
+step teardown_unanswered
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  route unanswered(stop_reason: reply.stop_reason, session_id: reply.session_id,
+    final_message: reply.final_message, teardown_ok: cleaned.ok)
+
+step teardown_unreported
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  route unreported(parse_error: probe_result.parse_error, session_id: reply.session_id,
+    final_message: reply.final_message, teardown_ok: cleaned.ok)

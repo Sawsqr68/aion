@@ -1,0 +1,68 @@
+//! investigate_ops — the mechanical half of the investigation loop: clone,
+//! typed report read-back, tracker filing, teardown. Served with
+//! `aion worker awl` on the investigation box; the commands run on THAT
+//! host, which is the whole point — the workflow document's own `run` bodies
+//! would execute on the server.
+//!
+//! Every command is `sh <script> <args>` with the scripts living at
+//! `/home/aion/fleet/bin/` on the box — worker-document run bodies admit no
+//! shell variables (an AWL parameter is the only `$name` allowed), so any
+//! logic beyond one command lives in a script file, exactly as the gates
+//! battery seals gate-runner. The scripts' source of truth is this folder's
+//! `bin/`; provisioning copies them and the runbook records their sha256 —
+//! a sealed-by-path command is honest only while the bytes are pinned.
+//!
+//! EXIT ZERO ALWAYS, REFUSAL AS DATA: an action here exits nonzero only on
+//! genuine breakage (unspawnable script, dead disk). Every anticipated
+//! refusal — destination exists, report absent, filing rejected, path
+//! outside the run root — comes back exit-zero as typed JSON with the
+//! refusal named, because a nonzero exit is a retryable-then-terminal
+//! activity failure and the workflow must ROUTE on these faces, not crash
+//! on them.
+worker investigate_ops
+  /// Clone to `<workspace_root>/<workflow_id>/repo`; refuse (as data) when
+  /// the destination exists — a leftover tree is a fact to surface, never
+  /// to delete in passing.
+  action clone(repo_url: String, workspace_root: String, workflow_id: String) -> CloneProbe
+    run json "sh /home/aion/fleet/bin/clone.sh $repo_url $workspace_root $workflow_id"
+  /// Parse `<tree>/.investigation/report.json` into the declared type; an
+  /// absent or unparseable report is a refusal with the parse error
+  /// verbatim, and the `report` key is OMITTED rather than nulled.
+  action read_report(workspace_root: String, workflow_id: String) -> ReportProbe
+    run json "sh /home/aion/fleet/bin/read-report.sh $workspace_root $workflow_id"
+  /// Render the report mechanically and `gh issue comment` it. The comment
+  /// leads with the read-by-hand law; the session id and control proof are
+  /// workflow-known facts passed in, because the session cannot know its
+  /// own audit handle.
+  action file_report(workspace_root: String, workflow_id: String, repo: String, number: String, session_id: String, control_reply: String) -> FilingProbe
+    run json "sh /home/aion/fleet/bin/file-report.sh $workspace_root $workflow_id $repo $number $session_id $control_reply"
+  /// Remove the run's tree. Refuses (as data) any path outside the run
+  /// root and an already-absent tree — deletion inherits every adjective
+  /// of its justification.
+  action teardown(workspace_root: String, workflow_id: String) -> TeardownProbe
+    run json "sh /home/aion/fleet/bin/teardown.sh $workspace_root $workflow_id"
+
+type CloneProbe { ok: Bool, refusal: String, path: String, head_commit: String, clone_bytes: Int }
+
+type ReportProbe { parse_error: String, report: InvestigationReport? }
+
+type Evidence { path: String, line: Int, excerpt: String }
+
+type InvestigationReport {
+  schema_version: String,
+  issue: String,
+  repo: String,
+  head_commit: String,
+  verdict: Verdict,
+  summary: String,
+  evidence: [Evidence],
+  repro: String?,
+  proposed_fix: String?,
+  confidence: String,
+}
+
+type Verdict = Reproduced | NotReproduced | AlreadyFixed | NeedsInfo | WrongRepo
+
+type FilingProbe { ok: Bool, exit_code: Int, stderr: String, url: String }
+
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
