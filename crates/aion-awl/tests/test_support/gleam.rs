@@ -57,6 +57,22 @@ const RESOLUTION_FAILURE_TITLE: &str = "Dependency resolution failed";
 /// (https://repo.hex.pm/packages/gleam_json)`.
 const RESOLUTION_TRANSPORT_MARKERS: &[&str] = &["error sending request", "repo.hex.pm"];
 
+/// `gleam`'s title for file-system failures. This title is also used for
+/// ordinary generated-project IO, so it only counts as infrastructure when
+/// the body identifies package unpacking or a package cache path
+/// ([`FILE_IO_PACKAGE_MARKERS`]).
+const FILE_IO_FAILURE_TITLE: &str = "File IO failure";
+
+/// Package-layer evidence that makes a [`FILE_IO_FAILURE_TITLE`] diagnostic a
+/// dependency failure rather than an AWL emitter fault in generated sources.
+const FILE_IO_PACKAGE_MARKERS: &[&str] = &[
+    "failed to unpack",
+    "/build/packages/",
+    "\\build\\packages\\",
+    "/hex/hexpm/packages/",
+    "\\hex\\hexpm\\packages\\",
+];
+
 /// Total `gleam build` attempts when a failure is classified as a registry
 /// failure. NOT a chosen number: it matches the only bounded-retry precedent
 /// for a transient external failure in this repository's test suites,
@@ -186,6 +202,13 @@ fn classify_text(combined: &str) -> BuildFailure {
         }
         if title == RESOLUTION_FAILURE_TITLE
             && RESOLUTION_TRANSPORT_MARKERS
+                .iter()
+                .any(|marker| combined.contains(marker))
+        {
+            return BuildFailure::Registry;
+        }
+        if title == FILE_IO_FAILURE_TITLE
+            && FILE_IO_PACKAGE_MARKERS
                 .iter()
                 .any(|marker| combined.contains(marker))
         {
@@ -332,6 +355,62 @@ impl Error for GleamBuildFailure {}
 // run that shadowed the all-features gate, a `gleam build` against an
 // unreachable registry (an unroutable HTTPS proxy, cold Hex cache), and a
 // `gleam build` over a Gleam module with an unknown variable.
+
+/// The unconditional dependency titles and the package-qualified file-IO
+/// title keep their respective Registry/Sources classifications.
+#[test]
+fn dependency_failure_titles_are_classified_by_layer() {
+    let cases = [
+        (
+            "package download",
+            "  Resolving versions\nDownloading packages\nerror: Failed to download package\n\nThe package gleam_stdlib could not be downloaded from Hex.\n",
+            true,
+        ),
+        (
+            "tar archive",
+            "  Resolving versions\nDownloading packages\nerror: Failure opening tar archive\n\nAn error occurred while opening the downloaded tar archive.\n",
+            true,
+        ),
+        (
+            "Hex API",
+            "  Resolving versions\nerror: Hex API failure\n\nThe Hex API returned an invalid response while fetching package metadata.\n",
+            true,
+        ),
+        (
+            "HTTP",
+            "  Resolving versions\nerror: HTTP error\n\nThe package request failed with HTTP status 503 Service Unavailable.\n",
+            true,
+        ),
+        (
+            "failed package unpack",
+            "  Resolving versions\nDownloading packages\nerror: File IO failure\n\nAn error occurred while writing a dependency file: failed to unpack gleam@uri.erl\n",
+            true,
+        ),
+        (
+            "generated-project package cache paths",
+            "  Resolving versions\nDownloading packages\nerror: File IO failure\n\nCould not write /tmp/awl/build/packages/gleam_stdlib/src/gleam/list.gleam; the equivalent Windows destination is C:\\work\\awl\\build\\packages\\gleam_stdlib\\src\\gleam\\list.gleam.\n",
+            true,
+        ),
+        (
+            "global Hex package cache paths",
+            "  Resolving versions\nDownloading packages\nerror: File IO failure\n\nCould not write /home/runner/.cache/gleam/hex/hexpm/packages/gleam_stdlib/1.6.0/src/gleam/list.gleam; the equivalent Windows cache is C:\\Users\\runner\\AppData\\Local\\gleam\\hex\\hexpm\\packages\\gleam_stdlib\\1.6.0\\src\\gleam\\list.gleam.\n",
+            true,
+        ),
+        (
+            "ordinary generated source file",
+            "  Compiling awl_flagship_compile_proof\nerror: File IO failure\n\nCould not read src/awl_hello.gleam: permission denied.\n",
+            false,
+        ),
+    ];
+
+    for (name, observed, expected_registry) in cases {
+        let classified_as_registry = matches!(classify_text(observed), BuildFailure::Registry);
+        assert_eq!(
+            classified_as_registry, expected_registry,
+            "classification row `{name}` returned the wrong layer"
+        );
+    }
+}
 
 /// The failure that shadowed the all-features gate on run `30192212491` is an
 /// infrastructure failure, and is retried rather than blamed on the emitter.
