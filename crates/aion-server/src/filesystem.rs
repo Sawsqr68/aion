@@ -61,6 +61,7 @@ impl ConfinedDir {
             dir: open_absolute(path, false)?,
         };
         root.ensure_private_mode(path)?;
+        root.probe_readable()?;
         Ok(root)
     }
 
@@ -71,7 +72,23 @@ impl ConfinedDir {
             dir: open_absolute(path, true)?,
         };
         root.ensure_private_mode(path)?;
+        root.probe_readable()?;
         Ok(root)
+    }
+
+    /// Refuse at acquisition a root the server cannot actually read.
+    ///
+    /// Openability is not readability: on Linux the held handle is an
+    /// `O_PATH` descriptor and opens even a directory whose mode denies every
+    /// read, so without this probe an unreadable root is "successfully"
+    /// confined and the `EACCES` surfaces later, at whichever operation first
+    /// reads through the handle — or never, when a request happens not to
+    /// need the directory's contents (aion#62). macOS refuses the same
+    /// directory at `open(2)`. Probing the entry stream here makes an
+    /// unusable root fail on every platform at the same place, with its
+    /// truthful errno.
+    fn probe_readable(&self) -> io::Result<()> {
+        self.dir.entries().map(drop)
     }
 
     /// Read a UTF-8 file without following any component or final symlink.
