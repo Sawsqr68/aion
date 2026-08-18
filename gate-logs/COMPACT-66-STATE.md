@@ -5249,3 +5249,4 @@ Post-restart wave (15r3/14r3/18r3/6r3/28 + 12r2 + probe 15-r4's first attempt) A
 
 - FOUR investigations dispatched on un-investigated rows: inv16=831dd986 (namespace/placement shard-routing bypass), inv34=ced22320 (red-gate repair leg — likely AlreadyFixed by tonight's fleet_dev fix rounds, verdict will say), inv50=1cea8834 (Py/TS SDK liveness ping exclusion), inv54=76b2bd3e (haematite shard-actor timeout under load). Monitor armed.
 - THROTTLE RULING, on the record: #28 headroom since 15:29Z restart ≈ 6 runs left; fleet-70's remaining gate+judge dispatches get the margin — NO restart while it flies, so the wave is capped at 4. REMAINING un-investigated queue for the post-fleet-70 wave: #5, #10, #11, #17, #29, #30, #31, #43, #44, #48, #49, #52, #55, #65 (± #61 ops-shaped, skip).
+- TICK 20:51Z: five workflows live (inv16/34/50/54 + fleet-70 fix round); Waffles day-file 0 min fresh — no alarm.
