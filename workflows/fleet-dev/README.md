@@ -38,12 +38,14 @@ sequential v1 — see the first entry under recorded trade-offs.
    parallel, each builder in its OWN worktree on its OWN branch
    (`leg.repo`). Each builder's prompt is an ADDRESS: read your brief at
    `.fleet/legs/<id>.md`, write your report to `.fleet/reports/<id>.md`,
-   commit to your own branch, stay inside your brief's file zone.
+   commit to your own branch, stay inside your brief's file zone. The
+   builder session transcript is also committed on that leg branch.
 6. **`merge`** — the server runs the fanin script: each leg's report carried
    back to the primary tree, then each leg branch merged in dispatch order.
    A conflict names the conflicting files on stdout, aborts clean, and
    routes `unmerged` — a merge conflict is a finding about the plan's leg
-   boundaries, never something an agent resolves in passing.
+   boundaries, never something an agent resolves in passing. A clean merge
+   commits the exact leg heads and merge commits to `.fleet/legs-merged.md`.
 7. **`check_reports`** — the builders get the planner's treatment: a
    server-run script verifies every promised report exists and is non-empty
    in the merged tree, naming each missing leg on stdout. A builder that
@@ -53,12 +55,32 @@ sequential v1 — see the first entry under recorded trade-offs.
    `unreported`.
 8. **`gate`** — the server runs the gate script on the merged tree; the real
    exit code routes green/red. Red refuses the run as `gates_red` before any
-   judgement is spent on it.
+   judgement is spent on it; green commits the routed 120-line tail before
+   judgement.
 9. **`judgement`** — the judge reads the merged tree (plan, briefs, reports,
    diff) under the charter carried in its prompt. Exactly the `judge_pass`
-   token routes `done`; ANY other reply routes `judge_flagged` with the
-   verdict text whole. The mismatch direction is deliberate: a false flag is
-   possible, a false clear is not.
+   token routes `capture_sessions`; ANY other reply routes `judge_flagged`
+   with the verdict text whole. The mismatch direction is deliberate: a
+   false flag is possible, a false clear is not.
+10. **`capture_sessions`** — before push and teardown, the server copies and
+    commits the counsel control, dev control, planner, and judge transcripts
+    into the primary tree. An unreachable transcript becomes a committed
+    typed absence rather than a silent skip. The result then routes through
+    `push_result` and `clean_up` as before.
+
+## What a landed run carries home
+
+- **`.fleet/sessions/`** — `fleet-sessions.sh` writes one transcript per
+  named agent session, or `ABSENT-<step>.md` with the exact lookup evidence.
+  Builder transcripts are committed in their leg worktrees and ride through
+  fanin; fix-round and primary counsel/control transcripts are committed in
+  the primary tree before push.
+- **`.fleet/gates/green-<n>.md`** — `fleet-gates.sh` commits the same final
+  120 lines returned by the green gate probe. Red rounds retain their whole
+  numbered logs and stable `RED-LATEST.md` address.
+- **`.fleet/legs-merged.md`** — `fleet-fanin.sh` records each leg id, branch,
+  pre-merge head, and resulting merge commit after every leg lands, then
+  verifies and commits the record before reporting success.
 
 ## Why the tree is the blackboard
 

@@ -26,17 +26,19 @@ worker fleet_ops
   /// anything in its way.
   action fanout(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
     run json "sh /home/aion/fleet/bin/fleet-fanout.sh $workspace_root $run_name $leg_ids_csv"
-  /// Ordered no-ff merges of the leg branches into the primary tree; a
-  /// conflict aborts clean and names the files — a finding about the
-  /// plan's leg boundaries, never an agent's to resolve in passing.
+  /// Ordered no-ff merges of the leg branches into the primary tree; records
+  /// the merged leg branch refs in `.fleet/legs-merged.md`. A conflict aborts
+  /// clean and names the files — a finding about the plan's leg boundaries,
+  /// never an agent's to resolve in passing.
   action fanin(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
     run json "sh /home/aion/fleet/bin/fleet-fanin.sh $workspace_root $run_name $leg_ids_csv"
   /// Every promised `.fleet/reports/<id>.md` committed in the merged tree,
   /// missing legs named on stdout.
   action report_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
     run json "sh /home/aion/fleet/bin/fleet-report-check.sh $workspace_root $run_name $leg_ids_csv"
-  /// Run the repo's own gate entry; on red, COMMIT the findings whole to
-  /// `.fleet/gates/` (numbered history + stable `RED-LATEST.md` address)
+  /// Run the repo's own gate entry; on red, COMMIT the findings whole, and
+  /// on green COMMIT the routed tail, to `.fleet/gates/` (numbered history
+  /// plus the stable red `RED-LATEST.md` address)
   /// so the fix round reads the verbatim evidence from the tree.
   action gates(workspace_root: String, run_name: String, gate_entry: String) -> OpProbe
     run json "sh /home/aion/fleet/bin/fleet-gates.sh $workspace_root $run_name $gate_entry"
@@ -48,6 +50,15 @@ worker fleet_ops
   /// gating the rm in the same script.
   action teardown(workspace_root: String, run_name: String) -> TeardownProbe
     run json "sh /home/aion/fleet/bin/fleet-teardown.sh $workspace_root $run_name"
+  /// Copy the four primary-tree agent sessions' transcripts into
+  /// `.fleet/sessions/` and COMMIT them; an unreachable source is a
+  /// committed typed absence, never a silent skip.
+  action sessions(workspace_root: String, run_name: String, counsel_control_session: String, dev_control_session: String, plan_session: String, judge_session: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-sessions.sh primary $workspace_root $run_name $counsel_control_session $dev_control_session $plan_session $judge_session"
+  /// One named session's transcript, copied and committed into the tree it
+  /// ran in — a leg worktree (riding home through fanin) or the primary.
+  action session(workspace_root: String, run_name: String, tree: String, step_label: String, session_id: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-sessions.sh one $workspace_root $run_name $tree $step_label $session_id"
 
 type CloneProbe { ok: Bool, refusal: String, root: String, repo_path: String, head_commit: String }
 
