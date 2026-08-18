@@ -1,0 +1,1045 @@
+.......................................FFFF.F........................... [ 51%]
+........................FFFFFF.FFF...................................    [100%]
+=================================== FAILURES ===================================
+________________ test_an_idle_worker_beats_its_connection_lease ________________
+
+    async def test_an_idle_worker_beats_its_connection_lease() -> None:
+        """Nothing in flight is exactly when the lease beat matters most."""
+    
+        window = 0.1
+        session = LeaseFakeSession(window_seconds=window)
+        dispatcher = RecordingDispatcher()
+    
+        serving = asyncio.create_task(serve(config(max_concurrency=1), session, dispatcher))
+        try:
+            # Four beats span more than a full window at the quarter-window
+            # cadence, so an idle worker demonstrably holds its lease open.
+>           await _await_count(session, "connection_beats", 4, timeout_seconds=5.0)
+
+tests/test_connection_lease.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+probe = LeaseFakeSession(events=<Queue at 0x10e30a030 maxsize=0 tasks=1>, log=[], handshakes=[], registrations=[], advertised=[], reported=[], drop_after_events=False, closed=False, window_seconds=0.1, connection_beats=[], task_beats=[])
+attribute = 'connection_beats', at_least = 4, timeout_seconds = 5.0
+
+    async def _await_count(probe: object, attribute: str, at_least: int, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while len(getattr(probe, attribute)) < at_least:
+            if loop.time() >= deadline:
+>               raise AssertionError(
+                    f"only {len(getattr(probe, attribute))} of {at_least} {attribute} arrived "
+                    f"within {timeout_seconds}s"
+                )
+E               AssertionError: only 0 of 4 connection_beats arrived within 5.0s
+
+tests/test_connection_lease.py:87: AssertionError
+________ test_an_in_flight_worker_beats_the_connection_before_its_tasks ________
+
+    async def test_an_in_flight_worker_beats_the_connection_before_its_tasks() -> None:
+        """A busy worker's lease is beaten too — the task beats do not replace it.
+    
+        Mirrors `pump_liveness`: the connection beat goes first on every tick, then
+        one beat per in-flight activity. A worker running work still has to prove
+        the CONNECTION is alive, because that is the lease the server holds.
+        """
+    
+        window = 0.1
+        session = LeaseFakeSession(window_seconds=window)
+        release = asyncio.Event()
+        dispatcher = RecordingDispatcher(release)
+        await session.push(task(7))
+    
+        serving = asyncio.create_task(serve(config(max_concurrency=1), session, dispatcher))
+        try:
+            await _await_count(session, "task_beats", 3, timeout_seconds=5.0)
+            assert not serving.done(), "serve ended while the pump was under observation"
+            # Every tick sends the connection beat first, so there is never a task
+            # beat that was not preceded by one.
+>           assert len(session.connection_beats) >= len(session.task_beats), (
+                f"the connection lease was beaten {len(session.connection_beats)} times against "
+                f"{len(session.task_beats)} task beats: the connection beat must lead every tick"
+            )
+E           AssertionError: the connection lease was beaten 0 times against 3 task beats: the connection beat must lead every tick
+E           assert 0 >= 3
+E            +  where 0 = len([])
+E            +    where [] = LeaseFakeSession(events=<Queue at 0x10e309640 maxsize=0 _getters[1] tasks=1>, log=['receive', 'heartbeat:7', 'heartbea...low-1', 7, None, 71945.196030833), ('workflow-1', 7, None, 71945.221463166), ('workflow-1', 7, None, 71945.246992375)]).connection_beats
+E            +  and   3 = len([('workflow-1', 7, None, 71945.196030833), ('workflow-1', 7, None, 71945.221463166), ('workflow-1', 7, None, 71945.246992375)])
+E            +    where [('workflow-1', 7, None, 71945.196030833), ('workflow-1', 7, None, 71945.221463166), ('workflow-1', 7, None, 71945.246992375)] = LeaseFakeSession(events=<Queue at 0x10e309640 maxsize=0 _getters[1] tasks=1>, log=['receive', 'heartbeat:7', 'heartbea...low-1', 7, None, 71945.196030833), ('workflow-1', 7, None, 71945.221463166), ('workflow-1', 7, None, 71945.246992375)]).task_beats
+
+tests/test_connection_lease.py:133: AssertionError
+_________ test_the_cadence_is_a_quarter_of_the_server_assigned_window __________
+
+    async def test_the_cadence_is_a_quarter_of_the_server_assigned_window() -> None:
+        """Derived from the `RegisterAck`, with no knob of its own.
+    
+        Measured as an interval rather than read from a constant: a test that
+        asserted against the SDK's own arithmetic would pass for any cadence the
+        SDK happened to pick. Four beats bound the elapsed time from both sides —
+        a pump that beat once per window would take four windows to get here, and
+        one that beat continuously would arrive far too early.
+        """
+    
+        window = 0.4
+        session = LeaseFakeSession(window_seconds=window)
+        dispatcher = RecordingDispatcher()
+    
+        started = time.monotonic()
+        serving = asyncio.create_task(serve(config(max_concurrency=1), session, dispatcher))
+        try:
+>           await _await_count(session, "connection_beats", 4, timeout_seconds=10.0)
+
+tests/test_connection_lease.py:168: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+probe = LeaseFakeSession(events=<Queue at 0x10cfe7aa0 maxsize=0 tasks=1>, log=[], handshakes=[], registrations=[], advertised=[], reported=[], drop_after_events=False, closed=False, window_seconds=0.4, connection_beats=[], task_beats=[])
+attribute = 'connection_beats', at_least = 4, timeout_seconds = 10.0
+
+    async def _await_count(probe: object, attribute: str, at_least: int, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while len(getattr(probe, attribute)) < at_least:
+            if loop.time() >= deadline:
+>               raise AssertionError(
+                    f"only {len(getattr(probe, attribute))} of {at_least} {attribute} arrived "
+                    f"within {timeout_seconds}s"
+                )
+E               AssertionError: only 0 of 4 connection_beats arrived within 10.0s
+
+tests/test_connection_lease.py:87: AssertionError
+______ test_a_blocked_event_loop_sends_no_beats_and_is_correctly_expired _______
+
+    async def test_a_blocked_event_loop_sends_no_beats_and_is_correctly_expired() -> None:
+        """A wedged runtime must still expire — the pump is not a background thread.
+    
+        The pump is an asyncio task on the worker's own event loop, so a handler
+        that blocks that loop stops the beats, and the server's lease expires the
+        worker exactly as it should. This asserts the mechanism that makes that
+        true: no beat's timestamp falls inside the blocked interval.
+        """
+    
+        window = 0.1
+        blocked_for = window * 3
+        session = LeaseFakeSession(window_seconds=window)
+        dispatcher = RecordingDispatcher()
+    
+        serving = asyncio.create_task(serve(config(max_concurrency=1), session, dispatcher))
+        try:
+>           await _await_count(session, "connection_beats", 1, timeout_seconds=5.0)
+
+tests/test_connection_lease.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+probe = LeaseFakeSession(events=<Queue at 0x10e30a3c0 maxsize=0 tasks=1>, log=[], handshakes=[], registrations=[], advertised=[], reported=[], drop_after_events=False, closed=False, window_seconds=0.1, connection_beats=[], task_beats=[])
+attribute = 'connection_beats', at_least = 1, timeout_seconds = 5.0
+
+    async def _await_count(probe: object, attribute: str, at_least: int, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while len(getattr(probe, attribute)) < at_least:
+            if loop.time() >= deadline:
+>               raise AssertionError(
+                    f"only {len(getattr(probe, attribute))} of {at_least} {attribute} arrived "
+                    f"within {timeout_seconds}s"
+                )
+E               AssertionError: only 0 of 1 connection_beats arrived within 5.0s
+
+tests/test_connection_lease.py:87: AssertionError
+_________ test_an_idle_worker_survives_three_windows_on_a_real_stream __________
+
+    async def test_an_idle_worker_survives_three_windows_on_a_real_stream() -> None:
+        """The issue's acceptance criterion, over a real gRPC connection.
+    
+        A server that enforces the connection lease deregisters an unbeaten idle
+        worker and ends its stream; the SDK's reconnect loop then redials, which is
+        the churn #26 reports. Exactly one accepted connection across more than
+        three windows is the proof the worker held its own lease open instead of
+        leaning on reconnection as a keepalive.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(heartbeat_window_ms=int(WINDOW_SECONDS * 1000))
+        async with running_worker(service, _IdleDispatcher(), IDLE_DESCRIPTORS) as running:
+            await asyncio.sleep(WINDOW_SECONDS * (WINDOWS_OBSERVED + 0.5))
+            assert not running.done(), f"the worker run ended early: {running.exception() if running.done() else ''}"
+>           assert len(service.connections) == 1, (
+                f"{len(service.connections)} connections were accepted across "
+                f"{WINDOWS_OBSERVED}+ windows; a worker that beats its lease reconnects zero times. "
+                f"Lease expiries: {[c.lease_expired for c in service.connections]}"
+            )
+E           AssertionError: 4 connections were accepted across 3+ windows; a worker that beats its lease reconnects zero times. Lease expiries: [True, True, True, False]
+E           assert 4 == 1
+E            +  where 4 = len([Connection(registrations=[['noop']], inbound=['register'], connection_beats=0, task_beats=[], liveness_answers=[], re...], liveness_answers=[], results=[], lease_expired=False, registered=<asyncio.locks.Event object at 0x10e2fd070 [set]>)])
+E            +    where [Connection(registrations=[['noop']], inbound=['register'], connection_beats=0, task_beats=[], liveness_answers=[], re...], liveness_answers=[], results=[], lease_expired=False, registered=<asyncio.locks.Event object at 0x10e2fd070 [set]>)] = <grpc_lease_server.LeaseEnforcingWorkerProtocol object at 0x10e2fc4a0>.connections
+
+tests/test_connection_lease.py:267: AssertionError
+----------------------------- Captured stderr call -----------------------------
+I0818 14:54:20.744299 17205659 chttp2_transport.cc:1393] ipv4:127.0.0.1:54765: Got goaway [2] err=UNAVAILABLE:GOAWAY received; Error code: 2; Debug Text: Cancelling all calls {http2_error:2}
+------------------------------ Captured log call -------------------------------
+WARNING  aion_worker.loop:loop.py:313 Server closed the worker stream cleanly; treating it as a session drop
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.01s (attempt 1/20)
+WARNING  aion_worker.loop:loop.py:313 Server closed the worker stream cleanly; treating it as a session drop
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.02s (attempt 2/20)
+WARNING  aion_worker.loop:loop.py:313 Server closed the worker stream cleanly; treating it as a session drop
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.04s (attempt 3/20)
+_______________ test_a_liveness_ping_decodes_into_a_typed_event ________________
+
+    def test_a_liveness_ping_decodes_into_a_typed_event() -> None:
+        """The sequence and the server's silence window both survive the decode."""
+    
+>       event = decode_server_message(liveness_ping_frame(sequence=41, silence_window_ms=7_000))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:79: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = liveness_ping {
+  liveness_ping: 41
+  silence_window_ms: 7000
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+
+aion_worker/session.py:642: TransportError
+__________ test_a_cancel_activity_decodes_into_the_cancellation_event __________
+
+    def test_a_cancel_activity_decodes_into_the_cancellation_event() -> None:
+        """The server sends this frame; the serve loop already handles the event.
+    
+        Only the decoder was missing, so a cooperative cancellation arrived as an
+        unsupported oneof and ended the session.
+        """
+    
+>       event = decode_server_message(cancel_activity_frame(sequence_position=5))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:93: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = cancel_activity {
+  workflow_id {
+    uuid: "workflow-1"
+  }
+  activity_id {
+    sequence_position: 5
+  }
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'cancel_activity'
+
+aion_worker/session.py:642: TransportError
+_____________ test_a_liveness_ping_does_not_end_the_receive_stream _____________
+
+    async def test_a_liveness_ping_does_not_end_the_receive_stream() -> None:
+        """The teardown itself: the ping must not raise out of the generator.
+    
+        A `TransportError` escaping `_receive_from_stream` is what the SDK's own
+        reconnect machinery classifies as a retryable session drop, so the failure
+        mode is invisible as an error and visible only as endless redialling.
+        """
+    
+        session = GrpcWorkerSession(config())
+        session._outbound = asyncio.Queue(maxsize=16)
+        session._stream = FakeGrpcStream(
+            frames=[
+                liveness_ping_frame(sequence=1),
+                liveness_ping_frame(sequence=2),
+            ]
+        )
+    
+>       received = [event async for event in session.receive_tasks()]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+aion_worker/session.py:610: in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = liveness_ping {
+  liveness_ping: 1
+  silence_window_ms: 30000
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+
+aion_worker/session.py:642: TransportError
+___________ test_the_session_answers_a_ping_with_the_echoed_sequence ___________
+
+    async def test_the_session_answers_a_ping_with_the_echoed_sequence() -> None:
+        """`LivenessAnswer.liveness_ping` echoes the asked sequence verbatim.
+    
+        A stale or invented sequence proves nothing: the server correlates the
+        answer against the ping it actually sent.
+        """
+    
+        session = GrpcWorkerSession(config())
+        session._outbound = asyncio.Queue(maxsize=16)
+        session._stream = FakeGrpcStream(frames=[register_ack_frame()])
+    
+>       await session.answer_liveness_ping(9_001)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'GrpcWorkerSession' object has no attribute 'answer_liveness_ping'
+
+tests/test_server_frame_decode.py:135: AttributeError
+____ test_the_serve_loop_answers_the_ping_without_consulting_the_dispatcher ____
+
+    async def test_the_serve_loop_answers_the_ping_without_consulting_the_dispatcher() -> None:
+        """The runtime answers; action code is never asked and never could be.
+    
+        The dispatcher is asserted untouched because "answered by the runtime" and
+        "answered by whatever happened to be running" are different facts, and only
+        the first survives an idle worker.
+        """
+    
+        session = AnsweringFakeSession()
+        dispatcher = RecordingDispatcher()
+>       await session.push(aion_worker.LivenessPingReceived(sequence=17, silence_window_ms=PING_WINDOW_MS))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'aion_worker' has no attribute 'LivenessPingReceived'
+
+tests/test_server_frame_decode.py:168: AttributeError
+_______________ test_a_worker_at_full_concurrency_still_answers ________________
+
+    async def test_a_worker_at_full_concurrency_still_answers() -> None:
+        """No concurrency permit is taken: reachability is not work.
+    
+        A worker saturated with activities is still reachable, and a probe that
+        could not tell the difference would withdraw eligibility from exactly the
+        workers doing the most.
+        """
+    
+        session = AnsweringFakeSession()
+        release = asyncio.Event()
+        dispatcher = RecordingDispatcher(release)
+        await session.push(task(3))
+>       await session.push(aion_worker.LivenessPingReceived(sequence=55, silence_window_ms=PING_WINDOW_MS))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'aion_worker' has no attribute 'LivenessPingReceived'
+
+tests/test_server_frame_decode.py:191: AttributeError
+______ test_a_probed_worker_answers_every_round_and_keeps_one_connection _______
+
+    async def test_a_probed_worker_answers_every_round_and_keeps_one_connection() -> None:
+        """The acceptance shape of #50, over a real gRPC stream.
+    
+        Three probe rounds answered on one connection is the operator-visible
+        difference between a worker that clears its probation and one that redials
+        forever without ever being dispatchable.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(heartbeat_window_ms=2_000, ping_every_seconds=0.1)
+        dispatcher = _HeldDispatcher()
+        async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+>           await _await_answers(service, at_least=3, timeout_seconds=5.0)
+
+tests/test_server_frame_decode.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+service = <grpc_lease_server.LeaseEnforcingWorkerProtocol object at 0x10e445100>
+at_least = 3, timeout_seconds = 5.0
+
+    async def _await_answers(service: LeaseEnforcingWorkerProtocol, at_least: int, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while True:
+            answered = sum(len(connection.liveness_answers) for connection in service.connections)
+            if answered >= at_least:
+                return
+            if loop.time() >= deadline:
+>               raise AssertionError(
+                    f"{answered} of {len(service.pings_sent)} liveness pings were answered across "
+                    f"{len(service.connections)} connection(s) within {timeout_seconds}s"
+                )
+E               AssertionError: 0 of 10 liveness pings were answered across 10 connection(s) within 5.0s
+
+tests/test_server_frame_decode.py:267: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+    async def test_a_probed_worker_answers_every_round_and_keeps_one_connection() -> None:
+        """The acceptance shape of #50, over a real gRPC stream.
+    
+        Three probe rounds answered on one connection is the operator-visible
+        difference between a worker that clears its probation and one that redials
+        forever without ever being dispatchable.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(heartbeat_window_ms=2_000, ping_every_seconds=0.1)
+        dispatcher = _HeldDispatcher()
+>       async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:284: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/contextlib.py:231: in __aexit__
+    await self.gen.athrow(value)
+tests/grpc_lease_server.py:285: in running_worker
+    await running
+aion_worker/loop.py:369: in connect_register_replay_and_serve
+    raise drop
+aion_worker/loop.py:304: in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:174: in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:393: in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+aion_worker/session.py:610: in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = liveness_ping {
+  liveness_ping: 10
+  silence_window_ms: 2000
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+
+aion_worker/session.py:642: TransportError
+----------------------------- Captured stderr call -----------------------------
+I0818 14:54:26.828163 17205997 chttp2_transport.cc:1393] ipv4:127.0.0.1:54782: Got goaway [2] err=UNAVAILABLE:GOAWAY received; Error code: 2; Debug Text: Cancelling all calls {http2_error:2}
+------------------------------ Captured log call -------------------------------
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.01s (attempt 1/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.02s (attempt 2/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.04s (attempt 3/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.08s (attempt 4/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.16s (attempt 5/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.32s (attempt 6/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.64s (attempt 7/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 1.0s (attempt 8/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 1.0s (attempt 9/20)
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 1.0s (attempt 10/20)
+______________ test_a_busy_worker_answers_the_probe_over_the_wire ______________
+
+    async def test_a_busy_worker_answers_the_probe_over_the_wire() -> None:
+        """Dispatch eligibility must not depend on the worker being idle.
+    
+        The worker's single concurrency slot is occupied for the whole observation,
+        so an answer that needed a permit could not be sent.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(
+            heartbeat_window_ms=2_000,
+            ping_every_seconds=0.1,
+            task_to_dispatch=dispatchable_task("workflow-probe", 1, "probe"),
+        )
+        dispatcher = _HeldDispatcher()
+        async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+>           await _await_answers(service, at_least=3, timeout_seconds=5.0)
+
+tests/test_server_frame_decode.py:313: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+service = <grpc_lease_server.LeaseEnforcingWorkerProtocol object at 0x10e446150>
+at_least = 3, timeout_seconds = 5.0
+
+    async def _await_answers(service: LeaseEnforcingWorkerProtocol, at_least: int, timeout_seconds: float) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while True:
+            answered = sum(len(connection.liveness_answers) for connection in service.connections)
+            if answered >= at_least:
+                return
+            if loop.time() >= deadline:
+>               raise AssertionError(
+                    f"{answered} of {len(service.pings_sent)} liveness pings were answered across "
+                    f"{len(service.connections)} connection(s) within {timeout_seconds}s"
+                )
+E               AssertionError: 0 of 19 liveness pings were answered across 1 connection(s) within 5.0s
+
+tests/test_server_frame_decode.py:267: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+    async def test_a_busy_worker_answers_the_probe_over_the_wire() -> None:
+        """Dispatch eligibility must not depend on the worker being idle.
+    
+        The worker's single concurrency slot is occupied for the whole observation,
+        so an answer that needed a permit could not be sent.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(
+            heartbeat_window_ms=2_000,
+            ping_every_seconds=0.1,
+            task_to_dispatch=dispatchable_task("workflow-probe", 1, "probe"),
+        )
+        dispatcher = _HeldDispatcher()
+>       async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:312: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/contextlib.py:231: in __aexit__
+    await self.gen.athrow(value)
+tests/grpc_lease_server.py:285: in running_worker
+    await running
+aion_worker/loop.py:369: in connect_register_replay_and_serve
+    raise drop
+aion_worker/loop.py:304: in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:174: in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:393: in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+aion_worker/session.py:610: in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = liveness_ping {
+  liveness_ping: 1
+  silence_window_ms: 2000
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+
+aion_worker/session.py:642: TransportError
+----------------------------- Captured stderr call -----------------------------
+I0818 14:54:31.895449 17205993 chttp2_transport.cc:1393] ipv4:127.0.0.1:54838: Got goaway [2] err=UNAVAILABLE:GOAWAY received; Error code: 2; Debug Text: Cancelling all calls {http2_error:2}
+------------------------------ Captured log call -------------------------------
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'liveness_ping'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.01s (attempt 1/20)
+___________ test_a_cancel_activity_reaches_the_handler_over_the_wire ___________
+
+fut = <coroutine object Event.wait at 0x10e39adc0>, timeout = 5.0
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/asyncio/tasks.py:520: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x10e2fdd90 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another coroutine calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/asyncio/locks.py:212: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+    async def test_a_cancel_activity_reaches_the_handler_over_the_wire() -> None:
+        """The cancellation the decoder used to drop, end to end.
+    
+        Proves the frame is decoded, delivered to the in-flight handler's
+        cancellation handle, and does not end the session.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(
+            heartbeat_window_ms=2_000,
+            task_to_dispatch=dispatchable_task("workflow-1", 1, "probe"),
+            cancel_after_seconds=0.1,
+        )
+        dispatcher = _HeldDispatcher()
+        async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+>           await asyncio.wait_for(dispatcher.cancellation_seen.wait(), timeout=5.0)
+
+tests/test_server_frame_decode.py:336: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/asyncio/tasks.py:519: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x10e5d6d00>
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is exceptions.CancelledError:
+                # Since there are no new cancel requests, we're
+                # handling this.
+>               raise TimeoutError from exc_val
+E               TimeoutError
+
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/asyncio/timeouts.py:115: TimeoutError
+
+During handling of the above exception, another exception occurred:
+
+    async def test_a_cancel_activity_reaches_the_handler_over_the_wire() -> None:
+        """The cancellation the decoder used to drop, end to end.
+    
+        Proves the frame is decoded, delivered to the in-flight handler's
+        cancellation handle, and does not end the session.
+        """
+    
+        service = LeaseEnforcingWorkerProtocol(
+            heartbeat_window_ms=2_000,
+            task_to_dispatch=dispatchable_task("workflow-1", 1, "probe"),
+            cancel_after_seconds=0.1,
+        )
+        dispatcher = _HeldDispatcher()
+>       async with running_worker(service, dispatcher, PROBE_DESCRIPTORS, dispatcher.release) as running:
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_server_frame_decode.py:335: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/tom/.local/share/uv/python/cpython-3.12.9-macos-aarch64-none/lib/python3.12/contextlib.py:231: in __aexit__
+    await self.gen.athrow(value)
+tests/grpc_lease_server.py:285: in running_worker
+    await running
+aion_worker/loop.py:369: in connect_register_replay_and_serve
+    raise drop
+aion_worker/loop.py:304: in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:174: in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+aion_worker/loop.py:393: in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+aion_worker/session.py:610: in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = cancel_activity {
+  workflow_id {
+    uuid: "workflow-1"
+  }
+  activity_id {
+    sequence_position: 1
+  }
+}
+
+
+    def decode_server_message(message: Message) -> WorkerSessionEvent:
+        """Decode a raw gRPC server-to-worker message into a typed session event."""
+        if not isinstance(message, worker_pb2.ServerToWorker):
+            raise TransportError("server-to-worker message had unexpected type")
+        which = message.WhichOneof("message")
+        if which == "task":
+            return TaskReceived(ActivityTask.from_proto(message.task))
+        if which == "drain":
+            return DrainReceived()
+        if which == "result_ack":
+            ack = message.result_ack
+            return ResultAcknowledged(workflow_id=ack.workflow_id, activity_id=ack.activity_id)
+        if which == "register_ack":
+            # The ack is consumed inside register(); a second one mid-stream is a
+            # server ordering bug that must surface.
+            raise TransportError("protocol violation: RegisterAck received after registration completed")
+        if which is None:
+            raise TransportError("server-to-worker message had no payload set")
+        # Genuinely unknown oneofs surface what was actually received instead of
+        # a misleading "empty message" report.
+>       raise TransportError(f"unsupported server-to-worker message {which!r}")
+E       aion_worker.session.TransportError: unsupported server-to-worker message 'cancel_activity'
+
+aion_worker/session.py:642: TransportError
+----------------------------- Captured stderr call -----------------------------
+I0818 14:54:36.947026 17205996 chttp2_transport.cc:1393] ipv4:127.0.0.1:54884: Got goaway [2] err=UNAVAILABLE:GOAWAY received; Error code: 2; Debug Text: Cancelling all calls {http2_error:2}
+------------------------------ Captured log call -------------------------------
+ERROR    aion_worker.loop:loop.py:331 worker session dropped; reconnecting before receiving more tasks
+Traceback (most recent call last):
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 304, in connect_register_replay_and_serve
+    end = await serve(config, session, dispatcher, unacked, shutdown, health, clock)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 174, in serve
+    event = await _receive_next_or_shutdown(stream, shutdown)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/loop.py", line 393, in _receive_next_or_shutdown
+    return next_task.result()
+           ^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 610, in _receive_from_stream
+    yield decode_server_message(cast(worker_pb2.ServerToWorker, message))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/tom/Developer/ablative/stack/aion-wt-26-py-heartbeat/sdks/python/aion-worker/aion_worker/session.py", line 642, in decode_server_message
+    raise TransportError(f"unsupported server-to-worker message {which!r}")
+aion_worker.session.TransportError: unsupported server-to-worker message 'cancel_activity'
+WARNING  aion_worker.loop:loop.py:357 Reconnecting in 0.01s (attempt 1/20)
+=========================== short test summary info ============================
+FAILED tests/test_connection_lease.py::test_an_idle_worker_beats_its_connection_lease
+FAILED tests/test_connection_lease.py::test_an_in_flight_worker_beats_the_connection_before_its_tasks
+FAILED tests/test_connection_lease.py::test_the_cadence_is_a_quarter_of_the_server_assigned_window
+FAILED tests/test_connection_lease.py::test_a_blocked_event_loop_sends_no_beats_and_is_correctly_expired
+FAILED tests/test_connection_lease.py::test_an_idle_worker_survives_three_windows_on_a_real_stream
+FAILED tests/test_server_frame_decode.py::test_a_liveness_ping_decodes_into_a_typed_event
+FAILED tests/test_server_frame_decode.py::test_a_cancel_activity_decodes_into_the_cancellation_event
+FAILED tests/test_server_frame_decode.py::test_a_liveness_ping_does_not_end_the_receive_stream
+FAILED tests/test_server_frame_decode.py::test_the_session_answers_a_ping_with_the_echoed_sequence
+FAILED tests/test_server_frame_decode.py::test_the_serve_loop_answers_the_ping_without_consulting_the_dispatcher
+FAILED tests/test_server_frame_decode.py::test_a_worker_at_full_concurrency_still_answers
+FAILED tests/test_server_frame_decode.py::test_a_probed_worker_answers_every_round_and_keeps_one_connection
+FAILED tests/test_server_frame_decode.py::test_a_busy_worker_answers_the_probe_over_the_wire
+FAILED tests/test_server_frame_decode.py::test_a_cancel_activity_reaches_the_handler_over_the_wire
+14 failed, 127 passed in 38.88s

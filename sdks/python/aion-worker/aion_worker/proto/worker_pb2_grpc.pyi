@@ -9,3 +9,10 @@ class _StreamStreamCallable(Protocol):
 class WorkerProtocolStub:
     StreamWorker: _StreamStreamCallable
     def __init__(self, channel: Any) -> None: ...
+
+class WorkerProtocolServicer:
+    def StreamWorker(
+        self, request_iterator: AsyncIterator[WorkerToServer], context: Any
+    ) -> AsyncIterator[ServerToWorker]: ...
+
+def add_WorkerProtocolServicer_to_server(servicer: WorkerProtocolServicer, server: Any) -> None: ...
