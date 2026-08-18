@@ -448,6 +448,16 @@ fn activity_failure(message: &str) -> aion_core::ActivityError {
     }
 }
 
+/// The NON-terminal failure the off-thread retry loop records for a failed attempt with budget
+/// left (`nif_activity_retry_dispatch.rs::record_retry_event`).
+fn retryable_failure(message: &str) -> aion_core::ActivityError {
+    aion_core::ActivityError {
+        kind: aion_core::ActivityErrorKind::Retryable,
+        message: String::from(message),
+        details: None,
+    }
+}
+
 /// Count the terminal events (`ActivityCompleted` + `ActivityFailed`) for `ordinal` in `history`.
 fn terminal_count(history: &[Event], ordinal: u64) -> usize {
     let target = aion_core::ActivityId::from_sequence_position(ordinal);
@@ -596,6 +606,113 @@ async fn fan_out_completion_drops_for_cancelled_ordinal() -> Result<(), Box<dyn 
         terminal_count(&history, 3),
         0,
         "no completion terminal may be written over an already-cancelled ordinal"
+    );
+    Ok(())
+}
+
+/// (b3, aion#47) A member's RETRY RECORD must not resolve its ordinal for the dedup predicate.
+///
+/// The off-thread retry loop appends a non-terminal `ActivityFailed`
+/// (`ActivityErrorKind::Retryable`) for every failed attempt with budget left, then re-dispatches
+/// the same ordinal. Counting that record as "resolved" drops the genuine terminal the retry
+/// eventually produces: the live sweep hands the workflow the completion it took from the runtime
+/// map while NOTHING is recorded for it, so a replayed settlement reads the retry record and answers
+/// `Failed`. The completion must be recorded.
+#[tokio::test]
+async fn fan_out_completion_records_over_a_retryable_attempt_record()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workflow_id = workflow_id(23);
+    let store = Arc::new(OutboxTestStore::new());
+    let mut recorder = Recorder::new(workflow_id.clone(), store.clone());
+
+    recorder
+        .record_activity_failed(
+            recorded_at(1),
+            aion_core::ActivityId::from_sequence_position(4),
+            retryable_failure("retryable:boom"),
+            1,
+        )
+        .await?;
+    let head_after_retry_record = recorder.current_head();
+
+    let result = recorder
+        .record_fan_out_completion(
+            recorded_at(2),
+            4,
+            None,
+            FanOutOutcome::Completed {
+                result: payload("retried")?,
+                attempt: 2,
+            },
+        )
+        .await?;
+
+    assert_eq!(
+        result,
+        FanOutCompletionResult::Recorded,
+        "an open retry trail is not a resolved ordinal: the retry's completion must be recorded"
+    );
+    assert_eq!(recorder.current_head(), head_after_retry_record + 1);
+    let history = store.read_history(&workflow_id).await?;
+    assert!(
+        history.iter().any(|event| matches!(
+            event,
+            Event::ActivityCompleted { activity_id, .. }
+                if *activity_id == aion_core::ActivityId::from_sequence_position(4)
+        )),
+        "the retried member's completion must be in history: {history:#?}"
+    );
+    Ok(())
+}
+
+/// (b4, aion#47) A TERMINAL `ActivityFailed` still resolves the ordinal: a late completion arriving
+/// after a genuine terminal failure is still dropped.
+///
+/// **The lane's one genuine CONTROL, and a control by measurement rather than by assertion:** it is
+/// the only arm of the aion#47 set that is GREEN against the unfixed text
+/// (`gate-logs/47-fanout-settlement/evidence/red-unfixed.log` — 43 run, 9 failed, this one among the
+/// 34 that passed). Every OTHER aion#47 test, including the ones whose names read like preserved
+/// behaviour, is red against the prior text.
+#[tokio::test]
+async fn fan_out_completion_drops_after_a_terminal_failure()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workflow_id = workflow_id(24);
+    let store = Arc::new(OutboxTestStore::new());
+    let mut recorder = Recorder::new(workflow_id.clone(), store.clone());
+
+    recorder
+        .record_activity_failed(
+            recorded_at(1),
+            aion_core::ActivityId::from_sequence_position(5),
+            activity_failure("boom"),
+            1,
+        )
+        .await?;
+    let head_after_terminal = recorder.current_head();
+
+    let result = recorder
+        .record_fan_out_completion(
+            recorded_at(2),
+            5,
+            None,
+            FanOutOutcome::Completed {
+                result: payload("late")?,
+                attempt: 1,
+            },
+        )
+        .await?;
+
+    assert_eq!(result, FanOutCompletionResult::Dropped);
+    assert_eq!(
+        recorder.current_head(),
+        head_after_terminal,
+        "a dropped completion must not advance the head past a terminal failure"
+    );
+    let history = store.read_history(&workflow_id).await?;
+    assert_eq!(
+        terminal_count(&history, 5),
+        1,
+        "no completion may be written over an already-failed ordinal"
     );
     Ok(())
 }

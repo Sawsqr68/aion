@@ -1,0 +1,244 @@
+   Compiling aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion-store-haematite)
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 38.88s
+────────────
+ Nextest run ID c236dab4-78c4-46c8-ba63-e42b5f5914be with nextest profile: default
+    Starting 43 tests across 1 binary (663 tests skipped)
+        PASS [   0.017s] ( 1/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_failed_terminal
+        PASS [   0.017s] ( 2/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_after_a_terminal_failure
+        PASS [   0.017s] ( 3/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_duplicate_for_resolved_ordinal
+        PASS [   0.017s] ( 4/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_for_cancelled_ordinal
+        PASS [   0.014s] ( 5/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_first_terminal_for_unresolved_ordinal
+        PASS [   0.015s] ( 6/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_sequence_conflict_surfaces_without_advancing
+        PASS [   0.015s] ( 7/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_for_scheduled_but_not_terminal_ordinal
+        FAIL [   0.015s] ( 8/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record
+  stdout ───
+
+    running 1 test
+    test durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record ... FAILED
+
+    failures:
+
+    failures:
+        durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record' (14524663) panicked at crates/aion/src/durability/recorder/fan_out_tests.rs:650:5:
+    assertion `left == right` failed: an open retry trail is not a resolved ordinal: the retry's completion must be recorded
+      left: Dropped
+     right: Recorded
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.013s] ( 9/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_is_atomic_on_store_failure
+        PASS [   0.014s] (10/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_empty_items_is_a_no_op
+        PASS [   0.012s] (11/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_sequence_conflict_surfaces_without_advancing
+        PASS [   0.014s] (12/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_appends_2n_events_in_scheduled_started_order
+        PASS [   0.015s] (13/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_stages_n_outbox_rows_with_dispatch_keys
+        FAIL [   0.015s] (14/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled' (14524690) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:305:5:
+    assertion `left == right` failed: a cancellation still resolves an ordinal whose retry trail was open
+      left: Some(Failed("retryable:boom"))
+     right: Some(Cancelled)
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.014s] (15/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all' (14524794) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:116:5:
+    assertion `left == right` failed: a retried member's success must settle the batch, not its retry record
+      left: Ok(FailFast("retryable:boom"))
+     right: Ok(AllCompleted(["\"done-a\"", "\"done-b\""]))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.013s] (16/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race' (14524885) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:143:5:
+    assertion `left == right` failed: an open retry trail settles nothing, so the race must stay suspended
+      left: Ok(RaceWon(Err("retryable:boom")))
+     right: Ok(Suspend)
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.010s] (17/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved' (14524932) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:58:5:
+    assertion `left == right` failed: a retryable attempt record must leave the ordinal unresolved, so recovery re-dispatches it
+      left: Some(Failed("retryable:boom"))
+     right: None
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.014s] (18/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message' (14524935) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:249:5:
+    assertion `left == right` failed
+      left: Ok(FailFast("retryable:boom"))
+     right: Ok(FailFast("exhausted: boom"))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.010s] (19/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record' (14524982) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:84:5:
+    assertion `left == right` failed: the terminal that ends a retry trail resolves the ordinal, and its message — not the retry record's — is what the settlement reports
+      left: Some(Failed("retryable:boom"))
+     right: Some(Failed("boom-final"))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.013s] (20/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message' (14524985) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:275:5:
+    assertion `left == right` failed
+      left: Ok(RaceWon(Err("retryable:boom")))
+     right: Ok(RaceWon(Err("exhausted: boom")))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.010s] (21/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_node
+        PASS [   0.010s] (22/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_task_queue
+        PASS [   0.010s] (23/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_fall_back_to_the_start_time_queue
+        PASS [   0.010s] (24/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_resolve_precedence_per_member
+        FAIL [   0.247s] (25/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged
+  stdout ───
+
+    running 1 test
+    test runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.24s
+
+  stderr ───
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged' (14524793) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:216:5:
+    assertion `left == right` failed: the replayed settlement must answer exactly what the live run answered
+      left: Ok(FailFast("retryable:boom"))
+     right: Ok(AllCompleted(["\"done-a\"", "\"done-b\""]))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.245s] (26/43) aion-rs runtime::nif_collect::tests::routing_fresh::no_selection_records_on_the_workflow_start_time_queue
+        PASS [   0.484s] (27/43) aion-rs runtime::nif_collect::tests::expiry::all_stale_snapshot_expiry_suspends_then_converges_with_replay
+        PASS [   0.484s] (28/43) aion-rs runtime::nif_collect::tests::expiry::race_stale_snapshot_expiry_suspends_then_settles_the_recorded_winner
+        PASS [   0.012s] (29/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_defaults_task_queue
+        PASS [   0.011s] (30/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_has_no_node
+        PASS [   0.010s] (31/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_node_not_none
+        PASS [   0.009s] (32/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_task_queue_not_default
+        PASS [   0.246s] (33/43) aion-rs runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_node
+        PASS [   0.246s] (34/43) aion-rs runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_task_queue
+        PASS [   0.475s] (35/43) aion-rs runtime::nif_collect::tests::routing_fresh::recovery_re_resolves_the_start_time_queue_not_default
+        PASS [   0.245s] (36/43) aion-rs runtime::nif_collect::tests::settlement::cancellation_set_covers_exactly_the_unresolved_ordinals
+        PASS [   0.244s] (37/43) aion-rs runtime::nif_collect::tests::settlement::empty_list_resolves_immediately_without_pinning
+        PASS [   0.244s] (38/43) aion-rs runtime::nif_collect::tests::settlement::fail_fast_returns_lowest_ordinal_failure_and_cancels_unresolved
+        PASS [   0.244s] (39/43) aion-rs runtime::nif_collect::tests::settlement::pinned_base_is_reused_across_reentries_and_counter_advances_once
+        PASS [   0.244s] (40/43) aion-rs runtime::nif_collect::tests::settlement::race_batch_tie_breaks_to_lowest_ordinal_and_drains_loser_entries
+        PASS [   0.479s] (41/43) aion-rs runtime::nif_collect::tests::settlement::expired_scope_cancels_unresolved_and_replay_derives_the_same_abort
+        PASS [   0.245s] (42/43) aion-rs runtime::nif_collect::tests::settlement::race_settlement_advances_now_over_the_recorded_winner
+        PASS [   0.478s] (43/43) aion-rs runtime::nif_collect::tests::settlement::race_winner_is_first_recorded_terminal_not_lowest_ordinal
+────────────
+     Summary [   1.542s] 43 tests run: 34 passed, 9 failed, 663 skipped
+        FAIL [   0.015s] ( 8/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record
+        FAIL [   0.015s] (14/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+        FAIL [   0.014s] (15/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all
+        FAIL [   0.013s] (16/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race
+        FAIL [   0.010s] (17/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved
+        FAIL [   0.014s] (18/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message
+        FAIL [   0.010s] (19/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record
+        FAIL [   0.013s] (20/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message
+        FAIL [   0.247s] (25/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)
+TRUE_EXIT=100
+TREE=red-only: tests present, fix absent

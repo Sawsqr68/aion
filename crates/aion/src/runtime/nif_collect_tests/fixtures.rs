@@ -1,6 +1,12 @@
 use super::{events::*, harness::CollectHarness, support::*};
 
 pub(in super::super) fn failed(ordinal: u64, message: &str) -> Event {
+    failed_at_attempt(ordinal, message, 1)
+}
+
+/// A TERMINAL `ActivityFailed` at an explicit attempt — the end of a retry
+/// trail, and the only failure shape that resolves a fan-out member.
+pub(in super::super) fn failed_at_attempt(ordinal: u64, message: &str, attempt: u32) -> Event {
     Event::ActivityFailed {
         envelope: placeholder_envelope(),
         activity_id: ActivityId::from_sequence_position(ordinal),
@@ -9,7 +15,25 @@ pub(in super::super) fn failed(ordinal: u64, message: &str) -> Event {
             message: message.to_owned(),
             details: None,
         },
-        attempt: 1,
+        attempt,
+    }
+}
+
+/// A NON-terminal `ActivityFailed` — the durable RETRY RECORD the off-thread
+/// retry loop appends for a failed attempt that still has budget
+/// (`nif_activity_retry_dispatch.rs::record_retry_event`, written with
+/// `ActivityErrorKind::Retryable`). It is one attempt in a trail, never a
+/// member's terminal (aion#47).
+pub(in super::super) fn retryable_failed(ordinal: u64, message: &str, attempt: u32) -> Event {
+    Event::ActivityFailed {
+        envelope: placeholder_envelope(),
+        activity_id: ActivityId::from_sequence_position(ordinal),
+        error: ActivityError {
+            kind: ActivityErrorKind::Retryable,
+            message: message.to_owned(),
+            details: None,
+        },
+        attempt,
     }
 }
 

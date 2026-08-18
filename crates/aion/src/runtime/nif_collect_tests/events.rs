@@ -135,6 +135,16 @@ pub(in super::super) fn scheduled_started(ordinal: u64, name: &str) -> Vec<Event
     ]
 }
 
+/// The `ActivityStarted` a retry re-dispatch records before the next attempt
+/// goes on the wire (NOI-0), continuing the ordinal's recorded attempt trail.
+pub(in super::super) fn started(ordinal: u64, attempt: u32) -> Event {
+    Event::ActivityStarted {
+        envelope: placeholder_envelope(),
+        activity_id: ActivityId::from_sequence_position(ordinal),
+        attempt,
+    }
+}
+
 pub(in super::super) fn completed(ordinal: u64, result: &str) -> Event {
     Event::ActivityCompleted {
         envelope: placeholder_envelope(),

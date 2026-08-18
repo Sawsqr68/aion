@@ -2,6 +2,7 @@ mod events;
 mod expiry;
 mod fixtures;
 mod harness;
+mod retryable_settlement;
 mod routing_fresh;
 mod routing_recovery;
 mod settlement;

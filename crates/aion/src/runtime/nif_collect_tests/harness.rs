@@ -69,6 +69,29 @@ pub(in super::super) async fn seed_history(
     Ok((workflow_id, run_id))
 }
 
+/// Rebuild `history` verbatim into a FRESH store under the SAME workflow id,
+/// renumbering the sequence contiguously from 1.
+///
+/// The construction a divergence test needs: a run's own recorded trail plus an
+/// event a concurrent writer interleaved into it, replayed by a later engine
+/// epoch. Only sequence numbers are re-stamped — the event order, the ordinals
+/// and every payload are the bytes the caller hands over.
+pub(in super::super) async fn restored_store(
+    workflow_id: &WorkflowId,
+    history: &[Event],
+) -> Result<Arc<dyn EventStore>, Box<dyn std::error::Error>> {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let mut sequenced = Vec::with_capacity(history.len());
+    for (index, event) in history.iter().enumerate() {
+        let seq = u64::try_from(index)? + 1;
+        sequenced.push(reenvelope(event.clone(), workflow_id, seq));
+    }
+    store
+        .append(WriteToken::recorder(), workflow_id, &sequenced, 0)
+        .await?;
+    Ok(store)
+}
+
 impl CollectHarness {
     /// Build over a fresh store seeded with `WorkflowStarted` + `events`.
     pub(super) async fn over_events(events: &[Event]) -> Result<Self, Box<dyn std::error::Error>> {
