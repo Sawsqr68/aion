@@ -114,7 +114,7 @@ describe('InstantText', () => {
   test('a parseable instant renders a <time> whose dateTime and title carry the raw UTC value', () => {
     const markup = renderToStaticMarkup(<InstantText value={INSTANT} />);
     expect(markup).toBe(
-      `<time dateTime="${INSTANT}" title="${INSTANT}">Jul 15, 2026 at 10:00:02 AM GMT+10</time>`
+      `<time dateTime="${INSTANT}" title="${INSTANT}">Jul 15, 2026, 10:00:02 AM GMT+10</time>`
     );
   });
 

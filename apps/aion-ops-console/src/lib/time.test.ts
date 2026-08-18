@@ -52,17 +52,17 @@ describe('formatInstant acceptance gate', () => {
 describe('viewer-local rendering', () => {
   test('a known instant renders exactly under an explicit timeZone option', () => {
     expect(formatInstant(INSTANT, { locales: 'en-US', timeZone: 'UTC' })).toBe(
-      'Jul 15, 2026 at 12:00:02 AM UTC'
+      'Jul 15, 2026, 12:00:02 AM UTC'
     );
     expect(formatInstant(INSTANT, { locales: 'en-US', timeZone: 'Australia/Sydney' })).toBe(
-      'Jul 15, 2026 at 10:00:02 AM GMT+10'
+      'Jul 15, 2026, 10:00:02 AM GMT+10'
     );
   });
 
   test('the pinned system zone (Australia/Sydney) IS the default rendering zone', () => {
     // Machine-independence rests on test-setup.ts pinning TZ (and guarding the
     // locale) before any Date exists — an exact assertion proves the pin bit.
-    expect(formatInstant(INSTANT)).toBe('Jul 15, 2026 at 10:00:02 AM GMT+10');
+    expect(formatInstant(INSTANT)).toBe('Jul 15, 2026, 10:00:02 AM GMT+10');
   });
 
   test('every rendering carries a visible timezone label, never the word "local"', () => {
@@ -78,7 +78,7 @@ describe('viewer-local rendering', () => {
 describe('formatInstantMs', () => {
   test('renders a known epoch and refuses non-finite input', () => {
     expect(formatInstantMs(INSTANT_EPOCH_MS, { locales: 'en-US' })).toBe(
-      'Jul 15, 2026 at 10:00:02 AM GMT+10'
+      'Jul 15, 2026, 10:00:02 AM GMT+10'
     );
     expect(formatInstantMs(INSTANT_EPOCH_MS, { locales: 'en-US', style: 'time' })).toBe(
       '10:00:02 AM GMT+10'
@@ -110,5 +110,21 @@ describe('parseInstantMs', () => {
     expect(parseInstantMs('2026-07-15T10:00:02.500+10:00')).toBe(INSTANT_EPOCH_MS);
     expect(parseInstantMs('not-a-timestamp')).toBeNull();
     expect(parseInstantMs('2026-13-15T00:00:02Z')).toBeNull();
+  });
+});
+
+describe('ICU-independent composition (issue #57)', () => {
+  // The date-time junction is OUR literal, not ICU's: CLDR 42 changed the
+  // en-US combined-format glue from ", " to " at ", so macOS and Linux hosts
+  // with different ICU data rendered different bytes from the same instant
+  // and the same bun version. These pins are exact on EVERY platform — if
+  // they fail anywhere, the glue has regressed to an ICU-supplied literal.
+  test('full-style output is byte-identical across ICU data: the glue is ours', () => {
+    expect(formatInstant(INSTANT, { locales: 'en-US', timeZone: 'UTC' })).toBe(
+      'Jul 15, 2026, 12:00:02 AM UTC'
+    );
+    expect(formatInstant(INSTANT, { locales: 'en-GB', timeZone: 'UTC' })).toBe(
+      '15 Jul 2026, 12:00:02 UTC'
+    );
   });
 });
