@@ -5,6 +5,8 @@ Commissioned by Tom's expansion order (item TWO), RAM health first. Access: `ssh
 ## RAM — story closed, one scheduled item open
 Tom's ruling: "supposed to be 32, it's the Galaxy" — and the hardware agrees: 2×16GiB DDR4 2133MT/s (ChannelA-DIMM0 + ChannelB-DIMM0, two slots empty), MemTotal 32785852kB. The dead-stick theory is closed; 32G IS the build. **Open item:** a full memtest pass has never been run at our hands. It requires the box offline, so it is a **scheduled-downtime item** — Tom names the window; a memtester run inside Linux (non-exclusive) is a weaker substitute we can run any time but it cannot clear the hardware the way the offline pass does. Until the pass, RAM is *presumed* healthy on the strength of clean gate history, not proven.
 
+**Update 2026-08-18 night:** under Tom's restart grant the item went tonight-opportunistic; my sequencing call was the zero-downtime form — a 20G-of-31G in-OS memtester pass launched detached (~/memtest/RESULT-20260818.txt, Qdrant left running untouched). A partial pass with a clean verdict raises confidence; only the offline pass at a natural window fully clears the hardware, and that remains open. (Box is Arch, memtester via pacman.)
+
 ## Class of work
 Rocketfish is a **gates-offload venue** — its proven history (remote clippy/test runs; its newer clippy doubles as a forward-compat canary). It is NOT yet an agent-seat venue: no claude/norn auth exists there, and granting it is a separate Tom decision with the same shape as the Dean-Mac docket.
 
