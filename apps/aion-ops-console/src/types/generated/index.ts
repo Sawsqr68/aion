@@ -218,6 +218,15 @@ run_id: RunId,
  */
 parent_run_id: RunId | null,
 /**
+ * The parent WORKFLOW that spawned this run as a child (aion#77):
+ * the child wears its parent, so a handoff chain is traversable
+ * backward from any run and the console can group an arc without
+ * scanning every parent history. `None` for operator-started roots
+ * and for histories recorded before the field existed (the serde
+ * default, exactly as `task_queue` and `attempt` decode legacies).
+ */
+parent_workflow_id: WorkflowId | null,
+/**
  * Package version this run was resolved against at record time.
  *
  * Recovery and replay resolve workflow code from this recorded
