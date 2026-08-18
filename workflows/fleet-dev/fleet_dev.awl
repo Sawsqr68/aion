@@ -133,6 +133,8 @@ type FleetDevReport {
   counsel_control_reply: String,
   teardown_ok: Bool,
   teardown_refusal: String,
+  sessions_exit: Int,
+  sessions_note: String,
 }
 
 /// The tree could not be provisioned — or the dispatcher's `repo` address
@@ -253,6 +255,8 @@ worker fleet_ops
   action gates(workspace_root: String, run_name: String, gate_entry: String) -> OpProbe
   action push(workspace_root: String, run_name: String, result_branch: String) -> PushProbe
   action teardown(workspace_root: String, run_name: String) -> TeardownProbe
+  action sessions(workspace_root: String, run_name: String, counsel_control_session: String, dev_control_session: String, plan_session: String, judge_session: String) -> OpProbe
+  action session(workspace_root: String, run_name: String, tree: String, step_label: String, session_id: String) -> OpProbe
 
 /// Provision the run tree: clone at the named ref under the confined run
 /// root. The dispatcher's `repo` address must equal the provisioner's own
@@ -317,6 +321,8 @@ step open
 
 step build_one
   delegate(repo: leg.repo, prompt: leg.prompt) -> built
+  session(workspace_root: workspace_root, run_name: run_name, tree: leg.repo,
+    step_label: leg.id, session_id: built.session_id) -> leg_captured
   built.text -> report
 
 step close
@@ -365,6 +371,8 @@ step gate
 /// meets the same red and exhausts the loop mechanically.
 step fix_round
   delegate(repo: repo, prompt: fix_prompt) -> fixed
+  session(workspace_root: workspace_root, run_name: run_name, tree: repo,
+    step_label: "fix_round", session_id: fixed.session_id) -> fix_captured
   route gate
 
 /// The judge rules on the delivery that gated green. Exact admission only:
@@ -375,10 +383,15 @@ step fix_round
 /// flight one was flagged on its own passing verdict by a `text` compare.
 step judgement
   judge(repo: repo, prompt: judge_prompt) -> judged
-  outcome clear: when judged.final_message == judge_pass, route push_result
+  outcome clear: when judged.final_message == judge_pass, route capture_sessions
   outcome flagged: otherwise,
     route judge_flagged(plan: planned.text, reports: reports, verdict: judged.text,
       kept_root: cloned.root)
+
+step capture_sessions
+  sessions(workspace_root: workspace_root, run_name: run_name,
+    counsel_control_session: counsel_control.session_id, dev_control_session: control.session_id,
+    plan_session: planned.session_id, judge_session: judged.session_id) -> captured
 
 /// Deliver home with a receipt. A refusal keeps the tree — the work exists
 /// only there until the remote holds it.
@@ -396,4 +409,5 @@ step clean_up
     base_commit: cloned.head_commit, pushed_commit: pushed.pushed_commit,
     result_branch: pushed.branch, gate_exit: gate_result.exit_code,
     control_reply: control.text, counsel_control_reply: counsel_control.text,
-    teardown_ok: td.ok, teardown_refusal: td.refusal)
+    teardown_ok: td.ok, teardown_refusal: td.refusal,
+    sessions_exit: captured.exit_code, sessions_note: captured.stdout)
