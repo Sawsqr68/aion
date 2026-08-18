@@ -161,7 +161,7 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// module, which is an input to every archive. The same-process determinism and
 /// fresh-closure tests are the controls: this pin moves with those intentional,
 /// deterministic shipped bytes. Repinned 2026-08-18 with the fresh Gleam
-/// landing-venue closure (see BUNDLE_CHECKSUM notes); the
+/// landing-venue closure (see `BUNDLE_CHECKSUM` notes); the
 /// bundle checksum and freshness proof move in the same change, while the
 /// fixed-input assembly remains deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
