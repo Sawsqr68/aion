@@ -44,4 +44,4 @@ mod namespace_shard;
 /// The [`HaematiteStore`] type and its `EventStore` trait implementations.
 pub mod store;
 
-pub use store::{ClusterBootstrap, ClusterResponder, HaematiteStore};
+pub use store::{ClusterBootstrap, ClusterResponder, HaematiteStore, OutboxRowState};

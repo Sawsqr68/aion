@@ -689,10 +689,36 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     assert_no_synthesized_terminals(&post_drain);
 
     drop(worker);
+    // This worker deliberately never obeyed the drain, so its stream is still
+    // open server-side and the connection task holds a `ServerState` clone —
+    // and through it the store. Wait for the SERVER to observe the disconnect
+    // (an observable condition, not a sleep) before tearing the epoch down;
+    // otherwise the next epoch races the writer lock, and a failed haematite
+    // open does not release the lock file it took, so there is no second try.
+    wait_for_no_registered_workers(&epoch.state).await?;
     // `reader` is the engine's own store handle; the writer lock is not released
     // until every clone of it is gone, and the next epoch opens the same dir.
     drop(reader);
     epoch.stop().await?;
 
     restart_and_complete(&db_path, package_path, &workflow_id).await
+}
+
+/// Block until the server has observed every worker stream closing.
+///
+/// A dropped `WorkerSession` closes the client socket; the server's connection
+/// task then unwinds and deregisters. That unwinding is what releases the
+/// `ServerState` clone the task holds, so a teardown that does not wait for it
+/// races the store handle it is trying to release.
+async fn wait_for_no_registered_workers(state: &ServerState) -> Result<(), TestError> {
+    let deadline = Instant::now() + POLL_DEADLINE;
+    loop {
+        if state.worker_registry().all_workers()?.is_empty() {
+            return Ok(());
+        }
+        if Instant::now() > deadline {
+            return Err("the server never observed the worker stream closing".into());
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }

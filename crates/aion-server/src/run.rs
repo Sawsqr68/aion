@@ -258,8 +258,8 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // row. Clustered (`Some`) relies on `claim_outbox_rows`' `owned_shard_scope()`
     // filter — already seeded by `set_owned_shards` during `ServerState::build`,
     // which runs before this point — so each node only ever claims rows on the
-    // shards it owns. Compute the flag here where the (feature-gated) cluster
-    // section is in scope; pass it to the gate so the boot banner records the mode.
+    // shards it owns. Compute the flag here where the cluster section is in
+    // scope; pass it to the gate so the boot banner records the mode.
     let outbox_clustered = cluster_config.is_some();
     // Dormant by default: only when `outbox.enabled` is set does the
     // non-replayed outbox dispatcher task start. With the flag off (the
@@ -1261,6 +1261,9 @@ mod tests {
             store: StoreConfig {
                 backend: StoreBackend::Haematite,
                 data_dir: Some(data_dir.to_string_lossy().into_owned()),
+                // Required, no default: the haematite boot path refuses a config
+                // that does not rule on the node cache's byte ceiling.
+                node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1273,6 +1276,8 @@ mod tests {
                 cluster_broadcast_capacity: Some(64),
             },
             outbox: outbox.clone(),
+            // Required, no default: the transcript drain's flush policy.
+            observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             ..ServerConfig::default()
         };
         let state = ServerState::build(config)
@@ -1492,6 +1497,9 @@ mod lsub_prod_xnode_e2e {
             store: StoreConfig {
                 backend: StoreBackend::Haematite,
                 data_dir: Some(data_dir.to_string_lossy().into_owned()),
+                // Required, no default: the haematite boot path refuses a config
+                // that does not rule on the node cache's byte ceiling.
+                node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1517,6 +1525,8 @@ mod lsub_prod_xnode_e2e {
                 transport: OutboxTransport::Liminal,
                 liminal_listen_address: Some(listen_address.to_string()),
             },
+            // Required, no default: the transcript drain's flush policy.
+            observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             ..ServerConfig::default()
         }
     }

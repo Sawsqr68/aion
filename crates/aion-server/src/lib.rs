@@ -40,11 +40,11 @@ pub mod build_identity;
 /// file read from disk.
 pub mod changelog;
 /// SS-5b automatic multi-node failover detection (cluster supervisor). Only
-/// meaningful for a distributed haematite boot, so gated behind the backend.
+/// meaningful for a distributed (`[store.cluster]`) boot; dormant otherwise.
 pub mod cluster;
-/// WS3 cluster topology/ownership broadcast publisher (not backend-gated: the
-/// ops console's cluster channel is served on every boot, showing calm state with
-/// no peers on a single-node server).
+/// WS3 cluster topology/ownership broadcast publisher. The ops console's cluster
+/// channel is served on every boot, showing calm state with no peers on a
+/// single-node server.
 pub mod cluster_publisher;
 /// Runtime configuration loading and validation.
 pub mod config;

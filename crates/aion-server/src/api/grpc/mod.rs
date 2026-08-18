@@ -22,6 +22,7 @@ use aion_proto::generated::{self, workflow_service_server::WorkflowServiceServer
 use tonic::{Request, Response, Status};
 
 use crate::namespace::MintCredentials;
+use crate::routing::{ForwardReply, ForwardRequest};
 use crate::{CallerIdentity, ServerState, api::handlers};
 use convert::decode_workflow_id;
 use convert::{
@@ -73,36 +74,34 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         // remint places it locally. `placement` is `None` for single-node /
         // non-clustered boots (and own-all scope), so the engine mints as usual —
         // default path unchanged.
-        {
-            let (metadata, _ext, inner) = request.into_parts();
-            let placement = match self.resolve_start(&inner, &metadata).await {
-                StartResolution::Reject(status) => return Err(status),
-                StartResolution::Reply(reply) => return Ok(Response::new(reply)),
-                StartResolution::Local(placement) => placement,
-            };
-            // Minted-on-use safety net (Phase 1 S6): mint/gate the authorized
-            // namespace before the engine start, sharing the SAME policy the
-            // worker-registration seam applies. Auth-scoped (`guard.scope` runs
-            // inside the handler); placement is the orthogonal steered-start id.
-            // Carry the caller's own credentials onto any forwarded mint, so
-            // the namespace shard's owner authorizes THIS caller rather than an
-            // anonymous peer (the same verbatim-metadata discipline the R-3
-            // request forwarder already applies to a forwarded start).
-            let minter = self
-                .state
-                .namespace_minter()
-                .with_caller_credentials(MintCredentials::from_grpc_metadata(&metadata));
-            let response = handlers::start_with_placement(
-                self.state.namespace_guard(),
-                &caller,
-                decode_start_request(inner),
-                placement,
-                Some(&minter),
-            )
-            .await
-            .map_err(status_from_wire_error)?;
-            return Ok(Response::new(encode_start_response(response)));
-        }
+        let (metadata, _ext, inner) = request.into_parts();
+        let placement = match self.resolve_start(&inner, &metadata).await {
+            StartResolution::Reject(status) => return Err(status),
+            StartResolution::Reply(reply) => return Ok(Response::new(reply)),
+            StartResolution::Local(placement) => placement,
+        };
+        // Minted-on-use safety net (Phase 1 S6): mint/gate the authorized
+        // namespace before the engine start, sharing the SAME policy the
+        // worker-registration seam applies. Auth-scoped (`guard.scope` runs
+        // inside the handler); placement is the orthogonal steered-start id.
+        // Carry the caller's own credentials onto any forwarded mint, so
+        // the namespace shard's owner authorizes THIS caller rather than an
+        // anonymous peer (the same verbatim-metadata discipline the R-3
+        // request forwarder already applies to a forwarded start).
+        let minter = self
+            .state
+            .namespace_minter()
+            .with_caller_credentials(MintCredentials::from_grpc_metadata(&metadata));
+        let response = handlers::start_with_placement(
+            self.state.namespace_guard(),
+            &caller,
+            decode_start_request(inner),
+            placement,
+            Some(&minter),
+        )
+        .await
+        .map_err(status_from_wire_error)?;
+        return Ok(Response::new(encode_start_response(response)));
     }
 
     async fn signal(
@@ -110,35 +109,32 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::SignalRequest>,
     ) -> Result<Response<generated::SignalResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(
+                workflow_id,
+                &metadata,
+                ForwardRequest::Signal(inner.clone()),
+            )
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(
-                    workflow_id,
-                    &metadata,
-                    ForwardRequest::Signal(inner.clone()),
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Signal(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::signal(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_signal_request(inner),
                 )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Signal(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::signal(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_signal_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_signal_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_signal_response(response)));
             }
         }
     }
@@ -148,31 +144,28 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::QueryRequest>,
     ) -> Result<Response<generated::QueryResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(workflow_id, &metadata, ForwardRequest::Query(inner.clone()))
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(workflow_id, &metadata, ForwardRequest::Query(inner.clone()))
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Query(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::query(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_query_request(inner),
+                )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Query(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::query(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_query_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_query_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_query_response(response)));
             }
         }
     }
@@ -182,36 +175,33 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::CancelRequest>,
     ) -> Result<Response<generated::CancelResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(
+                workflow_id,
+                &metadata,
+                ForwardRequest::Cancel(inner.clone()),
+            )
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(
-                    workflow_id,
-                    &metadata,
-                    ForwardRequest::Cancel(inner.clone()),
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Cancel(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::cancel(
+                    &self.state,
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_cancel_request(inner),
                 )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Cancel(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::cancel(
-                        &self.state,
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_cancel_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_cancel_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_cancel_response(response)));
             }
         }
     }
@@ -221,35 +211,32 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::ReopenRequest>,
     ) -> Result<Response<generated::ReopenResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(
+                workflow_id,
+                &metadata,
+                ForwardRequest::Reopen(inner.clone()),
+            )
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(
-                    workflow_id,
-                    &metadata,
-                    ForwardRequest::Reopen(inner.clone()),
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Reopen(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::reopen(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_reopen_request(inner),
                 )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Reopen(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::reopen(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_reopen_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_reopen_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_reopen_response(response)));
             }
         }
     }
@@ -259,31 +246,28 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::PauseRequest>,
     ) -> Result<Response<generated::PauseResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(workflow_id, &metadata, ForwardRequest::Pause(inner.clone()))
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(workflow_id, &metadata, ForwardRequest::Pause(inner.clone()))
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Pause(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::pause(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_pause_request(inner),
+                )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Pause(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::pause(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_pause_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_pause_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_pause_response(response)));
             }
         }
     }
@@ -293,35 +277,32 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::ResumeRequest>,
     ) -> Result<Response<generated::ResumeResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(
+                workflow_id,
+                &metadata,
+                ForwardRequest::Resume(inner.clone()),
+            )
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(
-                    workflow_id,
-                    &metadata,
-                    ForwardRequest::Resume(inner.clone()),
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Resume(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::resume(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_resume_request(inner),
                 )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Resume(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::resume(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_resume_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_resume_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_resume_response(response)));
             }
         }
     }
@@ -331,35 +312,32 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::RenameRequest>,
     ) -> Result<Response<generated::RenameResponse>, Status> {
         let caller = self.caller(&request).await?;
+        let (metadata, _ext, inner) = request.into_parts();
+        let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
+        match self
+            .resolve_route(
+                workflow_id,
+                &metadata,
+                ForwardRequest::Rename(inner.clone()),
+            )
+            .await
         {
-            use crate::routing::{ForwardReply, ForwardRequest};
-            let (metadata, _ext, inner) = request.into_parts();
-            let workflow_id = inner.workflow_id.clone().map(decode_workflow_id);
-            match self
-                .resolve_route(
-                    workflow_id,
-                    &metadata,
-                    ForwardRequest::Rename(inner.clone()),
+            RouteResolution::Reject(status) => return Err(status),
+            RouteResolution::Reply(ForwardReply::Rename(reply)) => {
+                return Ok(Response::new(reply));
+            }
+            RouteResolution::Reply(_) => {
+                return Err(Status::internal("forwarder returned a mismatched reply"));
+            }
+            RouteResolution::Local => {
+                let response = handlers::rename(
+                    self.state.namespace_guard(),
+                    &caller,
+                    decode_rename_request(inner),
                 )
                 .await
-            {
-                RouteResolution::Reject(status) => return Err(status),
-                RouteResolution::Reply(ForwardReply::Rename(reply)) => {
-                    return Ok(Response::new(reply));
-                }
-                RouteResolution::Reply(_) => {
-                    return Err(Status::internal("forwarder returned a mismatched reply"));
-                }
-                RouteResolution::Local => {
-                    let response = handlers::rename(
-                        self.state.namespace_guard(),
-                        &caller,
-                        decode_rename_request(inner),
-                    )
-                    .await
-                    .map_err(status_from_wire_error)?;
-                    return Ok(Response::new(encode_rename_response(response)));
-                }
+                .map_err(status_from_wire_error)?;
+                return Ok(Response::new(encode_rename_response(response)));
             }
         }
     }
@@ -496,11 +474,9 @@ mod tests {
             Ok(ServerState::from_parts_with_jwks(resolver, runtime, cache))
         }
         #[cfg(not(feature = "auth"))]
-        {
-            // Yield to preserve the async signature required by the auth-feature branch.
-            tokio::task::yield_now().await;
-            Ok(ServerState::from_parts(resolver, runtime))
-        }
+        // Yield to preserve the async signature required by the auth-feature branch.
+        tokio::task::yield_now().await;
+        Ok(ServerState::from_parts(resolver, runtime))
     }
 
     #[tokio::test]

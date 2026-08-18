@@ -984,7 +984,7 @@ impl ServerState {
     /// Borrow the durable namespace registry shared by the control plane.
     ///
     /// This is the SAME concrete leaf backend the engine writes events through
-    /// (haematite quorum-replicated, or haematite / in-memory local-only),
+    /// (haematite quorum-replicated, or in-memory local-only),
     /// captured as a [`NamespaceStore`] before the decorator chain wrapped it.
     /// Always present on every boot, so the mint-on-register path (Phase 1 S5)
     /// and `GET /namespaces` (S7) can reach a real registry regardless of
@@ -1882,9 +1882,9 @@ fn build_namespace_routing(
 
 /// A connected durable store plus the lifecycle pieces the boot path needs.
 ///
-/// `outbox_store` is the SAME leaf store cast as an [`OutboxStore`] for backends
-/// with a durable outbox table (haematite, haematite); the in-memory backend yields
-/// `None`. `bootstrap_coordinator` gates the schedule-coordinator seed on real
+/// `outbox_store` is the SAME leaf store cast as an [`OutboxStore`] on the
+/// haematite backend, which is the one that has a durable outbox; the in-memory
+/// backend yields `None`. `bootstrap_coordinator` gates the schedule-coordinator seed on real
 /// ownership (SS-2 / AA-4-4): `true` for every non-distributed boot (single-node
 /// owns the coordinator's shard), and for a distributed node only when it owns
 /// that shard. `cluster_responder` owns the distributed inbound-write responder
@@ -1895,9 +1895,9 @@ struct ConnectedStore {
     /// The SAME concrete leaf store as `event_store`, captured as a
     /// [`NamespaceStore`] before the decorator chain wraps it (the decorators
     /// are `NamespaceStore`-unaware). The control plane mints and lists through
-    /// this handle. Every backend populates it: haematite supplies the
-    /// quorum-replicated implementation, haematite and in-memory the local-only
-    /// one.
+    /// this handle. Every backend populates it: distributed haematite supplies
+    /// the quorum-replicated implementation, single-node haematite and the
+    /// in-memory store the local-only one.
     namespace_store: Arc<dyn NamespaceStore>,
     /// Same concrete leaf captured as the deployment-store contract.
     worker_deployment_store: Arc<dyn WorkerDeploymentStore>,

@@ -342,7 +342,7 @@ mod tests {
                     break;
                 }
                 // Cancelled is contractually untouchable here — only stale
-                // Claimed rows re-arm, exactly like the durable backends.
+                // Claimed rows re-arm, exactly as the durable backend does.
                 if row.status == OutboxStatus::Claimed
                     && !excluded.contains(&row.dispatch_key)
                     && row

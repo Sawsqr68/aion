@@ -331,20 +331,26 @@ async fn started_and_suspended_at(
         !fired.load(Ordering::SeqCst),
         "in-process dispatcher must NOT fire for a fresh fan-out member under the outbox flag"
     );
-    // ...and every ordinal has a persisted Pending outbox row.
-    // record_fan_out_dispatch stages these atomically with the scheduling
-    // events; the live in-process path would never write them.
+    // ...and every ordinal has a persisted outbox row, never dispatched.
+    //
+    // `record_fan_out_dispatch` stages the rows in the same call that records
+    // the scheduling events, but the routed outbox KV becomes observable a
+    // moment after the history does, so the wait is for EXISTENCE. What it does
+    // NOT prove is byte-simultaneity with the scheduling events — no polling
+    // observer can. The assertions below are separate questions the wait cannot
+    // mask: every row is still `Pending` (the live in-process path never wrote
+    // one, and nothing has claimed it), on attempt 0.
     let ordinals: Vec<u64> = (0..FAN_OUT as u64).collect();
-    wait_for_rows_pending(&store, &workflow_id, &ordinals).await?;
-    for ordinal in ordinals {
-        let key = OutboxRow::dispatch_key_for(&workflow_id, ordinal);
-        let Some(state) = store.outbox_row_state(&key).await? else {
-            return Err(format!("no outbox row staged for ordinal {ordinal} (key {key})").into());
-        };
+    let staged = wait_for_rows_staged(&store, &workflow_id, &ordinals).await?;
+    for (ordinal, state) in staged {
         assert_eq!(
             state.status,
             OutboxStatus::Pending,
             "outbox row for ordinal {ordinal} must be Pending after dispatch"
+        );
+        assert_eq!(
+            state.attempt, 0,
+            "outbox row for ordinal {ordinal} must be undispatched (attempt 0)"
         );
     }
 
@@ -379,6 +385,39 @@ async fn claim_all_pending(
 
 /// Poll until every `ordinal` in `ordinals` has its outbox row back at
 /// `Pending` (the state the crash-recovery re-arm restores), or time out.
+/// Wait until every named ordinal HAS an outbox row, returning their states.
+///
+/// Existence only — the caller asserts on the states, which is a different
+/// question and therefore not one this wait can satisfy on the caller's behalf.
+async fn wait_for_rows_staged(
+    store: &Arc<HaematiteStore>,
+    workflow_id: &WorkflowId,
+    ordinals: &[u64],
+) -> Result<Vec<(u64, aion_store_haematite::OutboxRowState)>, Box<dyn std::error::Error>> {
+    let deadline = std::time::Instant::now() + POLL_DEADLINE;
+    loop {
+        let mut staged = Vec::with_capacity(ordinals.len());
+        for &ordinal in ordinals {
+            let key = OutboxRow::dispatch_key_for(workflow_id, ordinal);
+            if let Some(state) = store.outbox_row_state(&key).await? {
+                staged.push((ordinal, state));
+            }
+        }
+        if staged.len() == ordinals.len() {
+            return Ok(staged);
+        }
+        if std::time::Instant::now() > deadline {
+            return Err(format!(
+                "timed out waiting for {} staged outbox rows; saw {}",
+                ordinals.len(),
+                staged.len()
+            )
+            .into());
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 async fn wait_for_rows_pending(
     store: &Arc<HaematiteStore>,
     workflow_id: &WorkflowId,

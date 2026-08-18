@@ -27,7 +27,9 @@ pub struct ServerArgs {
     /// rather than start on a different port than the operator named.
     #[arg(long)]
     grpc_address: Option<SocketAddr>,
-    /// Retired event-store URL flag; configuration loading refuses it with the haematite remedy.
+    /// RETIRED. Selected the libSQL backend, which no longer exists. Kept only so
+    /// that passing it is refused by name with the haematite remedy rather than
+    /// rejected as an unknown flag, which would name nothing.
     #[arg(long)]
     store_url: Option<String>,
     /// Number of engine scheduler worker threads.

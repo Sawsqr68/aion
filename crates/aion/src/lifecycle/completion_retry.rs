@@ -804,8 +804,8 @@ pub(super) fn classify_completion_failure(
 ///
 /// Deliberately **not** the rendered error. [`aion_store::StoreError::Backend`]
 /// is constructed by embedding the backend's own `Display`
-/// (`format!("haematite api error: {error}")`, `error.to_string()` in the haematite
-/// adapter), and those inner renderings routinely carry a peer address, an
+/// (`format!("haematite api error: {error}")` in the haematite adapter), and
+/// those inner renderings routinely carry a peer address, an
 /// elapsed time, a current-leader hint or an OS errno. Keying dedup on that
 /// string means the key changes on every single attempt against a real backend
 /// under a real outage, so the loop emits an identical-in-substance warning at

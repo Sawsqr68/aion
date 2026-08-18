@@ -419,9 +419,9 @@ pub trait OutboxStore: Send + Sync + 'static {
     ///
     /// The default implementation ignores `held` and delegates to
     /// [`OutboxStore::claim_outbox_rows`]: a test-double store that never pauses
-    /// is unaffected. The bundled durable backends (haematite, haematite) override
-    /// it to apply the exclusion inside the same atomic, single-writer claim so a
-    /// held row is never claimed even under concurrent sweeps.
+    /// is unaffected. The haematite backend overrides it to apply the exclusion
+    /// inside the same atomic, single-writer claim so a held row is never claimed
+    /// even under concurrent sweeps.
     ///
     /// # Errors
     ///
@@ -472,8 +472,8 @@ pub trait OutboxStore: Send + Sync + 'static {
     ///
     /// The default implementation ignores `held` and delegates to
     /// [`OutboxStore::claim_outbox_rows_scoped`]: a test-double store that never pauses
-    /// is unaffected. The bundled durable backends (haematite, haematite) override it to
-    /// apply the exclusion inside the same atomic, single-writer claim.
+    /// is unaffected. The haematite backend overrides it to apply the exclusion
+    /// inside the same atomic, single-writer claim.
     ///
     /// # Errors
     ///

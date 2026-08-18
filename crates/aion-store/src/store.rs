@@ -155,9 +155,9 @@ pub trait ReadableEventStore: Send + Sync + 'static {
     /// subsequent recovery reads see the full committed history for its shards.
     ///
     /// The default implementation is a deliberate no-op returning `Ok(())` —
-    /// single-shard / non-distributed backends (in-memory, haematite, and the
-    /// single-node haematite mode) own everything unconditionally and elect
-    /// nothing, so boot stays byte-identical. Only a DISTRIBUTED sharded backend
+    /// non-distributed backends (the in-memory store and single-node haematite)
+    /// own everything unconditionally and elect nothing, so boot stays
+    /// byte-identical. Only a DISTRIBUTED sharded backend
     /// overrides this to run the election. Decorators that wrap another store
     /// must forward this call to their inner store.
     ///

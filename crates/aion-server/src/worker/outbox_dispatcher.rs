@@ -996,6 +996,13 @@ mod tests {
             state.visible_after >= before + chrono::Duration::milliseconds(100),
             "visible_after must advance by at least the base backoff"
         );
+        // The fence HOLDS, not merely stored: a backend that persists
+        // visible_after and then ignores it when claiming would satisfy the
+        // assertion above and fail here.
+        assert!(
+            store.claim_outbox_rows(10).await?.is_empty(),
+            "the backoff fence must hold the row out of the claimable set"
+        );
         Ok(())
     }
 

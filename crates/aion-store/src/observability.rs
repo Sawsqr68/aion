@@ -155,7 +155,7 @@ pub trait ObservabilityStore: Send + Sync + 'static {
     /// `expected_seq`: there is no partial state to reason about and no commit
     /// to pay for.
     ///
-    /// **Every event must share one stream key** — the durable backends address
+    /// **Every event must share one stream key** — the durable backend addresses
     /// one stream per commit, so a mixed slice is a caller bug and is refused
     /// with [`StoreError::Backend`] rather than silently split (silently
     /// splitting would re-introduce the per-event commit this method exists to

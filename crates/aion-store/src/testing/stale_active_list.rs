@@ -1,8 +1,8 @@
 //! A store that lies in exactly one place: `list_active`.
 //!
 //! Every real backend filters `list_active` to projected status `Running` —
-//! [`InMemoryStore`] at `memory.rs`, the haematite backend in its read path, the
-//! haematite backend in its own. That filter is load-bearing and correct, and it
+//! [`InMemoryStore`] at `memory.rs` and the haematite backend in its own read
+//! path. That filter is load-bearing and correct, and it
 //! is *also* what makes a reader's second line of defence unreachable: a reader
 //! that re-reads each listed run's history and refuses the ones that project
 //! terminal (or `Paused`) can never see one through an honest store, so deleting

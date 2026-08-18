@@ -62,8 +62,8 @@ aion-integration-acp = { version = "0.17.0", path = "../aion-integration-acp", o
 # adapter is compiled in — and both of them name this crate's `ChildEnvironment` /
 # `EnvironmentDeclaration`, which describe a worker document's DECLARED child
 # environment, not any one harness. Gating the crate behind `norn`/`acp` made
-# `--no-default-features` fail to compile outright, which is half of why the
-# documented slim build was impossible (#186). Nothing is pulled in by this: every
+# `--no-default-features` fail to compile outright (#186). Nothing is pulled in
+# by this: every
 # dependency it carries (aion-core, tokio, serde, serde_json, thiserror, futures,
 # async-trait) is already in the slim graph. The §3A.4 invariant is about CONCRETE
 # adapters never reaching a platform crate; this is the neutral seam, and aion-cli is

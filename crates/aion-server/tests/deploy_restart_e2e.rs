@@ -293,7 +293,7 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
         HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
             .await?,
     );
-    let (engine, router) = server_over(store).await?;
+    let (engine, router) = server_over(Arc::clone(&store)).await?;
     let response = router
         .clone()
         .oneshot(post_archive(archive.clone())?)
@@ -308,6 +308,12 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
     assert_eq!(response.status(), StatusCode::OK, "step signal must land");
     engine.shutdown()?;
     drop(router);
+    // Epoch 1's handles must be GONE, not merely shadowed: haematite holds an
+    // exclusive writer lock on the data directory for as long as any store
+    // handle is alive, and a shadowed `let` keeps the old value until the end of
+    // the block. Epoch 2 opens the same directory.
+    drop(engine);
+    drop(store);
 
     // Epoch 2: fresh store handle, engine, resolver, router over the same
     // database. No workflow packages are supplied.

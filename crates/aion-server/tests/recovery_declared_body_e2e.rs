@@ -163,12 +163,20 @@ fn runtime_config() -> RuntimeConfig {
 
 /// One in-process server generation over the shared haematite file, built
 /// through the REAL full-boot constructor — the path under test.
-async fn server_over(db_path: PathBuf) -> Result<(ServerState, axum::Router), TestError> {
+///
+/// Returns the generation's OWN store handle alongside it. haematite holds an
+/// exclusive writer lock on the data directory, so a caller that wants to read
+/// what this generation writes must share this handle — `HaematiteStore` clones
+/// share one `Arc<haematite::EventStore>` — rather than open a second.
+async fn server_over(
+    db_path: PathBuf,
+) -> Result<(ServerState, axum::Router, HaematiteStore), TestError> {
     let store =
         HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let reader = store.clone();
     let state = ServerState::build_with_store(store, runtime_config()).await?;
     let router = http_router(state.clone())?;
-    Ok((state, router))
+    Ok((state, router, reader))
 }
 
 fn granted_headers(builder: axum::http::request::Builder) -> axum::http::request::Builder {
@@ -516,7 +524,7 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     // Generation 1: real full boot, deploy, and the fresh-path control arm —
     // the SAME dispatcher stack executes this declared body at the server,
     // proving the fixture and yielding byte-exact history for the corpses.
-    let (state, router) = server_over(db_path.clone()).await?;
+    let (state, router, generation_1_store) = server_over(db_path.clone()).await?;
     let generation_1 = async {
         deploy_archive(&router, prepared.archive).await?;
         let (probe_workflow, probe_run) = start_over_http(&router, &probe_marker_text).await?;
@@ -541,6 +549,9 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     );
     drop(router);
     drop(state);
+    // Every generation-1 handle must be GONE before the seeder opens the same
+    // directory: haematite's writer lock is held until the last clone drops.
+    drop(generation_1_store);
 
     // Corpse-seed the fleet on the dead store (no engine is alive anywhere).
     let corpses = seed_corpses(
@@ -555,13 +566,11 @@ async fn adopted_declared_body_dispatch_executes_after_recovery() -> Result<(), 
     // Startup recovery adopts the whole fleet; while its spawn loop is still
     // running, the earliest corpses reach their re-dispatches inside
     // `build()` — before any seam install can happen.
-    let (state, _router) = server_over(db_path.clone()).await?;
+    let (state, _router, reader) = server_over(db_path.clone()).await?;
 
     // The claim: EVERY adopted dispatch EXECUTES. Each corpse's history gains
     // a completion and its run finishes; the marker files on disk are the
     // belt. A parked dispatch (the defect) produces none of these, ever.
-    let reader =
-        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let verdict_result = await_corpse_completions(&reader, &corpses).await;
     let settle_result = settle(&state);
     verdict_result?;

@@ -1,8 +1,9 @@
-//! SS-1B: prove the haematite backend is a selectable `aion-server` store.
+//! SS-1B: prove haematite is `aion-server`'s durable store.
 //!
 //! These tests exercise the operator-facing config surface (`backend =
 //! haematite`) and the production boot path that constructs `HaematiteStore`.
-//! Haematite is the server's store in every build, so these run unconditionally.
+//! It is the only durable backend and is linked in every build, so these run
+//! unconditionally.
 
 use aion_server::config::{ServerConfig, StoreBackend};
 use aion_server::state::ServerState;

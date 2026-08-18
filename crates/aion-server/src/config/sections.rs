@@ -50,8 +50,13 @@ pub struct ServerSection {
 }
 
 /// Supported event-store backend names.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
+///
+/// Deliberately NOT `Deserialize`. `StoreConfigWire` parses the operator's
+/// spelling itself, case-insensitively, so that the file door and the
+/// `AION_STORE_BACKEND` door accept exactly the same set — a derived
+/// `rename_all = "lowercase"` impl was a second, case-SENSITIVE parser for the
+/// same value that nothing called and that disagreed with the one that runs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StoreBackend {
     /// In-memory store for local development.
     Memory,
@@ -63,8 +68,8 @@ pub enum StoreBackend {
 ///
 /// Recorded at parse/overlay time and refused by `ServerConfig::validate`, which
 /// names the input it found and prescribes haematite. Recorded rather than
-/// refused on the spot so all four doors converge on ONE refusal with one
-/// remedy, instead of four differently-worded errors from four parsers.
+/// refused on the spot so all five doors converge on ONE refusal with one
+/// remedy, instead of five differently-worded errors from five parsers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RetiredStoreInput {
     /// `backend = "libsql"` in the config file's `[store]` section.

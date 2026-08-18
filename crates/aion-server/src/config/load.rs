@@ -2036,6 +2036,55 @@ mod tests {
         assert_retired_store_refusal(result, "--store-url");
     }
 
+    /// A CLI flag beats the value the config file loaded. Only the `--store-url`
+    /// arm of the original pin died with libSQL; the precedence claim itself is
+    /// backend-agnostic and is the reason `apply_cli_overrides` exists.
+    #[test]
+    fn cli_overrides_win_over_loaded_values() -> Result<(), Box<dyn std::error::Error>> {
+        let mut config = ServerConfig::from_slice(
+            br#"
+                [store]
+                backend = "haematite"
+                data_dir = "from-the-file"
+
+                [runtime]
+                scheduler_threads = 1
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [observability]
+                max_batch_events = 64
+                max_batch_hold_ms = 0
+            "#,
+        )?;
+        assert_eq!(
+            config.runtime.scheduler_threads, 1,
+            "the file's value must be what the flag then beats"
+        );
+        let cli = CliOverrides {
+            scheduler_threads: Some(
+                std::num::NonZeroUsize::new(3)
+                    .ok_or("3 is not zero")?
+                    .into(),
+            ),
+            ..CliOverrides::default()
+        };
+
+        config.apply_cli_overrides(&cli);
+        config.validate()?;
+
+        assert_eq!(config.runtime.scheduler_threads, 3);
+        assert_eq!(
+            config.store.data_dir.as_deref(),
+            Some("from-the-file"),
+            "a value the CLI did not override keeps the file's value"
+        );
+        Ok(())
+    }
+
     #[test]
     fn haematite_store_config_remains_accepted() -> Result<(), Box<dyn std::error::Error>> {
         let config = ServerConfig::from_slice(

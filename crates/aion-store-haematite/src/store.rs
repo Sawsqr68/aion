@@ -298,7 +298,12 @@ impl HaematiteStore {
     ) -> Result<Self, StoreError> {
         let data_dir = data_dir.into();
         tokio::task::spawn_blocking(move || {
-            if data_dir.exists() {
+            // A DATABASE is `config.json`, not a directory — the same predicate
+            // `build_distributed` and the server's boot path use. Testing mere
+            // directory existence sends an existing-but-empty directory (the
+            // `tempfile::tempdir()` shape) down the `open` branch, where it
+            // errors, from a constructor whose name promises creation.
+            if data_dir.join("config.json").exists() {
                 Self::open(&data_dir)
             } else {
                 Self::create(data_dir, node_cache_budget)
@@ -2674,12 +2679,22 @@ fn is_inflight(status: OutboxStatus) -> bool {
 }
 
 impl HaematiteStore {
-    /// Read back one outbox row's mutable lifecycle state, or `None` when absent.
+    /// Read back one outbox row's mutable lifecycle state — status, attempt,
+    /// and `visible_after` — or `None` when no such row exists.
+    ///
+    /// The [`OutboxStore`] dispatch contract keys terminal transitions off
+    /// `dispatch_key` and never needs to read a row back; this is the
+    /// observation seam for the dispatcher's own retry/backoff pins and for
+    /// operators auditing a dead-lettered row. The row is co-located on its
+    /// workflow's shard, so the lookup derives the route key from the
+    /// `dispatch_key`'s workflow-id prefix exactly as [`Self::transition_outbox`]
+    /// does, and reads the locally-applied replica.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError`] when the dispatch key is malformed or haematite
-    /// cannot read or decode the durable row.
+    /// Returns [`StoreError::Backend`] when the `dispatch_key` is malformed (no
+    /// `':'` separator or a non-workflow-id prefix) or the local read fails, and
+    /// any decode error for a corrupt stored row.
     pub async fn outbox_row_state(
         &self,
         dispatch_key: &str,
@@ -2749,41 +2764,21 @@ impl HaematiteStore {
     /// Read back the durable status of the outbox row at `dispatch_key`, or
     /// `None` when no such row exists.
     ///
-    /// The [`OutboxStore`] dispatch contract keys terminal transitions off
-    /// `dispatch_key` and never needs to read a row back. The row is co-located on
-    /// its workflow's shard, so the lookup derives
-    /// the route key from the `dispatch_key`'s workflow-id prefix exactly as
-    /// [`Self::transition_outbox`] does and reads the locally-applied replica.
+    /// A projection of [`Self::outbox_row_state`], which owns the key parsing,
+    /// routing, and decode — one read path, so the two can never disagree about
+    /// which row a `dispatch_key` names.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreError::Backend`] when the `dispatch_key` is malformed (no
-    /// `':'` separator or a non-workflow-id prefix) or the local read fails, and
-    /// any decode error for a corrupt stored row.
+    /// As [`Self::outbox_row_state`].
     pub async fn outbox_row_status(
         &self,
         dispatch_key: &str,
     ) -> Result<Option<OutboxStatus>, StoreError> {
-        let dispatch_key = dispatch_key.to_owned();
-        self.blocking(move |store| {
-            let database = store.database();
-            let (workflow_text, _ordinal) = dispatch_key.rsplit_once(':').ok_or_else(|| {
-                StoreError::Backend(format!(
-                    "outbox dispatch_key missing ':' separator: {dispatch_key}"
-                ))
-            })?;
-            let workflow_id = parse_workflow_id(workflow_text)?;
-            let route_key = keyspace::event_stream_key(&workflow_id);
-            let key = keyspace::outbox_key(&dispatch_key);
-            let Some(existing) = database
-                .get_routed(&route_key, &key)
-                .map_err(|error| database_error(&error))?
-            else {
-                return Ok(None);
-            };
-            Ok(Some(decode_outbox(&existing)?.status))
-        })
-        .await
+        Ok(self
+            .outbox_row_state(dispatch_key)
+            .await?
+            .map(|state| state.status))
     }
 
     /// Apply `transition` to the row at `dispatch_key`, returning the transition's report.
@@ -3753,9 +3748,16 @@ mod tests {
     ///
     /// Test databases are tiny and short-lived, so the number here is not a
     /// measurement of anything — it is a deliberately roomy ceiling that no
-    /// fixture can reach, chosen so these tests exercise the budgeted path
-    /// without any test ever turning into a cache-eviction test by accident. It
-    /// is emphatically NOT a default: production callers state their own.
+    /// fixture can reach, chosen so THIS MODULE's tests exercise the budgeted
+    /// path without any test ever turning into a cache-eviction test by
+    /// accident. It is emphatically NOT a default: production callers state
+    /// their own.
+    ///
+    /// Integration fixtures elsewhere in the workspace state
+    /// [`NodeCacheBudget::Unlimited`] instead, which is the pre-budget
+    /// behaviour said out loud — the right ruling for a fixture whose subject
+    /// is a workflow, not a cache. The budgeted path is exercised here and by
+    /// the server's own boot tests.
     fn test_node_cache_budget() -> Result<haematite::NodeCacheBudget, StoreError> {
         haematite::NodeCacheBudget::bytes(1 << 30)
             .map_err(|error| StoreError::Backend(error.to_string()))
@@ -4294,6 +4296,140 @@ mod tests {
             Some(OutboxStatus::Failed)
         );
         assert!(store.claim_outbox_rows(10).await?.is_empty());
+        Ok(())
+    }
+
+    /// The claim limit is honoured, and honoured AFTER the ordering — so a
+    /// limited sweep takes the oldest-visible rows, not an arbitrary subset.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn claim_respects_limit_and_takes_the_oldest_first()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = store("outbox-limit")?;
+        let workflow_id = WorkflowId::new_v4();
+        let base = Utc::now() - Duration::hours(4);
+        let rows: Vec<OutboxRow> = (0_i64..4)
+            .map(|ordinal| {
+                pending_row(
+                    &workflow_id,
+                    ordinal.unsigned_abs(),
+                    "charge",
+                    base + Duration::minutes(ordinal),
+                )
+            })
+            .collect();
+        store.append_outbox_batch(&rows).await?;
+
+        let first = store.claim_outbox_rows(2).await?;
+        assert_eq!(first.len(), 2, "the claim must not exceed its limit");
+        assert_eq!(
+            first.iter().map(|row| row.ordinal).collect::<Vec<_>>(),
+            vec![0, 1],
+            "a limited claim takes the oldest visible_after first"
+        );
+        let second = store.claim_outbox_rows(10).await?;
+        assert_eq!(
+            second.iter().map(|row| row.ordinal).collect::<Vec<_>>(),
+            vec![2, 3],
+            "the rows the limit left behind are still claimable"
+        );
+        Ok(())
+    }
+
+    /// #204 route starvation: the held (paused) filter must run BEFORE the limit
+    /// truncates. Applying the limit first lets a paused workflow's rows consume
+    /// the whole budget and starve a claimable one indefinitely — the sweep would
+    /// return nothing while a dispatchable row sat Pending forever.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn held_workflow_rows_are_excluded_before_the_limit_truncates()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::collections::HashSet;
+
+        let store = store("outbox-held-starvation")?;
+        let past = Utc::now() - Duration::hours(1);
+        // The held workflow sorts FIRST on the claim ordering, so it is exactly
+        // the row a limit-then-filter implementation would spend the budget on.
+        let held_id = WorkflowId::new_v4();
+        let live_id = WorkflowId::new_v4();
+        let held_row = pending_row(&held_id, 0, "paused", past - Duration::minutes(10));
+        let live_row = pending_row(&live_id, 0, "live", past);
+        store
+            .append_outbox_batch(&[held_row.clone(), live_row.clone()])
+            .await?;
+
+        let mut held = HashSet::new();
+        held.insert(held_id.clone());
+        let claimed = store.claim_outbox_rows_excluding(1, &held).await?;
+
+        assert_eq!(
+            claimed.len(),
+            1,
+            "a limit of 1 must still yield the claimable row, not be spent on the held one"
+        );
+        assert_eq!(
+            claimed[0].dispatch_key, live_row.dispatch_key,
+            "the held workflow's row must never be claimed"
+        );
+        assert_eq!(
+            status_of(&store, &held_row.dispatch_key).await?,
+            Some(OutboxStatus::Pending),
+            "a held row stays Pending — release is resume plus the next sweep"
+        );
+        Ok(())
+    }
+
+    /// `append_with_outbox` is all-or-nothing: a refused append writes NEITHER
+    /// the events nor the outbox rows. A staged row whose events never landed is
+    /// a dispatch for work that does not exist.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn append_with_outbox_rolls_back_both_on_a_refused_append()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = store("outbox-atomic-rollback")?;
+        let workflow_id = WorkflowId::new_v4();
+        let event = aion_core::Event::WorkflowStarted {
+            envelope: aion_core::EventEnvelope {
+                seq: 1,
+                recorded_at: Utc::now(),
+                workflow_id: workflow_id.clone(),
+            },
+            workflow_type: String::from("checkout"),
+            input: Payload::new(ContentType::Json, b"{}".to_vec()),
+            run_id: aion_core::RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("a".repeat(64)),
+        };
+        let row = pending_row(&workflow_id, 0, "charge", Utc::now() - Duration::hours(1));
+
+        // expected_seq 7 against an empty stream: the append is refused.
+        let error = store
+            .append_with_outbox(
+                WriteToken::recorder(),
+                &workflow_id,
+                std::slice::from_ref(&event),
+                7,
+                std::slice::from_ref(&row),
+            )
+            .await
+            .err()
+            .ok_or("an append at the wrong expected_seq must be refused")?;
+        assert!(
+            matches!(error, StoreError::SequenceConflict { .. }),
+            "expected a sequence conflict, got {error:?}"
+        );
+
+        assert!(
+            store.read_history(&workflow_id).await?.is_empty(),
+            "the refused append must write no events"
+        );
+        assert_eq!(
+            status_of(&store, &row.dispatch_key).await?,
+            None,
+            "the refused append must stage no outbox row — a row without its \
+             events is a dispatch for work that does not exist"
+        );
+        assert!(
+            store.claim_outbox_rows(10).await?.is_empty(),
+            "and nothing is claimable"
+        );
         Ok(())
     }
 

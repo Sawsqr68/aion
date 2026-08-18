@@ -1,0 +1,8 @@
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.877s] (3/3) aion-store-haematite store::tests::claim_respects_limit_and_takes_the_oldest_first
+────────────
+     Summary [   0.880s] 3 tests run: 2 passed, 1 failed, 57 skipped
+        FAIL [   0.370s] (2/3) aion-store-haematite store::tests::held_workflow_rows_are_excluded_before_the_limit_truncates
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)
