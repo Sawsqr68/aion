@@ -87,6 +87,26 @@ const RESOLUTION_FAILURE_TITLE: &str = "Dependency resolution failed";
 /// (https://repo.hex.pm/packages/gleam_json)`.
 const RESOLUTION_TRANSPORT_MARKERS: &[&str] = &["error sending request", "repo.hex.pm"];
 
+/// `gleam`'s title for an IO failure while reading or writing a file.
+///
+/// This title is ambiguous: it covers both package unpacking and ordinary
+/// project-file IO. It therefore only counts as a dependency-layer failure
+/// when the body also carries package-layer evidence
+/// ([`FILE_IO_PACKAGE_MARKERS`]); otherwise the project-file failure must not
+/// be excused as infrastructure.
+const FILE_IO_FAILURE_TITLE: &str = "File IO failure";
+
+/// Package-layer evidence that disambiguates [`FILE_IO_FAILURE_TITLE`] from an
+/// IO failure involving an author's project files. Both slash forms are kept
+/// because `gleam` diagnostics can contain Unix- or Windows-shaped paths.
+const FILE_IO_PACKAGE_MARKERS: &[&str] = &[
+    "failed to unpack",
+    "/build/packages/",
+    r"\build\packages\",
+    "/hex/hexpm/packages/",
+    r"\hex\hexpm\packages\",
+];
+
 /// Classify the combined output of a **failed** `gleam` invocation.
 ///
 /// `combined` is the joined stdout and stderr of an invocation that already
@@ -114,6 +134,13 @@ pub fn classify_gleam_failure(combined: &str) -> GleamFailureLayer {
         {
             return GleamFailureLayer::DependencyLayer;
         }
+        if title == FILE_IO_FAILURE_TITLE
+            && FILE_IO_PACKAGE_MARKERS
+                .iter()
+                .any(|marker| combined.contains(marker))
+        {
+            return GleamFailureLayer::DependencyLayer;
+        }
     }
     GleamFailureLayer::NotDependencyLayer
 }
@@ -127,6 +154,66 @@ mod tests {
     const HEX_OUTAGE: &str = "  Resolving versions\nerror: HTTP error\n\nA HTTP request failed.\n\
          The error from the HTTP client was:\n\n    error sending request for url \
          (https://hex.pm/api/packages/gleam_stdlib/releases/1.0.3)\n";
+
+    #[test]
+    fn recognised_dependency_layer_diagnostics_are_classified_from_realistic_output() {
+        let cases = [
+            (
+                "P1 failed package download",
+                "  Resolving versions\nerror: Failed to download package\n\nThe package \
+                 gleam_stdlib could not be downloaded from Hex.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P2 tar archive open failure",
+                "  Downloading packages\nerror: Failure opening tar archive\n\nThe archive for \
+                 gleam_json could not be opened.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P3 Hex API failure",
+                "  Resolving versions\nerror: Hex API failure\n\nThe Hex API returned an \
+                 error while fetching package metadata.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P4 HTTP error",
+                "  Resolving versions\nerror: HTTP error\n\nA HTTP request failed while \
+                 downloading gleam_stdlib.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P5 file IO failure while unpacking the issue package",
+                "  Downloading packages\nerror: File IO failure\n\nAn error occurred while \
+                 writing a downloaded package:\n\n    failed to unpack gleam@uri.erl\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P6 file IO failure in project-local package directories",
+                "  Compiling packages\nerror: File IO failure\n\nCould not write package \
+                 contents to /tmp/sample/build/packages/gleam_stdlib/src or \
+                 C:\\work\\sample\\build\\packages\\gleam_stdlib\\src.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P7 file IO failure in global Hex package caches",
+                "  Downloading packages\nerror: File IO failure\n\nCould not update the Hex \
+                 cache at /home/author/.cache/gleam/hex/hexpm/packages/gleam_json or \
+                 C:\\Users\\author\\AppData\\Local\\gleam\\hex\\hexpm\\packages\\gleam_json.\n",
+                GleamFailureLayer::DependencyLayer,
+            ),
+            (
+                "P8 project source file IO failure is not infrastructure",
+                "  Compiling app\nerror: File IO failure\n\nCould not read project source \
+                 file /home/author/app/src/main.gleam: permission denied.\n",
+                GleamFailureLayer::NotDependencyLayer,
+            ),
+        ];
+
+        for (name, fixture, expected) in cases {
+            assert_eq!(classify_gleam_failure(fixture), expected, "{name}");
+        }
+    }
 
     #[test]
     fn the_hex_outage_that_opened_this_task_is_a_dependency_layer_failure() {
