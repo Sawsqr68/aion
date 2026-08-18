@@ -47,15 +47,6 @@ const PRIVATE_DIR_MODE: u32 = 0o700;
 /// same absence of an override.
 const PRIVATE_FILE_MODE: u32 = 0o600;
 
-/// [`PRIVATE_DIR_MODE`] in the form `rustix` takes for a direct `fchmod` on a
-/// held descriptor. The two constants are pinned to the same literal below so
-/// they can never drift apart.
-#[cfg(unix)]
-const PRIVATE_DIR_MODE_BITS: rustix::fs::Mode = rustix::fs::Mode::RWXU;
-#[cfg(unix)]
-const _: () = assert!(PRIVATE_DIR_MODE == 0o700);
-#[cfg(unix)]
-const _: () = assert!(PRIVATE_DIR_MODE_BITS.bits() == 0o700);
 
 /// A held directory descriptor confining all subsequent operations beneath it.
 pub(crate) struct ConfinedDir {
@@ -228,16 +219,25 @@ impl ConfinedDir {
     /// the requirement would have been the wrong fix — the directory holds
     /// workflow payloads — so the server now performs the repair instead.
     ///
-    /// Every decision is taken against the ALREADY-OPEN descriptor: `fstat` and
-    /// `fchmod` on the held fd, never a second resolution of `path`. That
-    /// closes the check-then-act window — there is no interval in which a
-    /// concurrent rename could point the inspection at one inode and the repair
-    /// at another, because both name the same open file description. `path` is
-    /// carried purely to make the log and error text nameable.
+    /// Every decision is taken against the ALREADY-OPEN descriptor: `fstat` on
+    /// the held fd, and the repair addressed through the held capability
+    /// (descriptor-relative `.`), never a second resolution of the ambient
+    /// `path`. That closes the check-then-act window — there is no interval in
+    /// which a concurrent rename could point the inspection at one inode and
+    /// the repair at another, because both resolve from the same held
+    /// descriptor. `path` is carried purely to make the log and error text
+    /// nameable.
+    ///
+    /// The repair is cap-std's `set_permissions`, not a raw `fchmod` on the
+    /// handle: on Linux the held directory handle is an `O_PATH` descriptor,
+    /// and `fchmod(2)` refuses those with `EBADF` — which left every
+    /// tightenable 0755 root refused on Linux while macOS repaired it
+    /// (aion#62). cap-std performs the descriptor-relative mode change
+    /// portably on both.
     ///
     /// Refusal is reserved for what Aion genuinely cannot repair: a directory
-    /// owned by another principal (not ours to change, and `fchmod` would fail
-    /// anyway), and a filesystem that will not carry Unix modes.
+    /// owned by another principal (not ours to change, and a mode change would
+    /// fail anyway), and a filesystem that will not carry Unix modes.
     fn ensure_private_mode(&self, path: &Path) -> io::Result<()> {
         #[cfg(unix)]
         {
@@ -264,22 +264,28 @@ impl ConfinedDir {
                 ));
             }
 
-            rustix::fs::fchmod(&self.dir, PRIVATE_DIR_MODE_BITS).map_err(|errno| {
-                io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    format!(
-                        "sensitive root `{}` has mode {mode:04o}, which grants group or world \
-                         access, and Aion could not tighten it to 0700: {errno}. Move this root \
-                         onto a filesystem that carries Unix permissions, or pre-create it with \
-                         mode 0700.",
-                        path.display()
-                    ),
+            self.dir
+                .set_permissions(
+                    Path::new("."),
+                    cap_std::fs::Permissions::from_mode(PRIVATE_DIR_MODE),
                 )
-            })?;
+                .map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!(
+                            "sensitive root `{}` has mode {mode:04o}, which grants group or world \
+                             access, and Aion could not tighten it to 0700: {error}. Move this \
+                             root onto a filesystem that carries Unix permissions, or pre-create \
+                             it with mode 0700.",
+                            path.display()
+                        ),
+                    )
+                })?;
 
             // Re-stat the same descriptor rather than assume the write took.
-            // Filesystems exist that accept `fchmod` and discard it (network
-            // and FAT-family mounts among them); without this the server would
+            // Filesystems exist that accept a mode change and discard it
+            // (network and FAT-family mounts among them); without this the
+            // server would
             // log that it had made the root private while the payloads stayed
             // world-readable.
             let applied = self.metadata()?.permissions().mode() & 0o777;
@@ -677,7 +683,7 @@ mod tests {
     }
 
     /// A permissive root owned by someone else is refused, not repaired: it is
-    /// not ours to change, and `fchmod` would fail regardless. The refusal has
+    /// not ours to change, and the mode change would fail regardless. The refusal has
     /// to carry the path, the mode, both uids, and what the operator can do.
     ///
     /// `/usr` is a stable stand-in for "root-owned and group/world readable" on
