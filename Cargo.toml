@@ -84,40 +84,19 @@ fs4 = "1.1"
 notify = "8.2"
 saffron = { version = "0.1", features = ["std"] }
 hostname = "0.4"
-# 0.18.2 and 0.18.1 carry the beamr seat's two further JIT-era fixes, attributed
-# to her as hers: 0.18.2 that compiled code delivers the messages it sends, and
-# that a compiled stack frame no longer names the wrong module; 0.18.1 the
-# RF-006 JIT GC-rooting fix. Those are the shape of the long-run deaths this
-# engine keeps taking (#82, #196), which is why the bump is taken deliberately —
-# `^0.17.0` EXCLUDES 0.18.x, so no lock refresh could ever have reached it.
-# THE MIGRATION IS PRICED, THE BEHAVIOUR IS NOT: 8 of the 9 breaking symbols
-# have zero call sites here, the one production site
-# (crates/aion/src/runtime/handle.rs `Scheduler::with_code_server`) has a
-# signature verified byte-identical across the two versions from the published
-# tarballs, and `SchedulerConfig`'s 11 public fields are unchanged. A green
-# build therefore proves we COMPILE on 0.18.2 and says nothing whatever about
-# whether the long runs now survive — only a soak on these bytes can say that.
-# 0.17.0 carries the JIT re-entry fix (a compiled frame re-entering the
-# interpreter now carries its NativeServices instead of an empty registry —
-# the replay-durability violation that froze long workflow runs estate-wide;
-# verified present in the published tarball by the beamr seat, and our single
-# scheduler construction site at handle.rs:157 `with_code_server` confirmed on
-# the correct side of the whole trap class); 0.16.2 carries the REVIEW-23-07
-# C1+C2 memory-safety patch — C1 is the GC release-walk misread behind the
-# 2026-07-23 workflow crash (badarg in json:encode_binary on valid content)
-# and the unbounded-residency growth; 0.15.2 routes `make_fun`/`put_map`
-# allocation through the GC safety net and fixes DOWN reservation arithmetic
-# (heap-full fix for the 2026-07-14 live AWL child failure); 0.14.0 added
-# `loader/encode` (the `.beam` container writer behind the `encode` feature)
-# consumed by aion-awl's BC-3 bytecode emitter.
-beamr = { version = "0.18.2", features = ["json", "encode"] }
-haematite = "0.8.3"
-# 0.2.4 carries the park-flip (idle connections park on fd readiness — retires
-# the embedded front door's per-connection busy-spin measured 2026-07-13) and
-# G7's push-reply contract restoration (receive = pure wait quantum).
-liminal = { package = "liminal-rs", version = "0.5.0" }
-liminal-sdk = "0.5.0"
-liminal-server = "0.5.0"
+# 0.19.2 is the estate-wide runtime floor. Keep the direct runtime and every
+# storage/messaging wrapper on releases whose beamr requirements can unify at
+# that floor; older 0.x requirements are disjoint and would retain unsafe
+# runtimes in the resolved graph.
+beamr = { version = "0.19.2", features = ["json", "encode"] }
+haematite = "0.9.0"
+# The crates.io 0.7.0 SDK manifest still selects liminal-rs 0.5.5 (and therefore
+# beamr 0.16.3). Pin the complete liminal family to its immutable 0.9.0 release
+# revision so shared wire types come from one source and its std transport uses
+# liminal-rs 0.6.0.
+liminal = { package = "liminal-rs", git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.6.0" }
+liminal-sdk = { git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.7.0" }
+liminal-server = { git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.9.0" }
 tempfile = "3.27.0"
 tokio-stream = "0.1.18"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "no-serde-warnings"] }
