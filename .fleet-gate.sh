@@ -34,7 +34,10 @@ echo "gate leg 1 ok: lock witness clean (all beamr rows >=0.19.2)"
 
 # Leg 2 — full workspace tests, NO gleam exclusions. This includes
 # runtime_codecs (28 tests) on this box's gleam-1.18.1/OTP-27 mix.
-cargo test --workspace
+# lld segfaulted under 16-way parallel links of workspace test binaries
+# (round-2 red, 2026-08-18: LLVM stack dumps, multiple binaries, 31G box) —
+# bound build parallelism so concurrent link memory stays inside the box.
+cargo test --workspace -j 4
 
 # Leg 3 — workspace lint wall.
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets -j 4 -- -D warnings
