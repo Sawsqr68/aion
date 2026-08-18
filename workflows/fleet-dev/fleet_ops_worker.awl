@@ -1,0 +1,58 @@
+//! fleet_ops — the mechanical half of the fleet-dev loop, served with
+//! `aion worker awl` on the fleet box: the commands run where the tree
+//! lives. Every command is `sh /home/aion/fleet/bin/<script>.sh $params`;
+//! the scripts' source of truth is this folder's `bin/`, provisioning
+//! copies them, and the runbook records their sha256.
+//!
+//! EXIT ZERO ALWAYS, INNER CODE AS DATA: under `run json` a nonzero exit is
+//! an activity failure and its stdout is DISCARDED — so every anticipated
+//! face here exits zero, `OpProbe.exit_code` is the INNER command's status,
+//! and the workflow routes on the typed field. A red gate is a routed
+//! finding carrying its evidence, never a retried-then-terminal failure
+//! that threw the findings away.
+worker fleet_ops
+  /// Clone at the named ref under the confined run root; refuse (as data)
+  /// a leftover root, and set a repo-local git identity so merges and the
+  /// gate script's findings commits are attributable to the fleet.
+  action clone(repo_url: String, base_ref: String, workspace_root: String, run_name: String) -> CloneProbe
+    run json "sh /home/aion/fleet/bin/fleet-clone.sh $repo_url $base_ref $workspace_root $run_name"
+  /// The plan and every leg brief exist, are non-empty, and are COMMITTED
+  /// at HEAD — a loose working-tree plan is a red, by the
+  /// blackboard-is-committed law.
+  action plan_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-plan-check.sh $workspace_root $run_name $leg_ids_csv"
+  /// One isolated worktree and one branch per leg, cut from the planned
+  /// tree at `<root>/legs/<id>`. Refuses loudly rather than deleting
+  /// anything in its way.
+  action fanout(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-fanout.sh $workspace_root $run_name $leg_ids_csv"
+  /// Ordered no-ff merges of the leg branches into the primary tree; a
+  /// conflict aborts clean and names the files — a finding about the
+  /// plan's leg boundaries, never an agent's to resolve in passing.
+  action fanin(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-fanin.sh $workspace_root $run_name $leg_ids_csv"
+  /// Every promised `.fleet/reports/<id>.md` committed in the merged tree,
+  /// missing legs named on stdout.
+  action report_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-report-check.sh $workspace_root $run_name $leg_ids_csv"
+  /// Run the repo's own gate entry; on red, COMMIT the findings whole to
+  /// `.fleet/gates/` (numbered history + stable `RED-LATEST.md` address)
+  /// so the fix round reads the verbatim evidence from the tree.
+  action gates(workspace_root: String, run_name: String, gate_entry: String) -> OpProbe
+    run json "sh /home/aion/fleet/bin/fleet-gates.sh $workspace_root $run_name $gate_entry"
+  /// Push the merged branch home with a receipt; refusals are typed and
+  /// never forced.
+  action push(workspace_root: String, run_name: String, result_branch: String) -> PushProbe
+    run json "sh /home/aion/fleet/bin/fleet-push.sh $workspace_root $run_name $result_branch"
+  /// Remove the run's tree — root pinned exactly, id shaped, the check
+  /// gating the rm in the same script.
+  action teardown(workspace_root: String, run_name: String) -> TeardownProbe
+    run json "sh /home/aion/fleet/bin/fleet-teardown.sh $workspace_root $run_name"
+
+type CloneProbe { ok: Bool, refusal: String, root: String, repo_path: String, head_commit: String }
+
+type OpProbe { exit_code: Int, stdout: String, stderr: String }
+
+type PushProbe { ok: Bool, refusal: String, branch: String, pushed_commit: String, remote: String }
+
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
