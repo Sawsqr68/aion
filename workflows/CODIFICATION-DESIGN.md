@@ -33,13 +33,18 @@ committed to the branch. No branch carries executable process artifacts.
 
 ### 1.3 `gate`
 Input: repo, ref (or in-place tree handle from a parent), and a gate spec: an ordered list
-of legs, each leg = `{ name, argv (whole cloth, written out), timeout: none-by-default,
-red_classifier }`. Output: typed per-leg results `{ name, rc, log_artifact }` — the rc is
+of legs drawn from a CLOSED kind vocabulary (authored: test_workspace, clippy_workspace,
+clippy_crate, test_crate_lib, fmt_check, lock_witness), each kind mapping to one
+whole-cloth command in the worker document with an authored per-action timeout
+(4h tests / 2h clippy / 30m fmt / 5m probes — hung cargo is a real face). Output: typed per-leg results `{ name, rc, log_artifact }` — the rc is
 the step's recorded result in workflow history, which IS the exit-file discipline expressed
 as vocabulary: no shell writes `rc=$?` to a manifest file, the engine records the activity
-result. Contended-red-is-not-red is a declared retry arm: a leg may declare
-`retry_on_contention { detector, max_rounds }` so an EMFILE/lld-class red re-runs by policy,
-visibly, in history.
+result. Contended-red-is-not-red is authored policy: the worker
+classifies contention from the leg's OWN log (EMFILE/lld signatures) into a `contended`
+flag beside the rc, and the workflow re-runs a contended red up to the caller's
+`contention_rounds`, per leg, every rerun a recorded visit. A contended GREEN does not
+rerun — the flag travels as data and the land battery spec routes on it (stated wave-1
+decision, gate.awl header).
 
 ### 1.4 `land`
 Input: source (result branch or commit set), target (main), issue refs to close, battery

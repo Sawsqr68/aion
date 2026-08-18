@@ -30,6 +30,18 @@
 //! kind, a tree that is not there. `measured.green` is the parent's to route
 //! on; `head_commit` pins exactly what tree the verdict is about.
 //!
+//! CONTENDED GREEN DOES NOT RERUN (wave-1 decision, stated): only a
+//! contended RED re-runs. A contended GREEN keeps its flag in the probe the
+//! parent receives — the timing-verdicts law says the contended green is the
+//! dangerous one, so the flag travels as data and the land workflow's battery
+//! spec routes on `contended` greens rather than this workflow quietly
+//! re-running them.
+//!
+//! LOGS LIVE IN THE TREE at `<tree>/.gate/` — the tree is the blackboard.
+//! OBLIGATION ON EVERY LANDING CONSUMER: `.gate/` never rides a landing
+//! commit; the land workflow stages by explicit pathspec and carries this
+//! exclusion by name.
+//!
 //! SALVAGE IS AN INPUT MODE (design delta b): `tree` may point at any kept
 //! tree, and `provenance` travels with the verdict naming how the tree came
 //! to be gated (fresh flight, salvage of a kept tree, landing candidate).
@@ -40,6 +52,9 @@ workflow gate
   input provenance: String
   input lifecycle: String
   input legs: [LegSpec]
+  // The maximum contended re-runs PER LEG (>= 1 — it is the language's visit
+  // bound on the rerun cycle, and a bound must be a real bound; a caller who
+  // wants no reruns states 1 and routes on the contended flag instead).
   input contention_rounds: Int
   outcome measured:      type Measured, route success
   outcome unprovisioned: type NoTree,   route failure
@@ -168,10 +183,17 @@ step leg_lock_witness
   run_lock_witness(tree: tree, kind: leg.kind, crate_name: leg.crate_name, pattern: leg.pattern) -> probe
   route settle
 
-/// A contended red re-runs, bounded by the caller's policy and the language's
-/// static ceiling; every rerun is a recorded visit. A clean red or any green
-/// moves on — contention never launders a genuine red, because the rerun's
-/// own probe replaces the contended one and is judged on its own rc.
+/// A contended red re-runs, bounded by the caller's `contention_rounds`
+/// (>= 1; the visit bound is this input, per-LEG: each sequence item lowers
+/// to its own nested flow whose entry wrapper seeds the visit counter to
+/// zero — emitter/flowshape.rs rewrite 2, emitter/flows.rs emit_wrapper — so
+/// one leg's passages never consume another's budget). Every rerun is a
+/// recorded visit, and the rerun's probe REPLACES the contended one: route-
+/// cycle re-entry rebinding is one of the checker's two sanctioned
+/// single-assignment exceptions, and collect binds ONE slot per input item
+/// in item order (reference §8) — a contended-then-green leg contributes its
+/// green probe, a contended-then-red leg its red one; contention never
+/// launders a genuine red.
 step settle
   outcome rerun: when probe.contended and not probe.green and visits < contention_rounds,
     route dispatch
