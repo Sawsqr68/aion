@@ -56,40 +56,66 @@ const RFC3339_DATE_TIME =
  * input — so the map is bounded by the style × zone × locale sets appearing
  * in code.
  */
-const formatters = new Map<string, Intl.DateTimeFormat>();
+/**
+ * The date-time junction in `'full'` style is THIS literal, never ICU's.
+ * CLDR 42 changed the en-US combined-format glue from ", " to " at ", so two
+ * hosts with different ICU data rendered different bytes from the same
+ * instant and the same runtime version (issue #57 — the bun gate leg could
+ * never be green off-macOS). Date and time are formatted separately and
+ * joined here, so the rendering is byte-identical on every platform; the
+ * halves themselves are locale-faithful as before. A comma is the junction
+ * because it asserts no language — an English "at" would be wrong under
+ * every non-English viewer locale this module refuses to hardcode away.
+ */
+const DATE_TIME_GLUE = ', ';
 
-function formatterFor(options: FormatInstantOptions | undefined): Intl.DateTimeFormat {
+type InstantRenderer = (ms: number | Date) => string;
+
+const renderers = new Map<string, InstantRenderer>();
+
+function rendererFor(options: FormatInstantOptions | undefined): InstantRenderer {
   const style = options?.style ?? 'full';
   const timeZone = options?.timeZone;
   const locales = options?.locales;
   const localesKey = Array.isArray(locales) ? locales.join(',') : (locales ?? '');
   const key = `${style}|${timeZone ?? ''}|${localesKey}`;
-  const cached = formatters.get(key);
+  const cached = renderers.get(key);
   if (cached !== undefined) {
     return cached;
   }
 
-  const formatOptions: Intl.DateTimeFormatOptions = {
+  const timeOptions: Intl.DateTimeFormatOptions = {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     timeZoneName: 'short',
   };
   if (style === 'time-ms') {
-    formatOptions.fractionalSecondDigits = 3;
-  }
-  if (style === 'full') {
-    formatOptions.year = 'numeric';
-    formatOptions.month = 'short';
-    formatOptions.day = 'numeric';
+    timeOptions.fractionalSecondDigits = 3;
   }
   if (timeZone !== undefined) {
-    formatOptions.timeZone = timeZone;
+    timeOptions.timeZone = timeZone;
   }
+  const timeFormatter = new Intl.DateTimeFormat(locales, timeOptions);
 
-  const formatter = new Intl.DateTimeFormat(locales, formatOptions);
-  formatters.set(key, formatter);
-  return formatter;
+  let renderer: InstantRenderer;
+  if (style === 'full') {
+    const dateOptions: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    };
+    if (timeZone !== undefined) {
+      dateOptions.timeZone = timeZone;
+    }
+    const dateFormatter = new Intl.DateTimeFormat(locales, dateOptions);
+    renderer = (instant) =>
+      `${dateFormatter.format(instant)}${DATE_TIME_GLUE}${timeFormatter.format(instant)}`;
+  } else {
+    renderer = (instant) => timeFormatter.format(instant);
+  }
+  renderers.set(key, renderer);
+  return renderer;
 }
 
 /**
@@ -128,7 +154,7 @@ export function formatInstant(
     return `${value} (unparseable timestamp)`;
   }
 
-  return formatterFor(options).format(parsedMs);
+  return rendererFor(options)(parsedMs);
 }
 
 /**
@@ -142,5 +168,5 @@ export function formatInstantMs(ms: number, options?: FormatInstantOptions): str
     return `${String(ms)} (unparseable timestamp)`;
   }
 
-  return formatterFor(options).format(date);
+  return rendererFor(options)(date);
 }

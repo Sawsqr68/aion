@@ -124,7 +124,7 @@ describe('ICU-independent composition (issue #57)', () => {
       'Jul 15, 2026, 12:00:02 AM UTC'
     );
     expect(formatInstant(INSTANT, { locales: 'en-GB', timeZone: 'UTC' })).toBe(
-      '15 Jul 2026, 12:00:02 UTC'
+      '15 Jul 2026, 00:00:02 UTC'
     );
   });
 });
