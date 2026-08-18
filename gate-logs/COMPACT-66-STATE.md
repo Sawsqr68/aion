@@ -5009,3 +5009,25 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
 - Script sha256 (Mac=box verified fleet-clone 47d31cd7…): full list in gate-logs/… bin/
   committed at fc48a02f2.
 - Waffles seq=121/122 sent (dispatch + controls). Tom watching console.
+
+## ZU-8c — 12:35Z (concurrency live; #64 verdict; ceilings struck)
+
+- **NO-DEADLINES directive (Tom, seq=123)**: agent/workflow timeouts struck (86ec121cc),
+  grammar accepts unbounded — no engine row. Deployed fleet_dev$2330baef; running flight
+  pinned to old module; workers reseat on new doc AFTER flight lands (box doc synced).
+- **FLIGHT ONE mid-air**: planner CAUGHT MY PREMISE ERROR (aion-awl copy ≠ other four,
+  398 vs 796 lines — amend #65 topology claim when flight lands); plan_check exit 0
+  (committed at HEAD first try); fanout cut both legs; 2 builder children running
+  (a4bad07b, 7336a6cf). Monitor bzhqni13v.
+- **FLIGHT TWO airborne**: investigate-51, workflow 944e8e2b-8e5b-46fd-b7f3-91c0e3f32bd5
+  (~12:33Z), same seated workers, input adapted from first-flight template (scratchpad/
+  investigate-51-input.json). Concurrency demo per Tom seq=127. Monitor bt2pbhwij.
+- **#64 CAPTURE VERDICT (sent Artemis m=3318)**: all 24 rings VIRGIN (zero SQEs ever,
+  both snapshots) — her io_uring candidate DEAD by her criterion; ALL solo tests hang
+  individually + threads=1 hangs; kvm-clock; TIMER branch now prime. Artifacts
+  ~/lane1-repro/hang-2/. Her call next.
+- **Lane-1 v4** live (12:27:09Z run 1, --no-fail-fast + PATH + both skips).
+- **Capture gaps named (hardening list, Waffles seq=128)**: session transcripts →
+  .fleet/sessions/ capture leg; green gate logs die with teardown; leg branch refs
+  not pushed.
+- Slot-6 battery still running (watcher bnfrb9gsa).
