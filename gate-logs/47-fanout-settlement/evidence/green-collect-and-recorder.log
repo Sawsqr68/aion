@@ -1,0 +1,54 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.13s
+────────────
+ Nextest run ID ceb86c4c-8edb-439b-abe4-5732a969a905 with nextest profile: default
+    Starting 43 tests across 1 binary (663 tests skipped)
+        PASS [   0.025s] ( 1/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_duplicate_for_resolved_ordinal
+        PASS [   0.025s] ( 2/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_after_a_terminal_failure
+        PASS [   0.025s] ( 3/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_drops_for_cancelled_ordinal
+        PASS [   0.026s] ( 4/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_failed_terminal
+        PASS [   0.019s] ( 5/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_sequence_conflict_surfaces_without_advancing
+        PASS [   0.019s] ( 6/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_for_scheduled_but_not_terminal_ordinal
+        PASS [   0.019s] ( 7/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_over_a_retryable_attempt_record
+        PASS [   0.020s] ( 8/43) aion-rs durability::recorder::fan_out_tests::fan_out_completion_records_first_terminal_for_unresolved_ordinal
+        PASS [   0.021s] ( 9/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_empty_items_is_a_no_op
+        PASS [   0.021s] (10/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_sequence_conflict_surfaces_without_advancing
+        PASS [   0.021s] (11/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_is_atomic_on_store_failure
+        PASS [   0.022s] (12/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_appends_2n_events_in_scheduled_started_order
+        PASS [   0.022s] (13/43) aion-rs durability::recorder::fan_out_tests::fan_out_dispatch_stages_n_outbox_rows_with_dispatch_keys
+        PASS [   0.036s] (14/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+        PASS [   0.049s] (15/43) aion-rs runtime::nif_collect::tests::expiry::race_stale_snapshot_expiry_suspends_then_settles_the_recorded_winner
+        PASS [   0.276s] (16/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged
+        PASS [   0.302s] (17/43) aion-rs runtime::nif_collect::tests::expiry::all_stale_snapshot_expiry_suspends_then_converges_with_replay
+        PASS [   0.272s] (18/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all
+        PASS [   0.263s] (19/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race
+        PASS [   0.023s] (20/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved
+        PASS [   0.024s] (21/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record
+        PASS [   0.027s] (22/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_node
+        PASS [   0.022s] (23/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_task_queue
+        PASS [   0.050s] (24/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message
+        PASS [   0.020s] (25/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_fall_back_to_the_start_time_queue
+        PASS [   0.019s] (26/43) aion-rs runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_resolve_precedence_per_member
+        PASS [   0.034s] (27/43) aion-rs runtime::nif_collect::tests::routing_fresh::no_selection_records_on_the_workflow_start_time_queue
+        PASS [   0.052s] (28/43) aion-rs runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_node
+        PASS [   0.057s] (29/43) aion-rs runtime::nif_collect::tests::routing_fresh::recovery_re_resolves_the_start_time_queue_not_default
+        PASS [   0.038s] (30/43) aion-rs runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_task_queue
+        PASS [   0.020s] (31/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_has_no_node
+        PASS [   0.023s] (32/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_defaults_task_queue
+        PASS [   0.017s] (33/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_node_not_none
+        PASS [   0.019s] (34/43) aion-rs runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_task_queue_not_default
+        PASS [   0.273s] (35/43) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message
+        PASS [   0.255s] (36/43) aion-rs runtime::nif_collect::tests::settlement::cancellation_set_covers_exactly_the_unresolved_ordinals
+        PASS [   0.251s] (37/43) aion-rs runtime::nif_collect::tests::settlement::empty_list_resolves_immediately_without_pinning
+        PASS [   0.263s] (38/43) aion-rs runtime::nif_collect::tests::settlement::fail_fast_returns_lowest_ordinal_failure_and_cancels_unresolved
+        PASS [   0.043s] (39/43) aion-rs runtime::nif_collect::tests::settlement::race_settlement_advances_now_over_the_recorded_winner
+        PASS [   0.260s] (40/43) aion-rs runtime::nif_collect::tests::settlement::pinned_base_is_reused_across_reentries_and_counter_advances_once
+        PASS [   0.264s] (41/43) aion-rs runtime::nif_collect::tests::settlement::race_batch_tie_breaks_to_lowest_ordinal_and_drains_loser_entries
+        PASS [   0.499s] (42/43) aion-rs runtime::nif_collect::tests::settlement::expired_scope_cancels_unresolved_and_replay_derives_the_same_abort
+        PASS [   0.492s] (43/43) aion-rs runtime::nif_collect::tests::settlement::race_winner_is_first_recorded_terminal_not_lowest_ordinal
+────────────
+     Summary [   1.447s] 43 tests run: 43 passed, 663 skipped
+TRUE_EXIT=0

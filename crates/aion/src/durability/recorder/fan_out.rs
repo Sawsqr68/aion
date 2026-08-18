@@ -227,7 +227,8 @@ impl Recorder {
     /// Determines whether [`ActivityId::from_sequence_position(ordinal)`](ActivityId::from_sequence_position)
     /// already has a terminal ([`Event::ActivityCompleted`] or [`Event::ActivityFailed`]) in this
     /// workflow's recorded history. This is the same "resolved" predicate the live dispatch path uses
-    /// (`nif_collect.rs::recorded_terminal`): an ordinal is resolved once either terminal is present.
+    /// (`nif_collect_settlement.rs::recorded_terminal`): an ordinal is resolved once a terminal for it
+    /// is present — a RETRYABLE `ActivityFailed` is a retry record and resolves nothing (aion#47).
     ///
     /// - If the ordinal is **already resolved**, returns [`FanOutCompletionResult::Dropped`] WITHOUT
     ///   writing anything — no store append, the sequence head is unchanged. This is the core dedup
@@ -303,19 +304,27 @@ fn completion_history<'a>(history: &'a [Event], run_id: Option<&RunId>) -> &'a [
     }
 }
 
-/// Whether `activity_id`'s ordinal already has a terminal ([`Event::ActivityCompleted`],
+/// Whether `activity_id`'s ordinal already has a terminal ([`Event::ActivityCompleted`], a TERMINAL
 /// [`Event::ActivityFailed`], or [`Event::ActivityCancelled`]) recorded in `history`.
 ///
-/// Mirrors the full "resolved" terminal set of `nif_collect.rs::recorded_terminal` — including
-/// `ActivityCancelled`. A cancelled ordinal IS terminally resolved, so a late worker completion
-/// arriving for it must be dropped, not recorded over the cancellation.
+/// Mirrors the full "resolved" terminal set of
+/// `nif_collect_settlement.rs::recorded_terminal_event` — including `ActivityCancelled`. A cancelled
+/// ordinal IS terminally resolved, so a late worker completion arriving for it must be dropped, not
+/// recorded over the cancellation.
+///
+/// # Terminality (aion#47)
+///
+/// A RETRYABLE `ActivityFailed` does NOT resolve the ordinal. It is the durable retry record the
+/// off-thread retry loop (`nif_activity_retry_dispatch.rs::record_retry_event`) appends for a failed
+/// attempt with budget left, before re-dispatching the same ordinal — so the trail is still open and
+/// the attempt that eventually succeeds must be recordable. The two predicates have to move
+/// together: with the outbox flag ON, `nif_collect_settlement.rs::take_and_record` reports the
+/// terminal it took from the runtime map while routing the durable write through this method, so a
+/// mirror that dropped the write would settle a member live with NOTHING in history for it — the
+/// same live/replay divergence in a worse shape than the one aion#47 names.
 fn ordinal_is_resolved(history: &[Event], activity_id: &ActivityId) -> bool {
     history.iter().any(|event| match event {
         Event::ActivityCompleted {
-            activity_id: recorded,
-            ..
-        }
-        | Event::ActivityFailed {
             activity_id: recorded,
             ..
         }
@@ -323,6 +332,11 @@ fn ordinal_is_resolved(history: &[Event], activity_id: &ActivityId) -> bool {
             activity_id: recorded,
             ..
         } => recorded == activity_id,
+        Event::ActivityFailed {
+            activity_id: recorded,
+            error,
+            ..
+        } => recorded == activity_id && !error.is_retryable(),
         _ => false,
     })
 }

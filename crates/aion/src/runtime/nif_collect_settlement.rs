@@ -302,19 +302,42 @@ fn drop_runtime_entries(deps: &CollectDeps, pid: u64, ordinal: u64) -> Result<()
 
 /// The recorded terminal EVENT for `ordinal` in this run's segment, if any.
 ///
-/// First match wins, exactly as the settlement sweep has always read it; the
+/// First match wins among the events that are TERMINAL for the ordinal; the
 /// event itself is returned so the sweep can advance workflow-visible now to
 /// the position the read establishes.
+///
+/// # Terminality (aion#47)
+///
+/// A recorded `ActivityFailed` is a member's terminal only when its error is
+/// terminal. The off-thread retry loop
+/// (`nif_activity_retry_dispatch.rs::record_retry_event`) appends a RETRYABLE
+/// `ActivityFailed` for every failed attempt that still has budget and then
+/// re-dispatches the SAME ordinal, so such a record is one attempt in a trail,
+/// never the trail's end. This is the same rule the single-activity await path
+/// already applies (`durability/resolver.rs::resolution_from_matched` resolves
+/// only a terminal failure; `durability/cursor.rs::resolve_activity` walks past
+/// the retryable ones), decided through the one shared predicate
+/// [`ActivityError::is_retryable`].
+///
+/// Treating a retry record as a terminal broke settlement two ways, and the skip
+/// closes both: a member that would have retried was settled `Failed` (and,
+/// after a crash mid-retry, refused the re-dispatch `dispatch_unscheduled`
+/// stages for it), and — because the scan takes the FIRST match — the retry
+/// record also SHADOWED the genuine terminal that eventually arrived, handing
+/// workflow code a superseded attempt's error for a member that really did fail.
+///
+/// The skip is narrow: it removes retry RECORDS from the scan and nothing else.
+/// `ActivityCompleted` and `ActivityCancelled` resolve the ordinal exactly as
+/// before, including when they sit behind a retry record.
 fn recorded_terminal_event(history: &[Event], ordinal: u64) -> Option<&Event> {
     let target = ActivityId::from_sequence_position(ordinal);
-    history.iter().find(|event| {
-        matches!(
-            event,
-            Event::ActivityCompleted { activity_id, .. }
-                | Event::ActivityFailed { activity_id, .. }
-                | Event::ActivityCancelled { activity_id, .. }
-            if *activity_id == target
-        )
+    history.iter().find(|event| match event {
+        Event::ActivityCompleted { activity_id, .. }
+        | Event::ActivityCancelled { activity_id, .. } => *activity_id == target,
+        Event::ActivityFailed {
+            activity_id, error, ..
+        } => *activity_id == target && !error.is_retryable(),
+        _ => false,
     })
 }
 
@@ -374,6 +397,13 @@ fn observed_terminal(context: &NifContext, ordinal: u64) -> Result<Option<Ordina
 }
 
 /// The earliest-seq recorded non-cancelled terminal in the fan-out range.
+///
+/// The SECOND first-match scan over the same failure set as
+/// [`recorded_terminal_event`], and it carries the same terminality rule
+/// (aion#47): a RETRYABLE `ActivityFailed` is a retry record, not a member's
+/// terminal, so it can neither win a race nor shadow the terminal that ends its
+/// trail. Both scans must agree — a race settled from a record the settlement
+/// scan walks past is the divergence in a second spelling.
 fn recorded_race_winner(
     history: &[Event],
     base_ordinal: u64,
@@ -397,7 +427,7 @@ fn recorded_race_winner(
             }
             Event::ActivityFailed {
                 activity_id, error, ..
-            } if in_range(activity_id) => {
+            } if in_range(activity_id) && !error.is_retryable() => {
                 return Ok(Some((
                     activity_id.sequence_position(),
                     Err(error.message.clone()),
