@@ -474,9 +474,11 @@ mod tests {
             Ok(ServerState::from_parts_with_jwks(resolver, runtime, cache))
         }
         #[cfg(not(feature = "auth"))]
-        // Yield to preserve the async signature required by the auth-feature branch.
-        tokio::task::yield_now().await;
-        Ok(ServerState::from_parts(resolver, runtime))
+        {
+            // Yield to preserve the async signature the auth arm requires.
+            tokio::task::yield_now().await;
+            Ok(ServerState::from_parts(resolver, runtime))
+        }
     }
 
     #[tokio::test]

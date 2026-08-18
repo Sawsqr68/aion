@@ -1,22 +1,9 @@
-    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-core)
-   Compiling aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto-generated)
-    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-mcp)
-   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
-    Checking aion-darwin-acl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-darwin-acl)
-    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/xtask)
-    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-package)
-    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
-    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-integrations)
-    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
-    Checking aion-integration-norn v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-integration-norn)
-    Checking aion-integration-acp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-integration-acp)
-    Checking aion-integration-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-integration-cli)
-    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-awl)
-    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-toolchain)
-    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-worker)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
     Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
     Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
-    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-awl-package)
-    Checking aion-awl-lsp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-awl-lsp)
-    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-client)
-    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/benchmarks/million-processes)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 25s

@@ -1,0 +1,5 @@
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
+error: could not compile `aion-server` (lib test) due to 3 previous errors

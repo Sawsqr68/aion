@@ -978,9 +978,16 @@ mod tests {
             .append_outbox_batch(std::slice::from_ref(&row))
             .await?;
 
+        // A backoff wide enough that the fence assertion below measures the
+        // FENCE and not the machine: with the shared 100ms base, a loaded box can
+        // spend longer than the window between the retry write and the claim, and
+        // the row legitimately becomes claimable again. The subject is "a fence
+        // exists and holds", not the size of the interval.
+        let mut config = config();
+        config.backoff_base = Duration::from_secs(30);
         let before = Utc::now();
         let dispatch = Arc::new(RecordingDispatch::new(false));
-        let dispatcher = OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch);
+        let dispatcher = OutboxDispatcher::new(store.clone(), config).with_dispatch(dispatch);
         let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
 
@@ -993,7 +1000,7 @@ mod tests {
         assert_eq!(state.attempt, 1);
         // visible_after advanced into the future by at least the base backoff.
         assert!(
-            state.visible_after >= before + chrono::Duration::milliseconds(100),
+            state.visible_after >= before + chrono::Duration::seconds(30),
             "visible_after must advance by at least the base backoff"
         );
         // The fence HOLDS, not merely stored: a backend that persists

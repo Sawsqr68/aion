@@ -334,16 +334,41 @@ struct ServerEpoch {
 }
 
 impl ServerEpoch {
+    /// Open the durable store and boot the first epoch over it.
+    ///
+    /// Returns the store handle alongside the epoch: every later generation is
+    /// built from a CLONE of it (see [`Self::start_over`]) rather than a second
+    /// `open_or_create`, because haematite holds an exclusive writer lock on the
+    /// data directory and a failed open does not release the lock file it took —
+    /// so there is exactly one chance to open, and no way to wait for a previous
+    /// generation's engine and connection tasks to finish unwinding.
     async fn start(
         db_path: &std::path::Path,
         package_path: PathBuf,
         drain_timeout: Duration,
-    ) -> Result<Self, TestError> {
+    ) -> Result<(Self, HaematiteStore), TestError> {
         let store = HaematiteStore::open_or_create(
             db_path.to_path_buf(),
             haematite::NodeCacheBudget::Unlimited,
         )
         .await?;
+        let epoch = Self::start_over(store.clone(), package_path, drain_timeout).await?;
+        Ok((epoch, store))
+    }
+
+    /// Boot a further epoch over an ALREADY-OPEN store — the in-process restart.
+    ///
+    /// This is a new `ServerState`: a new engine, a new resolver, a fresh startup
+    /// recovery over the durable log, which is the claim these tests make. It is
+    /// NOT a cold reopen of the database from disk; that claim belongs to
+    /// `deploy_restart_e2e` and to `aion-store-haematite`'s
+    /// `durable_state_survives_close_and_reopen`, both of which close every
+    /// handle before reopening and would go red if the bytes were not there.
+    async fn start_over(
+        store: HaematiteStore,
+        package_path: PathBuf,
+        drain_timeout: Duration,
+    ) -> Result<Self, TestError> {
         let state =
             ServerState::build_with_store(store, runtime_config(package_path, drain_timeout))
                 .await?;
@@ -527,11 +552,11 @@ fn assert_only_the_supersession_record(history: &[Event]) {
 /// attempt, completes, and the workflow completes — the recovery half of the
 /// kill -9 convergence proof.
 async fn restart_and_complete(
-    db_path: &std::path::Path,
+    store: HaematiteStore,
     package_path: PathBuf,
     workflow_id: &aion_core::WorkflowId,
 ) -> Result<(), TestError> {
-    let epoch = ServerEpoch::start(db_path, package_path, Duration::from_secs(30)).await?;
+    let epoch = ServerEpoch::start_over(store, package_path, Duration::from_secs(30)).await?;
     let mut worker = WorkerSession::connect(epoch.grpc_address).await?;
     let task = worker.next_task().await?;
     assert_eq!(task.activity_type, ACTIVITY_TYPE);
@@ -580,7 +605,8 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
     let db_path = dir.path().join("aion.db");
     let package_path = write_package_archive(dir.path(), &compile_park_beam()?)?;
 
-    let epoch = ServerEpoch::start(&db_path, package_path.clone(), Duration::from_secs(30)).await?;
+    let (epoch, store) =
+        ServerEpoch::start(&db_path, package_path.clone(), Duration::from_secs(30)).await?;
     let mut worker = WorkerSession::connect(epoch.grpc_address).await?;
     let workflow_id = start_over_http(&epoch.router).await?;
     let task = worker.next_task().await?;
@@ -627,7 +653,7 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
     drop(reader);
     epoch.stop().await?;
 
-    restart_and_complete(&db_path, package_path, &workflow_id).await
+    restart_and_complete(store, package_path, &workflow_id).await
 }
 
 /// #207 drain-timeout backstop: the worker IGNORES the drain and outlives the
@@ -647,7 +673,7 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     let package_path = write_package_archive(dir.path(), &compile_park_beam()?)?;
 
     // A short drain window the held-open worker stream is guaranteed to outlive.
-    let epoch =
+    let (epoch, store) =
         ServerEpoch::start(&db_path, package_path.clone(), Duration::from_millis(500)).await?;
     let mut worker = WorkerSession::connect(epoch.grpc_address).await?;
     let workflow_id = start_over_http(&epoch.router).await?;
@@ -701,7 +727,7 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     drop(reader);
     epoch.stop().await?;
 
-    restart_and_complete(&db_path, package_path, &workflow_id).await
+    restart_and_complete(store, package_path, &workflow_id).await
 }
 
 /// Block until the server has observed every worker stream closing.

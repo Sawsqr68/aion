@@ -1,0 +1,16 @@
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/grpc_liveness.rs","line":193,"lint":"dead_code","message":"function `ping_grpc_worker` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":23,"lint":"dead_code","message":"enum `PingFailure` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":41,"lint":"dead_code","message":"enum `ProbedTransport` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":53,"lint":"dead_code","message":"methods `name` and `pid` are never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":27,"lint":"dead_code","message":"field `0` is never read"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":31,"lint":"dead_code","message":"field `0` is never read"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/registry.rs","line":1150,"lint":"clippy::unnecessary_filter_map","message":"this `.filter_map(..)` can be written more simply using `.map(..)`"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/registry.rs","line":1150,"lint":"clippy::unnecessary_filter_map","message":"this `.filter_map(..)` can be written more simply using `.map(..)`"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/api/grpc/mod.rs","line":474,"lint":"E0308","message":"mismatched types"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/api/http/awl_deployed.rs","line":414,"lint":"unused_mut","message":"variable does not need to be mutable"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/api/http/managed_workers.rs","line":513,"lint":"unused_mut","message":"variable does not need to be mutable"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/grpc_liveness.rs","line":193,"lint":"dead_code","message":"function `ping_grpc_worker` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":23,"lint":"dead_code","message":"enum `PingFailure` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":41,"lint":"dead_code","message":"enum `ProbedTransport` is never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/liveness.rs","line":53,"lint":"dead_code","message":"methods `name` and `pid` are never used"}
+{"type":"clippy-feature-leg","level":"error","file":"crates/aion-server/src/worker/registry.rs","line":1150,"lint":"clippy::unnecessary_filter_map","message":"this `.filter_map(..)` can be written more simply using `.map(..)`"}
