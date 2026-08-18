@@ -1,6 +1,6 @@
 # Codification design surface — the development process as AWL workflows
 
-Status: DESIGN FOR REVIEW (Waffles), per Tom's go 2026-08-18 22:16Z. No AWL authored yet.
+Status: APPROVED TO AUTHOR (Waffles review 22:20Z, four deltas + rulings incorporated below).
 Author: Vesper. Reference trace: the #75 arc (COMPACT-66-STATE.md 21:0xZ–22:1xZ entries + issues #75/#76).
 
 Tom's words carried into every decision here: separate single-purpose workflows plus
@@ -68,6 +68,20 @@ requires a human relay; every stage boundary is a child-workflow result feeding 
 child's input. A human can still intervene (signal/cancel) — the design removes the NEED
 for relay, not the ability to steer.
 
+### 1.7 `propagate` (delta a — Tom has asked for it by name: "the beamr work still hasn't propagated")
+Input: released version + the service set it must reach. Steps: per service — resolve the
+running instance → stage the released artifact → restart under that service's own
+supervision discipline → VERIFY THE VERSION BANNER AT THE RUNNING SERVICE (landed ≠ running;
+the claim "propagated" carries its verification in the same step, class 4). Honest carve-out:
+covers every service EXCEPT the aion server's own binary, which stays with native supervision
+until the server moves off the Mac (§4 respawner note).
+
+### Salvage is an input mode (delta b)
+`fix_flight` and `gate` accept `resume_from: KeptTree { path, provenance: salvage }` —
+tonight's proven pattern (three flights salvaged by hand) becomes expressible: the run
+resumes from the kept tree with provenance recorded in history, so a Failed status column
+measures instruments, never work. An input mode, not a tenth workflow.
+
 ## 2. Whole-cloth command rule (acceptance criterion 2)
 
 Every argv is written out in full inside the AWL step definition. Concretely:
@@ -83,21 +97,22 @@ Every argv is written out in full inside the AWL step definition. Concretely:
 
 ## 3. Vocabulary → failure-class mapping (acceptance criterion 3)
 
-NOTE FOR REVIEW: I hold classes 4 and 8 verbatim from Waffles; the other six below are my
-reconstruction from tonight's record, labeled (r). Waffles: send the canonical inventory
-verbatim and I will reconcile this table to it before authoring — the mapping must be
-against YOUR eight, not my reconstruction.
+RECONCILED to the canonical inventory (Waffles → Tom 22:06Z, quoted verbatim below).
+Classes 1–8 are the canon; 9–10 are accepted additions from this design's first draft.
+Classes 6 and 7 carry NAMED RESIDUE — no vocabulary cure, resolution named, never dropped.
 
-| # | Failure class | Where it becomes inexpressible |
-|---|---------------|-------------------------------|
-| 1 (r) | Local scripts / process-on-one-box (gate scripts, battery files, dispatch templates) | Whole-cloth rule: no step type takes a script path; gate spec argv is inline. The vocabulary has no "run this file" verb. |
-| 2 (r) | Silent exit / lost rc (exit-file idiom, `\| head` truncation, markers that lie) | Activity result = recorded rc + full output artifact in history. A step with no recorded result cannot advance the chain — the engine, not discipline, enforces it. |
-| 3 (r) | Verdict-terminal investigations (work that ends as a file nobody consumes) | `investigate`'s result union has no bare-verdict arm: Handoff or named Park only. The orchestrator's next stage takes the handoff as required input. |
-| 4 | Claims-for-facts (a step asserts an outcome without its verification) | Every asserting step carries its verification leg in the same step definition: publish carries index-confirm; land carries battery-on-landed-tree; close carries the receipt as a required input field. A claim-only step shape does not exist in the vocabulary. |
-| 5 (r) | Contended-red / environmental red treated as work red | `retry_on_contention` is a declared arm with a detector and bounded rounds, recorded in history — the classification is policy in the step, not judgment in a chat log. |
-| 6 (r) | Release drift (tag/tree/index disagreeing — #76 both directions) | Tag step's input type = the full per-crate checksum set; publish steps ordered by data dependency from the full graph. Tag-without-publish and publish-out-of-order are unwritable. |
-| 7 (r) | Human-relay chain gaps (stages waiting on a person to carry a result) | `issue_lifecycle` stage boundaries are child-result → child-input edges. The vocabulary has no "await operator relay" step; operator steering is signal/cancel, never data transport. |
-| 8 | Habit beats standing orders (dead practice tooling still on disk) | Strike-list column below: each workflow's landing includes the removal of the artifacts it replaces, in the same landing commit/motion. Plus seat-layer supreme-orders file (Waffles, in draft) — acknowledged as the layer no step verb can cure. |
+| # | Canonical class (verbatim) | Where it becomes inexpressible |
+|---|---------------------------|-------------------------------|
+| 1 | "Gates and landing batteries ran as local scripts on your Mac when workflows existed for exactly that job — the box wasn't free and the habit outlived your order." | Whole-cloth rule: no step type takes a script path; gate spec argv is inline; execution routes server → fleet workers only. The vocabulary has no "run this file" verb and no Mac-local execution arm. |
+| 2 | "Releases claimed off the tag with no index check — 0.16 and 0.17 tagged but never published, two versions of silent drift." | `release_ceremony`: the tag step's input type = the full per-crate checksum set from index confirmation; publish steps ordered by data dependency over the full graph. Tag-without-publish and publish-out-of-order are unwritable. (#76 + addendum.) |
+| 3 | "Investigations that terminate as verdict files instead of chaining through fix, land, close, release — 27 verdicts, zero landings, main unmoved all night." | `investigate`'s result union has no bare-verdict arm: `Handoff` or `Park{reason, recheck}` only. `issue_lifecycle` consumes the handoff as the next stage's required input. |
+| 4 | "Claims standing in for facts everywhere: executor 'tests pass' reports that didn't match the final tree, 'reviewed' treated as 'landed', 'landed' treated as 'running', publishes assumed rather than verified." | Every asserting step carries its verification leg in the same step definition: publish carries index-confirm; land carries battery-on-the-landed-tree; close requires the receipt as an input field; `propagate` verifies the version banner AT the running service ("landed ≠ running", cured by name). A claim-only step shape does not exist. |
+| 5 | "Instrument defects that ate results silently: exit codes swallowed by pipelines, watchers that miss marks wrapping across lines, a version-mismatched patch line that cargo dropped without a word." | Activity result = recorded rc + full output artifact in engine history; a step with no recorded result cannot advance. Watch/monitor idioms are replaced by workflow await/signals (no line-matching watchers). Lock-witness legs in `gate`/`release_ceremony` make the dropped-patch class a red, not a silence. |
+| 6 | "Worker-plane fragility with rows already minted: idle socket death, in-flight dispatches orphaned on worker loss, server ignoring TERM, a judge dying on an API 529 and failing work that was mechanically green." | NAMED RESIDUE — no vocabulary cure. Resolves at the engine rows #69/#72/#73/#74 plus the wave-2 `estate_health` workflow. The mapping carries this row open until those land. |
+| 7 | "The dispatch engine wedging after ~15 runs until the beamr floor migration lands." | NAMED RESIDUE — no vocabulary cure. Resolves at the beamr-floor migration (fleet-70 salvage → #70 landing) plus wave-2 `fleet_provision` floor checks. Carried open until landed. |
+| 8 | "And the root one: standing orders losing to old habit because the dead practice's artifacts stayed on disk teaching it." | Strike-list column (§4): each workflow's landing removes the artifacts it replaces in the same motion. Plus the seat-layer supreme-orders boot-read (Waffles, in draft) — the layer no step verb can cure, held at the seat. |
+| 9 | Contended-red / environmental red treated as work red (addition, accepted 22:20Z) | `retry_on_contention` is a declared arm with a detector and bounded rounds, recorded in history — classification is step policy, not chat-log judgment. |
+| 10 | Human-relay chain gaps — stages waiting on a person to carry a result (addition, accepted 22:20Z) | `issue_lifecycle` stage boundaries are child-result → child-input edges. No "await operator relay" step exists; operator steering is signal/cancel, never data transport. |
 
 ## 4. Strike list (acceptance criterion 4) — same motion as each landing
 
@@ -122,13 +137,28 @@ against YOUR eight, not my reconstruction.
   from-index install, exhibit replay). Tonight's receipts are the acceptance fixtures; any
   step the AWL cannot express is a vocabulary gap to close before authoring ends.
 
-## 6. Open questions for review
+## 6. Rulings (Waffles 22:20Z — settled, formerly open questions)
 
-1. The canonical eight-class inventory verbatim (see §3 note).
-2. Park taxonomy: proposed named reasons — `NeedsInfo(owner)`, `BlockedOn(issue)`,
-   `CrossRepo(repo)`, `OperatorWord` — closed set or extensible?
-3. Release-set membership for `issue_lifecycle` → `release_ceremony`: who declares a
-   "coherent set" — the operator by word (today's law) or a declared grouping input?
-4. Judge/review legs: tonight's cut-ceremony law (small understood lanes = one honest
-   review + my read) — encode the calibration as workflow input, or keep review scaling
-   as operator word at dispatch?
+1. Eight-class inventory: received verbatim, reconciled in §3 (ten rows: canon 1–8 +
+   additions 9–10; residue named on 6 and 7).
+2. Park taxonomy: CLOSED set — `NeedsInfo(owner)`, `BlockedOn(issue)`, `CrossRepo(repo)`,
+   `OperatorWord` — and (delta d) every `Park{reason}` carries a RECHECK trigger (time or
+   event); a parked lifecycle resurfaces on it. Park reasons expire unchecked otherwise.
+   A new park reason is a design change with a doc edit, never a runtime string.
+3. Release-set membership: a declared grouping INPUT authored by operator word — authority
+   stays with the operator (standing order 7), the declaration becomes data the ceremony
+   records, so the set is auditable in history.
+4. Review calibration: a workflow INPUT with the cut-ceremony law as its default,
+   operator-overridable at dispatch, the override recorded in the run — calibration lives
+   in history, not chat.
+
+## 7. Wave 2 — declared now so absence reads as sequenced, not forgotten (delta c)
+
+- `fleet_provision`: box provisioning with version floors LOUD (refuse below floor, name
+  the floor) and an arch-correct interpreter probe (the ~/.local/bin Linux-ELF-on-Mac find
+  becomes a typed refusal at provision time).
+- `estate_health`: alarm channels PROVEN (every health probe demonstrated against a known
+  dead and a known live target before it is trusted — tonight's port_healthy "000" defect
+  as the founding exhibit), typed code matching throughout.
+Wave-2 authoring follows wave 1's landings; both resolve the named residue on classes 6–7
+together with the engine rows.
