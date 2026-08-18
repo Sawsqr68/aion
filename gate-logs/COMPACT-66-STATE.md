@@ -5199,3 +5199,11 @@ Post-restart wave (15r3/14r3/18r3/6r3/28 + 12r2 + probe 15-r4's first attempt) A
 - Next chain links after #53: #48, #9, #56, #22+#23 (Assistant-only reshape), #19/#20/#21/#24, #46, #66/#67.
 - 15:46Z Waffles: line 7 DONE (manifold landed de4d49c; frame bump EXONERATED via four-arm differential — pre-existing suite-conditional estate-boot race, MarkerSettlementBackpressure no-node-handling class; race row to be minted his side). Cascade open: 8 Apollo → 9 Athena → 10 Hermes → 11 Themis → my 13. His release rebuild rides his slot tail. Mint ledger #66-#73 = its own morning-report section per his read.
 - TICK 15:51Z: fleet-53-fix Running (13 events, counsel plan leg live since 15:42); plane 3/3/1; Waffles day-file 3 min fresh — no alarm. Cascade lines 8-11 ahead of my 13; no link to fire this tick.
+
+## ZU-17 — SATURATION WAVE (15:55-16:05Z, Tom at console per Waffles relay)
+
+- Tom's word via Waffles 15:55Z: push concurrency, he wants to SEE it; second-seat worker launches at my hands.
+- Workers launched box-side: fleet-dev-workflows-3, fleet-counsel-workflows-3, investigator-workflows-3 (pidfiles in ~/fleet/babysitter/, logs ~/fleet/*-3-worker.log; NOTE babysitter only guards the -2 pidfiles — -3 workers unguarded by design for now).
+- FIVE investigations dispatched on the night's own mints, running CONCURRENT with fleet-53-fix:
+  inv66=dc6c26d4-5916-4263-a335-495fedad1434, inv67=d1081e6b-dc92-4341-b1d7-444ad80200ec, inv69=bf819c06-b0c9-400f-b0aa-f733594d057c, inv72=3a83df9b-a3de-4fc6-9b10-1f9506ec033d, inv73=38c524ac-6c75-4dc9-b6d2-0fbfc61cbd6e. Monitor armed (split-safe pattern). Inputs scratchpad/investigate-{66,67,69,72,73}-input.json (template law honored; per-issue YOUR TASK loci: 66/67 harness.rs swallow+park, 69 worker redial+registry expiry, 72 connection-death→dispatch settlement gap, 73 spawn_blocking census).
+- Six workflows live at once. #28 headroom: fresh restart 15:29Z, ceiling ~15 runs — 6 concurrent flights spend it fast; NEXT RESTART LIKELY OWED before a second saturation wave. Watch for correlation wedge on any flight.
