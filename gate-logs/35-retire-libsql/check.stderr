@@ -1,5 +1,13 @@
-    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/xtask)
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
     Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
+    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/benchmarks/million-processes)
     Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 33.62s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 08s

@@ -72,3 +72,50 @@ config/env.rs, aion-cli/src/server.rs, all refusal machinery, plus
 run_server_outbox_e2e.rs carrying the red test's capability paragraph. No
 live claim survives. Worktree aion-wt-35-libsql, branch retire-libsql,
 a7fd114ebd6444d83cf88c5ffc8d4959156be71d, clean. Not merged, not pushed.
+
+---
+
+## Steward's gate (Vesper Lynd, 2026-08-18)
+
+**Verified at the bytes before landing:** libsql gone from `crates/` (crate
+directory removed; surviving mentions are the five refusal/config files the
+lane names, all refusal machinery); branch base checked and REBASED from
+`d4317268f` onto `1e20aea43` (post-#1 main) so the battery of record runs on
+the true final tree; the `issue36` e2e's required budget keys survived the
+replay.
+
+**Re-rule applied at the gate (`test(35)` commit):** the lane's one deliberate
+red became a runtime gate. Rationale: a permanently-red test on main makes
+every future battery's extraction non-empty and destroys the estate's
+"empty = green" reading. The full single-boot assertion body is kept armed
+exactly as written; the switch is `AION_E2E_CONCURRENT_STORE_SEAM`. This is
+honest only because the lane PROVED the relocated form vacuous (passed with
+the reconciler's guard mutated to `false`, and with reconciliation
+unconfigured) — we know the passable version measured nothing, so the real one
+waits armed for the capability instead of being green for the wrong reason.
+
+**Battery of record, rebased tree (`gate-logs/35-retire-libsql/`):**
+
+```
+findings.jsonl: 0 lines
+check.stderr / clippy.stderr: end on Finished lines (completion proof)
+Summary [ 660.491s] 5083 tests run: 5083 passed (10 slow), 0 skipped
+```
+
+5083 vs the lane's pre-rebase 5076 = the seven tests #1 added; the count
+reconciles with the rebase.
+
+**The gate's own channel, proven (not assumed).** The skip announcement did
+NOT appear in `nextest.stderr` — nextest captures a passing test's stderr, so
+`5083 passed` cannot distinguish a gated test from a real one. Driven directly
+with `--no-capture`, the line emits verbatim and the test passes in 0.018s.
+Closure rather than a documented limitation: `gate-logs/GATED-TESTS.md` is now
+the inventory a battery Summary must be read against, listing this test, the
+`NORN_BIN` faces, each switch, and the command that proves the channel.
+
+**Feature legs:** 15 findings against a 33-finding control at the base — no
+finding present here that is absent from the control (the standard's caveat-2
+verdict is the control diff, not emptiness).
+
+**haematite lock leak** (the lane's separate finding, 714 consecutive failures)
+was minted as haematite#16 before this landing.
