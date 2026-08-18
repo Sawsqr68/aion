@@ -16,8 +16,27 @@ exact-string pins can only match one platform until #57's deterministic
 composition lands. The bun leg therefore exits 1 with exactly these 4 failures
 (1033 pass) — any OTHER bun failure is out of set.
 
-## Every other leg: NO expected reds
-fmt, clippy_workspace, clippy_server, test, embed, gates_worker, write_manifest
-are expected green on the pinned instruments (rustup 1.97.1 per repo pin,
-clean target). Run-1/run-2 reds were instrument-era (no rustup; mixed-toolchain
-target artifacts) and are recorded in their run histories, not carried forward.
+## cargo legs — expected reds until aion#59 lands (declared 09:45Z after run 5)
+- clippy_workspace, clippy_server: RED on exactly one finding —
+  `unnecessary_wraps` at `crates/aion-server/src/filesystem.rs:180`
+  (backend_path's Linux cfg arm is infallible; genuine Linux finding, #59).
+- gates_worker: RED on exactly one test —
+  `an_absent_gate_tool_is_a_broken_measurement_not_a_result` (fixture assumes
+  /usr/bin lacks cargo; false on Arch, #59).
+- test: expected GREEN from run 6 on — its run-5 red was EMFILE under the
+  box's soft nofile 1024; the worker now runs at the box's own hard limit
+  (524288). A recurrence is a finding.
+Any cargo-leg red OUTSIDE these named shapes is a finding.
+
+## fmt, embed, write_manifest: NO expected reds
+
+## Record corrections (amended in place, 09:45Z)
+- RUN-1 FENCE CORRECTED: run 1's clippy red was fenced above as
+  instrument-era (clippy 1.94 vs 1.97.1 drift). That attribution was WRONG —
+  run 5, zram-free on pinned 1.97.1, reproduced the same lint. Run 1's clippy
+  red is RE-ATTRIBUTED GENUINE, see #59. (Run 1's rustup gap was still real;
+  it changed which clippy ran, not the verdict.)
+- Run-2 reds (mixed-toolchain target artifacts), run-3 reds (registry-cache
+  NUL corruption), run-4 reds (rustc SIGSEGV) stay fenced as box-era; root
+  cause for runs 3-4's corruption class = zram swap failure
+  ("Decompression failed! err=-22"), zram now masked at the unit level.
