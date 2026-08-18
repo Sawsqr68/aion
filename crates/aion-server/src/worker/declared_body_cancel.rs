@@ -52,8 +52,12 @@ const RESOURCE: &str = "declared command attempts";
 /// Keyed on the full [`AttemptKey`] — including the run — because a
 /// continue-as-new chain reuses one workflow id across generations while
 /// activity ordinals and attempt numbers restart, so a shorter key genuinely
-/// collides and would aim a cancel at a different generation than the operator
-/// was looking at.
+/// COLLIDES: two generations' attempts would be one entry, and registering the
+/// second would replace the first's handle with nothing left to stop it. The
+/// run axis is what keeps them distinct here and what lets the cancel report
+/// name which generation it stopped. Cancelling is still workflow-scoped, as it
+/// is for workers ([`super::HeartbeatTracker::in_flight_for_workflow`]): a
+/// cancelled workflow's work stops in every generation of it.
 #[derive(Clone, Debug, Default)]
 pub struct DeclaredCommandAttempts {
     inner: Arc<Mutex<HashMap<AttemptKey, ActivityCancellationHandle>>>,
