@@ -1,3 +1,16 @@
+# CONTROL ARM — clippy findings at the BASE commit d4317268f, before this lane.
+#
+# Measured 2026-08-18 in a throwaway worktree at d4317268f, since the canonical
+# battery compiles only the default feature set and this lane DELETES a feature.
+# The lane's verdict for these legs is the DIFF against this file, not
+# emptiness: both non-default sets are already red at the base.
+#
+# aion-server --all-features (measured separately, same session): exactly two
+#   unused_mut, at crates/aion-server/src/api/http/awl_deployed.rs:414 and
+#   crates/aion-server/src/api/http/managed_workers.rs:513 — byte-identical
+#   file:line to the lane's, so unchanged.
+#
+# aion-server --no-default-features:
 clippy::unnecessary_filter_map	this `.filter_map(..)` can be written more simply using `.map(..)`
 clippy::unused_async	unused `async` for function with no await statements
 clippy::unused_self	unused `self` argument

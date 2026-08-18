@@ -1,7 +1,7 @@
-    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
+    Checking aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto-generated)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
-    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
-    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-worker)
     Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-client)
     Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 06s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 52.44s

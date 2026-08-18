@@ -1,7 +1,17 @@
-    Blocking waiting for file lock on package cache
-    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
+    Checking aion-core v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-core)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
+    Checking aion-mcp v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-mcp)
+    Checking aion-darwin-acl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-darwin-acl)
+    Checking aion-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-package)
+    Checking aion-store v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store)
+    Checking aion-integrations v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-integrations)
+    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
+    Checking aion-awl v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-awl)
+    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-worker)
+    Checking aion-toolchain v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-toolchain)
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion)
     Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
+    Checking aion-awl-package v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-awl-package)
 error: could not compile `aion-server` (lib) due to 5 previous errors
 warning: build failed, waiting for other jobs to finish...
 error: could not compile `aion-server` (lib test) due to 3 previous errors
