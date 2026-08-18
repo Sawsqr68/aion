@@ -49,7 +49,7 @@ workflow repo_gates
   input repo: String
   input runner: String
   outcome clean: type Clean, route success
-  outcome red:   type Red,   route failure
+  outcome red:   type Red,   route success
 
 /// One gate command's own result. `finding_count` is that gate's share of the
 /// deduplicated findings, so the three counts and the `findings` list are two

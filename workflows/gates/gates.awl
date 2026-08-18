@@ -35,6 +35,16 @@
 //! in sequence, and the worker-crate leg (its own workspace, its own lock)
 //! runs sequenced too so the box is never contended.
 //!
+//! VERDICT IS DATA, NEVER WORKFLOW FAILURE (aion#58, Tom's ruling:
+//! "returning failure on the tests is a successful outcome to the
+//! workflow… it's completed, and the implication of Failed is that it
+//! didn't complete"): a battery that MEASURES completes, red or green,
+//! with the verdict in its result payload — consumers read the verdict
+//! from the outcome type (Clean / Failing), not from workflow status.
+//! Terminal workflow failure is reserved for could-not-measure: a leg's
+//! activity failing terminally (broken or cancelled measurement), the
+//! worker lost, delivery failure.
+//!
 //! WHAT THIS DOES NOT PROVE: a green battery proves what these seven
 //! commands measure against the named checkout, nothing more. Review of the
 //! diff is a reader's job, after this returns. Started by hand, never on a
@@ -47,7 +57,7 @@ workflow gates
   input server_grpc: String
   input server_http: String
   outcome clean:   type Clean,   route success
-  outcome failing: type Failing, route failure
+  outcome failing: type Failing, route success
 
 /// One gate's actual result — exit status is data, never a silent failure.
 /// `passed` is true exactly when the command exited 0 AND the leg's coverage
