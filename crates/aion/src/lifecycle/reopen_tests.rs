@@ -1,13 +1,37 @@
 //! Unit tests for reopen validation, activity selection, and timer rearming.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
 use aion_core::{
     ActivityError, ActivityErrorKind, ActivityId, Event, EventEnvelope, Payload, RunId,
-    WorkflowError, WorkflowId,
+    SearchAttributeSchema, TimerId, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus,
+    WorkflowSummary, status_from_events,
 };
-use chrono::Utc;
+use aion_package::ContentHash;
+use aion_store::visibility::VisibilityStore;
+use aion_store::{
+    EventStore, InMemoryStore, PackageRecord, PackageRouteRecord, ReadableEventStore, RunSummary,
+    StoreError, TimerEntry, WritableEventStore, WriteToken,
+};
+use chrono::{DateTime, Utc};
+use serde_json::json;
+use tokio::sync::Barrier;
 
-use super::{reopened_failed_activities, validate_and_compute_reopened};
+use super::{
+    ReopenWorkflowContext, reopen, reopened_failed_activities, validate_and_compute_reopened,
+};
 use crate::EngineError;
+use crate::durability::{DurabilityError, Recorder, WorkflowStartRecord};
+use crate::lifecycle::completion::{ProcessExitContext, handle_process_exit_attempt};
+use crate::lifecycle::completion_retry::{TerminalIntent, TerminalProgress};
+use crate::lifecycle::terminal_reconcile_gate;
+use crate::loader::WorkflowCatalog;
+use crate::registry::{
+    CompletionNotifier, HandleResidency, Registry, WorkflowHandle, WorkflowHandleParts,
+};
+use crate::runtime::{RuntimeConfig, RuntimeHandle, WorkflowProcessOutcome};
+use crate::supervision::SupervisionTree;
 
 fn wf() -> WorkflowId {
     WorkflowId::new(uuid::Uuid::from_u128(1))
@@ -357,4 +381,379 @@ fn a_reopened_run_that_reterminated_reopens_from_the_new_failure() {
         ),
         "only the current lease's failed step is reopened, not the superseded one: {reopened:?}"
     );
+}
+
+struct ResidentRun {
+    context: ProcessExitContext,
+    handle: WorkflowHandle,
+    same_head_store: Arc<SameHeadStore>,
+}
+
+/// An in-memory store whose next two full-history reads return their snapshots
+/// before either caller can proceed. This makes the concurrency twin genuinely
+/// start from one terminal head instead of merely releasing two tasks together.
+struct SameHeadStore {
+    inner: Arc<InMemoryStore>,
+    armed: AtomicBool,
+    reads: AtomicUsize,
+    barrier: Barrier,
+}
+
+impl SameHeadStore {
+    fn new(inner: Arc<InMemoryStore>) -> Self {
+        Self {
+            inner,
+            armed: AtomicBool::new(false),
+            reads: AtomicUsize::new(0),
+            barrier: Barrier::new(2),
+        }
+    }
+
+    fn arm(&self) {
+        self.reads.store(0, Ordering::SeqCst);
+        self.armed.store(true, Ordering::SeqCst);
+    }
+}
+
+#[async_trait::async_trait]
+impl ReadableEventStore for SameHeadStore {
+    async fn read_history(&self, workflow_id: &WorkflowId) -> Result<Vec<Event>, StoreError> {
+        let history = self.inner.read_history(workflow_id).await?;
+        if self.armed.load(Ordering::SeqCst) {
+            let read = self.reads.fetch_add(1, Ordering::SeqCst);
+            if read < 2 {
+                self.barrier.wait().await;
+                if read == 1 {
+                    self.armed.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+        Ok(history)
+    }
+
+    async fn read_history_from(
+        &self,
+        workflow_id: &WorkflowId,
+        from_seq: u64,
+    ) -> Result<Vec<Event>, StoreError> {
+        self.inner.read_history_from(workflow_id, from_seq).await
+    }
+
+    async fn read_run_chain(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Vec<RunSummary>, StoreError> {
+        self.inner.read_run_chain(workflow_id).await
+    }
+
+    async fn list_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
+        self.inner.list_workflow_ids().await
+    }
+
+    async fn list_active(&self) -> Result<Vec<WorkflowId>, StoreError> {
+        self.inner.list_active().await
+    }
+
+    async fn list_paused(&self) -> Result<Vec<WorkflowId>, StoreError> {
+        self.inner.list_paused().await
+    }
+
+    async fn query(&self, filter: &WorkflowFilter) -> Result<Vec<WorkflowSummary>, StoreError> {
+        self.inner.query(filter).await
+    }
+
+    async fn schedule_timer(
+        &self,
+        workflow_id: &WorkflowId,
+        timer_id: &TimerId,
+        fire_at: DateTime<Utc>,
+    ) -> Result<(), StoreError> {
+        self.inner
+            .schedule_timer(workflow_id, timer_id, fire_at)
+            .await
+    }
+
+    async fn expired_timers(&self, as_of: DateTime<Utc>) -> Result<Vec<TimerEntry>, StoreError> {
+        self.inner.expired_timers(as_of).await
+    }
+}
+
+#[async_trait::async_trait]
+impl WritableEventStore for SameHeadStore {
+    async fn append(
+        &self,
+        token: WriteToken,
+        workflow_id: &WorkflowId,
+        events: &[Event],
+        expected_seq: u64,
+    ) -> Result<(), StoreError> {
+        self.inner
+            .append(token, workflow_id, events, expected_seq)
+            .await
+    }
+}
+
+#[async_trait::async_trait]
+impl aion_store::PackageStore for SameHeadStore {
+    async fn put_package(&self, record: PackageRecord) -> Result<(), StoreError> {
+        self.inner.put_package(record).await
+    }
+
+    async fn put_package_with_routes(
+        &self,
+        record: PackageRecord,
+        route_workflow_types: &[String],
+    ) -> Result<(), StoreError> {
+        self.inner
+            .put_package_with_routes(record, route_workflow_types)
+            .await
+    }
+
+    async fn list_packages(&self) -> Result<Vec<PackageRecord>, StoreError> {
+        self.inner.list_packages().await
+    }
+
+    async fn delete_package(
+        &self,
+        workflow_type: &str,
+        content_hash: &str,
+    ) -> Result<(), StoreError> {
+        self.inner.delete_package(workflow_type, content_hash).await
+    }
+
+    async fn put_package_route(
+        &self,
+        workflow_type: &str,
+        content_hash: &str,
+    ) -> Result<(), StoreError> {
+        self.inner
+            .put_package_route(workflow_type, content_hash)
+            .await
+    }
+
+    async fn list_package_routes(&self) -> Result<Vec<PackageRouteRecord>, StoreError> {
+        self.inner.list_package_routes().await
+    }
+}
+
+async fn resident_run() -> Result<ResidentRun, Box<dyn std::error::Error>> {
+    let backing = Arc::new(InMemoryStore::default());
+    let same_head_store = Arc::new(SameHeadStore::new(Arc::clone(&backing)));
+    let store = Arc::clone(&same_head_store) as Arc<dyn EventStore>;
+    let visibility_store = backing as Arc<dyn VisibilityStore>;
+    let registry = Arc::new(Registry::default());
+    let workflow_id = WorkflowId::new_v4();
+    let run_id = RunId::new_v4();
+    let package_hash = ContentHash::from_bytes([0xaa; 32]);
+    let mut recorder = Recorder::new(workflow_id.clone(), Arc::clone(&store));
+    recorder
+        .record_workflow_started(
+            Utc::now(),
+            WorkflowStartRecord {
+                workflow_type: "checkout".to_owned(),
+                input: Payload::from_json(&json!({ "order": 51 }))?,
+                run_id: run_id.clone(),
+                parent_run_id: None,
+                package_version: aion_core::PackageVersion::new(package_hash.to_string()),
+            },
+        )
+        .await?;
+    let handle = WorkflowHandle::new(WorkflowHandleParts {
+        workflow_id: workflow_id.clone(),
+        run_id: run_id.clone(),
+        // Keep the synthetic terminal leftover outside the runtime's pid range.
+        // The runtime's first spawned test process can legitimately be pid 1,
+        // and `remove_if_pid` identifies leases by pid.
+        pid: u64::MAX,
+        workflow_type: "checkout".to_owned(),
+        namespace: String::from("default"),
+        loaded_version: package_hash.clone(),
+        cached_status: WorkflowStatus::Running,
+        residency: HandleResidency::Resident,
+        recorder,
+        completion: CompletionNotifier::new(),
+    });
+    registry.insert((workflow_id, run_id), handle.clone())?;
+
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("checkout_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test("checkout", "checkout_deployed", "run", package_hash);
+
+    Ok(ResidentRun {
+        context: ProcessExitContext {
+            store,
+            visibility_store,
+            registry,
+            catalog,
+            runtime,
+            supervision: Arc::new(SupervisionTree::new()),
+            tokio_handle: tokio::runtime::Handle::current(),
+            search_attribute_schema: Arc::new(SearchAttributeSchema::new()),
+        },
+        handle,
+        same_head_store,
+    })
+}
+
+fn reopen_context(context: &ProcessExitContext) -> ReopenWorkflowContext<'_> {
+    ReopenWorkflowContext {
+        store: Arc::clone(&context.store),
+        visibility_store: Arc::clone(&context.visibility_store),
+        catalog: Arc::clone(&context.catalog),
+        runtime: &context.runtime,
+        supervision: Arc::clone(&context.supervision),
+        registry: &context.registry,
+        search_attribute_schema: Arc::clone(&context.search_attribute_schema),
+    }
+}
+
+fn failed_intent() -> TerminalIntent {
+    TerminalIntent::from_outcome(Ok(WorkflowProcessOutcome::Failed(WorkflowError {
+        message: String::from("resident workflow failed"),
+        details: None,
+    })))
+}
+
+async fn drive_failed_terminal(run: &ResidentRun) -> Result<(), EngineError> {
+    let mut progress = TerminalProgress::NotRecorded;
+    handle_process_exit_attempt(&run.context, &run.handle, &failed_intent(), &mut progress).await
+}
+
+fn reopened_count(history: &[Event]) -> usize {
+    history
+        .iter()
+        .filter(|event| matches!(event, Event::WorkflowReopened { .. }))
+        .count()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn reopen_after_result_before_terminal_registry_reconcile_succeeds()
+-> Result<(), Box<dyn std::error::Error>> {
+    let resident = resident_run().await?;
+    let workflow_id = resident.handle.workflow_id().clone();
+    let run_id = resident.handle.run_id().clone();
+    let gate = terminal_reconcile_gate::arm(&workflow_id, &run_id);
+    assert!(
+        !gate.was_reached(),
+        "the gate starts before the terminal path"
+    );
+
+    let terminal_context = resident.context.clone();
+    let terminal_handle = resident.handle.clone();
+    let terminal_task = tokio::spawn(async move {
+        let mut progress = TerminalProgress::NotRecorded;
+        handle_process_exit_attempt(
+            &terminal_context,
+            &terminal_handle,
+            &failed_intent(),
+            &mut progress,
+        )
+        .await
+    });
+
+    gate.wait_until_reached().await;
+    assert!(
+        gate.was_reached(),
+        "the completion path reached the armed hold"
+    );
+    let history_at_hold = resident.context.store.read_history(&workflow_id).await?;
+    assert_eq!(status_from_events(&history_at_hold), WorkflowStatus::Failed);
+    let registered_at_hold = resident
+        .context
+        .registry
+        .get(&workflow_id, &run_id)?
+        .ok_or("the resident handle disappeared before reopen")?;
+    assert_eq!(registered_at_hold.cached_status(), WorkflowStatus::Running);
+
+    let reopen_result = reopen(reopen_context(&resident.context), &workflow_id, &run_id).await;
+    drop(gate);
+    terminal_task.await??;
+
+    let reopened = match reopen_result {
+        Ok(handle) => handle,
+        Err(error) => {
+            resident.context.runtime.shutdown()?;
+            return Err(format!(
+                "reopen must succeed while history is Failed and the lagging handle caches Running; got {error}"
+            )
+            .into());
+        }
+    };
+    assert_eq!(reopened.cached_status(), WorkflowStatus::Running);
+    let history = resident.context.store.read_history(&workflow_id).await?;
+    assert_eq!(status_from_events(&history), WorkflowStatus::Running);
+    assert_eq!(reopened_count(&history), 1);
+    resident.context.runtime.shutdown()?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn two_reopens_from_one_terminal_head_admit_exactly_one_writer()
+-> Result<(), Box<dyn std::error::Error>> {
+    let resident = resident_run().await?;
+    let workflow_id = resident.handle.workflow_id().clone();
+    let run_id = resident.handle.run_id().clone();
+    drive_failed_terminal(&resident).await?;
+
+    resident.same_head_store.arm();
+    let barrier = Arc::new(Barrier::new(3));
+    let first_context = resident.context.clone();
+    let first_id = workflow_id.clone();
+    let first_run = run_id.clone();
+    let first_barrier = Arc::clone(&barrier);
+    let first = tokio::spawn(async move {
+        first_barrier.wait().await;
+        reopen(reopen_context(&first_context), &first_id, &first_run).await
+    });
+    let second_context = resident.context.clone();
+    let second_id = workflow_id.clone();
+    let second_run = run_id.clone();
+    let second_barrier = Arc::clone(&barrier);
+    let second = tokio::spawn(async move {
+        second_barrier.wait().await;
+        reopen(reopen_context(&second_context), &second_id, &second_run).await
+    });
+    barrier.wait().await;
+
+    let first_result = first.await?;
+    let second_result = second.await?;
+    let history = resident.context.store.read_history(&workflow_id).await?;
+    assert_eq!(
+        reopened_count(&history),
+        1,
+        "one terminal history head admits exactly one WorkflowReopened writer: {history:#?}"
+    );
+
+    let successes = usize::from(first_result.is_ok()) + usize::from(second_result.is_ok());
+    assert_eq!(successes, 1, "exactly one reopen caller succeeds");
+    let (winner, loser) = match (first_result, second_result) {
+        (Ok(winner), Err(loser)) | (Err(loser), Ok(winner)) => (winner, loser),
+        (first, second) => {
+            resident.context.runtime.shutdown()?;
+            return Err(
+                format!("expected one winner and one loser, got {first:?} and {second:?}").into(),
+            );
+        }
+    };
+    let legitimate_loser = match &loser {
+        EngineError::InvalidState { reason } => reason.contains("concurrent reopen"),
+        EngineError::Durability(DurabilityError::Store(
+            aion_store::StoreError::SequenceConflict { .. },
+        )) => true,
+        _ => false,
+    };
+    assert!(
+        legitimate_loser,
+        "the losing reopen must see a replaced lease or a sequence conflict, got {loser}"
+    );
+
+    let registered = resident
+        .context
+        .registry
+        .get(&workflow_id, &run_id)?
+        .ok_or("the winning reopen handle was evicted")?;
+    assert_eq!(registered.pid(), winner.pid());
+    resident.context.runtime.shutdown()?;
+    Ok(())
 }

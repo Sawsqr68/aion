@@ -419,12 +419,16 @@ async fn reopen_clears_the_lingering_handle_of_a_run_that_failed_while_resident(
     Ok(())
 }
 
+/// A second caller is rejected once the winner's durable marker projects the run
+/// as `Running`.
+///
+/// The old version of this test treated a `Running` cached status over still-
+/// `Failed` history as proof of a concurrent reopen. Issue #51 showed that premise
+/// is false: terminal reconciliation can lag the completion result, so history is
+/// authoritative and the lingering handle's status is only a cache.
 #[tokio::test]
-async fn reopen_still_rejects_a_genuinely_running_concurrent_reopen()
+async fn reopen_rejects_a_second_caller_once_the_winner_has_appended()
 -> Result<(), Box<dyn std::error::Error>> {
-    // The counterpart guard: a live handle whose cached status is NON-terminal
-    // is a concurrent reopen driving the run — reject, and never append a
-    // second WorkflowReopened.
     let package = fixture_package("wait")?;
     let hash = package.content_hash().to_string();
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
@@ -439,7 +443,7 @@ async fn reopen_still_rejects_a_genuinely_running_concurrent_reopen()
         .build()
         .await?;
 
-    let winner = lingering_terminal_handle(
+    let lagging_leftover = lingering_terminal_handle(
         &store,
         &workflow_id,
         &run_id,
@@ -449,8 +453,10 @@ async fn reopen_still_rejects_a_genuinely_running_concurrent_reopen()
     .await?;
     engine
         .registry()
-        .insert((workflow_id.clone(), run_id.clone()), winner)?;
+        .insert((workflow_id.clone(), run_id.clone()), lagging_leftover)?;
 
+    let winner = engine.reopen_workflow(&workflow_id, &run_id).await?;
+    assert_eq!(winner.cached_status(), WorkflowStatus::Running);
     assert!(matches!(
         engine.reopen_workflow(&workflow_id, &run_id).await,
         Err(EngineError::InvalidState { .. })
@@ -461,7 +467,10 @@ async fn reopen_still_rejects_a_genuinely_running_concurrent_reopen()
         .iter()
         .filter(|event| matches!(event, Event::WorkflowReopened { .. }))
         .count();
-    assert_eq!(reopened_count, 0, "the rejected reopen must not append");
+    assert_eq!(
+        reopened_count, 1,
+        "the winner appends once and the rejected second caller appends nothing"
+    );
 
     engine.shutdown()?;
     Ok(())
