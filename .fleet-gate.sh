@@ -8,6 +8,8 @@
 # own mix is the migration's proof, measured where the refusal lived.
 PATH="$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
+# cargo itself resolves ~/.cargo and ~/.rustup through HOME — default it too.
+if [ -z "${HOME:-}" ]; then HOME=/home/aion; export HOME; fi
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "FAIL: cargo not found on PATH ($PATH)" >&2
