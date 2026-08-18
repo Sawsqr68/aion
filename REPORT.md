@@ -360,11 +360,11 @@ reported above in its own section rather than buried in a diff.
 
 ## Landing data
 
-- Branch head: <!-- HEAD-SHA -->
+- Branch head: `a16b1b463` (branch `26-py-heartbeat`)
 - Commits:
   - `7152df56a` `test(26,50): red — an idle Python worker sends nothing, and a liveness ping tears its session down`
   - `a437314b3` `fix(26,50): the Python runtime beats its own connection lease and answers the server's probe`
-  - <!-- GATE-COMMIT -->
+  - `a16b1b463` `gate(26,50): the lane's record — extraction battery, instrument proof, and REPORT.md`
 - No push, no merge.
 - `#26` closes. `#50` stays open for its TypeScript half — that SDK's
   `receiveTasks` still drops the ping silently, which is the quieter and
