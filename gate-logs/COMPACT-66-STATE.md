@@ -5218,3 +5218,10 @@ Post-restart wave (15r3/14r3/18r3/6r3/28 + 12r2 + probe 15-r4's first attempt) A
   - fleet-70-beamr-floor = 6aa7f074-67c9-4a17-9941-1272977cb8b1 (run 57118390). Base fleet-70 (gate: LOCK WITNESS zero beamr <0.19.2 + FULL workspace test NO gleam exclusions — runtime_codecs green on box mix IS the proof + workspace clippy). One leg "migrate", binding spec = floor bump + transitive-pin census (third-party old pin = STOP and report) + type_chunk decided from beamr source with written reasoning + API census + no ride-along rewrites.
 - Sequencing: #69/#72 fix flight HELD until fleet-70 lands (worker-plane surfaces + likely shares root; also #28 headroom). #53 flight still Running. FOUR fleet_dev capable of console visibility tonight: 53, 66-67, 70, then 69/72.
 - Monitor bm* replaced: new monitor over three flights (2-min poll). Inputs at scratchpad/fleet-{66-67,70}-input.json.
+
+## ZU-19 — fleet-53 instrument failure + three-way gate hardening (16:2xZ)
+
+- **fleet-53-fix FAILED gates_red on an INSTRUMENT bug, not code**: gate ran with EMPTY HOME → PATH="/.cargo/bin:..." → "cargo not found" red on all 3 rounds; the fix agent was correctly walled out of the gate script so it could not repair the instrument. The leg's code work (commit 2360685a + fix-round commits) is intact in the box merged tree.
+- **Hardening landed everywhere**: .fleet-gate.sh on branches fleet-53/fleet-66-67/fleet-70 now (a) puts /home/aion/.cargo/bin absolute FIRST in PATH, (b) defaults HOME=/home/aion when empty (cargo needs HOME for registry+rustup). Pushed to origin; cherry-picked into BOTH live flights' box clones (fleet-66-67-loudness repo @be607848, fleet-70-beamr-floor repo @864fecab) BEFORE their gates fire.
+- **fleet-53 SALVAGE running**: gate script fixed in its merged tree (head d0a96201), detached salvage gate launched 16:29:09Z (SALVAGE-GATE.txt, rc-gated + DONE marker). On green: my review of the diff → push fleet-53-result → close #53. On red: real findings, feed a fix.
+- OPEN QUESTION for a future row: WHY is HOME empty in the workflow's gate action context (worker plain-activity env contract) — attribute before minting.
