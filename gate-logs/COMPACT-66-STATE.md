@@ -4938,3 +4938,48 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
 - Fleet-53 (Waffles' raw stunt): superseded by this build; its report/PR may still arrive for my adjudication as row owner.
 - Identity question (fleet runs under Tom's auth vs dedicated credential) with Tom; e2e rode his standing acceptance (paper §6.3).
 - ZU-7b: NEXT COMMISSION (Waffles seq=105, Tom's): FLEET_DEV ON THE BOX — first task = GAP READ of workflows/fleet-dev/fleet_dev.awl against box deployment, NOT a build. Tom's constraint: mechanical steps (clone/push/git-shaped) = DETERMINISTIC STRUCTURED ACTIVITIES typed in/out, no agent improvising git. Waffles' expected delta: investigate's ops legs (clone/teardown reusable) + NEW push-with-receipt activity (typed refusal on rejection) + blackboard root workspace_root-relative + fanout/fanin/gates scripts currently Mac-authored (counsel harness npx path is Mac's /opt/homebrew — box has NO npx). Supervised first run carries a REAL fulcrum brief (Themis shaping; Tom named fulcrum as test cargo). Report honest delta to Waffles when read. Flight-landed message SENT (seq=106) incl. HIGH report grade + duplicated-classifier finding.
+
+## ZU-8 — 2026-08-18T12:0xZ (post-compact turn: gap read delivered, slot-6 firing, #64 capture running)
+
+- **GAP READ DELIVERED + ACCEPTED** (Waffles seq=112): gate-logs/fleet-dev-box/GAP-READ.md,
+  commit 53a6f807c (investigate-workflow). D1 = the find: worker `run json` discards stdout on
+  nonzero exit (repo_gates_worker.awl:38-42) → the five server-run mechanical actions need the
+  exit-zero-always typed facing on the box or a red gate loses its findings. Re-facing REQUIRED
+  per Waffles.
+- **D4 SETTLED BY TOM'S WORD** (via Waffles seq=113): "I've authenticated both Claude and Norn on
+  that box" — counsel MAY go resident under his auth on THIS box; dedicated fleet identity = rec
+  at box three. Runtime mechanics mine: box has bunx (/home/aion/.bun/bin/bunx), NO node/npx;
+  claude binary location unverified (auth is Tom's word; verify binary+handshake at preflight).
+  Counsel harness → bunx + preflight: production-argv ACP handshake proof before seating.
+  My hybrid judgment (seq=113 out): counsel-home split ALSO clears — plan/judge touch the tree at
+  two phase-bounded moments; git as transport (plan/briefs travel IN COMMITS; push-with-receipt +
+  pull mirror at the boundaries) = zero-credential fallback, no longer forced.
+- **SLOT-6 BATTERY FIRING** since ~11:53Z on aion-wt-59-linux-green (head a3a2d466c): 3 legs
+  (test --workspace, clippy --workspace, clippy -p aion-server), manifest at
+  gate-logs/62-stack-battery/manifest.txt, watcher bnfrb9gsa. On DONE: land stack on main, close
+  #57/#59/#62, cargo clean worktree same breath, mark queue line 6 DONE + push, move rocketfish,
+  gates run 9. Waffles line 7 preps on my DONE.
+- **LANE-1**: FT-3 = closure oracle toolchain pin (Mac OTP29/gleam1.17.0 vs box OTP27/gleam1.18.1),
+  receipt ~/lane1-repro/false-trigger-3/. v3 died rc=127 (detached PATH). Loop v4 queued BEHIND
+  capture (auto-chains): --no-fail-fast + --exclude aion-awl (#64) + --skip closure oracle, PATH
+  pinned. QUEUE LINE 12 TAKEN (docs c930eb6): instrumented nextest full-capture Mac run = the
+  definitive instrument. Disposition lean on record: closure test declares its pin, refuses-with-
+  name off-pin (fix-lane item).
+- **#64 CAPTURE RUNNING** (Artemis m=3317 protocol, launched 11:58:49Z, watcher by0qpn20i):
+  clocksource=kvm-clock; 24 io_uring fds; fdinfo t0 12:01:49Z + t1 12:01:59Z TAKEN; solo runs
+  (pipes/duration_boundary/fork_generality) then --test-threads=1 in progress; artifacts
+  ~/lane1-repro/hang-2/. On CAPTURE-COMPLETE: compute SqTail-vs-CqHead deltas per fd, send pack
+  to Artemis (persistent delta = op-submitted-never-completed CONFIRMED; all drained = her
+  candidate dies, look at timers/kvm-clock).
+- **DISPOSALS DONE** (Waffles seq=107): #65 minted (classifier one-truth-in-six; open question:
+  does divergence checker reach the PRODUCTION copy — read not assume); #63 comment = adjudicated
+  refusal of unconditional File-IO-failure title (comment 5327882972).
+- **ROWS POSTED** on aion/builds (Tom's commissions, seq=109/110, sequenced behind pipeline):
+  push-triggered gates 8a12bbbf; update subscriptions + design paragraph (MCP ephemeral arm +
+  Meridian-DM durable arm over ONE subscription record; feed = lifecycle→signal bridge;
+  delivery-as-activity) e149af83.
+- **INSTRUMENT LAW 4th exhibit**: pgrep -f pattern matched MY OWN ssh command line → pgroup
+  self-kill. Bracket-escape ([r]epro) now standard; Waffles sealed it into the law.
+- Pipeline order unchanged: red-first arms (hard gate) → fulcrum brief supervised fleet_dev run
+  (Themis shaping) → battery landing → lane-1 verdict → #64 pack. PROMISE standing: ONE message
+  to Tom at cluster-landed + second-device-running.
