@@ -1,5 +1,3 @@
-    Checking aion-proto-generated v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto-generated)
    Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-server)
-    Checking aion-proto v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-proto)
-    Checking aion-worker v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-worker)
+    Checking aion-store-haematite v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-35-libsql/crates/aion-store-haematite)
 error: could not compile `aion-server` (lib test) due to 2 previous errors
