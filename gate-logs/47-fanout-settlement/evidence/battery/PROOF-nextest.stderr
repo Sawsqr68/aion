@@ -1,0 +1,35 @@
+────────────
+ Nextest run ID 865e339f-99ff-43d7-ba0d-7a0192b3b5aa with nextest profile: default
+    Starting 8 tests across 1 binary (698 tests skipped)
+        FAIL [   0.020s] (1/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+  output ───
+
+    running 1 test
+
+    thread 'runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled' (14854109) panicked at crates/aion/src/runtime/nif_collect_tests/retryable_settlement.rs:306:5:
+    assertion `left == right` failed: a cancellation still resolves an ordinal whose retry trail was open
+      left: Some(Cancelled)
+     right: Some(Failed("PROOF-ONLY flipped assertion"))
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    test runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled ... FAILED
+
+    failures:
+
+    failures:
+        runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 705 filtered out; finished in 0.00s
+
+
+        PASS [   0.012s] (2/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_leaves_the_member_unresolved
+        PASS [   0.257s] (3/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_fail_fast_a_collect_all
+        PASS [   0.265s] (4/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retryable_attempt_record_does_not_win_a_race
+        PASS [   0.011s] (5/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_resolves_the_member_over_the_retry_record
+        PASS [   0.245s] (6/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_fails_fast_with_the_terminals_message
+        PASS [   0.499s] (7/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_retry_record_landing_mid_sweep_leaves_the_replayed_settlement_unchanged
+        PASS [   0.249s] (8/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_terminal_ending_a_retry_trail_wins_a_race_with_the_terminals_message
+────────────
+     Summary [   0.524s] 8 tests run: 7 passed, 1 failed, 698 skipped
+        FAIL [   0.020s] (1/8) aion-rs runtime::nif_collect::tests::retryable_settlement::a_cancellation_over_an_open_retry_trail_resolves_the_member_as_cancelled
+error: test run failed
+(hint: cargo nextest run -R latest to rerun failing tests)

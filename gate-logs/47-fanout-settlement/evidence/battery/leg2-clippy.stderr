@@ -1,0 +1,6 @@
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion)
+   Compiling aion-server v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion-server)
+    Checking aion-client v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/benchmarks/million-processes)
+    Checking aion-cli v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 55.30s

@@ -1,0 +1,8 @@
+leg1_check_rc=0
+leg2_clippy_rc=0
+leg3_nextest_rc=0
+findings_leg1_check=0
+findings_leg2_clippy=0
+findings_leg3_nextest=0
+nextest_summary=     Summary [ 465.673s] 5169 tests run: 5169 passed (7 slow), 0 skipped
+nextest_binaries=1

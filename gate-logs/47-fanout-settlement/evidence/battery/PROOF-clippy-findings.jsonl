@@ -1,0 +1,6 @@
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":535,"column":9,"lint":"unused_variables","message":"unused variable: `unused_binding`"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":534,"column":4,"lint":"dead_code","message":"function `battery_red_proof_probe` is never used"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":535,"column":9,"lint":"unused_variables","message":"unused variable: `unused_binding`"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":534,"column":4,"lint":"dead_code","message":"function `battery_red_proof_probe` is never used"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":536,"column":6,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}
+{"type":"clippy","level":"error","file":"crates/aion/src/runtime/nif_collect_settlement.rs","line":536,"column":6,"lint":"clippy::unwrap_used","message":"used `unwrap()` on an `Option` value"}

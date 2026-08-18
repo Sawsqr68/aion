@@ -1,0 +1,4 @@
+    Checking aion-rs v0.17.0 (/Users/tom/Developer/ablative/stack/aion-wt-47-fanout/crates/aion)
+error: could not compile `aion-rs` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `aion-rs` (lib test) due to 3 previous errors
