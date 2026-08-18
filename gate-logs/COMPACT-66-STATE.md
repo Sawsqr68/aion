@@ -4983,3 +4983,29 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
 - Pipeline order unchanged: red-first arms (hard gate) → fulcrum brief supervised fleet_dev run
   (Themis shaping) → battery landing → lane-1 verdict → #64 pack. PROMISE standing: ONE message
   to Tom at cluster-landed + second-device-running.
+
+## ZU-8b — 12:25Z FLEET_DEV FLIGHT ONE AIRBORNE (Tom's dispatch-now order, seq=119/120)
+
+- Workflow 890793f6-d0f2-423d-aabb-0091014deeea, run 8bc3225c, name fleet-63-first,
+  started 12:19:04Z. Monitor bzhqni13v (persistent, polls describe).
+- Sequencing OVERRIDDEN by Tom: dispatch now, hardening (remaining arms, full red-first
+  battery of fleet faces) BEHIND the flight, gates unsupervised operation only.
+- Cargo: #63 classifier fix. Branch fleet-63 (6087cf216) = origin/main + .fleet-gate.sh
+  (box-scoped gate: aion-toolchain tests + awl-package sdk_closure_freshness minus closure
+  oracle + clippy on both; exclusions declared IN script per #64 + FT-3). Result branch
+  fleet-63-result. Input JSON at scratchpad/fleet-63-input.json.
+- Deployed fleet_dev$96848177a7a79ba9 (16 steps). Workers on box (PATH incl .bun+.local):
+  fleet-ops-workflows (awl, 8 actions, pid 166957), fleet-counsel-workflows (ACP/bunx,
+  plan+judge, pid 166958), fleet-dev-workflows (norn, delegate, pid 166959). Logs
+  ~/fleet/fleet-{ops,counsel,dev}-worker.log.
+- RECEIPTS: clone ok head=6087cf216; counsel control EXACT "fleet-counsel-tree-ok"
+  end_turn session 590fa093 — SEATED ACP HANDSHAKE PROVEN (resident Claude under Tom's
+  box auth); dev control EXACT "fleet-dev-tree-ok" session b946324f. Planner running
+  (seq 13+, plan step).
+- Flight path remaining: plan → plan_check → fanout → 2 legs parallel (copies/production)
+  → fanin → report_check → gate (max 3 visits, fix_round loop via committed
+  .fleet/gates/RED-LATEST.md) → judge (token JUDGE-CLEAR-FLEET-63) → push → teardown → done.
+  Failure routes KEEP tree at /home/aion/fleet/runs/fleet-63-first.
+- Script sha256 (Mac=box verified fleet-clone 47d31cd7…): full list in gate-logs/… bin/
+  committed at fc48a02f2.
+- Waffles seq=121/122 sent (dispatch + controls). Tom watching console.
