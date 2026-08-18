@@ -5058,3 +5058,35 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
 - **Scoping docs owed tonight**: rocketfish (RAM story closed, memtest downtime item, class
   of work = gates-offload; dev seat = measurement question) + Dean-Mac (auth list for Tom's
   docket: claude, norn, gh; python double-fork launch; which seats). Cron 47fabb1d ticks :43.
+
+## ZU-8e — 13:07Z PRE-COMPACT HANDLE SHEET (read with ZU-8d)
+
+LIVE MONITORS/TASKS (harness re-invokes on events — do not re-create):
+- bzhqni13v = flight one 890793f6 (fleet_dev, IN FIX ROUND — next event decides the arc; on
+  green→judge→push→teardown→done: report Waffles, close #34 with receipt, close #63 via
+  result branch fleet-63-result review, amend #65 topology (planner: aion-awl copy differs,
+  398 vs 796 lines), THEN dispatch hardening cargo (link 1, base_ref investigate-workflow)
+  and reseat workers on ceiling-free doc fleet_dev$2330baef).
+- bo080db2q = investigate-9 (4f8ea267) + investigate-56 (1ef78cdb).
+- bv1v2gwhi = slot-6 battery (Mac, manifest gate-logs/62-stack-battery/manifest.txt in
+  aion-wt-59-linux-green; on BATTERY-COMPLETE all rc=0: land stack 62-linux-tighten→main,
+  close #57/#59/#62, cargo clean worktree same breath, DONE mark on queue line 6 WITH
+  populations as accepted (docs repo battery-queue-20260818.md), notify Waffles (his line 7
+  preps), move rocketfish workspace to new main, gates run 9).
+- bnfrb9gsa = stale first battery watcher (fires on same manifest — harmless duplicate).
+- Round-5 loud loader RERUNNING detached on box (no watcher armed for rerun! check
+  ~/lane1-repro/hang-5/CAPTURE.txt for ROUND5-COMPLETE + loader-failures.txt → ship to
+  Artemis: real failures = her lane + the failing .beam bytes; zero failures = hypothesis
+  needs new branch). Round-4 artifacts hang-4/ (bt full + vm-slice grep; empty slice grep =
+  consistent per her pre-statement).
+- Cron 47fabb1d = :43 watch tick (Waffles day-file staleness >90min → DM Tom = the alarm).
+- Lane-1 v4 loop on box (loop.log; FIRST-RED or TEN-GREEN; adjudicate per
+  gate-logs/lane1-racing/ADJUDICATION-INPUTS.md).
+DISPATCH TEMPLATES: scratchpad/investigate-63-input.json (base), 51/53/13/9/56 variants;
+fleet input scratchpad/fleet-63-input.json. Investigate dispatch = jq .issue/.investigate_prompt
+edit + aion start investigate --input-file X --name investigate-N.
+CHAIN (approved): after current: #48, #13-fix, #9-fix, #56-fix, #22+#23, assistant cluster,
+then engine-deep one at a time (#46,#12,#15,#14,#18,#6,#52,#49), docs #10/#11/#17 filler.
+#28 = hazard (firing IS diagnosis, notice-then-swap ruling). #34 close at flight-one landing.
+OWED TONIGHT: rocketfish scoping doc + Dean-Mac scoping doc (auth list → Waffles → Tom's
+docket). Night promise: Waffles gets phase-boundary DMs; Tom gets milestones via Waffles only.
