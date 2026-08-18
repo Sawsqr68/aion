@@ -22,15 +22,27 @@
 //! [`super::declared_body_transcript`]). The activity's recorded result is
 //! untouched by this: it still carries the command's complete output.
 //!
-//! # The command is bounded by what the dispatch authored
+//! # The command can be stopped, by its bound and by its run
 //!
-//! A dispatch carrying an authored per-attempt timeout (#223) ends its command
-//! at that bound HERE, in the server, where the process is — see
-//! [`run_bounded`]. The engine's own deadline stops the run WAITING and cannot
-//! reach a process, which is the right division of labour for a remote worker
-//! and no division at all for a body the server itself started. A dispatch that
-//! authored no bound is unbounded, exactly as before: the server adds no
-//! deadline of its own.
+//! Two things end a server-executed command early, and both reach the same
+//! cancellation the worker path already acts on — `SIGTERM` → grace →
+//! `SIGKILL` across the whole process group, with the verdict withheld until
+//! the group has been proven gone.
+//!
+//! The first is the attempt's own deadline. A dispatch carrying an authored
+//! per-attempt timeout (#223) ends its command at that bound HERE, in the
+//! server, where the process is — see [`run_bounded`]. The engine's own
+//! deadline stops the run WAITING and cannot reach a process, which is the
+//! right division of labour for a remote worker and no division at all for a
+//! body the server itself started. A dispatch that authored no bound is
+//! unbounded, exactly as before: the server adds no deadline of its own.
+//!
+//! The second is the run being cancelled. Every executing attempt registers in
+//! [`super::declared_body_cancel::DeclaredCommandAttempts`] for exactly as long
+//! as its command runs, which is how the cancel path reaches an activity no
+//! worker holds and no heartbeat tracks. An attempt that cannot register is
+//! refused rather than run: a command a cancelled run could not stop is the
+//! defect the registration exists to prevent.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -40,6 +52,7 @@ use aion_package::{ActionBodyContract, ContentHash};
 use aion_worker::shell::ShellAction;
 
 use super::declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
+use super::declared_body_cancel::DeclaredCommandAttempts;
 use super::declared_body_selection::select_declared_body;
 use super::declared_body_transcript::publish_declared_transcript;
 use super::workspace_root::{WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot};
@@ -244,21 +257,28 @@ impl DeclaredBodies for EngineDeclaredBodies {
 pub struct DeclaredCommandDispatcher {
     inner: Arc<dyn ActivityDispatcher>,
     bodies: DeclaredBodySource,
+    attempts: DeclaredCommandAttempts,
     tokio: tokio::runtime::Handle,
     workspace_root: WorkspaceRoot,
     transcript: ActivityEventPublisher,
 }
 
 impl DeclaredCommandDispatcher {
-    /// Wrap `inner`, consulting `bodies` before every dispatch, expanding
-    /// `{workspace_root}` in declared commands with the server-resolved
-    /// `workspace_root`, and streaming each executed command's output onto
-    /// `transcript` — the deployment's one transcript sequencer, shared with
-    /// every agent step.
+    /// Wrap `inner`, consulting `bodies` before every dispatch, registering
+    /// every attempt it executes in `attempts` so the run's cancel can reach
+    /// it, expanding `{workspace_root}` in declared commands with the
+    /// server-resolved `workspace_root`, and streaming each executed command's
+    /// output onto `transcript` — the deployment's one transcript sequencer,
+    /// shared with every agent step.
+    ///
+    /// `attempts` is required rather than optional because a dispatcher without
+    /// one would execute commands nothing could stop, which is precisely the
+    /// state this argument exists to end.
     #[must_use]
     pub fn new(
         inner: Arc<dyn ActivityDispatcher>,
         bodies: DeclaredBodySource,
+        attempts: DeclaredCommandAttempts,
         tokio: tokio::runtime::Handle,
         workspace_root: WorkspaceRoot,
         transcript: ActivityEventPublisher,
@@ -266,25 +286,26 @@ impl DeclaredCommandDispatcher {
         Self {
             inner,
             bodies,
+            attempts,
             tokio,
             workspace_root,
             transcript,
         }
     }
 
-    /// Execute one declared command attempt and encode the outcome onto the
-    /// FFI string contract (`retryable:`/`terminal:` on the error side).
-    fn run_declared_command(
+    /// Parse the declared command into the executor's action, with the
+    /// server-resolved `{workspace_root}` already spliced in.
+    ///
+    /// Ratification condition (#139): a body that USES the placeholder is
+    /// refused terminally, by name, when the root cannot resolve to an absolute
+    /// directory that exists — no fallback to cwd, temp, or anything else. A
+    /// body without the placeholder never reaches the resolution at all
+    /// (`expand` returns `Ok(None)` untouched).
+    fn declared_action(
         &self,
         request: &ActivityDispatch,
         command: &str,
-    ) -> Result<String, String> {
-        let arguments = decode_arguments(&request.input)?;
-        // Ratification condition (#139): a body that USES the placeholder is
-        // refused terminally, by name, when the root cannot resolve to an
-        // absolute directory that exists — no fallback to cwd, temp, or
-        // anything else. A body without the placeholder never reaches the
-        // resolution at all (`expand` returns `Ok(None)` untouched).
+    ) -> Result<ShellAction, String> {
         let expanded = self.workspace_root.expand(command).map_err(|error| {
             format!(
                 "terminal:declared body for action `{name}` uses the {placeholder} \
@@ -308,12 +329,57 @@ impl DeclaredCommandDispatcher {
         let command = expanded
             .as_ref()
             .map_or(command, |expansion| expansion.command.as_str());
-        let action = ShellAction::new(command).map_err(|error| {
+        ShellAction::new(command).map_err(|error| {
             // The AWL checker refuses these at compile time, so reaching this
             // arm means a defective contract got deployed — name the defect
             // rather than hiding it behind a generic dispatch failure.
             format!("terminal:declared command failed to parse at dispatch: {error}")
-        })?;
+        })
+    }
+
+    /// Put the attempt on this server's cancel path BEFORE its command starts.
+    ///
+    /// The returned guard keeps it there for exactly as long as the command
+    /// runs, so an attempt that ended — completed, failed, or unwound — can
+    /// never be signalled afterwards. A registration that cannot be made is a
+    /// command nothing could stop, so the dispatch is refused rather than run:
+    /// an uncancellable command on the operator's machine is the whole defect
+    /// this registration exists to prevent, and starting one to avoid an error
+    /// message would be choosing it.
+    fn join_cancel_path(
+        &self,
+        request: &ActivityDispatch,
+        cancellation: &aion_worker::ActivityCancellationHandle,
+    ) -> Result<super::DeclaredAttemptRegistration, String> {
+        self.attempts
+            .register(
+                super::AttemptKey::new(
+                    request.workflow_id.clone(),
+                    request.run_id.clone(),
+                    request.activity_id.clone(),
+                    request.attempt,
+                ),
+                cancellation.clone(),
+            )
+            .map_err(|error| {
+                format!(
+                    "terminal:declared body for action `{name}` cannot dispatch: the attempt \
+                     could not join this server's cancel path, and a command a cancelled run \
+                     could not stop must not be started: {error}",
+                    name = request.name,
+                )
+            })
+    }
+
+    /// Execute one declared command attempt and encode the outcome onto the
+    /// FFI string contract (`retryable:`/`terminal:` on the error side).
+    fn run_declared_command(
+        &self,
+        request: &ActivityDispatch,
+        command: &str,
+    ) -> Result<String, String> {
+        let arguments = decode_arguments(&request.input)?;
+        let action = self.declared_action(request, command)?;
         // The live transcript seam for this attempt. The context owns the
         // sending end, so dropping it after the run closes the stream and ends
         // the pump — which is then awaited, so no observed line is abandoned
@@ -326,6 +392,7 @@ impl DeclaredCommandDispatcher {
             request.attempt,
             events,
         );
+        let registration = self.join_cancel_path(request, &cancellation)?;
 
         tracing::info!(
             operation = "declared_command_dispatch",
@@ -366,44 +433,56 @@ impl DeclaredCommandDispatcher {
             }
             ended
         });
+        // The command is over and its group is gone, so the attempt leaves the
+        // cancel path. Dropped explicitly, here and not earlier: while this
+        // lives, a cancel arriving mid-run still reaches the process.
+        drop(registration);
 
-        let outcome = match ended {
-            AttemptEnd::Ran(outcome) => outcome,
-            AttemptEnd::Expired { bound, ran_anyway } => {
-                if let Some(exit_code) = ran_anyway {
-                    // The command reached its own end inside the stopping
-                    // window. Its result is discarded — the attempt is already
-                    // recorded as having outlived its bound, and answering with
-                    // a late success would contradict a terminal the run has
-                    // already been told about — but the fact is said, not
-                    // swallowed.
-                    tracing::warn!(
-                        operation = "declared_command_dispatch",
-                        workflow_id = %request.workflow_id,
-                        activity_id = %request.activity_id,
-                        activity_name = %request.name,
-                        attempt = request.attempt,
-                        exit_code,
-                        bound_ms = bound.as_millis(),
-                        "the declared command finished while it was being stopped on its \
-                         authored bound; its result is discarded in favour of the timeout"
-                    );
-                }
-                return Err(aion::activity_timeout_reason(bound));
-            }
-        };
+        encode_end(request, ended)
+    }
+}
 
-        match outcome {
-            Ok(result) => serde_json::to_string(&result).map_err(|error| {
-                format!("terminal:declared command result failed to encode: {error}")
-            }),
-            Err(failure) => {
-                let prefix = match failure.classification() {
-                    aion_worker::Classification::Retryable => "retryable",
-                    aion_worker::Classification::Terminal => "terminal",
-                };
-                Err(format!("{prefix}:{}", failure.message()))
+/// Encode how the attempt ended onto the FFI string contract.
+///
+/// Three vocabularies, one per honest outcome: the encoded result, the
+/// classified failure the executor produced (`retryable:`/`terminal:`), and the
+/// engine's own `timeout:` reason for an attempt that outlived its authored
+/// bound.
+fn encode_end(request: &ActivityDispatch, ended: AttemptEnd) -> Result<String, String> {
+    let outcome = match ended {
+        AttemptEnd::Ran(outcome) => outcome,
+        AttemptEnd::Expired { bound, ran_anyway } => {
+            if let Some(exit_code) = ran_anyway {
+                // The command reached its own end inside the stopping window.
+                // Its result is discarded — the attempt is already recorded as
+                // having outlived its bound, and answering with a late success
+                // would contradict a terminal the run has already been told
+                // about — but the fact is said, not swallowed.
+                tracing::warn!(
+                    operation = "declared_command_dispatch",
+                    workflow_id = %request.workflow_id,
+                    activity_id = %request.activity_id,
+                    activity_name = %request.name,
+                    attempt = request.attempt,
+                    exit_code,
+                    bound_ms = bound.as_millis(),
+                    "the declared command finished while it was being stopped on its \
+                     authored bound; its result is discarded in favour of the timeout"
+                );
             }
+            return Err(aion::activity_timeout_reason(bound));
+        }
+    };
+
+    match outcome {
+        Ok(result) => serde_json::to_string(&result)
+            .map_err(|error| format!("terminal:declared command result failed to encode: {error}")),
+        Err(failure) => {
+            let prefix = match failure.classification() {
+                aion_worker::Classification::Retryable => "retryable",
+                aion_worker::Classification::Terminal => "terminal",
+            };
+            Err(format!("{prefix}:{}", failure.message()))
         }
     }
 }
@@ -573,7 +652,8 @@ mod tests {
     use super::super::workspace_root::{WorkspaceRoot, WorkspaceRootError};
     use super::{
         ActivityEventPublisher, DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource,
-        DeclaredCommandDispatcher, DeclaringVersion, DispatchingRun, decode_arguments,
+        DeclaredCommandAttempts, DeclaredCommandDispatcher, DeclaringVersion, DispatchingRun,
+        decode_arguments,
     };
 
     /// What a test returns. Every fallible step is carried rather than
@@ -678,10 +758,33 @@ mod tests {
         None => std::num::NonZeroUsize::MIN,
     };
 
+    /// A dispatcher whose executing attempts nothing external will signal.
+    ///
+    /// Correct for every test whose subject runs to its own end. A test that
+    /// CANCELS its subject needs the registry the cancel signals through, and
+    /// uses [`dispatcher_with_attempts`] to hold the same instance.
     pub(super) fn dispatcher_with_root(
         lookup: DeclaredBodyLookup,
         reply: Result<String, String>,
         workspace_root: WorkspaceRoot,
+    ) -> (
+        DeclaredCommandDispatcher,
+        Arc<Mutex<Vec<String>>>,
+        ActivityEventPublisher,
+    ) {
+        dispatcher_with_attempts(
+            lookup,
+            reply,
+            workspace_root,
+            DeclaredCommandAttempts::new(),
+        )
+    }
+
+    pub(super) fn dispatcher_with_attempts(
+        lookup: DeclaredBodyLookup,
+        reply: Result<String, String>,
+        workspace_root: WorkspaceRoot,
+        attempts: DeclaredCommandAttempts,
     ) -> (
         DeclaredCommandDispatcher,
         Arc<Mutex<Vec<String>>>,
@@ -704,6 +807,7 @@ mod tests {
         let decorated = DeclaredCommandDispatcher::new(
             Arc::new(inner),
             bodies,
+            attempts,
             tokio::runtime::Handle::current(),
             workspace_root,
             transcript.clone(),
@@ -1143,6 +1247,7 @@ mod tests {
                 reply: Ok("\"worker-served\"".to_owned()),
             }),
             bodies,
+            DeclaredCommandAttempts::new(),
             tokio::runtime::Handle::current(),
             WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
             ActivityEventPublisher::new(

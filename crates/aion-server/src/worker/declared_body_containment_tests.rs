@@ -19,7 +19,7 @@ use aion_package::ActionBodyContract;
 
 use aion::ActivityDispatcher as _;
 
-use super::tests::{TestResult, dispatcher_with_root, reached_names, request};
+use super::tests::{TestResult, dispatcher_with_attempts, reached_names, request};
 use super::{DeclaredBodyLookup, DeclaredCommandDispatcher};
 use crate::worker::declared_body_cancel::DeclaredCommandAttempts;
 use crate::worker::heartbeat::HeartbeatTracker;
@@ -144,12 +144,13 @@ fn containment_dispatcher(
     DeclaredCommandAttempts,
 ) {
     let attempts = DeclaredCommandAttempts::new();
-    let (decorated, reached, _transcript) = dispatcher_with_root(
+    let (decorated, reached, _transcript) = dispatcher_with_attempts(
         DeclaredBodyLookup::Declared(ActionBodyContract::Run {
             command: blocking_command(marker),
         }),
         Err("terminal:the worker path must never be reached".to_owned()),
         WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+        attempts.clone(),
     );
     (decorated, reached, attempts)
 }

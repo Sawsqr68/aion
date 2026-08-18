@@ -1661,6 +1661,7 @@ fn build_decorated_dispatcher(
     let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
         dispatcher,
         seams.declared_bodies.clone(),
+        seams.declared_attempts.clone(),
         workspace_root.clone(),
         transcript,
         update_status.clone(),
@@ -1678,6 +1679,7 @@ fn build_decorated_dispatcher(
 fn decorate_activity_dispatcher(
     dispatcher: WorkerActivityDispatcher,
     declared_bodies: crate::worker::DeclaredBodySource,
+    declared_attempts: crate::worker::DeclaredCommandAttempts,
     workspace_root: crate::worker::WorkspaceRoot,
     transcript: crate::activity_publisher::ActivityEventPublisher,
     update_status: crate::update_check::UpdateStatusState,
@@ -1693,6 +1695,7 @@ fn decorate_activity_dispatcher(
     let declared = crate::worker::DeclaredCommandDispatcher::new(
         Arc::new(dispatcher),
         declared_bodies.clone(),
+        declared_attempts,
         tokio::runtime::Handle::current(),
         workspace_root,
         transcript,
