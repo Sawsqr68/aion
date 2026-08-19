@@ -5619,3 +5619,41 @@ context ceiling hit: serve `uvx marimo run --sandbox --headless --host 127.0.0.1
 2722 counter.py` from pocs/counting (kill old: lsof -ti :2721).
 TOM'S LIVE ASK: "front end to reflect that properly, really clearly" — card is built,
 needs serving + a drop to prove it.
+
+## ZU-42 — 2026-08-19T03:2xZ — #85 MECHANISM PROVEN: the JIT CACHE poisons a module permanently
+
+Tom's ruling: "It has to be able to run forever. That's part of the whole pitch… not a
+thing we can enter into a discussion or just accept as a limitation." NO WORKAROUND.
+Built minimal instruments in scratchpad/wall/ (sleep_wall.awl = sleep loop ONLY, no
+worker; nosleep_wall.awl = SAME loop shape, sleep REMOVED, fast activity instead).
+
+**MEASUREMENTS (all on aion 0.18.1 / beamr 0.19.2):**
+1. watch_inbox (3s sleep + activity): died seq 1012, `{bad_generator, <<"3000">>}` —
+   3000 = the SLEEP's own boundary arg. 200 timers + 200 activities done.
+2. nosleep_wall run 1 (FRESH module b5675207): died seq **607**, 201 activities
+   scheduled, last id **200**, `{bad_generator, <<"activity:200">>}` — the ACTIVITY's
+   own identifier. DIFFERENT event count, DIFFERENT arg, SAME 200 waits.
+   → sleep is NOT the cause; the arg is always THE THING BEING WAITED ON.
+3. nosleep_wall run 2, SAME module, same server: died on **activity:0** — the FIRST wait,
+   7 events.
+4. nosleep_wall run 3, same module: **0 activities completed**, died immediately.
+
+**CONCLUSION (differential; only variable = JIT-cache presence):** the hot function in
+the suspend/resume path is JIT-compiled at beamr's DEFAULT_JIT_THRESHOLD=1000 internal
+calls (≈200 waits × ~5 calls). The COMPILED code resumes into the WRONG TARGET — right
+argument, wrong callee (always gleam_json_ffi:object/1 receiving the wait's own value).
+Once compiled, the broken code is CACHED PER MODULE and every LATER run of that workflow
+type dies on its FIRST wait. A server restart clears the cache → cycle repeats.
+**SEVERITY IS WORSE THAN "long workflows die": a workflow TYPE POISONS ITSELF after ~200
+cumulative waits and then fails instantly forever until restart.**
+
+**aion does NOT set jit_threshold** (runtime/handle.rs:149 SchedulerConfig{thread_count,
+nif_private_data, ..Default}) → inherits 1000. beamr exposes
+`SchedulerConfig.jit_threshold: Option<u32>` (scheduler/mod.rs:312). Confirming
+instrument (NOT a cure — memory says the counter saturates and still fires): patch the
+knob through RuntimeConfig (builder-driven per NO-ARBITRARY-LIMITS), rebuild, verify the
+wall MOVES proportionally. Real cure is beamr's compiled-code resume path → ARTEMIS.
+Repro artifacts: scratchpad/wall/{sleep_wall,nosleep_wall}.awl (deployed 1c9fad3f /
+b5675207). sleep_wall run 34d325bf still climbing at bank time (separate module = own
+counter) — expect death ~op 200.
+PAGE FOR TOM: stocktake card serving :2722.
