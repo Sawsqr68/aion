@@ -483,6 +483,7 @@ async fn node_death_reopens_and_redispatches_the_in_vm_thunk() -> TestResult {
             input: Payload::from_json(&json!(key))?,
             run_id: run_id.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new(hash),
         },
         Event::ActivityScheduled {

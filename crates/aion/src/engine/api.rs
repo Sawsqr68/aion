@@ -885,6 +885,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -960,6 +961,7 @@ mod tests {
             input: Payload::new(aion_core::ContentType::Json, b"{}".to_vec()),
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: PackageVersion::new("a".repeat(64)),
         }
     }

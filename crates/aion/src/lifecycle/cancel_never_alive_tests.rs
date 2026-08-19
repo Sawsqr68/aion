@@ -99,6 +99,7 @@ async fn never_alive_run() -> TestResult<NeverAlive> {
                 input: Payload::from_json(&json!({ "label": "input" }))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: PackageVersion::new(pinned_version().to_string()),
             },
         )

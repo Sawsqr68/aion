@@ -47,8 +47,15 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// `final_message` field changed the committed `aion@agent` BEAM. The closure
 /// freshness gate and its focused green prove the committed bytes match a fresh
 /// harvest; this checksum pins those shipped bytes rather than the pre-#241
-/// module.
-const BUNDLE_CHECKSUM: &str = "b301746fa0244ecedff4743ffbbb35f8f80e3426bed834f83f8801d2cabef657";
+/// module. Repinned 2026-08-18 after the beamr 0.19.2 migration's full gate
+/// forced a fresh Gleam 1.18.1/OTP 27 closure harvest (box venue). Repinned
+/// again 2026-08-19 for the v0.18.1 landing: the closure was re-harvested on
+/// the landing gate's venue (Mac, Gleam 1.17.0/OTP 29) — BEAM bytes follow
+/// the host toolchain, so the freshness oracle is venue-bound; estate
+/// toolchain unification is tracked as its own issue. The module set and SDK
+/// version are unchanged; `committed_closure_matches_a_fresh_oracle_harvest`
+/// proves these are the current deterministic shipped bytes.
+const BUNDLE_CHECKSUM: &str = "208007cf39b2d71e8c367b7688fdeb15d0eeea40da10ce4f65c34a09b8d193f7";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -153,9 +160,12 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// mandatory `final_message` regenerated the committed `aion@agent` closure
 /// module, which is an input to every archive. The same-process determinism and
 /// fresh-closure tests are the controls: this pin moves with those intentional,
-/// deterministic shipped bytes.
+/// deterministic shipped bytes. Repinned 2026-08-18 with the fresh Gleam
+/// landing-venue closure (see `BUNDLE_CHECKSUM` notes); the
+/// bundle checksum and freshness proof move in the same change, while the
+/// fixed-input assembly remains deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "9c0181ccdd7a27240ff8a915768b0dfb72184342ae2bd27e301a0f77d4678813";
+    "c98c1c087244c96661da53c137cd0b97ac78aba76c883699a981926cbb8c5b56";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

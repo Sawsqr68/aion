@@ -282,6 +282,7 @@ fn rekey_event(
             input,
             run_id: _,
             parent_run_id,
+            parent_workflow_id,
             package_version,
         } => Ok(Event::WorkflowStarted {
             envelope: rekeyed_envelope(envelope, corpse_workflow),
@@ -289,6 +290,7 @@ fn rekey_event(
             input: swap_marker(input, probe_marker, corpse_marker)?,
             run_id: corpse_run.clone(),
             parent_run_id: parent_run_id.clone(),
+            parent_workflow_id: parent_workflow_id.clone(),
             package_version: package_version.clone(),
         }),
         Event::SearchAttributesUpdated {

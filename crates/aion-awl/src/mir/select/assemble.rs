@@ -66,6 +66,7 @@ pub(super) fn assemble(module: &MirModule) -> Result<Vec<u8>, SelectError> {
         literals: parts.literals,
         string_table: Vec::new(),
         line_info: Vec::new(),
+        type_chunk: None,
     };
 
     let bytes = encode_module(&parsed, &parts.atom_table)?;

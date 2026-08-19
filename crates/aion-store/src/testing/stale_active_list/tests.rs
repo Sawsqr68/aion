@@ -39,6 +39,7 @@ fn started(seq: u64, workflow_id: &WorkflowId) -> TestResult2<Event> {
         input: Payload::from_json(&json!({}))?,
         run_id: RunId::new(Uuid::from_u128(1)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     })
 }

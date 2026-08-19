@@ -652,6 +652,7 @@ mod tests {
             input: payload("input")?,
             run_id: aion_core::RunId::new(uuid::Uuid::from_u128(10)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         })
     }

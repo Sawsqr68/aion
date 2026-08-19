@@ -436,7 +436,7 @@ async fn force_rows_to_stale_claimed(
     workflow_id: &aion_core::WorkflowId,
     ordinals: &[u64],
 ) -> Result<(), TestError> {
-    let store = HaematiteStore::open(data_dir)?;
+    let store = HaematiteStore::open(data_dir, haematite::NodeCacheBudget::Unlimited)?;
     let claimed_at = Utc::now() - chrono::Duration::seconds(60);
     for ordinal in ordinals {
         let dispatch_key = OutboxRow::dispatch_key_for(workflow_id, *ordinal);

@@ -78,6 +78,7 @@ async fn timed_run() -> Result<TimedRun, Box<dyn std::error::Error>> {
                 input: Payload::from_json(&json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -253,6 +254,7 @@ async fn cold_start_finalizes_timed_out_teardown_without_a_registered_handle() -
                 input: Payload::from_json(&json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -429,6 +431,7 @@ async fn teardown_failure_preserves_retry_anchors_then_resumes() -> TestResult {
                 input: Payload::from_json(&json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )

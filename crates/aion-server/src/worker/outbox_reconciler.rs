@@ -403,6 +403,7 @@ mod tests {
             input: Payload::from_json(&serde_json::json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         })
     }

@@ -513,6 +513,7 @@ async fn unload_refuses_pinned_versions_and_succeeds_when_free() -> TestResult {
                 input: input()?,
                 run_id: ghost_run.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: version_of(&v1),
             },
         )

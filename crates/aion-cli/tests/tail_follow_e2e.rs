@@ -489,6 +489,7 @@ fn describe_response() -> Result<generated::DescribeWorkflowResponse, Box<dyn st
         input: Payload::from_json(&json!({}))?,
         run_id: RunId::new(uuid::Uuid::from_u128(PARENT_RUN)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     };
     let summary = WorkflowSummary::from_history(std::slice::from_ref(&started))

@@ -596,6 +596,7 @@ fn inflight_workflow_completes_on_survivor_after_owner_death() -> TestResult {
         input,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new(package.content_hash().to_string()),
     };
     let a_store: Arc<dyn EventStore> = Arc::clone(&node_a.store) as Arc<dyn EventStore>;

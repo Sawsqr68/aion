@@ -519,6 +519,7 @@ async fn start_with_existing_workflow_id_resumes_history_sequence()
                 input: payload("first")?,
                 run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -547,6 +548,7 @@ async fn start_with_existing_workflow_id_resumes_history_sequence()
             workflow_id: Some(workflow_id.clone()),
             routing_key: None,
             parent_run_id: Some(parent_run_id.clone()),
+            parent_workflow_id: None,
             loaded_version: None,
             search_attributes: std::collections::HashMap::new(),
             namespace: None,

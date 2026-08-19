@@ -208,32 +208,39 @@ fn a_committed_beam() -> Result<(String, &'static [u8]), Box<dyn std::error::Err
 /// where the oracle project cannot be built.
 #[test]
 fn a_changed_body_is_invisible_to_exports_and_caught_by_bytes() -> TestResult {
-    let (module, committed) = a_committed_beam()?;
     // Try the behavioural chunks a body edit actually moves. `Code` is the
     // instruction stream; `StrT`/`LitT` hold the string and literal tables a
-    // changed error message lands in. Whichever the beam carries, the mutant
-    // must still parse — a corrupted beam that fails to load would prove
-    // nothing about export-set blindness.
+    // changed error message lands in. Whichever beam and chunk are used, the
+    // mutant must still parse — a corrupted beam that fails to load would prove
+    // nothing about export-set blindness. Search the closure rather than pinning
+    // its first module: compiler releases may make a particular module's final
+    // byte structural while another module still carries a safe behavioural byte.
     let mut proven = None;
-    for chunk in [*b"Code", *b"StrT", *b"LitT"] {
-        let Some(mutated) = flip_last_byte_of_chunk(committed, chunk) else {
-            continue;
-        };
-        let Ok(mutated_exports) = export_set(&mutated) else {
-            continue;
-        };
-        if mutated_exports != export_set(committed)? {
-            continue;
+    'modules: for (module, committed) in sdk_closure_modules() {
+        let committed_exports = export_set(committed)?;
+        for chunk in [*b"Code", *b"StrT", *b"LitT"] {
+            let Some(mutated) = flip_last_byte_of_chunk(committed, chunk) else {
+                continue;
+            };
+            let Ok(mutated_exports) = export_set(&mutated) else {
+                continue;
+            };
+            if mutated_exports != committed_exports {
+                continue;
+            }
+            proven = Some((
+                module.to_owned(),
+                committed,
+                String::from_utf8_lossy(&chunk).into_owned(),
+                mutated,
+            ));
+            break 'modules;
         }
-        proven = Some((String::from_utf8_lossy(&chunk).into_owned(), mutated));
-        break;
     }
-    let (chunk, mutated) = proven.ok_or_else(|| {
-        format!(
-            "no behavioural chunk of `{module}` could be perturbed while holding the export set \
-             constant — the pin cannot demonstrate what it exists to demonstrate"
-        )
-    })?;
+    let (module, committed, chunk, mutated) = proven.ok_or(
+        "no behavioural chunk in the committed closure could be perturbed while holding the \
+         export set constant — the pin cannot demonstrate what it exists to demonstrate",
+    )?;
 
     assert_eq!(
         export_set(&mutated)?,

@@ -32,6 +32,9 @@ pub struct WorkflowStartRecord {
     pub run_id: RunId,
     /// Parent run that continued into this run, when applicable.
     pub parent_run_id: Option<RunId>,
+    /// The parent WORKFLOW that spawned this run as a child (aion#77);
+    /// `None` for operator-started roots and continue-as-new successors.
+    pub parent_workflow_id: Option<WorkflowId>,
     /// Package version this run was resolved against at record time.
     pub package_version: PackageVersion,
 }
@@ -134,6 +137,7 @@ impl Recorder {
             input,
             run_id,
             parent_run_id,
+            parent_workflow_id,
             package_version,
         } = start;
         let recorded_run_id = run_id.clone();
@@ -143,6 +147,7 @@ impl Recorder {
             input,
             run_id,
             parent_run_id,
+            parent_workflow_id,
             package_version,
         })
         .await?;
@@ -182,6 +187,7 @@ impl Recorder {
             input,
             run_id,
             parent_run_id,
+            parent_workflow_id,
             package_version,
         } = start;
         let recorded_run_id = run_id.clone();
@@ -196,6 +202,7 @@ impl Recorder {
                 input,
                 run_id,
                 parent_run_id,
+                parent_workflow_id,
                 package_version,
             },
             Event::SearchAttributesUpdated {
@@ -1183,6 +1190,7 @@ mod tests {
             input: payload("workflow-input")?,
             run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         })
     }
@@ -1202,6 +1210,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1233,6 +1242,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1286,6 +1296,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1336,6 +1347,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1389,6 +1401,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1443,6 +1456,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
                 attributes.clone(),
@@ -1508,6 +1522,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
                 attributes,
@@ -1542,6 +1557,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
                 HashMap::new(),
@@ -1575,6 +1591,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1630,6 +1647,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1672,6 +1690,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: run_id.clone(),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )
@@ -1903,6 +1922,7 @@ mod tests {
                         input: payload("input")?,
                         run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                         parent_run_id: None,
+                        parent_workflow_id: None,
                         package_version: aion_core::PackageVersion::new("a".repeat(64)),
                     },
                 )
@@ -1949,6 +1969,7 @@ mod tests {
                     input: payload("input")?,
                     run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
                     parent_run_id: None,
+                    parent_workflow_id: None,
                     package_version: aion_core::PackageVersion::new("a".repeat(64)),
                 },
             )

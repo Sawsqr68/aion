@@ -2217,7 +2217,11 @@ fn build_haematite_store_with_hook(
 
     let Some(cluster) = cluster else {
         let store = if backend_path.join("config.json").exists() {
-            HaematiteStore::open(&backend_path).map_err(ServerError::from)?
+            // The configured budget rides along as the migration ruling for a
+            // store that predates the field (aion#75: an upgrade must never
+            // present as data loss); a store that already rules keeps its
+            // recorded ruling and this value is ignored.
+            HaematiteStore::open(&backend_path, node_cache_budget).map_err(ServerError::from)?
         } else {
             HaematiteStore::create_with_shard_count(&backend_path, shard_count, node_cache_budget)
                 .map_err(ServerError::from)?
@@ -2651,6 +2655,7 @@ mod tests {
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: PackageVersion::new("a".repeat(64)),
         };
         event_store

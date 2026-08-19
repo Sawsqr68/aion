@@ -41,6 +41,7 @@ fn started(seq: u64) -> Result<Event, crate::PayloadError> {
         input: payload()?,
         run_id: RunId::new(uuid::Uuid::from_u128(10)),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: crate::PackageVersion::new("a".repeat(64)),
     })
 }

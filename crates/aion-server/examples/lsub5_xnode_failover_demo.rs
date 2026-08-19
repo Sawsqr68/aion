@@ -806,6 +806,7 @@ async fn stage_fanout(
                 input: Payload::from_json(&json!({ "fixture": "fanout" })).map_err(demo_error)?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: PackageVersion::new(package.content_hash().to_string()),
             },
         )

@@ -47,7 +47,6 @@ const PRIVATE_DIR_MODE: u32 = 0o700;
 /// same absence of an override.
 const PRIVATE_FILE_MODE: u32 = 0o600;
 
-
 /// A held directory descriptor confining all subsequent operations beneath it.
 pub(crate) struct ConfinedDir {
     dir: Dir,

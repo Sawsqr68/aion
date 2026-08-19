@@ -221,6 +221,7 @@ fn stranded_histories(
             input: Payload::from_json(&json!({"first": true}))?,
             run_id: first_run.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::WorkflowContinuedAsNew {
@@ -237,6 +238,7 @@ fn stranded_histories(
         input,
         run_id: second_run,
         parent_run_id: Some(first_run.clone()),
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     });
     Ok((base, full, first_run))
@@ -343,6 +345,7 @@ async fn recovered_monitor_installation_failure_drains_retained_completion() -> 
         input: Payload::from_json(&json!({"recovered": true}))?,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("07".repeat(32)),
     }];
     let pid = runtime.spawn_test_process()?;
@@ -408,6 +411,7 @@ async fn recovered_reconcile_failure_after_publication_runs_observed_abort() -> 
         input: Payload::from_json(&json!({"recovered": true}))?,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new("08".repeat(32)),
     }];
     let pid = runtime.spawn_test_process()?;
@@ -476,6 +480,7 @@ async fn seed_terminal_with_uncancelled_deadline(
                 input: Payload::from_json(&json!({}))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -585,6 +590,7 @@ async fn adoption_repairs_orphaned_future_dated_terminal_deadline() -> TestResul
             input: Payload::from_json(&json!({}))?,
             run_id: run_id.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
     )
@@ -723,6 +729,7 @@ async fn cold_boot_repairs_predecessor_deadline_before_starting_the_successor() 
             input: Payload::from_json(&json!({}))?,
             run_id: predecessor.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
     )
@@ -868,6 +875,7 @@ async fn a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable() -
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             // The pin must MATCH the catalogued version, or this run is degraded
             // too and the comparison has no baseline. `ContentHash` renders as
             // lowercase hex, so `from_bytes([3; 32])` is "03" thirty-two times.
@@ -890,6 +898,7 @@ async fn a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable() -
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("b".repeat(64)),
         },
     )
@@ -1003,6 +1012,7 @@ async fn a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted() -> 
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1019,6 +1029,7 @@ async fn a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted() -> 
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1102,6 +1113,7 @@ async fn a_terminal_run_forced_into_the_active_list_is_never_made_resident() -> 
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1116,6 +1128,7 @@ async fn a_terminal_run_forced_into_the_active_list_is_never_made_resident() -> 
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1202,6 +1215,7 @@ async fn a_paused_run_forced_into_the_active_list_is_never_made_resident() -> Te
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1217,6 +1231,7 @@ async fn a_paused_run_forced_into_the_active_list_is_never_made_resident() -> Te
             input: Payload::from_json(&json!({}))?,
             run_id: held_run.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1321,6 +1336,7 @@ async fn a_cancelled_run_forced_into_the_active_list_never_has_a_writer_minted()
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )
@@ -1337,6 +1353,7 @@ async fn a_cancelled_run_forced_into_the_active_list_never_has_a_writer_minted()
             input: Payload::from_json(&json!({}))?,
             run_id: RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("03".repeat(32)),
         },
     )

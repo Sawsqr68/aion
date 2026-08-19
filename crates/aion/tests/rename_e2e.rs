@@ -100,6 +100,7 @@ fn started(
         input: input_payload()?,
         run_id: run_id.clone(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: aion_core::PackageVersion::new(hash.to_owned()),
     })
 }
@@ -467,6 +468,7 @@ async fn renaming_a_superseded_run_is_refused_not_recorded_onto_its_successor()
                 input: input_payload()?,
                 run_id: second.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new(hash.clone()),
             },
             // The successor is terminal too, so the control arm below exercises
@@ -912,6 +914,7 @@ async fn renaming_a_run_that_has_continued_as_new_is_refused_on_the_one_shot_pat
                 input: input_payload()?,
                 run_id: control.clone(),
                 parent_run_id: Some(stranded.clone()),
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new(hash.clone()),
             },
             Event::WorkflowCompleted {

@@ -477,6 +477,7 @@ mod tests {
             input: Payload::new(ContentType::Json, br#""input""#.to_vec()),
             run_id: aion_core::RunId::new_v4(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         };
         bridge

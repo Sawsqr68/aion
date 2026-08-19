@@ -199,6 +199,7 @@ fn payload_event(seq: u64, size: usize) -> Event {
         input: Payload::new(ContentType::Json, vec![7; size]),
         run_id: RunId::new(uuid::Uuid::from_u128(u128::from(seq))),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     }
 }

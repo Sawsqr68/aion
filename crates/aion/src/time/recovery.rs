@@ -436,6 +436,7 @@ mod tests {
             input: aion_core::Payload::new(aion_core::ContentType::Json, b"null".to_vec()),
             run_id: run.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         };
         let deadline_started = Event::TimerStarted {

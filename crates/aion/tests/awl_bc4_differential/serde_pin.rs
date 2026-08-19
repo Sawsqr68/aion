@@ -68,6 +68,7 @@ fn event_serde_field_names_match_the_normalizer_literals() -> TestResult {
         input: Payload::from_json(&serde_json::json!({ "pin": true }))?,
         run_id: RunId::new_v4(),
         parent_run_id: Some(RunId::new_v4()),
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     };
     let timer = Event::TimerStarted {
@@ -100,6 +101,7 @@ fn normalizer_replaces_every_identity_field() -> TestResult {
         input: Payload::from_json(&serde_json::json!({ "pin": true }))?,
         run_id: RunId::new_v4(),
         parent_run_id: Some(RunId::new_v4()),
+        parent_workflow_id: None,
         package_version: PackageVersion::new("b".repeat(64)),
     };
     let timer = Event::TimerStarted {

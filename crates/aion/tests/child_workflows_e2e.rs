@@ -268,6 +268,7 @@ async fn restart_mid_child_resumes_awaiting_same_child() -> TestResult {
                     workflow_type: PARENT_MODULE.to_owned(),
                     input: parent_input()?,
                     run_id: parent_run_id.clone(),
+                    parent_workflow_id: None,
                     parent_run_id: None,
                     package_version: fixture_version(PARENT_MODULE, PARENT_BEAM)?,
                 },
@@ -300,6 +301,7 @@ async fn restart_mid_child_resumes_awaiting_same_child() -> TestResult {
                 input: Payload::new(ContentType::Json, br#""child-input""#.to_vec()),
                 run_id: child_run_id,
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: fixture_version(CHILD_MODULE, CHILD_BEAM)?,
             }],
             0,
@@ -489,5 +491,77 @@ async fn signal_between_spawns_preserves_child_identities_across_restart() -> Te
     );
 
     recovered.shutdown()?;
+    Ok(())
+}
+
+/// aion#77: THE CHILD WEARS ITS PARENT. A spawned child's own
+/// `WorkflowStarted` must record the parent's workflow id — and ONLY that:
+/// `parent_run_id` is the continue-as-new predecessor link, whose single
+/// meaning the store's run-chain root rule depends on (overloading it with
+/// the spawn parent left a child's chain rootless — caught by
+/// `namespace_restart` in the 0.18.1 landing flush). The summary projected
+/// from the child's own history must name the parent, so a handoff chain is
+/// traversable backward from any run and the console can group an arc
+/// without scanning every parent history. Before the fix the start recorded
+/// `parent_workflow_id: None` (live exhibit 2026-08-18, `handoff_b` showing
+/// `parent: None`), which is exactly the assertion below red.
+#[tokio::test]
+async fn spawned_child_records_its_parent_and_the_summary_names_it() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_over(&store, "child_round_trip").await?;
+
+    let handle = engine
+        .start_workflow(
+            PARENT_MODULE,
+            parent_input()?,
+            std::collections::HashMap::new(),
+            String::from("default"),
+        )
+        .await?;
+    engine
+        .result(handle.workflow_id(), handle.run_id())
+        .await?
+        .map_err(|error| format!("parent workflow failed: {error:?}"))?;
+
+    let parent_history = store.read_history(handle.workflow_id()).await?;
+    let children = child_started_ids(&parent_history);
+    assert_eq!(children.len(), 1, "history: {parent_history:#?}");
+
+    let child_history = store.read_history(&children[0]).await?;
+    let child_start = child_history
+        .iter()
+        .find_map(|event| {
+            if let Event::WorkflowStarted {
+                parent_workflow_id,
+                parent_run_id,
+                ..
+            } = event
+            {
+                Some((parent_workflow_id.clone(), parent_run_id.clone()))
+            } else {
+                None
+            }
+        })
+        .ok_or("child history has no WorkflowStarted")?;
+    assert_eq!(
+        child_start.0.as_ref(),
+        Some(handle.workflow_id()),
+        "the child's own start must wear the parent workflow id: {child_history:#?}"
+    );
+    assert_eq!(
+        child_start.1, None,
+        "parent_run_id is the continue-as-new predecessor link and must stay \
+         None on spawn — the run-chain root rule depends on its single meaning"
+    );
+
+    let summary = aion_core::WorkflowSummary::from_history(&child_history)
+        .ok_or("child summary must project")?;
+    assert_eq!(
+        summary.parent.as_ref(),
+        Some(handle.workflow_id()),
+        "the projected summary must name the parent"
+    );
+
+    engine.shutdown()?;
     Ok(())
 }

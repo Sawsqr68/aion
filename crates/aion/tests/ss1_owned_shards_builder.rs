@@ -66,6 +66,7 @@ fn started_event(workflow_id: &WorkflowId) -> Event {
         input: Payload::new(ContentType::Json, b"{}".to_vec()),
         run_id: RunId::new_v4(),
         parent_run_id: None,
+        parent_workflow_id: None,
         package_version: PackageVersion::new("a".repeat(64)),
     }
 }
@@ -202,7 +203,10 @@ async fn builder_owned_shards_scopes_recovery_to_disjoint_sets() -> TestResult {
     drop(store);
 
     // --- Engine A: owns ONLY shard 0 -----------------------------------------
-    let store_first: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(&dir)?);
+    let store_first: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(
+        &dir,
+        haematite::NodeCacheBudget::Unlimited,
+    )?);
     let active_first = active_ids_scoped_to(store_first, &[0]).await?;
     let first_view = id_strings(&active_first);
     assert_eq!(
@@ -218,7 +222,10 @@ async fn builder_owned_shards_scopes_recovery_to_disjoint_sets() -> TestResult {
 
     // --- Engine B: owns the complement of shard 0 ----------------------------
     let other_shards: Vec<usize> = (1..SHARD_COUNT).collect();
-    let store_second: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(&dir)?);
+    let store_second: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(
+        &dir,
+        haematite::NodeCacheBudget::Unlimited,
+    )?);
     let active_second = active_ids_scoped_to(store_second, &other_shards).await?;
     let second_view = id_strings(&active_second);
     assert_eq!(

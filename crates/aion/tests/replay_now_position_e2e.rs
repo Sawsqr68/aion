@@ -110,6 +110,7 @@ fn slept_and_woke_history(
             input,
             run_id: run_id.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version.clone(),
         },
         Event::TimerStarted {

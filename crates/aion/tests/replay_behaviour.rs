@@ -91,6 +91,7 @@ async fn record_full_history(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -160,6 +161,7 @@ async fn record_partial_history_for(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -198,6 +200,7 @@ async fn record_terminal_history_for(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -221,6 +224,7 @@ async fn record_divergent_history_for(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -291,6 +295,7 @@ async fn record_round_trip_history(
                 input: payload("input")?,
                 run_id: run,
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -401,6 +406,7 @@ async fn record_partial_history(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -768,6 +774,7 @@ async fn record_history_with_mid_run_rename(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -921,6 +928,7 @@ async fn record_history_renamed_inside_the_timer_window(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -1098,6 +1106,7 @@ async fn terminal_activity_failure_is_served_from_history_cache_without_live_cal
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )
@@ -1144,6 +1153,7 @@ async fn record_realistic_history(
                 input: payload("input")?,
                 run_id: run_id(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("a".repeat(64)),
             },
         )

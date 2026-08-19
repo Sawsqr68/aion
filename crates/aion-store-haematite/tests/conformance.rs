@@ -64,7 +64,10 @@ async fn haematite_store_satisfies_worker_deployment_conformance_suite() -> Resu
         Some(Box::new(move || {
             let data_dir = data_dir.clone();
             Box::pin(async move {
-                Ok(Arc::new(HaematiteStore::open(data_dir)?) as Arc<dyn WorkerDeploymentStore>)
+                Ok(Arc::new(HaematiteStore::open(
+                    data_dir,
+                    haematite::NodeCacheBudget::Unlimited,
+                )?) as Arc<dyn WorkerDeploymentStore>)
             })
         })),
         Box::new(move |name, bytes| {

@@ -474,6 +474,7 @@ async fn a_signal_is_admitted_when_the_pinned_identity_is_no_longer_retained() -
                 input: payload(&json!({ "objective": "unretained" }))?,
                 run_id: run_id.clone(),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: aion_core::PackageVersion::new("b".repeat(64)),
             },
         )

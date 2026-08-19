@@ -54,6 +54,7 @@ fn history() -> TestResult<Vec<Event>> {
             input: payload("input")?,
             run_id: run_id(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::ActivityScheduled {
@@ -237,6 +238,7 @@ fn faulted_history() -> TestResult<(Vec<Event>, crate::durability::NonDeterminis
             input: payload("input")?,
             run_id: run_id(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::ActivityScheduled {
@@ -300,6 +302,7 @@ fn recorded_divergence_round_trips_through_the_real_failure_format() -> TestResu
             input: payload("input")?,
             run_id: run_id(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::WorkflowFailed {
@@ -352,6 +355,7 @@ fn child_signal_timer_history() -> TestResult<Vec<Event>> {
             input: payload("input")?,
             run_id: run_id(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::ChildWorkflowStarted {
@@ -577,6 +581,7 @@ fn inspect_run_scopes_to_the_current_run_segment() -> TestResult {
             input: payload("first")?,
             run_id: first_run.clone(),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::WorkflowContinuedAsNew {
@@ -591,6 +596,7 @@ fn inspect_run_scopes_to_the_current_run_segment() -> TestResult {
             input: payload("second")?,
             run_id: second_run.clone(),
             parent_run_id: Some(first_run),
+            parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
         Event::WorkflowCompleted {

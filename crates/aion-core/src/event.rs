@@ -214,6 +214,14 @@ pub enum Event {
         /// Parent run that continued as this run, when this start is part of a
         /// continue-as-new chain.
         parent_run_id: Option<RunId>,
+        /// The parent WORKFLOW that spawned this run as a child (aion#77):
+        /// the child wears its parent, so a handoff chain is traversable
+        /// backward from any run and the console can group an arc without
+        /// scanning every parent history. `None` for operator-started roots
+        /// and for histories recorded before the field existed (the serde
+        /// default, exactly as `task_queue` and `attempt` decode legacies).
+        #[serde(default)]
+        parent_workflow_id: Option<WorkflowId>,
         /// Package version this run was resolved against at record time.
         ///
         /// Recovery and replay resolve workflow code from this recorded
@@ -1184,6 +1192,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version(),
         };
         let completed = Event::WorkflowCompleted {
@@ -1215,6 +1224,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: package_version(),
             },
             Event::SearchAttributesUpdated {
@@ -1244,6 +1254,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version(),
         }];
 
@@ -1266,6 +1277,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: package_version(),
             },
             Event::SearchAttributesUpdated {
@@ -1294,6 +1306,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version(),
         }];
 
@@ -1324,6 +1337,7 @@ mod tests {
                 input: payload("input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: package_version(),
             },
             name_event(2, "first name"),
@@ -1355,6 +1369,7 @@ mod tests {
             input: payload("input")?,
             run_id: RunId::new(uuid::Uuid::from_u128(1)),
             parent_run_id: None,
+            parent_workflow_id: None,
             package_version: package_version(),
         };
 
@@ -1374,6 +1389,7 @@ mod tests {
                 input: payload("workflow-input")?,
                 run_id: RunId::new(uuid::Uuid::from_u128(1)),
                 parent_run_id: None,
+                parent_workflow_id: None,
                 package_version: package_version(),
             },
             Event::WorkflowCompleted {
