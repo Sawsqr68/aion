@@ -5724,3 +5724,32 @@ reads doc AT LAUNCH so every edit needs a relaunch (bx4de1bbr current).
 **INSTRUMENT SCAR**: my verification `until tail -1 | grep -q OLDRIVER` passed instantly
 on the PREVIOUS record — a check that passes on stale state measured nothing. Cure: gate
 on wc -l INCREASING, never on content that already exists.
+
+## ZU-45 — 2026-08-19T03:4xZ — Artemis caught MY confound; two decisive instruments in flight
+
+**ARTEMIS'S CATCH (correct, and it's my own law):** sleep_wall's 900-round bound sits
+BELOW the 1000-CALL threshold if a sleep costs ~1 call ⇒ a clean completion proves
+NOTHING (the arm never compiled). Outcome as predicted: **run 1 COMPLETED CLEAN at 901
+sleeps — CONFOUNDED, discarded as evidence.** "A green from an arm that never compiled is
+worth nothing" (cf. mutation-must-sit-on-the-tests-path / power-fitted-in-one-world).
+**DECISIVE ARM RUNNING (task b1gk11vbm)**: sleep_wall RUN 2 (wf 2a09c6e0), 2000 rounds, on
+the SAME module 1c9fad3f — the profile/cache PERSIST per (module,function,arity) per
+scheduler (proven by nosleep_wall runs 2/3 dying at wait 0), so run 2 starts carrying run
+1's ~900 calls and crosses 1000 within ~100 sleeps with huge margin. TWO-SIDED: early
+death ⇒ compiled sleeps break; clean 2000 ⇒ compiled sleeps resume CORRECTLY (the real
+discriminator for Artemis's Waiting→deopt hypothesis). ~33 min. NOTE: did NOT need the
+jit_threshold lever — persistence gave the same power for free.
+**DESTINATION PROBE RUNNING (task bcqoiy1fe)**: shape3_wall.awl (deployed d7cbc819, wf
+e9c9d386, 400 rounds) — deliberately DIFFERENT import profile (2 workers/2 actions, extra
+types, Float+String+List fields) so the function/import tables differ. Q: does the
+misdelivery ALWAYS land in gleam_json_ffi:object/1 (function-specific) or does it MOVE
+(position-dependent)? Different bugs. Priced my earlier "two shapes agree" DOWN to ~one
+observation — both are AWL-generated and share a module skeleton.
+**WITNESS QUESTION ANSWERED (aion's gap, not beamr's)**: `Scheduler::jit_cache()` is
+already public (beamr scheduler/mod.rs:1996) + `JitCache::lookup(key)` — a consumer CAN
+ask "did this MFA compile" today. aion holds the scheduler and never asks
+(crates/aion/src/runtime/ mentions jit NOWHERE). Told Artemis not to spend a release on
+it. Cache OBSERVABILITY exists; cache CONTROL does not — only the second needs them, and
+their disable-knob release stands on its own.
+**MY OWED ROWS**: (a) aion surfaces JIT-compiled observability (new); (b) aion surfaces
+beamr's jit_threshold builder-driven (ZU-43, instrument-only, never mitigation).
