@@ -124,3 +124,27 @@ cd /Users/tom/Developer/ablative/stack/aion && aion server --jit-threshold 42949
 - `JitCache::keys()` — enumeration of which functions reachable from an AWL workflow actually tier up.
 - Respawner defects (Vesper's finding, logged with Waffles): the flagless spawn form (moot after this deploy, live as a class) and the **spawn-attribution lie** — it records whatever holds the port as its own child, so its "spawned pid=…" lines are not evidence it started anything. Same shape as the corpse-hash, in supervisor's clothing.
 - Ops console `run unknown` — diagnosed in `gate-logs/console-run-unknown-diagnosis.md`, queued next.
+
+---
+
+## Post-deploy live state (06:37Z)
+
+- **Deploy GREEN and complete.** Fresh window `d728f2e9` crossed **1,014 events**
+  at 06:31:37Z on the fixed engine, default threshold, no mitigation. Verified at
+  the crossing: **2 cranelift compile witnesses** in Tom's server log (so not a
+  cold walk — a crossing with zero compiles would have been the mitigation
+  wearing a different coat), **zero** `bad_generator`/`panic`/`VM execution
+  error` since the swap, port holder still hashing `14b509c16506da9033b6`,
+  `unserved` empty at every sample.
+- Stated at strength: **one clean crossing** of the point his runs previously
+  died at, mechanism live. 1009 was characteristic, not a guarantee — this is not
+  a forever-claim, and `Exited`-without-exception remains unclaimed.
+- **Tom asked for the watcher to run indefinitely.** Bounded window `d728f2e9`
+  (scans 1200) cancelled; **`cbc288e4-2a33-4701-8615-31c757c53f28`** started with
+  `scans: 1000000` (~years at 3s/scan). Running, worker serving, unserved empty.
+- Waffles carried the milestone to Tom, led by the durability line: his watcher
+  was mid-flight at **5,919 events** when the engine was replaced underneath it
+  and it finished the job. Nobody staged that.
+- Waffles: **stand down from the #85 arc.** Next is the thing-finder Friday demo
+  — he wants the banked bar-stocktake direction consolidated before he authors
+  the brief. On my own clock; tomorrow is fine.
