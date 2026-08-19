@@ -5382,3 +5382,40 @@ ON LIMINAL INDEX-LIVE: rerun $S/publish-0.18.1.sh (SKIPs 18) → 21/21 index-con
 - THREE REVIEW DELTAS flagged (header + DM): (1) ceremony takes a landed/gated/CUT tree (cut precedes landing gate; cut_witness refuses version mismatch) vs §1.5's cut-inside-ceremony; (2) topo order = declared operator input, cargo/index enforce (compute-action possible later); (3) changelog two-directional: mechanical faces refuse, judgment face travels as evidence.
 - Waffles' two carries folded: semver-surface leg (0.8.3 lesson), attest-with-citation delta-publish shape.
 NEXT (post-review): harden per review → deploy + worker → acceptance = re-run the 0.18.1 ceremony THROUGH the workflow (all-SKIP idempotent pass = live proof, "runs not files") → then continue wave 1 (investigate rework, fix_flight, land, propagate, issue_lifecycle). Still open: #79/#80/#81, #34 (workflows/ to main), morning report cargo, Tom's three direction answers, Apollo 0.8.x ruling (not my lane).
+
+## ZU-33 — 2026-08-19T01:5xZ — line-13 truth + ceremony hardened (READ FIRST with ZU-31/32)
+
+**LINE-13 WAS NEVER DONE — Waffles' relay failed re-measure.** His premise ("substance
+verifiably shipped, 0.18.1 built on it") is FALSE at the artifact: 30e060046 NOT an
+ancestor of main; the 8e230ca0c..67e0b8d9f window is fleet-70+#75/#77+0.18.x only; the
+battery MANIFEST has started=21:03:11Z and NO test_rc (leg 1 died at FULL STOP, never
+re-fired); #63/#51 still open. Cure IN FLIGHT: origin/main merged into land-stack CLEAN
+(195 files, no conflicts) in /Users/tom/Developer/ablative/stack/aion-wt-59-linux-green;
+battery re-fired on merged tree (task bxp9y5c3o, script gate-logs/land-stack/run-battery.sh,
+3 legs → MANIFEST.txt). ON GREEN: push as main, close #63+#51 w/ Failed-status
+reconciliation (NOT #34 — rides line-14), timestamped DONE on queue line 13
+(ablative/docs tracking/battery-queue-20260818.md, head 8556d17), cargo clean wt-59
+target same breath (covers line 12's; ~25G+ → Athena's disk unblock; Mac at ~12Gi free).
+Flag to Athena: her crossing pins aion =0.18.1 — this landing moves main past the cut;
+index unaffected, but flag if her battery reads main not registry.
+
+**CEREMONY REVIEW APPLIED** (commit 29ad550f6, checks+fmt clean, sh -n × 7): Fix 1 =
+in-body 3-read/40s index recheck + truthful refusal (action retry unfirable on exit-zero
+bodies — recorded as comment). Fix 2 = ARRAYS CANNOT RENDER: aion-worker
+shell/template.rs render_value refuses Array/Object/Null at argv substitution — push_tag
+$confirms reference REMOVED (would never have run); confirms stays declared input
+(history = witness); route gate sole guard, cited both docs. Notes a-d applied
+([workspace.package]-anchored version read; convention-in-refusal; absent-embed face
+named + aion-shaped headers; verify_install deliberately unlocked). LIVE DRIVES caught
+2 more: grep -c zero-match trap (prints 0 AND exits 1 → doubled 0, malformed JSON) and
+checksum sed context arithmetic (2+5 dots vs API's 1+3 — EVERY confirm would rc=92).
+Both fixed + proven vs live index; aion-core checksum matches confirmed table.
+NEXT: after battery frees Mac → deploy ceremony + release_ops worker (aion worker awl
+workflows/release_ceremony/release_ceremony_worker.awl, queue release_ops) → acceptance
+= re-serve 0.18.1 input (21 skips, tag idempotent, install proof; verify_install = cold
+cargo install, needs quiet Mac + the freed disk).
+
+**TOM ASK LIVE**: Marimo notebooks as aion workers — keep as notebooks (front end per
+worker) AND serve as workers. Answered yes (Marimo files are plain .py; dual-role via
+Python SDK decorators; notebook IS the worker). Asked where notebooks live; wire first
+one as proof when he answers.
