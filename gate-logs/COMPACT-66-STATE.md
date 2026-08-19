@@ -5494,3 +5494,28 @@ awl check, refused at deploy (checker gap + refusal names line 1 / symptom not r
 **Server predates 0.18.1** → children show parent:none in console; one restart onto
 0.18.1 lights lineage — offered, NOT done under Tom's live session. Watcher window
 expiry ~02:50Z — restart on Tom's word (same aion start input, scans as desired).
+
+## ZU-37 — 2026-08-19T02:45Z — product surface split (Tom's brief: kill the demo feel + the flicker)
+
+Tom's brief: "lose the product demo kind of feel… self-congratulatory… over-explanatory";
+"refreshing the page every time which is really jarring"; wants "the actual product".
+DONE — SPLIT INTO TWO FILES:
+- **counter.py** (NEW) = the PRODUCT page AND the worker (all three activities moved
+  here: count_scene, scan_inbox, count_photo). Plain voice: title, drop path, current
+  result image, mo.ui.table of jobs (time/source/count/check). No tiers, no emoji, no
+  self-description. Served `marimo run` port **2720** (log .counter-serve.log).
+- **walkthrough.py** = REVERTED to pure explainer (setup block + live cells stripped;
+  marimo check rc=0). No longer a worker.
+FLICKER CURE: `mo.ui.refresh` (periodic repaint) → **`mo.watch.file(JOBS_LOG)`** —
+reactive, redraws only on actual change. mo.watch.{file,directory} confirmed in 0.23.x.
+REAL BUG FOUND+FIXED in the rework: job records pointed at SHARED stage filenames in
+out/live/ — two concurrent photos would overwrite each other's images. Records now
+carry ABSOLUTE per-job paths (outbox/<name>_input.png + _yolo.png); front end resolves
+absolute-or-relative. Proven: whiskey-guide.webp through full pipeline (watcher 8a56de0a
+→ child → 10 bottles → outbox + page). Worker now bnpt6l192 serving counter.py.
+OPEN WITH TOM: (a) he's generating synthetic bar-shelf images — prompt sent (4 classes:
+dense 3-4 row shelves 20-60 bottles w/ occlusion; lighting variants incl. glare; fill
+levels + forward labels for label/scale legs; awkward — blur/angle/shadow); (b) ops
+console "a bit overwhelming" — design conversation he wants later, I offered opinions;
+(c) tiled detector vs fast (his call); (d) server restart onto 0.18.1 for console
+parent→child lineage (offered, not done under his live session).
