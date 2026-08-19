@@ -201,6 +201,23 @@ fn visits_is_unreadable_outside_the_bounded_steps_guards() -> TestResult {
          \x20 outcome rework: otherwise, route compose\n\
          \x20 max 4 visits\n");
     assert_error_at(&source, "builtin visit counter", "visits) -> echo")?;
+    // In a route payload, even when the route belongs to the bounded step:
+    let source = "//! Payload scope.\n\
+                  workflow t\n\
+                  \x20 outcome done: type Report, route success\n\
+                  \n\
+                  type Report { rounds: Int }\n\
+                  \n\
+                  step tick\n\
+                  \x20 sleep 1s\n\
+                  \x20 outcome over: when visits >= 3, route done(rounds: visits)\n\
+                  \x20 outcome again: otherwise, route tick\n\
+                  \x20 max 3 visits\n";
+    assert_error_at(
+        source,
+        "`visits` is the builtin visit counter — it is readable only in the outcome guards",
+        "visits)\n",
+    )?;
     // And in the guards of a step with no bound:
     let source = doc("step alone\n\
          \x20 work(item: \"x\") -> note\n\
@@ -208,6 +225,22 @@ fn visits_is_unreadable_outside_the_bounded_steps_guards() -> TestResult {
          \x20 outcome retry: when visits < 2, route done(note)\n\
          \x20 outcome ok: otherwise, route done(note)\n");
     assert_error_at(&source, "builtin visit counter", "visits < 2")
+}
+
+#[test]
+fn visits_in_a_bounded_guard_remains_clean_when_the_payload_uses_ordinary_data() -> TestResult {
+    let source = "//! Guard scope.\n\
+                  workflow t\n\
+                  \x20 outcome done: type Report, route success\n\
+                  \n\
+                  type Report { rounds: Int }\n\
+                  \n\
+                  step tick\n\
+                  \x20 sleep 1s\n\
+                  \x20 outcome over: when visits >= 3, route done(rounds: 3)\n\
+                  \x20 outcome again: otherwise, route tick\n\
+                  \x20 max 3 visits\n";
+    assert_clean(source)
 }
 
 // ---------------------------------------------------------------------

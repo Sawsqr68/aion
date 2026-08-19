@@ -274,9 +274,10 @@ fn check_outcome_payload(
 /// Check a step's outcome clauses in written order.
 pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, env: &Env<'_>) {
     // A step carrying `max … visits` reads the builtin `visits` counter (an
-    // `Int`, 1-based) in its outcome guards — and only there.
+    // `Int`, 1-based) in its outcome guards — and only there. Keep that
+    // capability out of the route's view: payload expressions are not guards.
     let with_visits;
-    let scope = if let Some(max_visits) = &step.max_visits {
+    let guard_scope = if let Some(max_visits) = &step.max_visits {
         let mut extended = scope.clone();
         extended.insert(
             "visits".to_owned(),
@@ -325,7 +326,7 @@ pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, 
         let mut narrow = Vec::new();
         match &clause.guard {
             Guard::When { expr, .. } => {
-                let view = View::plain(scope);
+                let view = View::plain(guard_scope);
                 let ty = type_of(w, view, expr);
                 if !matches!(resolve(&ty, &w.ctx.types), Ty::Bool | Ty::Unknown) {
                     w.err(
@@ -333,7 +334,7 @@ pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, 
                         format!("`when` needs a Bool guard, found {ty}"),
                     );
                 }
-                narrow = super::narrow::from_guard(w, scope, expr);
+                narrow = super::narrow::from_guard(w, guard_scope, expr);
             }
             Guard::Otherwise { span } => {
                 if position + 1 != count {
