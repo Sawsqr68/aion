@@ -141,6 +141,44 @@ meanings are:
 My recommendation is **(a)**, with the response message naming the `cancel` tool
 as the way to stop the run.
 
+### RULED (Waffles, 2026-08-19T07:31Z): option (a).
+
+With one design note attached, which he required settled **before** building:
+find where the extension expects a cancel-requested state to be VISIBLE on
+subsequent `tasks/get` reads. If the acknowledgement alone satisfies the
+contract, stay stateless; if the requested-state must persist across reads, its
+honest home is an event in the run's own history — never a resurrected side-map,
+"which would be the `TaskStore` crawling back in through the cancel door".
+
+**Settled: stay stateless.** Read from the pinned contract itself
+(`modelcontextprotocol/ext-tasks` @ `2c1425d9…`, `specification/draft/tasks.md`)
+rather than from this repo's paraphrase of it — the code's own comment asserts
+the same thing, but a relayed fact wears the relayer's name.
+
+> "Cancellation processing is *eventually consistent* — the task's observable
+> status **MAY** remain `working` (or some other non-terminal status) after the
+> ack, and **MAY** ultimately reach a terminal status other than `cancelled` if
+> the work finished before cancellation could take effect."
+
+> "Cancellation is **cooperative**: The request signals intent, and the server
+> decides whether and when to honor it."
+
+And the status set is closed at five — `working`, `input_required`, `completed`,
+`failed`, `cancelled`. **There is no `cancel_requested` or `cancelling` status**,
+so the extension has no place to put a visible requested-state even if a server
+wanted one. `TaskStatus` in `model.rs` already enumerates exactly those five, so
+nothing is missing there either.
+
+The contract therefore requires only the acknowledgement, and explicitly leaves
+"whether and when to honor it" to the server. This server's answer is *never*,
+for a reason already written into the runner it replaces: a durable run is not
+something an MCP client's disinterest is allowed to kill. **No state is stored,
+and no event is written to the run's history** — the second branch of the design
+note does not apply.
+
+The acknowledgement's message must say plainly that the run continues and name
+the `cancel` tool, so that a caller is never left believing it stopped something.
+
 ## Scope, stated so it is not quietly widened
 
 `start_run` is the only task-shaped tool, so **every** task today is run-backed
