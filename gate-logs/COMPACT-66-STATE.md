@@ -5657,3 +5657,33 @@ Repro artifacts: scratchpad/wall/{sleep_wall,nosleep_wall}.awl (deployed 1c9fad3
 b5675207). sleep_wall run 34d325bf still climbing at bank time (separate module = own
 counter) — expect death ~op 200.
 PAGE FOR TOM: stocktake card serving :2722.
+
+## ZU-43 — 2026-08-19T03:3xZ — repair attempt: two hypotheses REFUTED, escape hatches CLOSED
+
+Tom: "we need to get that finished immediately now." Went into beamr (local source
+/Users/tom/Developer/ablative/stack/beamr, crates/beamr 0.19.2, HEAD 58a7e5d, clean).
+**H1 native-services** — REFUTED earlier (fix present in 0.19.2, JitRuntimeContext carries
+services). **H2 wrong initial_module**: jit/runtime.rs:179 passes `current_module` (the
+CALLER's) to run_with_native_services after setting process current_module/code_position
+to the TARGET — looked like right-arg-wrong-callee. REFUTED by reading
+interpreter/mod.rs:219 `current_module_for_position`: resolution is driven by
+position.module via process.current_module then the REGISTRY, so initial_module is a
+fallback only. Two misses in 30 min in Artemis's JIT ⇒ stopped; a third-hypothesis hot
+patch to the estate's VM is not defensible.
+**ESCAPE HATCHES MEASURED, BOTH CLOSED**: (a) `jit` IS an optional feature in 0.19.2 BUT
+the mislabelling from 0.16.2 SURVIVES — scheduler/mod.rs:220 gates `use crate::jit::{...}`
+on `feature = "threads"`, not `jit`; making it genuinely disableable = 10+ files, 18 sites
+in scheduler/mod.rs alone = a VM-core refactor needing beamr's own gate. (b)
+jit_threshold: profiler.rs record_call uses `counter.saturating_add(1)` then
+`new_count < threshold` — so u32::MAX STILL FIRES (~4.29e9 calls ≈ 860M waits). A delay,
+not a cure; refused as a fix and NOT applied (would also be a magic value).
+**HANDED TO ARTEMIS** (DM sent): mechanism + symptom + repro + the note that my July
+attribution was wrong so they don't start from it. aion#85 comments 5337078814 (correction)
+and 5337131281 (mechanism table).
+**SAFE-OPERATION FACTS for the demo**: <200 waits per workflow TYPE per server lifetime is
+safe; restart clears the poisoned module state. Keep the pipeline inside that KNOWINGLY —
+not by hiding the limit.
+**LEGITIMATE aion-side gap noted (not done)**: aion never surfaces beamr's jit_threshold
+(runtime/handle.rs:149). Exposing it builder-driven is correct per NO-ARBITRARY-LIMITS
+(operator's lever, default deferred to beamr) and would also serve as the confirming
+causation instrument — but is NOT the cure and must never be presented as one.
