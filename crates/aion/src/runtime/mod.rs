@@ -63,7 +63,9 @@ pub use config::{
 pub use handle::{Pid, RuntimeHandle, RuntimeInput};
 pub use nif::{Determinism, Mfa, NifEntry, NifRegistration};
 pub(crate) use nif_activity::install_nif_runtime_context;
-pub use nif_activity_retry::{PARKED_ACTIVITY_REASON, is_parked_reason};
+pub use nif_activity_retry::{
+    PARKED_ACTIVITY_REASON, activity_timeout_from_config, activity_timeout_reason, is_parked_reason,
+};
 pub(crate) use nif_child::install_child_nif_bridge;
 pub(crate) use nif_child_engine::{ChildNifBridge, ChildNifBridgeParts};
 pub(crate) use nif_query::install_query_bridge;

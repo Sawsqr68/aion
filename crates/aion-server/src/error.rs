@@ -189,6 +189,29 @@ pub enum ServerError {
         reason: CompletionRejectionReason,
     },
 
+    /// A second server-executed declared body was started for an execution site
+    /// whose prior attempt is still running here.
+    ///
+    /// Distinct from [`Self::PendingActivityCollision`], which is about the
+    /// responder slot a dispatch installs: this is about the PROCESS. The
+    /// registry that makes a running declared command cancellable holds one
+    /// cancellation handle per attempt, so admitting a second execution would
+    /// replace the first command's handle — and a replaced handle is a command
+    /// running on the operator's machine that nothing can stop. Refusing the
+    /// second is the only outcome that leaves both attempts accounted for.
+    #[error(
+        "declared command for workflow {workflow_id}, activity {activity_id} attempt {attempt} \
+         is already executing at this server"
+    )]
+    DeclaredAttemptCollision {
+        /// Workflow whose declared body is already executing.
+        workflow_id: WorkflowId,
+        /// Activity site whose declared body is already executing.
+        activity_id: ActivityId,
+        /// Attempt whose declared body is already executing.
+        attempt: u32,
+    },
+
     /// A lock was poisoned and the protected state cannot be trusted.
     #[error("{resource} lock was poisoned")]
     LockPoisoned {
@@ -256,6 +279,9 @@ impl ServerError {
             }
             Self::PendingActivityCollision { .. } => {
                 WireError::backend("pending activity collision")
+            }
+            Self::DeclaredAttemptCollision { .. } => {
+                WireError::backend("declared command attempt collision")
             }
             Self::WorkerDispatch { .. } => WireError::backend("worker dispatch failed"),
             Self::WorkerConnectionLost { .. } => {
@@ -471,6 +497,11 @@ impl ServerError {
             },
             Self::PendingActivityCollision { activity_id, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("PendingActivityCollision"),
+                store_error_type: None,
+                reason: activity_id,
+            },
+            Self::DeclaredAttemptCollision { activity_id, .. } => ErrorTraceFields {
+                error_type: Cow::Borrowed("DeclaredAttemptCollision"),
                 store_error_type: None,
                 reason: activity_id,
             },

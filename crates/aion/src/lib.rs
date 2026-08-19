@@ -121,7 +121,8 @@ pub use registry::{
 };
 pub use runtime::{
     CompletionRetryConfig, InvalidCompletionRetryLadder, PARKED_ACTIVITY_REASON, Pid,
-    RuntimeConfig, RuntimeHandle, RuntimeInput, SignalDeliveryConfig, is_parked_reason,
+    RuntimeConfig, RuntimeHandle, RuntimeInput, SignalDeliveryConfig, activity_timeout_from_config,
+    activity_timeout_reason, is_parked_reason,
 };
 pub use schedule::{ScheduleError, next_fire_time, parse_cron_expression};
 pub use supervision::{

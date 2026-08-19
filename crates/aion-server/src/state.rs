@@ -124,6 +124,13 @@ struct ServerStateInner {
     /// the engine exists. Held so surfaces (and the bridge) share ONE reader
     /// rather than each building their own view of the deployed contracts.
     queue_declarations: crate::worker::QueueDeclarationSource,
+    /// The declared bodies THIS server is executing right now, shared with the
+    /// [`crate::worker::DeclaredCommandDispatcher`] that registers each attempt
+    /// for the life of its command. Always present (cheap, no `Option`): the
+    /// cancel path signals through it on every boot. Empty whenever no
+    /// server-run command is in flight — which, on a `from_parts*` state that
+    /// builds no declared-body dispatcher, is always.
+    declared_attempts: crate::worker::DeclaredCommandAttempts,
     /// The last completed update check (#189 slice one), shared with the
     /// [`crate::update_check::UpdateCheckObserver`] decorator that writes it
     /// on the full boot path. Always present and always EMPTY at
@@ -297,6 +304,7 @@ impl ServerState {
                 attempt_owners,
                 queue_service_state: seams.queue_service_state,
                 queue_declarations: seams.queue_declarations,
+                declared_attempts: seams.declared_attempts,
                 update_status,
                 workspace_root,
                 cluster_self_node,
@@ -414,6 +422,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // No declared-body dispatcher is built on this path, so nothing
+                // ever registers here; present so the cancel path reads one
+                // registry on every construction rather than an `Option`.
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -508,6 +520,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // No declared-body dispatcher is built on this path, so nothing
+                // ever registers here; present so the cancel path reads one
+                // registry on every construction rather than an `Option`.
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -599,6 +615,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // No declared-body dispatcher is built on this path, so nothing
+                // ever registers here; present so the cancel path reads one
+                // registry on every construction rather than an `Option`.
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -685,6 +705,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // No declared-body dispatcher is built on this path, so nothing
+                // ever registers here; present so the cancel path reads one
+                // registry on every construction rather than an `Option`.
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -755,29 +779,43 @@ impl ServerState {
         &self.inner.worker_registry
     }
 
-    /// Ask every worker holding an activity of `workflow_id` to stop it (#233).
+    /// Stop every in-flight activity of `workflow_id`, by whichever path is
+    /// executing it (#233).
     ///
-    /// Joins the two pieces of live state this node holds — the heartbeat
-    /// tracker (which worker holds which activity) and the connected-worker
-    /// registry (how to reach that worker) — so the cancel handler needs only a
-    /// `ServerState` and never learns the routing itself.
+    /// Joins the three pieces of live state this node holds — the heartbeat
+    /// tracker (which worker holds which activity), the connected-worker
+    /// registry (how to reach that worker), and the declared-attempt registry
+    /// (which commands this server is running itself) — so the cancel handler
+    /// needs only a `ServerState` and never learns the routing itself.
     ///
     /// Returns one record per tracked in-flight activity, INCLUDING the ones
-    /// that could not be asked. A cancel is a request, not a guarantee.
+    /// that could not be asked, plus the server-executed declared bodies that
+    /// were signalled. A worker cancel is a request, not a guarantee; a
+    /// declared body's signal reaches its process group.
     ///
     /// # Errors
     ///
-    /// Returns [`ServerError::LockPoisoned`] when the tracker's or the
-    /// registry's state cannot be read.
+    /// Returns [`ServerError::LockPoisoned`] when the tracker's, the registry's,
+    /// or the declared-attempt registry's state cannot be read.
     pub fn cancel_in_flight_activities(
         &self,
         workflow_id: &aion_core::WorkflowId,
-    ) -> Result<Vec<crate::worker::CancelRequest>, ServerError> {
+    ) -> Result<crate::worker::InFlightCancellation, ServerError> {
         crate::worker::cancel_in_flight_activities(
             self.heartbeat_tracker(),
             self.worker_registry(),
+            self.declared_attempts(),
             workflow_id,
         )
+    }
+
+    /// Borrow the registry of declared bodies this server is executing.
+    ///
+    /// The declared-body dispatcher registers each attempt here for the life of
+    /// its command; [`Self::cancel_in_flight_activities`] signals through it.
+    #[must_use]
+    pub fn declared_attempts(&self) -> &crate::worker::DeclaredCommandAttempts {
+        &self.inner.declared_attempts
     }
 
     /// Borrow the WS3 cluster-event publisher shared by the cluster state-change
@@ -1434,6 +1472,12 @@ struct WorkerSeams {
     queue_declarations: crate::worker::QueueDeclarationSource,
     queue_service_state: crate::worker::QueueServiceState,
     declared_bodies: crate::worker::DeclaredBodySource,
+    /// The declared bodies this server is EXECUTING, as opposed to the ones it
+    /// can look up. The declared-body dispatcher registers each attempt here for
+    /// the life of its command and the cancel path signals through it, so a
+    /// cancelled run's server-run command is stopped rather than left holding
+    /// the machine.
+    declared_attempts: crate::worker::DeclaredCommandAttempts,
     /// The boot's one cluster-event publisher, kept here so the dispatchers
     /// built over these seams announce an unbounded park on the operator's
     /// real-time channel (#266 T4).
@@ -1477,6 +1521,7 @@ fn build_worker_seams(
         queue_declarations: crate::worker::QueueDeclarationSource::default(),
         queue_service_state: crate::worker::QueueServiceState::default(),
         declared_bodies: crate::worker::DeclaredBodySource::default(),
+        declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
         cluster_publisher: cluster_publisher.clone(),
     }
 }
@@ -1625,6 +1670,7 @@ fn build_decorated_dispatcher(
     let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
         dispatcher,
         seams.declared_bodies.clone(),
+        seams.declared_attempts.clone(),
         workspace_root.clone(),
         transcript,
         update_status.clone(),
@@ -1642,6 +1688,7 @@ fn build_decorated_dispatcher(
 fn decorate_activity_dispatcher(
     dispatcher: WorkerActivityDispatcher,
     declared_bodies: crate::worker::DeclaredBodySource,
+    declared_attempts: crate::worker::DeclaredCommandAttempts,
     workspace_root: crate::worker::WorkspaceRoot,
     transcript: crate::activity_publisher::ActivityEventPublisher,
     update_status: crate::update_check::UpdateStatusState,
@@ -1657,6 +1704,7 @@ fn decorate_activity_dispatcher(
     let declared = crate::worker::DeclaredCommandDispatcher::new(
         Arc::new(dispatcher),
         declared_bodies.clone(),
+        declared_attempts,
         tokio::runtime::Handle::current(),
         workspace_root,
         transcript,
