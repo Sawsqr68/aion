@@ -1,0 +1,14 @@
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.56s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-992e88e6997bc301)
+
+running 1 test
+test worker::outbox_dispatcher::tests::failed_dispatch_retries_with_backoff_and_bumps_attempt ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1125 filtered out; finished in 0.14s
+

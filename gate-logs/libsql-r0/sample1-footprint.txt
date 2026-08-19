@@ -1,0 +1,30 @@
+======================================================================
+aion [23923]: 64-bit    Footprint: 39 GB (16384 bytes per page)
+======================================================================
+
+  Dirty      Clean  Reclaimable    Regions    Category
+    ---        ---          ---        ---    ---
+  38 GB        0 B          0 B       9772    MALLOC_SMALL
+ 924 MB        0 B          0 B         15    MALLOC_LARGE
+ 154 MB        0 B          0 B        317    MALLOC metadata
+  20 MB        0 B          0 B          1    page table
+5632 KB        0 B          0 B        486    stack
+1328 KB        0 B          0 B        338    __DATA_CONST
+ 432 KB        0 B          0 B         14    MALLOC_NANO
+ 331 KB        0 B          0 B        282    __DATA_DIRTY
+ 288 KB        0 B          0 B          1    MALLOC_TINY
+ 213 KB        0 B          0 B        296    __DATA
+  80 KB        0 B          0 B        853    unused dyld shared cache area
+  48 KB        0 B          0 B        491    untagged (VM_ALLOCATE)
+  48 KB        0 B          0 B          2    __TPRO_CONST
+  16 KB        0 B          0 B          1    os_alloc_once
+  16 KB        0 B          0 B          1    Activity Tracing
+ 1104 B        0 B          0 B        147    __AUTH
+    0 B      21 MB          0 B        347    __TEXT
+    0 B      64 KB          0 B          3    __LINKEDIT
+    0 B        0 B          0 B          1    __CTF
+    0 B        0 B          0 B        338    __AUTH_CONST
+    0 B        0 B          0 B          1    __FONT_DATA
+    0 B        0 B          0 B          1    mapped file
+    ---        ---          ---        ---    ---
+  39 GB      21 MB          0 B      13710    TOTAL

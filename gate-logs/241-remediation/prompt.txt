@@ -1,0 +1,230 @@
+Delegation mode: dev
+Specialist preset: implementation
+Repository: /Users/tom/Developer/ablative/stack/aion/.worktrees/241-final-message (isolated git worktree, branch 241-final-message)
+
+Task: execute the remediation brief below in full. It is your complete charter.
+
+# #241 remediation — discharge the Opus review of record (VERDICT: FAIL)
+
+You are remediating an existing build, not starting one. The branch
+`241-final-message` in this worktree carries three commits (red pin
+cccef3c2d → carry d0571f176 → contract enforcement 4ca454d9c) that add
+`final_message` as a distinct field on the canonical AgentOutcome record
+with REPLACE semantics. An Opus review of record (verdict FAIL,
+2026-08-15 02:40Z) found the core work good and bypass-free but
+incomplete on contract completeness. The FULL review text follows this
+brief in your prompt — every finding carries file:line. Your charter is
+the review's own "What must happen before this lands" list plus the
+dispatcher's addendum, restated here with dispatch rulings applied.
+
+## The charter
+
+1. **Fix the three Gleam constructor sites** in the example packages
+   still passing three fields (Gleam constructors are total; both
+   packages resolve aion_flow by path, so `gleam test` in
+   examples/assistant and examples/agent-dev is currently a compile
+   error). Run `gleam test` for all three packages; commit the logs.
+
+2. **Build the Gleam gate.** The review offered two arms (gate in
+   battery.sh, or Gleam-ungated stated unmissably). The dispatch takes
+   the GATE arm — the disclaimer arm is not available to this
+   remediation. Add an announced Gleam gate to the battery so the
+   CRITICAL-1 breakage class is observable by the record, prove it red
+   on the pre-fix tree state or by reintroducing one three-field
+   constructor (commit the red log), then green after the fix.
+
+3. **Fix every stale-contract site the review names** (IMPORTANT-1
+   through IMPORTANT-4 and IMPORTANT-6, file:line in the review):
+   aion-integrations/src/error.rs:82 rustdoc; build-deck.py:261-264 and
+   build-tutorial.py:690-693 PLUS regenerating both HTML outputs;
+   examples/agent-dev/worker/src/main.rs:10; both activities.gleam;
+   examples/agent-dev/README.md:24; harness.gleam:27; the
+   valid/agent_seam.awl and invalid/agent_returns_the_wrong_record.awl
+   fixture headers; retired_doctrine_gate.rs:195's husk sample.
+
+4. **Restore the corpus-gate assertion** (IMPORTANT-5):
+   awl_corpus_gate.rs:249 asserts the full four-field phrase the
+   diagnostic actually emits, not a one-field substring.
+
+5. **Assert `final_message` directly** in acp_live_agent.rs:226-237
+   (the only real-agent E2E) and in norn translate/tests/outcomes.rs
+   (`outcome.final_message == outcome.text` at record level)
+   (SUGGESTION-1/-2 — taken as required by the dispatch).
+
+6. **Document the in-flight replay consequence** (SUGGESTION-3, taken
+   as required): RULING-AGENT-ACTION-WIRE-FORM.md must state that a
+   three-field agent result already recorded in a run's history
+   hard-fails decode after the swap — the "no longer decodes" line
+   gains the operational consequence.
+
+7. **Decode census (dispatcher addendum, mandatory):** census every
+   site that DECODES a historical AgentOutcome payload — replay,
+   resume, describe, console read paths. State precisely which runs a
+   binary swap breaks: in-flight only, or completed-history reads too.
+   Pin the deploy constraint in RULING-AGENT-ACTION-WIRE-FORM.md: the
+   binary must not swap while any run's history holds a three-field
+   agent result unless the read path for it is proven unused. The
+   census is enumerated in a committed record (file list, one verdict
+   per site), not asserted in prose.
+
+8. **One complete workspace battery on the final tree**, output to a
+   file, manifest read. Charter item 8 (file three battery-defect
+   tickets) is ALREADY DISCHARGED by the dispatcher — tasks #251
+   (announce anchor race), #252 (TS proto stub regen), #253 (bun test
+   vs declared vitest) exist; do not re-file. Those three blockers are
+   dated and attributed: if the battery shows a FOURTH red, it belongs
+   to this diff and must be fixed, not attributed.
+
+## House laws
+
+Worktree-only (this tree), commit-as-you-go on branch
+241-final-message, never push, no lint bypasses (#[allow]/#[expect]/
+#[ignore]/_var renames are refusals, not fixes), ≤500 LOC per file,
+clippy ×2 (--workspace AND -p per touched crate) + fmt clean, all
+battery/gate output to files under gate-logs/241-remediation/ in this
+worktree, box load recorded beside any red. Do not claim completion or
+verification without direct evidence: a claim of a green run names its
+log file.
+
+--- REVIEW OF RECORD (verbatim; findings carry file:line) ---
+
+# #241 Opus review of record — VERDICT: FAIL (2026-08-15 02:40Z)
+
+Reviewer: Opus subagent at Waffles' desk. Full text preserved verbatim below.
+Trio reviewed: cccef3c2d (red pin) / d0571f176 (carry) / 4ca454d9c (enforce),
+base 13123455e. Remediation charter = §"What must happen before this lands".
+
+## Summary of verdict
+
+Core work (record, ACP accumulator, checker, AWL/MIR/Gleam/TS/closure
+regeneration, file splits) is correct and bypass-free. FAILS on contract
+completeness:
+
+- CRITICAL-1: three Gleam constructor sites still three-field
+  (examples/agent-dev/test/support/harness.gleam:155,
+  examples/assistant/test/support/harness.gleam:64,
+  examples/assistant/test/assistant_test.gleam:198) — both example
+  packages' `gleam test` no longer compiles, SILENTLY (src halves build);
+  scripts/battery.sh has NO Gleam gate anywhere, so the break is
+  unobservable by any gate in the repo.
+- CRITICAL-2: no complete workspace test run exists on the final tree
+  (battery.log is 6-of-20-failed from mid-build; only targeted reruns
+  after the closure regen).
+- IMPORTANT-1..6: aion-integrations/src/error.rs:82 rustdoc teaches the
+  retired 3-field shape; both authoring-doc generators
+  (build-deck.py:261, build-tutorial.py:690) still teach it; example
+  prose ×5; two fixture headers contradict their fixtures;
+  awl_corpus_gate.rs:249 assertion WEAKENED (4-field phrase → 1 field);
+  retired_doctrine_gate.rs:195 clean-sample is now a husk.
+- SUGGESTIONS: acp_live_agent.rs never asserts final_message (the only
+  real-agent E2E); norn translate tests don't pin the duplication
+  directly; the replay hazard (3-field payload in existing history
+  hard-fails decode) is documented nowhere.
+
+## Three "unrelated blockers" — all CONFIRMED-PREEXISTING, mechanisms named
+
+1. costly-proof announcement: anchor race — costly_gate::announce writes
+   real stderr, battery merges 2>&1, anchored grep ^COSTLY_PROOF_SKIPPED
+   misses when the write lands mid-line under load (evidence: same tree
+   announced correctly in rust:test, glued mid-line in
+   rust:test-all-features). Own ticket.
+2. TS worker proto drift: caused by eaac2510a (#233, 2026-08-14) adding
+   CancelActivity to worker.proto without regenerating the TS stub. File
+   against #233.
+3. vi.advanceTimersByTimeAsync: battery.sh runs `bun test` (bun's own
+   runner, vi shim lacks the API) where package.json says `vitest run`
+   — one-word fix `bun test` → `bun run test`; that gate has NEVER run
+   the suite as the SDK defines it. Own ticket.
+
+## Builder-report claims unsupported by the diff
+
+"examples/documentation all carry the replacement contract" (false ×8+
+sites); "Biome zero findings" (log says Found 2 warnings, exit 0 real);
+"gleam test 165/165" (no committed log, no gate reproduces it).
+
+## Dispatcher addendum (Waffles): remediation charter must ALSO
+
+- Census every site that DECODES a historical AgentOutcome payload
+  (replay, resume, describe, console read paths). State precisely which
+  runs a swap breaks: in-flight only, or completed-history reads too.
+  Pin the deploy constraint in RULING-AGENT-ACTION-WIRE-FORM.md — the
+  binary must not swap while any run's history holds a three-field
+  agent result unless the read path for it is proven unused.
+
+(Full review text follows — verbatim.)
+
+---
+
+# VERDICT: **FAIL** (full text)
+
+The core of the work is genuinely good — the record, the ACP accumulator, the checker, the AWL/MIR/Gleam/TS/closure regeneration, and the file splits are correct, well-documented, and free of bypasses. It fails on **contract completeness**: the sweep the charter defines as "every production entry point that owns it" left three Gleam constructor sites at three fields, which means two Gleam packages in this repo no longer compile their test suites, and no gate in the repository would have told anyone. Several documentation sites that state the record shape were also missed, and two of the builder's own report claims are not supported by the evidence.
+
+## 1. Red-first discipline — PASS (with one honest caveat)
+
+`cccef3c2d` contains **only** the test: 15 added lines in `crates/aion-integration-acp/src/messages.rs`, the `three_answer_messages_keep_the_last_message_distinct` pin. The red is real, not theatrical: `gate-logs/241-final-message/r2-pin-red.log` records E0599 `final_message` not found at messages.rs:514 against pre-change bytes. Caveat stated plainly: this is a COMPILE-TIME red, not behavioural — for a type-level accessor addition a behavioural red is not constructible first; the green (r2-pin-green.log, exit 0) carries the behavioural claim: completed_text() == "narration\nmore narration\nfleet-judge-pass" while final_message() == "fleet-judge-pass". Mechanism verified sound: messages.rs:303 sets final_message inside close() AFTER the empty-text early return at :294 (empty answer cannot clobber a real final message; tool-only case :536 and thought-contamination case :610 pin it); finish() folds a still-open answer before the read (pump.rs:296 then :308).
+
+## 2. Call-site census (reviewer's own, every site opened)
+
+AgentOutcome::new — 7 sites, all four-arg: outcome.rs:156 (acp, from PromptOutcome.final_message); translate/outcome.rs:147 (norn, text.clone() x2, protocol-cited); session.rs:303 (cli, final_line x2); mock.rs:151; agent_outcome.rs:206/:226/:246 (core tests). No fifth production harness (contract.rs = trait only; examples worker main.rs prose only).
+
+Serialization/decode: agent_outcome.rs:170 into_payload = the one funnel, 4 keys pinned :211, 3-field decode refused :265. gleam agent.gleam:32,53 type+codec four-field both directions. ops-console generated types regenerated (ts-bindings.log). checker/agents.rs:178 len==4 + field_is_string("final_message"); String? still refused (agent_final_message_is_optional.awl pins).
+
+AWL documents: every .awl with stop_reason outside target/.git/gate-logs/etc now four-field, ONE deliberate exception (invalid/agent_returns_the_wrong_record.awl negative fixture). Swept list: fleet_dev.awl, norn_dev.awl, norn_fleet.awl, assistant.awl (server embed), assistant_spike.awl, deck 03-agent-seam.awl, tutorial repo_gate_judged.awl, agent_seam{,_unmarked_control}.awl, 35 harness-section fixtures.
+
+Checked and correctly untouched: python/ts SDKs + conformance (zero occurrences — genuinely not present); cli templates (scaffold none of it); awl ast/lexer/calls (unrelated grammar text); translate.rs + demux.rs (StopKind not record); two design docs (transcript StopKind); CHANGELOGs (history).
+
+## 3. Findings
+
+### CRITICAL-1 — Three Gleam constructor sites still three-field; two packages no longer compile their tests
+examples/agent-dev/test/support/harness.gleam:155-159, examples/assistant/test/support/harness.gleam:64-68, examples/assistant/test/assistant_test.gleam:198-202 — all still `AgentOutcome(text:, stop_reason:, session_id:)`. Gleam constructors are total; both packages take aion_flow by path, so `gleam test` is now a compile error in each; `gleam build` passes (src reads only outcome.text) = SILENT break. scripts/battery.sh has NO Gleam gate (all 20 gates read; .github/, ci/, xtask, gates.json also empty of gleam). The builder's 165/165 was a hand-run with no committed log. Report claim "examples … all carry the replacement contract" unsupported.
+REQUIRED: fix three sites; run gleam test in aion_flow + both examples, commit logs; add a Gleam gate to battery.sh or state Gleam-is-ungated where the next reader cannot miss it.
+
+### CRITICAL-2 — No green full-workspace run on the final tree
+battery.log manifest: 6 of 20 gates failed (clippy/test/test-all-features 101 + costly-announced + ts-worker x2). rust:test failures included committed_closure_matches_a_fresh_oracle_harvest — CAUSED by this diff (agent.gleam changed), subsequently fixed by closure regen in 4ca454d9c; clippy rerun green. But the workspace test gate was never rerun whole on final tree — only a targeted single-test rerun. Targeted green is not a workspace claim.
+REQUIRED: one complete battery (or paired_test cargo test --workspace --no-fail-fast) on final tree, to a file, manifest read.
+
+### IMPORTANT-1 — aion-integrations/src/error.rs:82 rustdoc still teaches `AgentOutcome { text, stop_reason, session_id }` — the shared seam crate's error type states the retired contract (sibling contract.rs:97 WAS updated).
+
+### IMPORTANT-2 — Both authoring-doc generators teach the retired shape: build-deck.py:261-264 ("exactly text … and stop_reason", reproduced awl-deck.html:518); build-tutorial.py:690-693 ("record of text and stop_reason", first-workflow.html:710). Code snippets in the same pages are four-field (sliced from swept .awl) — prose contradicts the adjacent type. Generators are source of truth; next regen re-emits the wrong sentence forever.
+
+### IMPORTANT-3 — Example prose contradicts the record it carries: examples/agent-dev/worker/src/main.rs:10; examples/agent-dev/src/agent_dev/activities.gleam:6; examples/assistant/src/assistant/activities.gleam:5-6; examples/agent-dev/README.md:24; examples/agent-dev/test/support/harness.gleam:27. NOTE examples/agent-dev/worker is a standalone cargo workspace (not a member) — its one code change (descriptors_tests.rs:377) has no committed build evidence.
+
+### IMPORTANT-4 — Fixture headers contradict their fixtures: valid/agent_seam.awl:3-4 (header says exactly three fields, line 19 declares four); invalid/agent_returns_the_wrong_record.awl:2-3 (stated reason now false, behaviour still correct).
+
+### IMPORTANT-5 — Corpus gate's negative control narrowed AND weakened: awl_corpus_gate.rs — control's retired shape moved from pre-#181 bare-String to pre-#241 three-field (bare-String refusal no longer exercised by THIS gate; still covered structurally + by wrong-record fixture); line 249 assertion went from the full three-name phrase to contains("`final_message: String`") — one field where the diagnostic names four. Assert the full four-field phrase.
+
+### IMPORTANT-6 — retired_doctrine_gate.rs:195 clean-sample echoes the OLD diagnostic ("text, stop_reason, and session_id") — checker diagnostic changed (agents.rs:59-62); the sample no longer samples live doctrine; husk.
+
+### SUGGESTION-1 — acp_live_agent.rs:226-237 (the only real-agent E2E) asserts stop_reason + non-empty text via serde_json indexing, never final_message; would pass against a harness that dropped the field.
+### SUGGESTION-2 — norn translate/tests/outcomes.rs never asserts outcome.final_message == outcome.text (covered one layer up at payload JSON level — directness gap not coverage gap).
+### SUGGESTION-3 — Replay hazard undocumented: no serde(default); three-field payload refused at decode (agent_outcome.rs:265 pins) = charter's REPLACE semantics, BUT any run whose history holds a three-field agent result hard-fails decode on replay. RULING-AGENT-ACTION-WIRE-FORM.md:311-318 says "no longer decodes" without the in-flight-run consequence.
+
+## 4. Scope, shortcuts, LOC — PASS
+Scope clean (all inside charter surface; non-goals untouched; worktree clean). Shortcut grep over added lines 13123455e..HEAD: zero allow/expect/ignore/cfg(any())/unwrap/expect/todo/unimplemented/unreachable/panic; no _var renames; no Option/serde(default) shim. Largest touched file pump.rs 486 lines; splits verified verbatim moves. Tests: acp 103→105, norn 85, cli 20, core 116, awl 578 — nothing deleted; two renames + fixture replacement charter-sanctioned. MIR golden diff = exactly the new field + lit-pool shift + one encoder field(v0,N); legitimate re-bless (red then bless logs).
+
+## 5. Three "unrelated blockers" — settled
+Diff touches nothing under sdks/, aion-proto*, parked_timer tests, costly_gate.rs, battery.sh, package.json, bun.lock (non-authorship established; causation then dated):
+(1) costly-announce: CONFIRMED-PREEXISTING. Sites last changed a9e4b3514 2026-08-01; machinery intact; SAME TREE announced correctly in rust:test (battery.log:2293) and glued mid-line in test-all-features (:9350 "... okCOSTLY_PROOF_SKIPPED..."), gate greps ^-anchored (:14686 announced NOTHING). Mechanism: announce writes real stderr, battery merges 2>&1, interleave under load breaks the anchor; the one costly target with concurrent inline-test stdout is the one that fails. Historically announces fine in 3 quiet logs. FILE: buffer to line boundary or relax anchor safely.
+(2) TS proto drift: CONFIRMED-PREEXISTING, caused by eaac2510a (#233, 08-14) adding CancelActivity to worker.proto without regenerating the TS stub (proto grep 3 vs ts grep 0; eaac2510a is ancestor of base). Same root for ts-worker:test half. FILE against #233.
+(3) advanceTimersByTimeAsync: CONFIRMED-PREEXISTING. battery.sh runs `bun test` (bun runner, vi shim v1.3.14 lacks the API) where package.json declares `vitest run`; since ce66b8dd5 2026-07-30 that gate has never run the suite as the SDK defines it. FILE: one-word fix bun test → bun run test.
+Calibration: focused logs exist and read as claimed (focused-tests.log zero FAILED; r2-pin-green exit 0; clippy-rerun clean; ts-bindings + regen-awl-sdk-closure 47 modules present). NO committed log for gleam 165/165 nor sdk_closure_freshness rerun.
+
+## 6. Builder-report claims unsupported
+1. "fixtures, examples, documentation … all carry the replacement contract" — false (CRITICAL-1 + IMPORTANT-2/3/4).
+2. "Biome reported zero findings" — console-gates.log:100 "Found 2 warnings" (pre-existing, non-fatal, exit 0 real; wording false).
+3. "gleam test 165/165" — unevidenced.
+4. "remaining battery failure paths verified unchanged relative to base" — SUPPORTED (re-derived independently ×3).
+
+## What must happen before this lands
+1. Fix three Gleam constructors; gleam test ×3 packages, logs committed.
+2. Gleam gate in battery.sh, or Gleam-ungated stated unmissably.
+3. Fix error.rs:82, build-deck.py, build-tutorial.py (+regen both HTML), worker main.rs:10, both activities.gleam, README.md:24, harness.gleam:27, agent_seam.awl header, agent_returns_the_wrong_record.awl header.
+4. Restore awl_corpus_gate.rs:249 full four-field assertion; update retired_doctrine_gate.rs:195 to current diagnostic.
+5. Assert final_message in acp_live_agent.rs and translate/tests/outcomes.rs.
+6. Add in-flight-replay consequence to RULING-AGENT-ACTION-WIRE-FORM.md.
+7. One complete battery on final tree, to a file, manifest read — three blockers now dated; any FOURTH red is this diff's.
+8. File three battery-defect tickets: costly-announcement anchor race; #233 un-regenerated TS proto stub; battery.sh bun test vs bun run test.
+
+Work from the current repository state. Return only the value required
+by the supplied output schema. Do not claim completion or verification
+without direct evidence.

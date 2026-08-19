@@ -1,0 +1,4 @@
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/247-transcript-spool/crates/aion-server)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/247-transcript-spool/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.14s
+EXIT=0

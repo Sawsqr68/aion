@@ -1,0 +1,51 @@
+=== /Users/tom/Developer/ablative/claude-runner/
+## codex/sdk-parity-train...origin/codex/sdk-parity-train
+ M .meridian/profiles/norn-codebase-explorer.md
+ M .meridian/profiles/norn-developer.md
+ M .meridian/profiles/norn-reviewer.md
+ M .meridian/workflows/onatopp-dev-norn/profiles/norn-agent.md
+M  docs/CLAUDE-AGENT-SDK-MIGRATION-HANDOFF-2026-07-25.md
+D  docs/evidence/CR-BUSYPOLL-MEASUREMENT-2026-07-26.md
+D  refs/ts-claude-agent-sdk.md
+M  src/catalog/model.rs
+M  src/lib.rs
+M  src/query/error.rs
+M  src/query/interaction_tests.rs
+M  src/query/lifecycle_tests.rs
+M  src/query/mod.rs
+M  src/query/tests.rs
+M  src/types/mod.rs
+M  src/types/model.rs
+?? .worktrees/
+?? .yggdrasil-worktrees/
+?? refs/ts-claude-agent-sdk.md
+
+=== /Users/tom/Developer/ablative/docs/
+## main...origin/main [ahead 55]
+?? ABLATIVE-DURABLE-AGENTS-ONEPAGER.md
+?? ABLATIVE-FIX-LIST.md
+?? ABLATIVE-FUNDING-TRACKER.md
+?? ABLATIVE-PROJECTS.md
+?? ABLATIVE-STACK-ONEPAGER-VC.md
+?? ABLATIVE-STACK-PITCH.md
+?? ABLATIVE-STACK-ROADMAP.md
+?? COMET-SIGHTINGS.md
+?? COMPETITIVE-ANALYSIS.md
+?? FABLE-METHODS.md
+?? FABLE-SESSION-PLAN.md
+?? FEATURE-REQUEST-TEMPLATE.md
+?? USE-CASE-DISCOVERY-TEMPLATE.md
+?? design-system-v2/
+?? living-software.html
+?? meridian-design-scratch/
+?? pitches/
+?? prompts.md
+?? prompts/
+?? tracking/.seat-locality-probe-cally-20260807.txt
+?? tracking/.seat-locality-reply-seth-20260807.txt
+?? tracking/aion-feature-complement-census-20260817.md
+?? tracking/beamr-feature-complement-census-20260817.md
+?? tracking/briefs/BEAMR-NOSTD-001.md
+?? tracking/estate-feature-complement-census-20260817.md
+?? tracking/iridium-feature-complement-census-20260817.md
+?? tracking/meridian-feature-complement-census-20260817.md

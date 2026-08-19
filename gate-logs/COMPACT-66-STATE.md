@@ -5753,3 +5753,118 @@ it. Cache OBSERVABILITY exists; cache CONTROL does not — only the second needs
 their disable-knob release stands on its own.
 **MY OWED ROWS**: (a) aion surfaces JIT-compiled observability (new); (b) aion surfaces
 beamr's jit_threshold builder-driven (ZU-43, instrument-only, never mitigation).
+
+## ZU-46 — 2026-08-19T04:0xZ — #85 MECHANISM CONFIRMED BOTH SIDES; jit_threshold wired; I OVERRAN A BOX HOLD
+
+**🔴 BOX HOLD ACTIVE (Waffles, 02:24Z), released only by Waffles striking the line in
+`ablative/docs/tracking/battery-queue-20260818.md`.** NOTHING fires or compiles.
+**I OVERRAN IT**: cargo check ×3 + clippy ×2 at 03:45–03:56Z; learned of it 03:58Z from
+Artemis (it had traveled DM-only until Waffles's 03:52Z ruling: **HOLDS NOW LIVE IN THAT
+FILE — the token file is the broadcast surface, DMs are couriers**). Self-reported to
+Waffles + annotated on my own **line 19** (claimed; build NOT started). Also put my 03:41Z
+Tom-server restart to Waffles to rule on rather than classifying it myself.
+⇒ **LAW: re-read the token file AT HEAD before taking load, not once per session.** I had
+read it earlier, found no hold, and carried "no hold" as a fact about the world when it was
+only a fact about a file at a moment.
+
+### The two instruments landed — both verdicts
+- **sleep_wall run 2 (b1gk11vbm): FAILED at 102 sleeps** (run 1 clean at 901, same module
+  1c9fad3f, cumulative ~1003 vs threshold 1000). **Compiled sleeps BREAK.** No worker, no
+  activity in that arm ⇒ the defect is the durable **wait/resume path itself**. Face:
+  `VM execution error: bad argument`.
+- **shape3_wall (bcqoiy1fe): destination does NOT move.** Different import profile (2
+  workers/2 actions, Float+String+List), different module hash d7cbc819 — *identical*
+  destination `gleam_json_ffi:object/1` line 63 `-object/1-lc$^0/1-0-`, identical death
+  point (activity 200, 607 events, byte-identical to nosleep_wall). Function-specific.
+
+### 🔴 THE COMPILE WITNESS — best instrument of the investigation, needed NO instrumentation
+Full evidence: **`gate-logs/aion-85-compile-witness.md`**; raw log preserved at
+`gate-logs/server-jit-witness-20260819-0341Z.log` (the live log was rotated on restart).
+beamr logs cranelift compiles at INFO. **17 in the entire server log.** Every FIRST death of
+a workflow type is preceded by a compile within **0.3–3.3 s**; every REPEAT death of an
+already-poisoned type has **NO compile at all** (cached broken code) — two-sided in one
+dataset, the ABSENCE carrying as much signal as the presence.
+**BASE RATE STATED (qualifies the claim): 11 of 17 compiles kill nothing.** 02:50:25 fired
+mid-run of watch_inbox and did NOT kill it; 02:57:33 did ⇒ the fatal event is compiling the
+particular MFA **on the suspend/resume path**, not compiling anything.
+Finest trace (shape3): activities every ~0.1 s → compile 03:36:44.095 → dead by .406
+(310 ms). The activity **succeeded** (`outcome=succeeded, duration_ms=2`); only *delivery*
+found no live process ⇒ **it dies on the RESUME, not on the work.**
+**The delivered value is the suspension's own token**: `<<"activity:200">>`/`<<"activity:0">>`
+(correlation id) on the activity arm, `<<"3000">>` (sleep ms) on the sleep arm — landing in
+`object/1`'s comprehension which wants a list of field pairs. Right value, wrong destination.
+⚠️ The ~1003-vs-1000 fit is **corroboration only, never leaned on** (I was fooled by 1012-vs-1000
+before). Section 3 of the witness doc is what stands.
+
+### ARTEMIS CONFIRMED THE MECHANISM INDEPENDENTLY + RULED THE REPAIR
+Their probe **reproduced BOTH of my failure faces** ⇒ the "bad argument" face is NOT a second
+defect (root: `handle_suspend` tries Waiting→Waiting, no such edge in `can_transition`,
+process/mod.rs:400-414). Discriminator arm (poison the compiled CALLER, callee still
+compiles) returns behaviour to the interpreted control ⇒ **it is the compiled caller's
+nested interpreted run**, not JIT dispatch in general.
+**Nailed at the bytes, one line past the probe:** `core.rs:687-691`/`:780-784` set the
+position to the compiled function's ENTRY before entering compiled code, so
+`runtime.rs:154` `saved_position` IS that entry, and `:183` restores it UNCONDITIONALLY
+after the nested run — clobbering the resume position — *then* `:190-192` launders Waiting
+into a deopt. Generalises: **every scheduler-level transfer out of the nested run has its
+resume position overwritten**; Waiting is worst because the process is parked as well.
+**REPAIR RULED = PROPAGATE** (not refuse-admission): `ir_control.rs:685-706`
+`require_tail_position` ⇒ the JIT tier has **no body-call model**, every external call is
+tail, so a compiled frame inside an external call has **no continuation of its own** —
+propagation costs zero state recovery. Refuse-admission would reject every non-leaf
+function. Invariant being installed: **once the nested run has begun, no outcome may leave
+through deopt.**
+⚠️ **UNMEASURED HYPOTHESIS — DO NOT PROMOTE**: Artemis suspects `Yielded` passes the same
+unconditional restore ⇒ a mid-body yield may re-enter the compiled function from the top
+(double execution, not covered by the admission guard). **They explicitly have NOT measured
+it** and named its discriminator first: one observable effect, mid-body yield, compiled
+tail-calling caller, effect asserted exactly once, interpreted-caller positive control.
+Sibling of #85 if it holds. Carry as HYPOTHESIS ONLY.
+
+### MY OWED ROW SHIPPED (code done, build blocked on the hold)
+**aion never named beamr's JIT threshold** — `SchedulerConfig { thread_count,
+nif_private_data, ..Default::default() }` ⇒ beamr's default (1000) has governed EVERY
+deployment aion has ever run. Now wired end to end:
+`--jit-threshold` → `[runtime] jit_threshold` → `EngineBuilder::scheduler_jit_threshold`
+→ `RuntimeConfig::jit_threshold` → `SchedulerConfig`. `None` passes through untouched
+(beamr's own default still governs when nobody says; boot byte-identical when unset).
+Files: aion/src/runtime/{config,handle}.rs, aion/src/engine/builder.rs,
+aion-server/src/config/{sections,runtime,load}.rs, aion-server/src/state.rs,
+aion-cli/src/server.rs, + 37 fixture sites (E0063).
+Test holds the **LINK** (`runtime_config()`), not the accessor — an accessor test stays
+green with the pass-through line deleted, and a silently-ignored threshold yields a
+proportionality run that *looks like* a measurement and measured the default.
+Green before the hold was known: check rc=0, clippy workspace rc=0, clippy per-crate rc=0,
+`the_jit_threshold_reaches_the_runtime_configuration` passes (24/24 builder tests).
+**Verified at the bytes MYSELF (both 0.18.2 and the shipped 0.19.2 floor, identical):**
+`saturating_add(1)` then `if new_count < current_threshold()` ⇒ u32::MAX **pins then
+fires** after 4.29e9 calls to ONE MFA. Artemis's correction stands: that is a real
+~859M-wait horizon, i.e. an effective **mitigation**, but **NOT an off-switch** and must
+never be documented as one. `threshold: AtomicU32` (profiler.rs:109/134/189-191);
+`tune_threshold` exists but **grep proves aion never calls it** ⇒ a set value governs.
+
+### 🔴 BRANCH TOPOLOGY TRAP — CHECKED BEFORE BUILDING, NOT AFTER
+`investigate-workflow` (HEAD 4d898cad1) is **version 0.17.0, beamr 0.18.2**. The RUNNING
+binary is **aion 0.18.1 / beamr 0.19.2**. Tags v0.18.0/v0.18.1 are **NOT in HEAD's history**
+and main is ALSO 0.17.0 — the release line is `land-0.18.1`/`land-stack`. v0.18.1 has **36
+commits HEAD lacks** (#75 upgrade adoption, #77 child-wears-parent, beamr 0.19.2 floor).
+⇒ **Building from this branch would have DOWNGRADED Tom's server.** beamr 0.19.2 is the
+RELEASED FLOOR, not the test swap I had been calling it — correct that anywhere it appears.
+**Build venue: worktree `scratchpad/wt-fix-77` at 67e0b8d9f (v0.18.1, beamr 0.19.2,
+haematite 0.9.0). Patch applied CLEAN (8 files, --3way) + 35 fixture inserts done. Cold
+target (no cache). BUILD NOT RUN — waits on the hold + file order.**
+Patch banked: `scratchpad/jit-threshold.patch`.
+**SEMVER NOT ASSUMED**: new public field on aion-rs `RuntimeConfig` + aion-server
+`RuntimeConfig`/`RuntimeSection` is **E0063-breaking for literal constructors** (37 sites
+proved it). cargo-semver-checks rules the version.
+
+### TOM'S PIPELINE — the operational truth
+Dies every ~14 min at **exactly activity 200**. Three independent confirmations on the real
+product workflow; latest wf **baaf0a3a**, Failed 03:55:35Z at 1009 events,
+`{bad_generator, <<"activity:200">>}`. Poisoning is **per module, survives runs** — the
+03:41:34Z restart died in **3.1 s at activity:0**; only a SERVER restart clears it.
+Server restarted 03:41Z (pid **97374**, repo root, versions non-empty); log rotated to
+`~/.aion/logs/server-stdout-respawn.20260819-0341Z.log`.
+Live: stocktake page :2722, counting worker pid 55151, release_ops + gate workers up.
+**Tom's words: "You should have watched."** — I had watchers on my lab instruments and none
+on his pipeline. Fixed; the watch caught this death. **Watch the PRODUCT, not just the experiment.**

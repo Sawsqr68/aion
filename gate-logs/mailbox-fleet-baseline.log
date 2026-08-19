@@ -1,0 +1,12 @@
+FMT=0
+    Checking manifold-surface-host v0.1.0 (/Users/tom/Developer/ablative/apps/manifold/.worktrees/mailbox-fleet/crates/manifold-surface-host)
+    Checking manifold-node v0.1.0 (/Users/tom/Developer/ablative/apps/manifold/.worktrees/mailbox-fleet/crates/manifold-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 00s
+CLIPPY=0
+    write_door::a_partial_bootstrap_reconciles_each_missing_seat_on_the_next_boot
+
+test result: FAILED. 145 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5149.56s
+
+error: test failed, to rerun pass `-p manifold-node --test mailbox`
+TEST=0
+BASELINE-COMPLETE

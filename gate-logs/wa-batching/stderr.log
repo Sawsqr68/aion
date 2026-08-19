@@ -1,0 +1,6 @@
+[2m2026-08-17T10:17:04.724159Z[0m [33m WARN[0m [2mdiagnostics::conventions::config[0m[2m:[0m CONVENTIONS.toml contains an unrecognized top-level table; skipping [3mkey[0m[2m=[0m"gleam"
+[2m2026-08-17T10:21:21.131901Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"clippy"
+[2m2026-08-17T10:21:21.135827Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"rustfmt"
+[2m2026-08-17T10:26:47.386840Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"clippy"
+[2m2026-08-17T10:26:47.395211Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"rustfmt"
+norn: SIGTERM received; cancelling the run — signal again to exit immediately

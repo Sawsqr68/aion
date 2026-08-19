@@ -1,0 +1,177 @@
+Delegation mode: dev
+Specialist preset: implementation
+Repository: /Users/tom/Developer/ablative/stack/aion/.worktrees/wa-envelope-delta (isolated git worktree, branch wa-envelope-delta)
+
+Task: execute the lane charter below in full. It is your complete charter.
+
+# Lane charter: write-amplification piece D — envelope-delta persistence
+
+You are fixing one named, measured defect. The forensics document appended
+below this charter is the mechanism of record — read it first, especially
+§1's per-event-type tables and §3.
+
+## Scope — piece D ONLY
+
+Three full provider response envelopes per LLM turn (`response.created` /
+`response.in_progress` / `response.completed`, ~82KB each, identical
+instructions block every time) are persisted into the activity-transcript
+stream — 91% of transcript bytes. Fix at the event-shaping layer: persist
+the full envelope ONCE per turn and deltas for the rest. Events stay
+events; history semantics do not change; what changes is what the emitter
+puts in them.
+
+## READER FIRST — mandatory ordering inside this lane
+
+This is a FORMAT change to the transcript stream and mixed history will
+exist forever. The reader arm lands FIRST: transcript
+rendering/reconstruction proves it renders old-format streams, delta
+streams, AND a mixed stream — with the old-format render behavior pinned
+as a fixture BEFORE you change anything (capture the pre-change rendering
+of a real fixture stream; that pinned output is the equivalence oracle).
+Only after the reader proof is green does the writer flip. You may not
+green the writer against a reader you changed in the same motion.
+
+Requirements:
+1. Reader: reconstruction of a turn from (one envelope + deltas) renders
+   byte-identically (or provably-equivalently, stated) to the old
+   three-envelope form. Old, new, and mixed streams all proven.
+2. Writer: the emission layer persists one full envelope per turn, deltas
+   for in_progress/completed (the identical instructions block never
+   repeats).
+3. RED FIRST: per-event-type byte table of a fixture turn — red today
+   (3 × full envelope bytes), green with the delta shape. Red output
+   quoted in the commit message.
+4. Replay/resume paths that consume the transcript stream are part of the
+   reader proof, not just the console view.
+
+## Zone wall — violation = STOP, not merge
+
+Your files: the event-emission layer (`crates/aion-integration-norn`,
+`crates/aion-integrations` where Raw provider envelopes are shaped) and
+the transcript reconstruction/rendering layer. You may NOT touch
+`crates/aion-server/src/activity_publisher.rs` or
+`crates/aion-store-haematite/src/store.rs` — a parallel lane owns those;
+the store returns events, it does not interpret them. If your fix
+genuinely needs those files, STOP, write REPORT.md explaining why the
+zone split fails, and end. Do not merge two lanes' work with your own
+hands.
+
+## Lane rules (standard, from the 36-follow-on charter — binding)
+
+- PLAIN BUILDER. No aion harness anywhere in this lane's execution.
+- Isolation walls absolute: never the live estate server, ~/.aion,
+  aion-data/, live workers, or any sibling worktree. Any server you need
+  runs isolated inside the worktree, built FROM this worktree's tree
+  (binary provenance recorded in REPORT.md: path + commit) — never
+  ~/.cargo/bin/aion.
+- No lint bypasses, no #[allow], no #[ignore], no test skips, no weakened
+  assertions.
+- Autoformat (`cargo fmt --all`) before committing; there is NO fmt gate.
+- Final battery at the final tree, extraction pipeline, ALL of:
+  `cargo check --workspace --all-targets --message-format=json --keep-going`,
+  `cargo clippy --workspace --all-targets --message-format=json --keep-going -- -D warnings`,
+  clippy again `-p aion-integration-norn -p aion-integrations` (feature
+  resolution differs per-crate vs workspace), and
+  `NEXTEST_EXPERIMENTAL_LIBTEST_JSON=1 cargo nextest run --workspace --all-targets --cargo-quiet --message-format libtest-json-plus --no-fail-fast`.
+  The battery runs EVERYTHING and reports everything; never stop at the
+  first red binary. Exit codes recorded in REPORT.md.
+- No allocation instrumentation without an explicit disk-budget line.
+- REPORT.md at the worktree root before you finish, whatever the outcome:
+  what you did, what you proved (with the red/green evidence and the
+  reader-first ordering receipts), and an explicit non-claim section for
+  anything unproven. Silence is not an option.
+
+--- FORENSICS OF RECORD (verbatim) ---
+
+# Aion Write-Amplification Forensics — 2026-08-17
+
+READ-ONLY investigation. Nothing written to the store, no locks taken; all store access was direct file reads of immutable content-addressed blobs plus the live server's own read paths (`aion list`, `aion describe`). Companion doc: `aion-store-census-20260817.md` (totals, shard table, age curve — settled there, not re-derived here). This doc answers the question that census left open: **what mechanism turns kilobytes of honest content into ~432 MB/run of permanent store?**
+
+Store: `/Users/tom/Developer/ablative/stack/aion/aion-data` — 107.94 GB apparent bytes, 286,847 node files at measurement time, 238 runs ⇒ **453 MB/run average** (census's 432 MB, plus a day's growth). Node files are zstd blobs, immutable, mtime = creation time, so an mtime-window census measures exactly the bytes a run wrote — and, because nothing ever deletes them (see §4), exactly the bytes it permanently keeps.
+
+## 1. The three subject runs — stored vs honest
+
+| Run | Type / status | Window (UTC) | Store bytes written (files) | Honest transcript payload | History (D-keyspace) | Multiplier |
+|---|---|---|---|---|---|---|
+| `4da9963a-4f3d-4287-9ea4-d4d0fd8336ce` | git_status_sweep, Completed | Aug-17 08:10:21–08:10:46 (25 s) | **73.7 MB** (705 files; 676 in shard-21) | **136,442 B** (338 `Message` events, ~404 B each — status lines) | 33,110 B (12 events) | **~540×** |
+| `0dad5237-72a7-49e3-838c-111a5a54c377` | norn_dev, Completed | Aug-16 15:43:37–16:00:04 (16.5 m) | **2.98 GB** (2,444 files; shards 44+32) | **26,638,342 B** (1,714 events) | 51,442 B (14 events) | **~112×** |
+| `4c4ef686-ccc7-49d7-a352-63df61f6f3da` | norn_dev, Failed | Aug-16 02:20:16–04:40:09 (2 h 20 m) | **6.96 GB** (9,387 files; shard-56 ≈ 5.0 GB, shard-51 ≈ 1.94 GB) | **~66.9 MB** (19.5 MB + 47.4 MB across its two stream leaves) | 39,081 B (16 events) | **~104×** |
+
+Sweep ticks generally: 29 consecutive sweeps Aug-16 22:00 → Aug-17 08:39 wrote **5.91 GB total, avg 204 MB/tick, max 663 MB** (`91af66c8`, 49 s) — Tom's "hundreds of MB per status sweep" is measured fact. The tick cost varies with how fat the leaf its events land in happens to be (§3).
+
+The `describe` history (the workflow's actual durable oplog — the decisions) is **33–51 KB per run**. All volume lives in the `O`-keyspace activity-transcript streams and, overwhelmingly, in superseded storage-tree nodes.
+
+### Per-event-type tables (transcript payloads, subject run only)
+
+**Failed norn_dev `4c4ef686`, shard-51 stream (2,921 events, 47,384,015 B):**
+
+| kind | n | bytes |
+|---|---|---|
+| Raw/response.in_progress | 178 | 14,577,193 |
+| Raw/response.created | 178 | 14,576,480 |
+| Raw/response.completed | 175 | 14,457,341 |
+| ToolResult | 173 | 1,448,787 |
+| Raw/response_item | 339 | 587,674 |
+| Raw/response.output_item.done | 345 | 578,600 |
+| (9 more kinds) | | <1.5 MB total |
+
+**Completed norn_dev `0dad5237` (1,714 events, 26,638,342 B):** Raw/response.completed 92×8,234,156 B · Raw/response.in_progress 92×8,217,252 B · Raw/response.created 92×8,216,884 B · everything else <1.9 MB.
+
+**Sweep `4da9963a` (338 events, 136,442 B):** 100% `Message`, ~404 B each.
+
+Note the honest-content layer has its own duplication: `response.created` / `response.in_progress` / `response.completed` are each a **full provider response envelope (~82 KB avg) carrying the entire instructions block**, persisted three times per LLM turn — ~91% of transcript bytes. But even taking that 67 MB as "honest", the store cost is 100–540× on top of it. The structural amplifier is below.
+
+## 2. The mechanism — whole-leaf re-persistence per event append
+
+The named write path, file:line:
+
+1. **One event = one append = one tree commit.** The server publishes every agent telemetry event individually: `crates/aion-server/src/activity_publisher.rs:183` → `self.store.append_activity_event(expected_seq, &event)`; `crates/aion-store-haematite/src/store.rs:1617` → `store.append_batch(&stream_key, &[payload.as_slice()], expected_seq)` — a batch of ONE. No coalescing (confirmed empirically: sweep wrote 676 shard-21 files for 338 events — one new leaf + one new root per event).
+2. **Each commit rewrites the entire containing leaf.** Haematite's mutation path (`haematite/crates/haematite/src/tree/mutate/mod.rs:102-130` `batch_mutate_owned_erased`) computes the affected window and calls `tree/mutate/window.rs:82` `rebuild_window`, which `load_entries()` the WHOLE leaf, applies the 1-event mutation, and re-persists the full leaf as a **new content-addressed node** via `tree/mutate/spine.rs:244` `.put(&Node::Leaf(leaf))` → `store/disk/node_io.rs:57` `compress_node` (zstd) → `publish_compressed_node` (`node_io.rs:28`). The old leaf blob stays on disk.
+3. **Leaves are value-blind and balloon to ~73 MB.** The deployed store is **unstamped** (`aion-data/config.json` has no `format_version`), so `haematite/src/db/config.rs:280` (`derive_policy`) locks it to `TreePolicy::V1_DEFAULT` *forever*: leaf boundary fires iff `blake3(key) % 4096 == 0` (`tree/boundary.rs:26`, `DEFAULT_TARGET_SIZE = 4*1024` at `boundary.rs:1`) — an expected **4,096 entries per leaf regardless of entry size** (`tree/policy.rs:91-101`; the test `v1_default_ignores_value_length` at `policy.rs:182` documents the blindness). Transcript events average 12–17 KB, so leaves reach **73.3 MB decompressed / ~2.3 MB zstd**.
+4. **So the cost of appending one ~500 B event is one full leaf blob.** Sweep leaf: 1.56 MB decompressed → ~130 KB compressed **per status line**. norn_dev leaf: 73.3 MB → ~2.3 MB compressed **per telemetry delta**. Sizes across a run form the O(n²) ladder (shard-56 top blobs: 2,303,798 → 2,303,416 → 2,302,830 → … over 646 blobs in the 2–3 MB band alone; shard-56 holds 17,195 files, 12.68 GB, median blob 817 KB, only 7,092 tiny root/internal nodes <1 KB).
+5. **Nothing ever deletes superseded nodes.** Aion has **zero call sites** for haematite's vacuum/prune (grep of `crates/aion-store-haematite`, `crates/aion-server`: none; `aion-data/config.json` `sweep_interval: null` is a retired TTL-cadence key, `db/config.rs:320`, not GC). Every superseded leaf version is permanent until an offline `haem vacuum` that has never run (census §8: v1 vacuum requires the writer lock the live server holds). Reachable data per shard is the current root's tree — order of the final leaf (~2.3 MB compressed) against shard-56's 12.68 GB: **>99.8% of the hot shards is superseded-version garbage.**
+6. **Cross-run amplification.** V1 leaves pack adjacent keys from MANY workflows: the shard-56 leaf holds **five workflows'** transcripts (4c4ef686 19.5 MB + 7e2192df 37.7 MB + 60ae7eeb 12.7 MB + two small); the sweep leaf holds **seven** (three sweeps + a fleet_dev + others). A live run's every event **re-persists the finished runs' full transcripts sharing its leaf**. That is why a kilobyte sweep costs 25–663 MB depending on which shard its workflow-id hashed into.
+
+Multiplier arithmetic, per run: honest 136 KB → 73.7 MB permanent (sweep, 540×); honest ~67 MB → 6.96 GB permanent (failed norn_dev, 104×). Per single append the structural multiplier is the leaf-to-event ratio: **~977× compressed (2,359 B honest → 2,303,416 B blob), ~31,000× in serialized bytes** (fixture below).
+
+## 3. The red-first fixture pair (for the fix lane)
+
+Two consecutive versions of the same shard-56 leaf, written **2 seconds apart** during run `7e2192df-72f1-49da-8ae4-68cc2349ca16` (norn_dev, Failed, Aug-16 09:09–10:57 UTC):
+
+| | blob k−1 | blob k |
+|---|---|---|
+| Path | `aion-data/shard-56/store/4d/f6a48078935e0777aa24a8e0200afa72de4ae41b1d3ee0770ab56b7af318b0` | `aion-data/shard-56/store/7f/9f01493155a004322d7ff429d6885e4645b77932e7a9eac9bf51e9050ee3b7` |
+| mtime | 2026-08-16 09:58:28 UTC | 2026-08-16 09:58:30 UTC |
+| Compressed | 2,303,798 B | 2,303,416 B |
+| Decompressed | 73,301,175 B | 73,303,846 B |
+| Events | 5,712 | 5,716 |
+
+**Demonstrated superset:** every one of k−1's 5,712 `(worker_seq, store_seq)` event identities is present in k; k adds exactly 4 events, all belonging to `7e2192df` activity 1 attempt 2, emitted 09:57:06.48Z: worker_seq **56203** (Raw, 629 B), **56206** (Raw, 645 B), **56207** (Message, 409 B), **56208** (Raw, 676 B) — **2,359 honest bytes**, paid for with a new 2,303,416 B permanent blob (plus new internal/root nodes). Raw byte prefixes diverge at offset 1 (leaf header lengths shift), so the proof is by event identity, not prefix — parse both and compare `(worker_seq, store_seq)` sets. Both leaves also carry the complete transcripts of the *finished* runs `4c4ef686` (19,516,073 B) and `60ae7eeb` (12,682,960 B) — the cross-run re-persistence in one specimen.
+
+Re-fetch: the blobs are immutable CAS files — `zstd -d -c <path>` yields the serialized leaf; events are framed JSON, delimited by `{"workflow_id":"…`, each with `worker_seq`/`store_seq`/`kind`. (Server may never be running against a copy of these paths' parent; reading the files directly is safe — they are write-once.) CLI cross-check of the live stream: `aion describe 7e2192df-72f1-49da-8ae4-68cc2349ca16` for the oplog; the transcript itself is served by the transcript read path (`read_activity_events_from`, `aion-store-haematite/src/store.rs:1628`).
+
+## 4. Relation to aion#32 (memory retention, ~0.8 GB per sweep tick)
+
+Same root, different symptom. #32's malloc_history stacks all terminate in **`LeafNode::deserialise`** (via `stream_index::rebuild`, `WalRecovery::recover_path`, `DiskStore::read_node`) — the *read* side of the same oversized leaves: every read/rebuild/replay must materialize a whole 1.5–73 MB leaf to touch one event, and the server retains them (~7.2 KB avg allocations = leaf entries). The 0.8 GB-per-sweep-tick memory delta and the 204 MB-per-sweep-tick disk delta are the same value-blind V1 leaves being, respectively, deserialized-and-retained and rewritten-and-retained. Fixing leaf sizing shrinks both; #32 additionally needs its unbounded re-deserialization loop found (its brief: `ablative/docs/briefs/aion-haematite-leak-brief-20260817.md`, Apollo's lane), which leaf sizing alone does not close.
+
+The `247-transcript-spool` worktree (7 commits, worker-side disk spool + collision-safe replay dedup for transcript events across server outages) is a durability lane, not this defect: its replay dedup prevents *event-level* duplication on reconnect; it neither causes nor mitigates the leaf-rewrite amplification.
+
+## 5. Shape of the proper fix
+
+Haematite has already built the fix upstream: **`TreePolicy::V2` byte-weighted chunking** (on-disk format 2, `tree/policy.rs:47`, stamped via `db/config.rs` with nonzero `leaf_target_bytes`) caps leaves by bytes and isolates oversized entries. The deployed path needs: (1) aion off pinned haematite 0.8.1 onto a V2-capable release and a **format-2 migration of the unstamped `aion-data`** (unstamped = V1 forever by design — migration, not config, is the only exit); (2) **batch event appends** in `activity_publisher` (one commit per event is a second, independent multiplier); (3) a **vacuum story for superseded nodes** (aion never calls it; >99% of hot shards is reclaimable garbage) plus aion-level unpin of terminal-run transcripts; (4) at the content layer, stop persisting three full provider envelopes per turn (persist deltas; the envelope's instructions block is identical every time).
+
+## Summary (5 lines)
+
+1. **Mechanism:** every single activity-transcript event append rewrites its entire containing storage-tree leaf as a new permanent zstd blob — leaves hold ~4,096 entries *regardless of size* (value-blind V1 chunking, unstamped store), reaching 73 MB and packing up to 5+ workflows, so live runs re-persist finished runs' whole transcripts per event, and no vacuum ever deletes the superseded versions.
+2. **Multiplier:** honest content → permanent store = 540× for a sweep tick (136 KB → 73.7 MB), ~104–112× for norn_dev runs (67 MB → 6.96 GB failed; 26.6 MB → 2.98 GB completed); per-append the fixture shows 2,359 honest bytes buying a 2,303,416-byte permanent blob (~977×).
+3. **File:line:** `aion-server/src/activity_publisher.rs:183` + `aion-store-haematite/src/store.rs:1617` (append-of-one per event) → haematite `tree/mutate/window.rs:82` `rebuild_window` + `tree/mutate/spine.rs:244` `.put(&Node::Leaf)` (whole-leaf rewrite) under `tree/boundary.rs:1,26` / `db/config.rs:280` (value-blind V1 policy, locked in by the unstamped `aion-data/config.json`).
+4. **#32 same root:** yes — its leak stacks end in `LeafNode::deserialise` of these same oversized leaves (read-side materialization + retention), though #32's unbounded re-deserialization loop is an additional defect leaf-sizing alone won't close.
+5. **Proper fix:** migrate `aion-data` to haematite format-2 byte-weighted chunking (already implemented upstream: `TreePolicy::V2`), batch event appends per commit, add a vacuum/unpin path for superseded nodes, and stop persisting three full provider envelopes per LLM turn.
+
+---
+*Forensics by read-only measurement, 2026-08-17. Runs measured via `aion list`/`aion describe` against the live server; store bytes via immutable-blob mtime census; leaf contents via direct zstd decode of named CAS blobs; source lines from `stack/aion` @ dev and `stack/haematite` @ 6deee97.*
+
+Work from the current repository state. Write REPORT.md at the worktree
+root before you finish, whatever the outcome. Return only the value
+required by the supplied output schema. Do not claim completion or
+verification without direct evidence.

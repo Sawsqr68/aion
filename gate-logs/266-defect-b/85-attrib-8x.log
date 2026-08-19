@@ -1,0 +1,75 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 06s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.02s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 10s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.85s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 11s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.43s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 31s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.94s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 33s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 2.73s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 38s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 2.18s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 35s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.87s
+
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 30s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-742cfffafecf459f)
+
+running 1 test
+test workflow_task_queue_selection_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.71s
+

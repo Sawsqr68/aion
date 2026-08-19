@@ -1,0 +1,683 @@
+=== CONTROL ARM: unmodified main 0bed60196 ===
+HEAD=0bed60196cf51dee4624bffa199a2b63f8480f3e
+LOAD-BEFORE: 19:09  up 3 days,  6:44, 4 users, load averages: 3.85 6.28 9.25
+--- run 1 default ---
+   Compiling libc v0.2.186
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling cfg-if v1.0.4
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling memchr v2.8.1
+   Compiling version_check v0.9.5
+   Compiling log v0.4.32
+   Compiling smallvec v1.15.1
+   Compiling equivalent v1.0.2
+   Compiling find-msvc-tools v0.1.9
+   Compiling once_cell v1.21.4
+   Compiling shlex v2.0.1
+   Compiling itoa v1.0.18
+   Compiling pin-project-lite v0.2.17
+   Compiling scopeguard v1.2.0
+   Compiling hashbrown v0.17.1
+   Compiling parking_lot_core v0.9.12
+   Compiling lock_api v0.4.14
+   Compiling bitflags v2.13.0
+   Compiling zerocopy v0.8.50
+   Compiling typenum v1.20.1
+   Compiling fnv v1.0.7
+   Compiling futures-core v0.3.32
+   Compiling allocator-api2 v0.2.21
+   Compiling indexmap v2.14.0
+   Compiling autocfg v1.5.1
+   Compiling tracing-core v0.1.36
+   Compiling getrandom v0.3.4
+   Compiling futures-sink v0.3.32
+   Compiling anyhow v1.0.102
+   Compiling zeroize v1.8.2
+   Compiling slab v0.4.12
+   Compiling futures-channel v0.3.32
+   Compiling futures-task v0.3.32
+   Compiling futures-io v0.3.32
+   Compiling zmij v1.0.21
+   Compiling rand_core v0.10.1
+   Compiling generic-array v0.14.7
+   Compiling getrandom v0.4.2
+   Compiling serde_json v1.0.150
+   Compiling syn v2.0.117
+   Compiling jobserver v0.1.34
+   Compiling errno v0.3.14
+   Compiling cc v1.2.63
+   Compiling parking_lot v0.12.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling socket2 v0.6.4
+   Compiling mio v1.2.1
+   Compiling percent-encoding v2.3.2
+   Compiling num-traits v0.2.19
+   Compiling core-foundation-sys v0.8.7
+   Compiling synstructure v0.13.2
+   Compiling either v1.16.0
+   Compiling foldhash v0.2.0
+   Compiling hashbrown v0.16.1
+   Compiling heck v0.5.0
+   Compiling ahash v0.8.12
+   Compiling thiserror v2.0.18
+   Compiling httparse v1.10.1
+   Compiling serde_derive v1.0.228
+   Compiling tokio-macros v2.7.0
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.32
+   Compiling zerofrom-derive v0.1.7
+   Compiling futures-util v0.3.32
+   Compiling tracing v0.1.44
+   Compiling yoke-derive v0.8.2
+   Compiling zerofrom v0.1.8
+   Compiling thiserror-impl v2.0.18
+   Compiling stable_deref_trait v1.2.1
+   Compiling pkg-config v0.3.33
+   Compiling tower-service v0.3.3
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling zerovec-derive v0.11.3
+   Compiling lazy_static v1.5.0
+   Compiling libm v0.2.16
+   Compiling cranelift-srcgen v0.131.2
+   Compiling cranelift-assembler-x64-meta v0.131.2
+   Compiling displaydoc v0.2.6
+   Compiling wasmtime-internal-core v44.0.2
+   Compiling ppv-lite86 v0.2.21
+   Compiling bumpalo v3.20.3
+   Compiling zstd-safe v7.2.4
+   Compiling base64 v0.22.1
+   Compiling uuid v1.23.4
+   Compiling hybrid-array v0.4.12
+   Compiling rustix v1.1.4
+   Compiling crc32fast v1.5.0
+   Compiling try-lock v0.2.5
+   Compiling cranelift-isle v0.131.2
+   Compiling want v0.3.1
+   Compiling yoke v0.8.3
+   Compiling async-trait v0.1.89
+   Compiling bytes v1.11.1
+   Compiling tokio v1.52.3
+   Compiling http v1.4.1
+   Compiling iana-time-zone v0.1.65
+   Compiling prettyplease v0.2.37
+   Compiling bitflags v1.3.2
+   Compiling litemap v0.8.2
+   Compiling httpdate v1.0.3
+   Compiling writeable v0.6.3
+   Compiling cranelift-codegen-shared v0.131.2
+   Compiling cranelift-codegen-meta v0.131.2
+   Compiling chrono v0.4.45
+   Compiling cranelift-bitset v0.131.2
+   Compiling hashbrown v0.14.5
+   Compiling cranelift-assembler-x64 v0.131.2
+   Compiling crypto-common v0.1.7
+   Compiling cmake v0.1.58
+   Compiling cpufeatures v0.2.17
+   Compiling icu_normalizer_data v2.2.0
+   Compiling utf8_iter v1.0.4
+   Compiling data-encoding v2.11.0
+   Compiling tower-layer v0.3.3
+   Compiling target-lexicon v0.13.5
+   Compiling crossbeam-utils v0.8.21
+   Compiling icu_properties_data v2.2.0
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling cranelift-codegen v0.131.2
+   Compiling cranelift-entity v0.131.2
+   Compiling crypto-common v0.2.2
+   Compiling rustc-hash v2.1.2
+   Compiling arbitrary v1.4.2
+   Compiling simd-adler32 v0.3.9
+   Compiling regex-syntax v0.8.10
+   Compiling cranelift-control v0.131.2
+   Compiling regalloc2 v0.15.1
+   Compiling cranelift-bforest v0.131.2
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_collections v2.2.0
+   Compiling regex-automata v0.4.14
+   Compiling tokio-util v0.7.18
+   Compiling icu_provider v2.2.0
+   Compiling gimli v0.33.0
+   Compiling cmov v0.5.4
+   Compiling foldhash v0.1.5
+   Compiling adler2 v2.0.1
+   Compiling ctutils v0.4.2
+   Compiling icu_normalizer v2.2.0
+   Compiling miniz_oxide v0.8.9
+   Compiling icu_properties v2.2.0
+   Compiling regex v1.12.3
+   Compiling block-buffer v0.12.0
+   Compiling num-integer v0.1.46
+   Compiling aho-corasick v1.1.4
+   Compiling fastrand v2.4.1
+   Compiling zlib-rs v0.6.3
+   Compiling ref-cast v1.0.25
+   Compiling const-oid v0.10.2
+   Compiling digest v0.11.3
+   Compiling idna_adapter v1.2.2
+   Compiling ref-cast-impl v1.0.25
+   Compiling getrandom v0.2.17
+   Compiling rustls-pki-types v1.14.1
+   Compiling camino v1.2.2
+   Compiling idna v1.1.0
+   Compiling num-bigint v0.4.6
+   Compiling http-body v1.0.1
+   Compiling pin-project-internal v1.1.13
+   Compiling mach2 v0.4.3
+   Compiling cpufeatures v0.3.0
+   Compiling chacha20 v0.10.0
+   Compiling mime v0.3.17
+   Compiling termcolor v1.4.1
+   Compiling constant_time_eq v0.4.2
+   Compiling pin-project v1.1.13
+   Compiling rand v0.10.2
+   Compiling ts-rs-macros v12.0.1
+   Compiling region v3.0.2
+   Compiling num-rational v0.4.2
+   Compiling num-iter v0.1.45
+   Compiling crossbeam-epoch v0.9.18
+   Compiling wasmtime-internal-jit-icache-coherence v44.0.2
+   Compiling block-buffer v0.10.4
+   Compiling num-complex v0.4.6
+   Compiling bit-vec v0.8.0
+   Compiling ipnet v2.12.0
+   Compiling ecow v0.2.6
+   Compiling borrow-or-share v0.2.4
+   Compiling unicode-general-category v1.1.0
+   Compiling gleam-types v0.4.3
+   Compiling num v0.4.3
+   Compiling fluent-uri v0.4.1
+   Compiling ts-rs v12.0.1
+   Compiling bit-set v0.8.0
+   Compiling flate2 v1.1.9
+   Compiling crossbeam-deque v0.8.6
+   Compiling digest v0.10.7
+   Compiling crossbeam-queue v0.3.12
+   Compiling dashmap v6.2.1
+   Compiling crossbeam-channel v0.5.15
+   Compiling http v0.2.12
+   Compiling itertools v0.14.0
+   Compiling num_cpus v1.17.0
+   Compiling glob v0.3.3
+   Compiling outref v0.5.2
+   Compiling micromap v0.3.0
+   Compiling md5 v0.8.0
+   Compiling atomic-waker v1.1.2
+   Compiling vsimd v0.8.0
+   Compiling web-time v1.1.0
+   Compiling rustversion v1.0.22
+   Compiling unicode-segmentation v1.13.3
+   Compiling untrusted v0.9.0
+   Compiling uuid-simd v0.8.0
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-core)
+   Compiling h2 v0.4.14
+   Compiling clang-sys v1.8.1
+   Compiling referencing v0.46.6
+   Compiling fancy-regex v0.18.0
+   Compiling fraction v0.15.4
+   Compiling prost-derive v0.14.3
+   Compiling email_address v0.2.9
+   Compiling uncased v0.9.10
+   Compiling fs_extra v1.3.0
+   Compiling dunce v1.0.5
+   Compiling bytecount v0.6.9
+   Compiling num-cmp v0.1.0
+   Compiling rustix v0.38.44
+   Compiling aws-lc-sys v0.41.0
+   Compiling jsonschema v0.46.6
+   Compiling http-body v0.4.6
+   Compiling sha1 v0.11.0
+   Compiling tokio-stream v0.1.18
+   Compiling rand_core v0.9.5
+   Compiling form_urlencoded v1.2.2
+   Compiling sync_wrapper v1.0.2
+   Compiling pulldown-cmark v0.13.4
+   Compiling minimal-lexical v0.2.1
+   Compiling nom v7.1.3
+   Compiling rand_chacha v0.9.0
+   Compiling hyper v1.10.1
+   Compiling zstd v0.13.3
+   Compiling beamr v0.16.3
+   Compiling rand_core v0.6.4
+   Compiling inout v0.2.2
+   Compiling blake3 v1.8.5
+   Compiling hyper-util v0.1.20
+   Compiling indexmap v1.9.3
+   Compiling libloading v0.8.9
+   Compiling home v0.5.12
+   Compiling unicase v2.9.0
+   Compiling powerfmt v0.2.0
+   Compiling siphasher v1.0.3
+   Compiling bindgen v0.66.1
+   Compiling subtle v2.6.1
+   Compiling deranged v0.5.8
+   Compiling prost v0.14.3
+   Compiling which v4.4.2
+   Compiling cipher v0.5.2
+   Compiling rand_chacha v0.3.1
+   Compiling cexpr v0.6.0
+   Compiling rand v0.9.4
+   Compiling tower v0.5.3
+   Compiling h2 v0.3.27
+   Compiling sha1 v0.10.6
+   Compiling sha2 v0.11.0
+   Compiling http-body-util v0.1.3
+   Compiling hmac v0.13.0
+   Compiling tempfile v3.27.0
+   Compiling hashbrown v0.15.5
+   Compiling futures-executor v0.3.32
+   Compiling ring v0.17.14
+   Compiling socket2 v0.5.10
+   Compiling rustc-hash v1.1.0
+   Compiling cpubits v0.1.1
+   Compiling lazycell v1.3.0
+   Compiling num-conv v0.2.2
+   Compiling libbz2-rs-sys v0.2.5
+   Compiling aws-lc-rs v1.17.0
+   Compiling arrayref v0.3.9
+   Compiling winnow v1.0.3
+   Compiling shlex v1.3.0
+   Compiling fixedbitset v0.5.7
+   Compiling time-core v0.1.8
+   Compiling hashbrown v0.12.3
+   Compiling arrayvec v0.7.7
+   Compiling peeking_take_while v0.1.2
+   Compiling thiserror v1.0.69
+   Compiling time v0.3.47
+   Compiling petgraph v0.8.3
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling bzip2 v0.6.1
+   Compiling aes v0.9.1
+   Compiling lru v0.12.5
+   Compiling futures v0.3.32
+   Compiling lzma-rust2 v0.16.4
+   Compiling pbkdf2 v0.13.0
+   Compiling tungstenite v0.29.0
+   Compiling hyper v0.14.32
+   Compiling prost-types v0.14.3
+   Compiling rand v0.8.6
+   Compiling pulldown-cmark-to-cmark v22.0.0
+   Compiling axum-core v0.3.4
+   Compiling zopfli v0.8.3
+   Compiling thiserror-impl v1.0.69
+   Compiling itertools v0.12.1
+   Compiling security-framework-sys v2.17.0
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling cranelift-native v0.131.2
+   Compiling cranelift-module v0.131.2
+   Compiling cranelift-frontend v0.131.2
+   Compiling cranelift-jit v0.131.2
+   Compiling serde_spanned v1.1.1
+   Compiling multimap v0.10.1
+   Compiling deflate64 v0.1.12
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling ppmd-rust v1.4.0
+   Compiling ryu v1.0.23
+   Compiling typed-path v0.12.3
+   Compiling serde_urlencoded v0.7.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling prost-derive v0.12.6
+   Compiling prost-build v0.14.3
+   Compiling libsql-ffi v0.9.30
+   Compiling zip v8.6.0
+   Compiling tower v0.4.13
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum-core v0.5.6
+   Compiling phf_shared v0.11.3
+   Compiling axum v0.6.20
+   Compiling tonic-build v0.14.6
+   Compiling block-padding v0.3.3
+   Compiling serde_path_to_error v0.1.20
+   Compiling protoc-bin-vendored-macos-x86_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-x86_32 v3.2.0
+   Compiling protoc-bin-vendored-linux-ppcle_64 v3.2.0
+   Compiling matchit v0.8.4
+   Compiling io-lifetimes v3.0.1
+   Compiling protoc-bin-vendored-macos-aarch_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-aarch_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-x86_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-s390_64 v3.2.0
+   Compiling protoc-bin-vendored-win32 v3.2.0
+   Compiling io-lifetimes v2.0.4
+   Compiling protoc-bin-vendored v3.2.0
+   Compiling tonic-prost-build v0.14.5
+   Compiling inout v0.1.4
+   Compiling phf_generator v0.11.3
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-package)
+   Compiling axum v0.8.9
+   Compiling prost v0.12.6
+   Compiling hyper-timeout v0.5.2
+   Compiling beamr v0.18.2
+   Compiling tokio-io-timeout v1.2.1
+   Compiling async-stream-impl v0.3.6
+   Compiling io-extras v0.19.0
+   Compiling rustls v0.22.4
+   Compiling utf8parse v0.2.2
+   Compiling matchit v0.7.3
+   Compiling same-file v1.0.6
+   Compiling base64 v0.21.7
+   Compiling sync_wrapper v0.1.2
+   Compiling rustls v0.23.40
+   Compiling walkdir v2.5.0
+   Compiling anstyle-parse v1.0.0
+   Compiling async-stream v0.3.6
+   Compiling tonic v0.14.6
+   Compiling hyper-timeout v0.4.1
+   Compiling rustls-webpki v0.102.8
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-proto-generated)
+   Compiling phf_codegen v0.11.3
+   Compiling cipher v0.4.4
+   Compiling hashlink v0.8.4
+   Compiling zerocopy-derive v0.7.35
+   Compiling core-foundation v0.9.4
+   Compiling nom v5.1.3
+   Compiling cfg_aliases v0.2.1
+   Compiling fallible-iterator v0.2.0
+   Compiling colorchoice v1.0.5
+   Compiling byteorder v1.5.0
+   Compiling anstyle v1.0.14
+   Compiling cap-primitives v4.0.2
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling tonic v0.11.0
+   Compiling zerocopy v0.7.35
+   Compiling anstream v1.0.0
+   Compiling security-framework v2.11.1
+   Compiling libsql-rusqlite v0.9.30
+   Compiling nix v0.30.1
+   Compiling tonic-prost v0.14.5
+   Compiling libsql-sqlite3-parser v0.13.0
+   Compiling fs-set-times v0.20.3
+   Compiling sha2 v0.10.9
+   Compiling aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store)
+   Compiling tungstenite v0.30.0
+   Compiling rustls-pemfile v2.2.0
+   Compiling webpki-roots v1.0.7
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling serde_derive_internals v0.29.1
+   Compiling ambient-authority v0.0.2
+   Compiling signal-hook v0.3.18
+   Compiling protobuf v3.7.2
+   Compiling maybe-owned v0.3.4
+   Compiling cap-std v4.0.2
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.0
+   Compiling http-range-header v0.3.1
+   Compiling winnow v0.7.15
+   Compiling liminal-protocol v0.3.2
+   Compiling toml_write v0.1.2
+   Compiling tower-http v0.4.4
+   Compiling schemars_derive v1.2.1
+   Compiling toml_edit v0.22.27
+   Compiling clap_builder v4.6.0
+   Compiling tokio-rustls v0.25.0
+   Compiling webpki-roots v0.26.11
+   Compiling rustls-native-certs v0.7.3
+   Compiling phf v0.11.3
+   Compiling rust-embed-utils v8.11.0
+   Compiling libsql-sys v0.9.30
+   Compiling cbc v0.1.2
+   Compiling aes v0.8.4
+   Compiling protobuf-support v3.7.2
+   Compiling url v2.5.8
+   Compiling clap_derive v4.6.1
+   Compiling core-foundation v0.10.1
+   Compiling spin v0.9.8
+   Compiling dyn-clone v1.0.20
+   Compiling fallible-iterator v0.3.0
+   Compiling prometheus v0.14.0
+   Compiling cap-fs-ext v4.0.2
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-awl)
+   Compiling security-framework v3.7.0
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-proto)
+   Compiling tower-http v0.6.11
+   Compiling schemars v1.2.1
+   Compiling clap v4.6.1
+   Compiling haematite v0.7.0
+   Compiling haematite v0.8.1
+   Compiling libsql_replication v0.9.30
+   Compiling saffron v0.1.0
+   Compiling rust-embed-impl v8.11.0
+   Compiling hyper-rustls v0.25.0
+   Compiling toml v0.8.23
+   Compiling tonic-web v0.11.0
+   Compiling libsql-hrana v0.9.30
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-integrations)
+   Compiling matchers v0.2.0
+   Compiling tracing-serde v0.2.0
+   Compiling bincode v1.3.3
+   Compiling rand_chacha v0.10.0
+   Compiling sharded-slab v0.1.7
+   Compiling hostname v0.4.2
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.9
+   Compiling nu-ansi-term v0.50.3
+   Compiling exacl v0.13.0
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-server)
+   Compiling aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion)
+   Compiling tracing-subscriber v0.3.23
+   Compiling libsql v0.9.30
+   Compiling aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-awl-package)
+   Compiling rust-embed v8.11.0
+   Compiling aion-toolchain v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-toolchain)
+   Compiling aion-mcp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-mcp)
+   Compiling aion-darwin-acl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-darwin-acl)
+   Compiling fs4 v1.1.0
+   Compiling users v0.11.0
+   Compiling aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store-haematite)
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store-libsql)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling rustls-webpki v0.103.13
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-worker)
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 48s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+EXIT=0
+--- run 1 all-features ---
+   Compiling zeroize_derive v1.4.3
+   Compiling generic-array v0.14.7
+   Compiling subtle v2.6.1
+   Compiling num-traits v0.2.19
+   Compiling const-oid v0.9.6
+   Compiling spin v0.9.8
+   Compiling base64ct v1.8.3
+   Compiling time-macros v0.2.27
+   Compiling lazy_static v1.5.0
+   Compiling bindgen v0.66.1
+   Compiling ff v0.13.1
+   Compiling base16ct v0.2.0
+   Compiling semver v1.0.28
+   Compiling pem-rfc7468 v0.7.0
+   Compiling group v0.13.0
+   Compiling num-bigint-dig v0.8.6
+   Compiling rustc_version v0.4.1
+   Compiling sharded-slab v0.1.7
+   Compiling zeroize v1.8.2
+   Compiling pem v3.0.6
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-server)
+   Compiling curve25519-dalek v4.1.3
+   Compiling time v0.3.47
+   Compiling prometheus v0.14.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling tracing-subscriber v0.3.23
+   Compiling num-integer v0.1.46
+   Compiling chrono v0.4.45
+   Compiling num-iter v0.1.45
+   Compiling num-bigint v0.4.6
+   Compiling num-rational v0.4.2
+   Compiling num-complex v0.4.6
+   Compiling ts-rs v12.0.1
+   Compiling digest v0.10.7
+   Compiling num v0.4.3
+   Compiling fraction v0.15.4
+   Compiling sha2 v0.10.9
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-core)
+   Compiling rust-embed-utils v8.11.0
+   Compiling block-buffer v0.12.0
+   Compiling rustls-pki-types v1.14.1
+   Compiling digest v0.11.3
+   Compiling der v0.7.10
+   Compiling jsonschema v0.46.6
+   Compiling sha1 v0.11.0
+   Compiling sha2 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling block-padding v0.3.3
+   Compiling inout v0.1.4
+   Compiling pbkdf2 v0.13.0
+   Compiling crypto-bigint v0.5.5
+   Compiling sha1 v0.10.6
+   Compiling hmac v0.12.1
+   Compiling tungstenite v0.29.0
+   Compiling signature v2.2.0
+   Compiling lzma-rust2 v0.16.4
+   Compiling spki v0.7.3
+   Compiling hkdf v0.12.4
+   Compiling libsql-ffi v0.9.30
+   Compiling pkcs8 v0.10.2
+   Compiling tokio-tungstenite v0.29.0
+   Compiling sec1 v0.7.3
+   Compiling aws-lc-rs v1.17.0
+   Compiling zip v8.6.0
+   Compiling axum v0.8.9
+   Compiling elliptic-curve v0.13.8
+   Compiling cipher v0.4.4
+   Compiling rustls-webpki v0.102.8
+   Compiling rfc6979 v0.4.0
+   Compiling webpki-roots v1.0.7
+   Compiling rustls-pemfile v2.2.0
+   Compiling ecdsa v0.16.9
+   Compiling webpki-roots v0.26.11
+   Compiling cbc v0.1.2
+   Compiling rustls-native-certs v0.7.3
+   Compiling aes v0.8.4
+   Compiling rustls v0.22.4
+   Compiling primeorder v0.13.6
+   Compiling liminal-rs v0.5.0
+   Compiling tungstenite v0.30.0
+   Compiling rustls-webpki v0.103.13
+   Compiling pkcs1 v0.7.5
+   Compiling ed25519 v2.2.3
+   Compiling rustls v0.23.40
+   Compiling p256 v0.13.2
+   Compiling ed25519-dalek v2.2.0
+   Compiling p384 v0.13.1
+   Compiling simple_asn1 v0.6.4
+   Compiling tokio-rustls v0.25.0
+   Compiling hyper-rustls v0.25.0
+   Compiling rsa v0.9.10
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-package)
+   Compiling aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store)
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-integrations)
+   Compiling rust-embed-impl v8.11.0
+   Compiling tonic v0.14.6
+   Compiling tokio-rustls v0.26.4
+   Compiling hyper-rustls v0.27.9
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling saffron v0.1.0
+   Compiling reqwest v0.13.4
+   Compiling rust-embed v8.11.0
+   Compiling jsonwebtoken v10.4.0
+   Compiling aion-mcp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-mcp)
+   Compiling libsql-rusqlite v0.9.30
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-proto-generated)
+   Compiling aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store-haematite)
+   Compiling libsql-sys v0.9.30
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-awl)
+   Compiling libsql_replication v0.9.30
+   Compiling aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion)
+   Compiling aion-toolchain v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-toolchain)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling libsql v0.9.30
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-proto)
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-worker)
+   Compiling aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-awl-package)
+   Compiling aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/main-control/crates/aion-store-libsql)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 22s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+EXIT=0
+--- run 2 default ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.42s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+
+EXIT=0
+--- run 2 all-features ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.66s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+EXIT=0
+--- run 3 default ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+EXIT=0
+--- run 3 all-features ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+EXIT=0
+LOAD-AFTER: 19:15  up 3 days,  6:49, 4 users, load averages: 15.92 18.69 14.67

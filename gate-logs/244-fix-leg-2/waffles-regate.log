@@ -1,0 +1,35 @@
+RE-GATE tree: e8c1b28bfcb064124d52467aa68b57d7e142919f
+== fmt ==
+EXIT=0
+== clippy workspace ==
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-server)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 29.30s
+EXIT=0
+== aion-cli suite ==
+     Running tests/server_command.rs (target/debug/deps/server_command-7ed52320e301b20c)
+
+running 3 tests
+test an_explicit_missing_config_refuses_and_scaffolds_nothing ... ok
+test server_subcommand_boots_serves_and_drains_cleanly ... ok
+test a_bare_boot_scaffolds_the_home_config_and_serves_deploy_and_outbox ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.30s
+
+     Running tests/stacked_dev_live_e2e.rs (target/debug/deps/stacked_dev_live_e2e-eb3ee5c27e3f634d)
+
+running 1 test
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a stacked-dev change landing through a REAL worker process and returning a review signal — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/stacked_dev_live_e2e.rs:484]
+test stacked_dev_lands_through_the_real_worker_and_review_signal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/tail_follow_e2e.rs (target/debug/deps/tail_follow_e2e-8fabf3f5ad93102e)
+
+running 2 tests
+test tail_no_follow_does_not_append_json_null_to_its_transcript_output ... ok
+test tail_follow_attributes_replay_only_after_the_selected_generation_starts ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+EXIT=0

@@ -1,0 +1,38 @@
+   Compiling aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion)
+warning: method `seen_attempts` is never used
+  --> crates/aion/tests/recovery_supersession_e2e.rs:70:8
+   |
+61 | impl ScriptedDispatcher {
+   | ----------------------- method in this implementation
+...
+70 |     fn seen_attempts(&self) -> Vec<u32> {
+   |        ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-rs` (test "recovery_supersession_e2e") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.05s
+     Running tests/recovery_supersession_e2e.rs (target/debug/deps/recovery_supersession_e2e-363d5198f57a5ad9)
+
+running 11 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+test recovery_records_the_superseded_attempt_before_redispatch ... ok
+test the_supersession_record_is_budget_inert ... ok
+test an_already_failed_attempt_is_not_recorded_twice ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+EXIT=0

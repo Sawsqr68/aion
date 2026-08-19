@@ -1,0 +1,355 @@
+HEAD=9f85e7963d3dd9d3e707e04fdc1e05690de091e8
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.45s
+     Running unittests src/lib.rs (target/debug/deps/aion_store-64aa2d7f20edd504)
+
+running 70 tests
+test memory::namespace_tests::get_returns_none_for_absent_name ... ok
+test memory::namespace_tests::register_creates_if_absent_and_persists ... ok
+test memory::namespace_tests::second_register_already_existed_bumps_last_seen_only ... ok
+test memory::namespace_tests::deprecate_sets_state_and_is_idempotent ... ok
+test memory::namespace_tests::put_namespace_is_idempotent_on_existing_name ... ok
+test memory::namespace_tests::list_orders_by_created_at_then_name ... ok
+test memory::namespace_tests::set_placement_updates_only_placement_and_reports_not_found ... ok
+test memory::tests::append_preserves_sequence_order ... ok
+test memory::tests::expired_timers_include_boundary_and_exclude_future ... ok
+test memory::tests::append_rejects_non_contiguous_event_sequences ... ok
+test memory::tests::concurrent_appends_on_same_expected_sequence_conflict_once ... ok
+test memory::tests::list_active_returns_only_running_workflows ... ok
+test memory::tests::list_paused_and_list_active_partition_by_projected_status ... ok
+test memory::tests::list_workflow_ids_returns_running_and_terminal_histories ... ok
+test memory::tests::read_history_returns_empty_for_unknown_workflow ... ok
+test memory::tests::query_uses_core_filter_semantics ... ok
+test memory::tests::read_run_chain_projects_run_id_from_started_event ... ok
+test memory::tests::rescheduling_same_timer_replaces_prior_fire_at ... ok
+test namespace::tests::bump_last_seen_advances_only_last_seen ... ok
+test memory::tests::stale_expected_sequence_writes_nothing ... ok
+test namespace::tests::decode_rejects_malformed_bytes ... ok
+test namespace::tests::encode_decode_preserves_reserved_kind_discriminator ... ok
+test namespace::tests::enum_derives_are_copy_clone_eq ... ok
+test namespace::tests::encode_decode_round_trips ... ok
+test namespace::tests::new_minted_sets_created_equal_to_last_seen_and_origin ... ok
+test namespace::tests::max_in_flight_activities_round_trips_present_and_absent ... ok
+test namespace::tests::old_unplaced_record_without_quota_field_decodes ... ok
+test namespace::tests::prefer_and_pinned_encode_as_single_key_maps ... ok
+test namespace::tests::unknown_placement_tag_is_rejected ... ok
+test namespace::tests::unplaced_encodes_as_bare_string_tag ... ok
+test namespace::tests::placement_variants_round_trip_through_record ... ok
+test observability::tests::append_assigns_contiguous_store_seq_from_zero ... ok
+test observability::tests::attempts_are_disjoint_streams ... ok
+test observability::tests::list_activity_streams_is_empty_for_unknown_workflow ... ok
+test observability::tests::list_activity_streams_orders_by_activity_then_attempt ... ok
+test observability::tests::read_from_resumes_by_store_seq ... ok
+test observability::tests::stale_expected_seq_conflicts_and_writes_nothing ... ok
+test observability::tests::two_generations_of_one_chain_never_share_a_stream ... ok
+test outbox::tests::dispatch_key_is_workflow_id_colon_ordinal ... ok
+test outbox::tests::node_less_scope_admits_only_unpinned_rows ... ok
+test outbox::tests::outbox_store_is_object_safe ... ok
+test outbox::tests::scope_admits_matching_namespace_task_queue_and_unpinned_or_matching_node ... ok
+test outbox::tests::scope_rejects_other_namespace_task_queue_or_pinned_to_other_node ... ok
+test outbox::tests::status_tokens_round_trip ... ok
+test outbox::tests::unknown_status_token_is_rejected ... ok
+test store::tests::event_store_traits_are_object_safe ... ok
+test testing::fenced_history::tests::an_armed_fence_claims_no_shard_at_all ... ok
+test testing::fenced_history::tests::appends_are_fenced_as_well_as_reads ... ok
+test testing::fenced_history::tests::reads_are_honest_until_armed_and_refuse_after ... ok
+test testing::stale_active_list::tests::a_forced_paused_id_is_reported_active_and_still_projects_paused ... ok
+test testing::stale_active_list::tests::a_forced_terminal_id_is_reported_active_while_its_history_still_says_terminal ... ok
+test testing::stale_active_list::tests::forcing_an_already_active_id_does_not_duplicate_it ... ok
+test testing::stale_active_list::tests::forcing_nothing_leaves_the_answer_identical_to_the_inner_store ... ok
+test visibility::tests::closed_after_filter_does_not_match_running_workflows ... ok
+test testing::stale_active_list::tests::multiple_forced_ids_are_appended_in_the_order_they_were_forced ... ok
+test visibility::tests::closed_after_filter_matches_closed_workflow_at_boundary ... ok
+test visibility::tests::closed_before_filter_does_not_match_running_workflows ... ok
+test visibility::tests::closed_before_filter_matches_closed_workflow_at_boundary ... ok
+test visibility::tests::combined_filters_require_all_predicates_to_match ... ok
+test visibility::tests::default_filter_matches_all_workflows ... ok
+test visibility::tests::mismatched_typed_search_attribute_predicates_do_not_match ... ok
+test visibility::tests::search_attribute_predicates_match_supported_typed_operations ... ok
+test visibility::tests::started_after_filter_matches_boundary_and_rejects_earlier ... ok
+test visibility::tests::started_before_filter_matches_boundary_and_rejects_later ... ok
+test visibility::tests::status_filter_matches_exact_status_and_rejects_mismatch ... ok
+test visibility::tests::visibility_store_is_object_safe ... ok
+test visibility::tests::workflow_type_filter_matches_exact_type_and_rejects_mismatch ... ok
+test worker_deployment::tests::empty_name_is_refused ... ok
+test worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot ... ok
+test worker_deployment::tests::unknown_artifact_tag_is_a_typed_refusal ... ok
+
+test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/inmemory_conformance.rs (target/debug/deps/inmemory_conformance-89306df0132dd52c)
+
+running 2 tests
+test inmemory_store_satisfies_event_store_conformance_suite ... ok
+test inmemory_store_satisfies_worker_deployment_conformance_suite ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_store_haematite-56649fc01ce09a21)
+
+running 57 tests
+test error::tests::election_lost_maps_to_not_owner ... ok
+test error::tests::cas_conflict_is_idempotent_for_self_but_aborts_for_other ... ok
+test keyspace::tests::observability_run_prefix_is_a_strict_prefix_of_the_full_key ... ok
+test keyspace::tests::namespace_key_is_tagged_and_disjoint_from_other_regions ... ok
+test keyspace::tests::event_stream_key_is_tagged_and_disjoint_from_kv_regions ... ok
+test keyspace::tests::observability_keys_order_by_workflow_then_run_then_activity_then_attempt ... ok
+test keyspace::tests::namespace_from_key_rejects_foreign_keys ... ok
+test keyspace::tests::the_pre_run_axis_key_shape_is_not_decodable ... ok
+test keyspace::tests::worker_deployment_keyspace_is_tagged_and_disjoint ... ok
+test keyspace::tests::observability_key_is_o_tagged_and_disjoint_from_every_region ... ok
+test keyspace::tests::prefix_upper_bound_increments_last_byte ... ok
+test keyspace::tests::prefix_upper_bound_unbounded_when_all_ff ... ok
+test error::tests::election_timeout_and_quorum_stay_backend ... ok
+test keyspace::tests::namespace_key_round_trips ... ok
+test keyspace::tests::route_key_round_trips ... ok
+test keyspace::tests::workflow_id_from_event_stream_key_rejects_non_stream_keys ... ok
+test keyspace::tests::decode_observability_stream_key_rejects_foreign_and_truncated_keys ... ok
+test keyspace::tests::observability_stream_key_encode_decode_round_trips ... ok
+test keyspace::tests::workflow_id_from_event_stream_key_round_trips ... ok
+test namespace_shard::tests::default_namespace_lands_on_shard_one_at_three_shards ... ok
+test namespace_shard::tests::namespace_shard_is_within_the_shard_count ... ok
+test namespace_shard::tests::distinct_namespaces_resolve_distinct_stable_shards ... ok
+test keyspace::tests::shard_owner_key_lands_on_its_shard_for_every_shard ... ok
+test namespace_shard::tests::single_shard_store_routes_every_namespace_to_shard_zero ... ok
+test store::tests::get_namespace_returns_none_for_absent ... ok
+test store::tests::head_from_next_seq_translates_all_three_arms ... ok
+test store::tests::expired_observability_history_surfaces_as_error_not_empty_transcript ... ok
+test store::tests::append_outbox_batch_ignores_duplicate_dispatch_key ... ok
+test store::tests::deprecate_namespace_sets_state_and_is_idempotent ... ok
+test store::tests::mint_for_shard_lands_on_the_routing_key_shard ... ok
+test store::tests::only_typed_fence_classifies_as_not_owner ... ok
+test store::tests::append_with_outbox_persists_events_and_rows ... ok
+test store::tests::outbox_serde_round_trips_node_and_absent_field_decodes_none ... ok
+test store::tests::count_claimed_by_namespace_matches_per_namespace_scalar_counts ... ok
+test store::tests::durable_state_survives_close_and_reopen ... ok
+test store::tests::list_namespaces_is_ascending_by_created_at_then_name ... ok
+test store::tests::count_inflight_outbox_rows_counts_pending_and_claimed_per_namespace ... ok
+test store::tests::count_claimed_outbox_rows_counts_only_claimed_not_pending_backlog ... ok
+test store::tests::count_inflight_outbox_rows_excludes_terminal_only_namespace ... ok
+test store::tests::remint_for_owned_shard_respects_scope ... ok
+test store::tests::pending_outbox_routes_enumerates_distinct_claimable_routes ... ok
+test store::tests::node_less_scoped_claim_excludes_pinned_rows ... ok
+test store::tests::register_namespace_creates_then_get_returns_it ... ok
+test store::tests::put_namespace_carries_supplied_record ... ok
+test store::tests::single_node_fence_seam_is_a_noop ... ok
+test store::tests::second_register_is_already_existed_and_bumps_last_seen ... ok
+test store::tests::scoped_claim_matches_namespace_task_queue_and_node_predicate ... ok
+test store::tests::stale_append_reports_metadata_head_as_found ... ok
+test store::tests::stream_head_does_not_depend_on_payload_decodability ... ok
+test store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names ... ok
+test store::tests::set_placement_updates_existing_and_is_not_found_when_absent ... ok
+test store::tests::staged_row_round_trips_node_affinity ... ok
+test store::tests::rearm_preserves_attempt_and_inserts_fresh_rows ... ok
+test store::tests::outbox_claim_complete_retry_fail_round_trip ... ok
+test store::tests::stream_head_matches_committed_seq_when_quiesced ... ok
+test store::tests::unscoped_claim_still_claims_any_row ... ok
+test store::tests::settle_cancelled_is_idempotent_and_terminal ... ok
+
+test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.04s
+
+     Running tests/colocation.rs (target/debug/deps/colocation-38a5bdd888010d96)
+
+running 2 tests
+test per_workflow_records_land_on_the_workflow_shard ... ok
+test two_workflows_on_different_shards_stay_isolated ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-947a1da774463e82)
+
+running 3 tests
+test haematite_store_satisfies_worker_deployment_conformance_suite ... ok
+test haematite_store_satisfies_event_store_conformance_suite ... ok
+test haematite_store_satisfies_outbox_settlement_conformance_suite ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.22s
+
+     Running tests/distributed_failover.rs (target/debug/deps/distributed_failover-07f31bfde18cba49)
+
+running 6 tests
+test workflow_history_replicates_to_followers ... ok
+test lagging_node_without_writes_reads_empty_history ... ok
+test durable_timer_survives_shard_adoption ... ok
+test workflow_history_survives_owner_failover ... ok
+test adopted_shard_owner_is_published_to_and_read_by_a_different_survivor ... ok
+test deposed_survivor_publish_is_fenced_to_not_owner ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.91s
+
+     Running tests/multishard.rs (target/debug/deps/multishard-530722ae5bdf08fa)
+
+running 4 tests
+test enumerations_fan_out_across_shards ... ok
+test list_packages_fans_out_across_shards ... ok
+test expired_timers_fan_out_across_shards ... ok
+test outbox_claims_fan_out_across_shards ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+
+     Running tests/namespace_quorum_cas.rs (target/debug/deps/namespace_quorum_cas-b448ef3143db3e33)
+
+running 2 tests
+test duplicate_register_across_nodes_converges_to_one_record ... ok
+test register_against_deposed_owner_is_fenced_to_not_owner ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/observability.rs (target/debug/deps/observability-61f48c2b6ff50eab)
+
+running 6 tests
+test stale_expected_seq_conflicts_and_writes_nothing ... ok
+test attempts_are_disjoint_streams ... ok
+test observability_records_survive_reopen_and_are_invisible_to_replay ... ok
+test two_generations_of_one_chain_never_share_a_durable_stream ... ok
+test append_read_head_round_trip ... ok
+test list_activity_streams_enumerates_only_the_runs_streams_and_survives_reopen ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/scoping.rs (target/debug/deps/scoping-781d6367613aea6b)
+
+running 3 tests
+test default_claim_spans_all_shards ... ok
+test active_active_each_row_claimed_by_exactly_one_owner ... ok
+test enumeration_scopes_to_owned_shards ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_store_libsql-4f3cd2559c83031a)
+
+running 83 tests
+test config::tests::embedded_replica_requires_primary_url ... ok
+test config::tests::deserializes_embedded_replica_mode ... ok
+test config::tests::deserializes_embedded_mode ... ok
+test config::tests::omitted_tunables_remain_unset ... ok
+test connection::tests::opens_embedded_connection_and_queries ... ok
+test error::tests::maps_libsql_error_to_backend ... ok
+test error::tests::maps_serde_json_error_to_serialization ... ok
+test connection::tests::concurrent_writers_on_the_same_file_do_not_lock_each_other_out ... ok
+test namespace::tests::deprecate_sets_state_and_is_idempotent ... ok
+test append::tests::empty_batch_checks_guard_and_leaves_head_unchanged ... ok
+test append::tests::ahead_expected_sequence_rolls_back_without_writes ... ok
+test append::tests::non_contiguous_batch_rolls_back_without_writes ... ok
+test append::tests::appends_first_batch_from_empty_history ... ok
+test append::tests::stale_expected_sequence_rolls_back_without_writes ... ok
+test append::tests::concurrent_same_expected_sequence_has_one_winner ... ok
+test append::tests::appends_multi_event_batch_with_contiguous_sequences ... ok
+test namespace::tests::get_returns_none_for_absent_name ... ok
+test namespace::tests::put_namespace_is_idempotent_on_existing_name ... ok
+test namespace::tests::list_orders_by_created_at_then_name ... ok
+test namespace::tests::second_register_already_existed_bumps_last_seen_only ... ok
+test namespace::tests::set_placement_updates_existing_and_is_not_found_when_absent ... ok
+test outbox_tests::append_outbox_batch_ignores_duplicate_dispatch_key ... ok
+test namespace::tests::register_creates_if_absent_and_persists ... ok
+test outbox_tests::append_with_outbox_commits_events_and_rows_atomically ... ok
+test outbox_tests::append_with_outbox_rolls_back_both_on_failure ... ok
+test outbox_tests::claim_respects_limit ... ok
+test outbox_tests::claim_complete_retry_round_trip ... ok
+test outbox_tests::event_only_append_with_outbox_matches_plain_append ... ok
+test outbox_tests::legacy_null_namespace_and_task_queue_read_back_as_default ... ok
+test outbox_tests::legacy_null_node_reads_back_as_none ... ok
+test outbox_tests::count_inflight_outbox_rows_excludes_terminal_only_namespace ... ok
+test outbox_tests::count_claimed_by_namespace_matches_per_namespace_scalar_counts ... ok
+test outbox_tests::count_inflight_outbox_rows_counts_pending_and_claimed_per_namespace ... ok
+test outbox_tests::node_less_scoped_claim_excludes_pinned_rows ... ok
+test outbox_tests::count_claimed_outbox_rows_counts_only_claimed_not_pending_backlog ... ok
+test connection::tests::maps_replica_open_failure_to_backend ... ok
+test outbox_tests::a_completion_survives_a_rollback_of_a_concurrent_writer_transaction ... ok
+test outbox_tests::staged_row_round_trips_namespace_and_task_queue ... ok
+test outbox_tests::pending_outbox_routes_enumerates_distinct_claimable_routes ... ok
+test outbox_tests::scoped_claim_matches_namespace_task_queue_and_node_predicate ... ok
+test outbox_tests::staged_row_round_trips_node_affinity ... ok
+test outbox_tests::unscoped_claim_still_claims_any_row ... ok
+test package::tests::deployed_at_round_trips_through_persisted_row ... ok
+test outbox_tests::rearm_outbox_pending_revives_a_done_row_and_inserts_a_fresh_one ... ok
+test outbox_tests::settle_cancelled_is_idempotent_and_terminal ... ok
+test outbox_tests::stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt ... ok
+test pool::tests::a_pooled_connection_carries_the_configured_pragmas_not_only_the_first ... ok
+test read::tests::malformed_event_blob_maps_to_serialization_error ... ok
+test read::tests::query_binds_filter_values_with_sql_metacharacters ... ok
+test pool::tests::an_absent_read_pool_size_retains_nothing ... ok
+test read::tests::list_active_returns_only_running_workflows ... ok
+test pool::tests::the_pool_retains_at_most_the_configured_count ... ok
+test pool::tests::many_tasks_against_one_store_interleave_writes_and_reads_safely ... ok
+test read::tests::query_combines_parent_with_child_filters ... ok
+test read::tests::query_combines_filter_dimensions ... ok
+test read::tests::query_default_returns_all_workflows ... ok
+test read::tests::query_filters_by_parent ... ok
+test read::tests::read_history_returns_empty_for_unknown_workflow ... ok
+test read::tests::query_filters_by_start_time_bounds ... ok
+test read::tests::query_filters_by_workflow_type ... ok
+test store::tests::libsql_store_is_send_sync_static ... ok
+test read::tests::query_filters_by_status ... ok
+test read::tests::read_history_from_range_scan_uses_primary_key_index ... ok
+test read::tests::validate_event_compatibility_rejects_stale_workflow_started_blob ... ok
+test timer::tests::fire_at_encoding_round_trips_losslessly ... ok
+test schema::tests::ensure_schema_creates_tables_and_indexes ... ok
+test read::tests::status_projection_reports_running_and_completed ... ok
+test read::tests::read_history_returns_events_in_appended_order ... ok
+test read::tests::read_history_from_returns_range_suffix ... ok
+test schema::tests::ensure_schema_is_idempotent ... ok
+test store::tests::open_creates_schema ... ok
+test store::tests::store_can_be_used_as_event_store_trait_object ... ok
+test visibility::tests::count_workflows_counts_total_and_filtered_matches ... ok
+test visibility::tests::timestamp_encoding_round_trips_losslessly ... ok
+test store::tests::a_write_is_visible_from_a_different_pooled_connection ... ok
+test timer::tests::expired_timers_returns_due_rows_including_as_of_boundary ... ok
+test visibility::tests::libsql_store_implements_visibility_store_trait ... ok
+test timer::tests::schedule_timer_replaces_existing_row_for_same_key ... ok
+test visibility::tests::list_empty_filter_orders_by_start_time_desc_and_paginates ... ok
+test visibility::tests::list_filters_custom_search_attributes ... ok
+test visibility::tests::record_visibility_inserts_and_updates_queryable_row ... ok
+test visibility::tests::list_filters_standard_fields_and_time_ranges ... ok
+test visibility::tests::record_visibility_round_trips_failed_step_and_reason ... ok
+
+test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-cb94fab183dcee7d)
+
+running 3 tests
+test libsql_store_satisfies_worker_deployment_conformance_suite ... ok
+test libsql_store_satisfies_outbox_settlement_conformance_suite ... ok
+test libsql_store_satisfies_event_store_conformance_suite ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running tests/outbox_hold.rs (target/debug/deps/outbox_hold-6b17082e6028aaad)
+
+running 2 tests
+test scoped_excluding_claim_survives_held_backlog_wider_than_window ... ok
+test unscoped_excluding_claim_survives_held_backlog_wider_than_window ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/persistence.rs (target/debug/deps/persistence-2ad3fb9de6076816)
+
+running 2 tests
+test sequence_guard_uses_persisted_head_after_reopen ... ok
+test history_active_list_and_timers_survive_reopen ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/replica_sync.rs (target/debug/deps/replica_sync-d5a5f45ef0f94ea5)
+
+running 1 test
+test embedded_replica_sync_round_trips_through_primary ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_store
+
+running 1 test
+test crates/aion-store/src/lib.rs - (line 9) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.80s; merged doctests compilation took 1.26s
+   Doc-tests aion_store_haematite
+
+running 1 test
+test crates/aion-store-haematite/src/lib.rs - (line 22) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.57s; merged doctests compilation took 1.19s
+   Doc-tests aion_store_libsql

@@ -1,0 +1,8 @@
+js-deps-console=0
+js-deps-ts-worker=0
+fmt=0
+clippy-workspace=0
+clippy-per-crate=0
+aion-server=101
+aion-rs=0
+stores=0

@@ -1,0 +1,200 @@
+   Compiling log v0.4.32
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+   Compiling tracing-core v0.1.36
+   Compiling sync_wrapper v1.0.2
+   Compiling petgraph v0.8.3
+   Compiling anyhow v1.0.102
+   Compiling prost v0.14.3
+   Compiling axum-core v0.5.6
+   Compiling regalloc2 v0.15.1
+   Compiling zopfli v0.8.3
+   Compiling tracing v0.1.44
+   Compiling jobserver v0.1.34
+   Compiling parking_lot_core v0.9.12
+   Compiling errno v0.3.14
+   Compiling cc v1.2.63
+   Compiling parking_lot v0.12.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.1
+   Compiling socket2 v0.6.4
+   Compiling getrandom v0.3.4
+   Compiling getrandom v0.4.2
+   Compiling tokio v1.52.3
+   Compiling rustix v1.1.4
+   Compiling cpufeatures v0.3.0
+   Compiling rand_core v0.9.5
+   Compiling sha2 v0.11.0
+   Compiling mach2 v0.4.3
+   Compiling cmake v0.1.58
+   Compiling rand_chacha v0.9.0
+   Compiling cranelift-codegen v0.131.2
+   Compiling region v3.0.2
+   Compiling aes v0.9.1
+   Compiling aws-lc-sys v0.41.0
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling uuid v1.23.4
+   Compiling tempfile v3.27.0
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+   Compiling prost-build v0.14.3
+   Compiling lzma-rust2 v0.16.4
+   Compiling sha1 v0.11.0
+   Compiling chrono v0.4.45
+   Compiling ahash v0.8.12
+   Compiling fluent-uri v0.4.1
+   Compiling email_address v0.2.9
+   Compiling wasmtime-internal-jit-icache-coherence v44.0.2
+   Compiling cpufeatures v0.2.17
+   Compiling tonic-prost-build v0.14.5
+   Compiling referencing v0.46.6
+   Compiling sha1 v0.10.6
+   Compiling ts-rs v12.0.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-proto-generated)
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-core)
+   Compiling jsonschema v0.46.6
+   Compiling rand v0.9.4
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling rand v0.10.2
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling dashmap v6.2.1
+   Compiling num_cpus v1.17.0
+   Compiling axum v0.8.9
+   Compiling saffron v0.1.0
+   Compiling hyper v1.10.1
+   Compiling aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-store)
+   Compiling hyper-util v0.1.20
+   Compiling cranelift-module v0.131.2
+   Compiling cranelift-native v0.131.2
+   Compiling cranelift-jit v0.131.2
+   Compiling cranelift-frontend v0.131.2
+   Compiling hyper-timeout v0.5.2
+   Compiling zstd-safe v7.2.4
+   Compiling zstd v0.13.3
+   Compiling zip v8.6.0
+   Compiling beamr v0.18.2
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-package)
+   Compiling aws-lc-rs v1.17.0
+   Compiling rustls v0.23.40
+   Compiling rustls-webpki v0.103.13
+   Compiling aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion)
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.29.0
+   Compiling tonic v0.14.6
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-proto)
+   Compiling aion-client v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-client)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 01s
+     Running unittests src/lib.rs (target/debug/deps/aion_client-2330ab5c61da8dfe)
+
+running 72 tests
+test client::tests::client_is_clone_send_sync ... ok
+test error::tests::client_error_is_send_sync_static ... ok
+test client::tests::auth_debug_redacts_token ... ok
+test client::tests::stream_endpoint_has_no_default ... ok
+test error::tests::not_owner_is_its_own_class_and_never_collapses_into_unavailable ... ok
+test error::tests::detail_display_appends_the_typed_discriminator ... ok
+test error::tests::display_is_class_colon_detail_for_every_variant ... ok
+test client::tests::builder_captures_connection_options ... ok
+test ops::tests::query_failed_outcome_error_maps_to_query_failed ... ok
+test ops::tests::a_blank_display_name_is_refused ... ok
+test ops::tests::backend_outcome_error_is_a_server_fault_not_query_failed ... ok
+test ops::tests::query_maps_result_error_and_deadline ... ok
+test ops::tests::query_forwards_its_arguments_onto_the_wire ... ok
+test ops::tests::reopen_maps_invalid_state_to_distinct_typed_error ... ok
+test ops::tests::a_no_argument_query_sends_the_canonical_null_document ... ok
+test ops::tests::query_typed_decodes_no_arg_query_result ... ok
+test ops::tests::query_typed_forwards_non_empty_args_without_silent_drop ... ok
+test ops::tests::reopen_returns_running_run_and_maps_request ... ok
+test ops::tests::signal_maps_latest_run_and_error ... ok
+test ops::tests::start_maps_request_and_returns_handle ... ok
+test ops::tests::start_idempotency_replays_identical_and_rejects_conflicts ... ok
+test ops::tests::start_idempotency_treats_a_changed_route_as_a_different_request ... ok
+test ops::tests::a_replay_with_a_different_name_dedupes_and_reports_the_unapplied_name ... ok
+test ops::tests::the_unapplied_name_report_fires_only_for_a_replay_that_asked_for_a_name ... ok
+test payload::tests::typed_payload_round_trips_through_json_payload ... ok
+test stream::tests::live_only_disconnect_after_delivery_is_honest_unavailable ... ok
+test stream::tests::live_only_streams_reconnect_only_before_any_delivery ... ok
+test stream::tests::from_sequence_passes_the_cursor_on_the_initial_attach ... ok
+test stream::tests::live_only_unavailable_attach_failure_is_retried_before_any_delivery ... ok
+test stream::tests::namespace_denied_is_terminal_and_never_retried ... ok
+test stream::tests::live_only_streams_do_not_dedupe_sequence_numbers_across_workflows ... ok
+test stream::tests::non_retryable_attach_failure_is_terminal ... ok
+test stream::tests::not_found_is_terminal_and_never_retried ... ok
+test stream::tests::resumes_after_transient_disconnect_without_gaps_or_duplicates ... ok
+test ops::tests::cancel_list_and_describe_map_requests ... ok
+test stream::tests::terminal_failure_is_yielded_before_end ... ok
+test stream::tests::unavailable_attach_failure_is_retried_until_attach_succeeds ... ok
+test stream::tests::unavailable_reconnect_failure_retries_with_the_same_cursor ... ok
+test transport::embedded::tests::cursor_ahead_of_history_is_invalid_argument ... ok
+test transport::embedded::tests::cursor_zero_is_invalid_argument ... ok
+test transport::embedded::tests::cursor_at_head_plus_one_yields_empty_replay_and_live_tail_only ... ok
+test transport::embedded::tests::mid_history_cursor_replays_suffix_only ... ok
+test transport::embedded::tests::lag_mid_splice_surfaces_unavailable_after_the_replay ... ok
+test transport::embedded::tests::live_lag_maps_to_unavailable ... ok
+test transport::embedded::tests::overlap_between_snapshot_and_live_is_deduplicated_contiguous_unique ... ok
+test transport::embedded::tests::shutting_down_carries_its_discriminator_not_only_its_class ... ok
+test transport::embedded::tests::per_workflow_stream_closes_after_terminal_event ... ok
+test transport::transcript_ws::tests::lag_is_a_recoverable_typed_item ... ok
+test transport::embedded::tests::every_named_engine_error_reaches_its_own_class ... ok
+test transport::ws::unit_tests::initial_attach_sends_no_resume_cursor ... ok
+test transport::ws::unit_tests::lagged_error_frames_map_to_unavailable_so_the_resume_loop_reconnects ... ok
+test transport::transcript_ws::tests::decodes_frame_from_canonical_server_serializer ... ok
+test transport::transcript_ws::tests::rejects_unknown_kind_and_fields_loudly ... ok
+test transport::ws::unit_tests::live_only_subscriptions_reject_resume_cursors ... ok
+test transport::ws::unit_tests::missing_stream_endpoint_is_invalid_argument_with_precise_message ... ok
+test transport::ws::unit_tests::malformed_custom_ca_pem_is_invalid_argument ... ok
+test transport::ws::unit_tests::no_tls_options_means_no_custom_connector ... ok
+test transport::ws::unit_tests::per_workflow_frame_carries_the_resume_cursor ... ok
+test transport::ws::unit_tests::resume_cursor_zero_never_reaches_the_wire ... ok
+test transport::ws::unit_tests::stream_url_maps_http_schemes_and_passes_ws_through ... ok
+test transport::ws::unit_tests::stream_url_rejects_non_websocket_schemes ... ok
+test transport::ws::unit_tests::terminal_error_frames_map_through_the_shared_taxonomy ... ok
+test transport::ws::unit_tests::streamed_event_frames_decode_to_core_events ... ok
+test transport::ws::unit_tests::tls_options_without_custom_ca_build_a_webpki_connector ... ok
+test transport::ws::unit_tests::custom_ca_certificate_is_added_to_the_websocket_trust_roots ... ok
+test transport::ws::unit_tests::unrecognizable_frames_are_terminal_server_errors ... ok
+test transport::ws::socket_tests::terminal_error_frame_ends_the_attempt_with_the_mapped_error ... ok
+test transport::ws::socket_tests::abrupt_socket_drop_surfaces_one_unavailable_item ... ok
+test transport::ws::socket_tests::open_subscription_streams_events_and_forwards_identity_headers ... ok
+test transport::ws::socket_tests::resume_loop_reconnects_with_the_cursor_over_a_real_socket ... ok
+test transport::embedded::tests::a_directly_read_store_refusal_keeps_its_routing_class ... ok
+test transport::embedded::tests::embedded_resume_splices_recorded_history_with_live_appends ... ok
+
+test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-847f4042a9c5c314)
+
+running 1 test
+test shared_client_contract_conformance ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/error_mapping.rs (target/debug/deps/error_mapping-7de7998207c2a352)
+
+running 6 tests
+test wire_errors_map_to_distinct_variants_preserving_detail ... ok
+test namespace_denied_proto_details_override_the_status_message ... ok
+test status_fallback_without_details_keeps_the_status_message ... ok
+test sequence_conflict_is_a_server_bug_not_already_exists ... ok
+test status_details_carry_the_authoritative_typed_wire_error ... ok
+test wire_error_type_discriminator_is_preserved ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_client
+
+running 2 tests
+test crates/aion-client/src/client.rs - client::Client (line 17) - compile ... ok
+test crates/aion-client/src/lib.rs - (line 9) - compile ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.91s; merged doctests compilation took 0.54s
+EXIT=0

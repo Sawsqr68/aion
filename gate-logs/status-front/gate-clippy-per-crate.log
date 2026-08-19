@@ -1,0 +1,77 @@
+HEAD=9f85e7963d3dd9d3e707e04fdc1e05690de091e8
+=== cargo clippy -p aion-awl --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.50s
+PACKAGE_EXIT[aion-awl]=0
+=== cargo clippy -p aion-awl-lsp --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.82s
+PACKAGE_EXIT[aion-awl-lsp]=0
+=== cargo clippy -p aion-awl-package --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+PACKAGE_EXIT[aion-awl-package]=0
+=== cargo clippy -p aion-cli --all-targets -- -D warnings ===
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.33s
+PACKAGE_EXIT[aion-cli]=0
+=== cargo clippy -p aion-client --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+PACKAGE_EXIT[aion-client]=0
+=== cargo clippy -p aion-core --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+PACKAGE_EXIT[aion-core]=0
+=== cargo clippy -p aion-darwin-acl --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.08s
+PACKAGE_EXIT[aion-darwin-acl]=0
+=== cargo clippy -p aion-integration-acp --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+PACKAGE_EXIT[aion-integration-acp]=0
+=== cargo clippy -p aion-integration-cli --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+PACKAGE_EXIT[aion-integration-cli]=0
+=== cargo clippy -p aion-integration-norn --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+PACKAGE_EXIT[aion-integration-norn]=0
+=== cargo clippy -p aion-integrations --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+PACKAGE_EXIT[aion-integrations]=0
+=== cargo clippy -p aion-mcp --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+PACKAGE_EXIT[aion-mcp]=0
+=== cargo clippy -p aion-package --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+PACKAGE_EXIT[aion-package]=0
+=== cargo clippy -p aion-proto --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+PACKAGE_EXIT[aion-proto]=0
+=== cargo clippy -p aion-proto-generated --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+PACKAGE_EXIT[aion-proto-generated]=0
+=== cargo clippy -p aion-rs --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+PACKAGE_EXIT[aion-rs]=0
+=== cargo clippy -p aion-server --all-targets -- -D warnings ===
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.25s
+PACKAGE_EXIT[aion-server]=0
+=== cargo clippy -p aion-store --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+PACKAGE_EXIT[aion-store]=0
+=== cargo clippy -p aion-store-haematite --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.17s
+PACKAGE_EXIT[aion-store-haematite]=0
+=== cargo clippy -p aion-store-libsql --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+PACKAGE_EXIT[aion-store-libsql]=0
+=== cargo clippy -p aion-toolchain --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+PACKAGE_EXIT[aion-toolchain]=0
+=== cargo clippy -p aion-worker --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+PACKAGE_EXIT[aion-worker]=0
+=== cargo clippy -p million-processes --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+PACKAGE_EXIT[million-processes]=0
+=== cargo clippy -p xtask --all-targets -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
+PACKAGE_EXIT[xtask]=0
+EXIT=0

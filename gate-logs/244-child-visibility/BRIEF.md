@@ -1,0 +1,90 @@
+# #244 — The operator sees the run's legs from the run's own page
+
+Tom's commitment item (first freed lane), ratified by Waffles 00:18Z with
+the acceptance test verbatim, general go from Tom 01:54Z ("especially the
+uncontroversial stuff... no cut corners"). Folds board #59 + the console
+half of #107's gap. Ground truth: Waffles' operator-experience report §1
+(docs/tracking/aion-operator-experience-20260815.md) — every defect line
+below happened to a real operator tonight.
+
+## The acceptance test (Waffles, verbatim — this is the red case)
+
+"The operator watching a named fleet run must see its legs' live
+transcripts from the run's own page without knowing child ids exist —
+Tom tonight, verbatim, is the red case."
+
+Tom watched K9's parent run page after fanout: event history ends at
+ActivityStarted for hours (honestly quiet — nothing newer exists in that
+store), while both builder legs streamed thousands of transcript events
+under CHILD workflow ids he had no reason to know existed. He concluded
+the system was broken. Nothing was broken. That gap is the defect.
+
+## What exists (proven live tonight — build on it, don't rebuild it)
+
+- Child ids ARE in the parent's event history: ChildWorkflowStarted
+  events carry child_workflow_id. This is the derivation seam.
+- Child transcripts DO flow mid-activity: POST /workflows/transcripts
+  (list: namespace/workflow_id/run_id → streams with head) and POST
+  /workflows/transcript (fetch: + activity_id/attempt/from_seq/limit)
+  — proven advancing live on K9's L1/L2 (heads 2667→2759 measured).
+- Streams are keyed 4-axis (workflow/run/activity/attempt) since #168;
+  attempt is part of the key — surface it, don't collapse it (#246
+  taught that attempt identity is operator-safety information).
+
+## The build
+
+R1 — **Server: derived children endpoint.** The parent run's page needs
+"who are my children" answered server-side by DERIVING from the parent's
+own event history (ChildWorkflowStarted → child workflow/run ids +
+display names + status projection). NO schema change, NO stored
+parent→children relation — that is #107, which sits on TOM'S DOCKET
+gating ADR-004. **HARD WALL (Waffles 01:54Z): if the honest fix needs
+the schema relation, STOP and bring the finding to the dispatcher —
+never widen silently.** Depth: one level is what fleet_dev produces
+today; recursion can derive iteratively if trivial, otherwise disclose
+as a non-goal.
+
+R2 — **Console: the run page folds its legs in.** On a run with
+children: a legs section, one entry per child (display name, short id
+beside it per the #211 law, status, current activity + attempt), each
+tailing its live transcript through the existing transcript endpoints.
+Live = the console's socket-first discipline (board law: real data
+only, no polling theater where a socket exists). The parent's own quiet
+history stays visible and honest — the legs section ANSWERS the quiet,
+it doesn't hide it.
+
+R3 — **CLI: the same answer at the terminal.** `aion tail <workflow-id>`
+(report §1's shape): resolves the run, discovers legs via R1's
+derivation, tails parent + child transcripts interleaved with leg
+prefixes. Terminal operators get what the console gets — one story.
+
+R4 — **Attempt honesty everywhere.** Wherever R2/R3 show a leg's
+stream, the attempt number is visible, and a stream that went quiet
+because its attempt was superseded says so rather than reading as
+"working". (The #207 double-writer made this non-cosmetic.)
+
+## Red-first discipline
+
+The acceptance red is reproducible tonight: a fleet_dev parent with
+running children whose parent page/CLI answer contains NO leg
+information. Pin it: an e2e that starts a parent-with-children fixture,
+asks the R1 endpoint / R3 verb, and asserts leg visibility — written
+first, committed failing against the current tree, then built green.
+Console side pins the legs section renders from a recorded fixture.
+
+## Out of scope (disclosed non-goals)
+
+- #107's schema-level parent→children relation (Tom's docket; the wall
+  above).
+- Heartbeats in run history (report §1 mentions them — separate line,
+  needs engine-record design like #249).
+- The one-surface observability redesign (report §6 — design
+  conversation, not this build).
+- Any landing/swap/restart while K9/#207 fly (standing wall; landed is
+  not running).
+
+## House laws
+
+Worktree-only build, commit-as-you-go, never push. No #[allow]/
+#[ignore]/lint bypasses. Files ≤500 LOC. Clippy ×2 resolutions + fmt +
+battery to files. Waffles' re-gate before landing; his desk lands it.

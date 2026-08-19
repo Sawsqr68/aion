@@ -1,0 +1,142 @@
+=== WAFFLES SOLO DISCRIMINATOR 2026-08-16T09:06:25Z ===
+HEAD=9f85e7963d3dd9d3e707e04fdc1e05690de091e8
+LOAD-BEFORE: 19:06  up 3 days,  6:40, 4 users, load averages: 5.28 6.26 9.93
+--- run 1 default ---
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.00s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+EXIT=0
+--- run 1 all-features ---
+   Compiling aion-core v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-core)
+   Compiling jsonschema v0.46.6
+   Compiling tungstenite v0.29.0
+   Compiling rustls v0.23.40
+   Compiling tokio-rustls v0.25.0
+   Compiling libsql_replication v0.9.30
+   Compiling jsonwebtoken v10.4.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+   Compiling hyper-rustls v0.25.0
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum v0.8.9
+   Compiling liminal-rs v0.5.0
+   Compiling aion-mcp v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-mcp)
+   Compiling libsql v0.9.30
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling aion-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-package)
+   Compiling aion-store v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-store)
+   Compiling aion-integrations v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-integrations)
+   Compiling reqwest v0.13.4
+   Compiling tonic v0.14.6
+   Compiling aion-store-haematite v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-store-haematite)
+   Compiling tonic-prost v0.14.5
+   Compiling aion-awl v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-awl)
+   Compiling aion-toolchain v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-toolchain)
+   Compiling aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion)
+   Compiling aion-proto-generated v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-proto-generated)
+   Compiling aion-store-libsql v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-store-libsql)
+   Compiling aion-proto v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-proto)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling aion-awl-package v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-awl-package)
+   Compiling aion-worker v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 36s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+EXIT=0
+--- run 2 default ---
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.60s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+EXIT=0
+--- run 2 all-features ---
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.59s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test child_workflow_namespace_enforcement_survives_restart ... FAILED
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+
+failures:
+
+---- child_workflow_namespace_enforcement_survives_restart stdout ----
+Error: Store(Backend("SQLite failure: `bad parameter or other API misuse`"))
+
+
+failures:
+    child_workflow_namespace_enforcement_survives_restart
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+error: test failed, to rerun pass `-p aion-server --test namespace_restart`
+EXIT=101
+--- run 3 default ---
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.54s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-69f02991985f77c0)
+
+running 4 tests
+test child_workflow_namespace_enforcement_survives_restart ... FAILED
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+
+failures:
+
+---- child_workflow_namespace_enforcement_survives_restart stdout ----
+Error: Store(Backend("SQLite failure: `bad parameter or other API misuse`"))
+
+
+failures:
+    child_workflow_namespace_enforcement_survives_restart
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+error: test failed, to rerun pass `-p aion-server --test namespace_restart`
+EXIT=101
+--- run 3 all-features ---
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/status-truth/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.24s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-500d918afe2a4001)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+EXIT=0
+LOAD-AFTER: 19:09  up 3 days,  6:43, 4 users, load averages: 5.77 6.90 9.62

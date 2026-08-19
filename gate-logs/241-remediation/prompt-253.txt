@@ -1,0 +1,55 @@
+# #253 micro-fix — the ts-worker test gate goes green for the right reason
+
+Bounded TS-only micro-fix on branch 241-final-message (worktree
+.worktrees/241-final-message), commits atop 039226c29. Commit-as-you-go;
+never push. This is a FRESH session; this brief is your complete charter —
+do not infer scope beyond it.
+
+## The defect (task #253, red already on the record)
+
+The battery's ts-worker:test gate runs `bun test` in
+sdks/typescript/aion-worker. One test fails under it:
+
+    TypeError: vi.advanceTimersByTimeAsync is not a function.
+    (fail) reconnect > completes an unaborted default sleep and leaves
+    no timer behind
+
+Bun's vi shim lacks advanceTimersByTimeAsync; the SDK's package.json
+declares vitest as its runner, so this suite has never fully run as the
+gate executes it. The failure above IS the committed red — quote it in
+the fix commit (it is also recorded at
+gate-logs/241-remediation/ts-worker-stub-fix.log and in the
+final-battery.log ts-worker:test section).
+
+## Required work
+
+Make the gate's OWN command (`bun test`, exactly as scripts/battery.sh
+invokes it) pass the reconnect suite for the RIGHT reason:
+
+- Rework the failing test's timer control to an API that is real under
+  bun's runner (and still real under vitest if the declared runner is
+  ever used) — the assertion's meaning must be preserved exactly: the
+  unaborted default sleep completes AND no timer is left behind.
+- FORBIDDEN: skipping/It.todo, weakening or removing the assertion,
+  try/catch around the shim call, feature-detecting the API and
+  silently no-oping, or adding a hand-rolled fake of vitest's API that
+  fakes time without advancing the code under test.
+- If you conclude the only honest fix is switching the gate to the
+  declared vitest runner instead (a battery-script change, out of this
+  brief's scope), STOP and say exactly that in your report — do not
+  build it.
+
+## Verification floor
+
+- Pre-fix red quoted in the commit message (the failure above, at your
+  own run).
+- Post-fix: `bun test` full suite green (119 pass / 0 fail expected)
+  AND `bun run typecheck` green AND `bun run check:proto` still green.
+- Mutation honesty check: re-break the timer path (revert your test
+  change locally) and confirm the failure returns, then restore —
+  state this was done in the report.
+- No production source edits; test file(s) only.
+
+Work from the current repository state. Return only the value required
+by the supplied output schema. Do not claim completion or verification
+without direct evidence.

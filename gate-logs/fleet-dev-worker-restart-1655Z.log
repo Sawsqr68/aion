@@ -1,0 +1,2 @@
+error: /Users/tom/.aion/authoring/fleet_dev.awl does not compile, so no action surface can be derived from it:
+/Users/tom/.aion/authoring/fleet_dev.awl:321:1: error: expected a `const`, `type`, `worker`, `child`, `subflow`, or `step` declaration, found `a`

@@ -1,0 +1,5 @@
+HEAD=568c1f6193d8e6f88dc39aa2a7273f911bae66c5
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/247-transcript-spool/crates/aion-server)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/247-transcript-spool/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 49.49s
+EXIT=0

@@ -1,2 +1,12 @@
 === K9 watch armed 2026-08-14T23:25:14Z workflow b7c5fb1f-8734-452f-975c-2c3b7725049f run 49b7ca5d ===
 23:25:14Z Running -
+=== K9 watch RE-ARMED 00:22:44Z (prior watcher reaped) ===
+00:22:44Z Running
+00:29:45Z describe-failed
+01:25:50Z Running
+=== K9 watch RE-ARMED post-server-restart 01:26:43Z ===
+01:26:43Z Running
+02:21:50Z Failed
+terminal: Failed
+02:21:52Z Failed
+terminal: Failed

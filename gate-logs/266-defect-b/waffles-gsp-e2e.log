@@ -1,0 +1,18 @@
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 42.40s
+     Running tests/graceful_shutdown_park_e2e.rs (target/debug/deps/graceful_shutdown_park_e2e-ad02ded0eb7f75c6)
+
+running 10 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test graceful_drain_parks_in_flight_activity_and_restart_completes ... ok
+test drain_timeout_parks_and_exits_success_and_restart_completes ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.65s
+
