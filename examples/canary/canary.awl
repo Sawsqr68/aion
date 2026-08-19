@@ -1,0 +1,71 @@
+//! canary — a workflow whose only job is to still be running.
+//!
+//! It sleeps on a durable timer, wakes, records that it woke, and sleeps
+//! again. That is the whole workflow. Its value is entirely in its own
+//! survival: while it is `Running`, the engine is appending events, firing
+//! timers, projecting status and replaying workflow code. If it ever stops
+//! without being cancelled, something is wrong with the engine — and because
+//! it has no worker, no child, no filesystem and no network, there is nothing
+//! ELSE that could have killed it. A canary that can die of unrelated causes
+//! is not a canary, it is a second thing to debug.
+//!
+//! Three deliberate absences, each of which would otherwise end it early:
+//!
+//!   * NO header `timeout`. A run deadline is optional in AWL, and every one
+//!     that is declared is a countdown started at the moment of the start.
+//!     `watch_inbox` declares `timeout 4h`, which is right for real work and
+//!     fatal for a canary — a large scan count does not survive it, because
+//!     the deadline is not counting scans.
+//!   * NO worker. An action needs something to serve it, and that something
+//!     can exit, get its contract changed underneath it, or be routed to a
+//!     queue another lane has claimed. Each of those kills the run for a
+//!     reason that is not the engine.
+//!   * NO child workflows, so nothing it starts can outlive or block it.
+//!
+//! AWL will not let a loop be truly unbounded — `max` is mandatory, and that
+//! is the language keeping its promise that every run terminates. So "forever"
+//! here is 5,000,000 rounds at 30 seconds each, which is a little over four
+//! years. When it does finally land on `worn_out` that is a COMPLETED run, not
+//! a failure, and the report says plainly that it ran out rather than died.
+//!
+//! Cost of running it: one wake every 30 seconds, appending a small handful of
+//! events each time — on the order of ten thousand events a day. History grows
+//! for as long as it runs and is never truncated, which is the honest price of
+//! an eternal workflow in an engine with no continue-as-new surface in AWL.
+//! Restart it when that price stops being worth paying; a fresh run starts a
+//! fresh history and nothing is lost but the count.
+//!
+//!   aion run canary.awl --input '{"note":"engine canary"}'
+//!   aion describe <id>         # Running, and an event count that keeps rising
+workflow canary
+  input note: String
+  outcome worn_out: type CanaryReport, route success
+
+/// The one place the round ceiling is written. It is the `max`, it is the
+/// guard, and it is the number the report carries — three readings of a single
+/// fact, so none of them can drift away from the other two.
+const rounds = 5000000
+
+/// What a canary has to say for itself, once it finally stops.
+type CanaryReport { rounds_done: Int, note: String }
+
+/// One round: sleep, then go round again.
+///
+/// The sleep comes FIRST so a run that has just started has already proved it
+/// can hold a durable timer before it does anything else, and so a restart
+/// mid-sleep is the ordinary case rather than the rare one.
+///
+/// There is no `query` on this workflow, deliberately. AWL has no arithmetic —
+/// `+` joins strings — so a counter cannot be incremented in workflow code
+/// without an activity, and an activity is the one thing this document refuses
+/// to have. The pulse is read from outside instead: `aion describe <id>` shows
+/// the status AND the event count, and the event count is the better signal of
+/// the two. `Running` alone cannot tell a ticking canary from a wedged one; an
+/// event count that is higher than it was a minute ago can.
+step tick
+  sleep 30s
+  outcome ran_out: when visits >= rounds,
+    route worn_out(rounds_done: rounds,
+      note: "canary ran its full count and stopped healthy — start another")
+  outcome again: otherwise, route tick
+  max rounds visits
