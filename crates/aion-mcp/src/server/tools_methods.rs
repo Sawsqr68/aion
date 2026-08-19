@@ -1,18 +1,16 @@
 //! `tools/list` and `tools/call`.
 
-use std::sync::Arc;
-
 use serde_json::{Map, Value, json};
 
 use crate::protocol::error::ProtocolError;
 use crate::protocol::meta::RequestMeta;
 use crate::protocol::result::{RESULT_TYPE_COMPLETE, RESULT_TYPE_TASK, result_envelope};
 use crate::protocol::version::TASKS_EXTENSION;
-use crate::tasks::store::TaskStore;
 use crate::tools::service::{ToolCall, ToolService, ToolTaskDecision, validate_against};
 
 use super::call_result::{call_tool_failure_result, call_tool_success_result};
 use super::config::McpServerConfig;
+use super::tasks_methods::resolve_detailed;
 
 /// Build the `tools/list` result.
 ///
@@ -80,73 +78,76 @@ pub fn decode_call<S: ToolService>(
 ///   call must run as a task and the request did not declare the tasks
 ///   extension. The call is refused rather than silently downgraded to an
 ///   inline call that would block the client for as long as the work takes.
-/// * [`ProtocolError::Internal`] when the task store cannot record the task, or
-///   when a tool violates its own published `outputSchema`.
+/// * [`ProtocolError::Internal`] when a tool violates its own published
+///   `outputSchema`, or when the host cannot name the work a task-shaped call
+///   just started.
 pub async fn execute_call<S: ToolService>(
-    service: &Arc<S>,
+    service: &S,
     config: &McpServerConfig,
-    tasks: &TaskStore,
     meta: &RequestMeta,
     caller: &S::Caller,
     call: ToolCall,
 ) -> Result<Value, ProtocolError> {
-    match service.task_decision(&call) {
-        ToolTaskDecision::Task => {
-            if !meta.client_capabilities.declares_tasks() {
-                return Err(ProtocolError::MissingClientCapability {
-                    required: vec![format!("extensions.{TASKS_EXTENSION}")],
-                });
-            }
-            create_task(service, config, tasks, caller, call)
-        }
-        ToolTaskDecision::Inline => {
-            let outcome = service.call(caller, call.clone()).await;
+    let decision = service.task_decision(&call);
+    if decision == ToolTaskDecision::Task && !meta.client_capabilities.declares_tasks() {
+        return Err(ProtocolError::MissingClientCapability {
+            required: vec![format!("extensions.{TASKS_EXTENSION}")],
+        });
+    }
+    // The call is performed the same way either way: the work is really done
+    // and confirmed before this returns. A task-shaped call differs only in
+    // what it is ANSWERED with — a handle onto durable work instead of that
+    // work's finished result.
+    let outcome = match service.call(caller, call.clone()).await {
+        Ok(outcome) => outcome,
+        // A failed call is answered INLINE even when the decision was `Task`. A
+        // task pointing at work that never started could never resolve, and an
+        // unresolvable handle is worse than the error it would be hiding.
+        Err(failure) => {
             let mut result = result_envelope(RESULT_TYPE_COMPLETE, &config.server_info);
-            let body = match outcome {
-                Ok(outcome) => {
-                    call_tool_success_result(service.catalog().find(&call.name), &outcome)
-                        .map_err(|detail| ProtocolError::Internal { detail })?
-                }
-                Err(failure) => call_tool_failure_result(&failure),
-            };
+            merge(&mut result, call_tool_failure_result(&failure));
+            return Ok(Value::Object(result));
+        }
+    };
+    match decision {
+        ToolTaskDecision::Task => create_task(service, config, caller, &call, &outcome).await,
+        ToolTaskDecision::Inline => {
+            let mut result = result_envelope(RESULT_TYPE_COMPLETE, &config.server_info);
+            let body = call_tool_success_result(service.catalog().find(&call.name), &outcome)
+                .map_err(|detail| ProtocolError::Internal { detail })?;
             merge(&mut result, body);
             Ok(Value::Object(result))
         }
     }
 }
 
-fn create_task<S: ToolService>(
-    service: &Arc<S>,
+/// Answer a completed task-shaped call with a handle onto the work it started.
+///
+/// The creation result is built by RESOLVING that handle rather than by
+/// describing what was just done, so the answer comes from the same projection
+/// every later `tasks/get` reads. Work that was already finished by the time
+/// the handle was minted is reported as finished here, immediately — there is
+/// no moment where the server claims `working` about work that has stopped.
+async fn create_task<S: ToolService>(
+    service: &S,
     config: &McpServerConfig,
-    tasks: &TaskStore,
     caller: &S::Caller,
-    call: ToolCall,
+    call: &ToolCall,
+    outcome: &crate::tools::service::ToolOutcome,
 ) -> Result<Value, ProtocolError> {
-    let now = chrono::Utc::now();
-    let (task, cancel) = tasks
-        .create(
-            now,
-            config.task_ttl_ms,
-            config.task_poll_interval_ms,
-            Some(format!("`{}` is running", call.name)),
-        )
-        .map_err(|error| ProtocolError::Internal {
-            detail: format!("the task could not be created: {error}"),
+    let task_id = service
+        .task_handle(call, outcome)
+        .ok_or_else(|| ProtocolError::Internal {
+            detail: format!(
+                "`{}` was answered as a task but the server could not name the work it started",
+                call.name
+            ),
         })?;
-    // The task is in the store BEFORE the executor is spawned and before this
-    // returns, so a `tasks/get` issued the instant the client reads the
-    // creation result already resolves.
-    tokio::spawn(crate::tasks::runner::drive(
-        Arc::clone(service),
-        tasks.clone(),
-        task.task_id.clone(),
-        caller.clone(),
-        call,
-        cancel,
-        config.task_ttl_ms.map(std::time::Duration::from_millis),
-    ));
+    let detail = resolve_detailed(service, config, caller, &task_id).await?;
+    // A `CreateTaskResult` carries the FLAT task record. The status-specific
+    // payload is what `tasks/get` is for.
     let mut result = result_envelope(RESULT_TYPE_TASK, &config.server_info);
-    task.write_into(&mut result);
+    detail.task().write_into(&mut result);
     Ok(Value::Object(result))
 }
 

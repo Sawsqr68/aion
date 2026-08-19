@@ -252,6 +252,9 @@ struct Harness {
     /// the way the engine records it and then read the answer back through the
     /// real tool surface.
     store: Arc<dyn EventStore>,
+    /// The same store as the concrete type, so a restart can rebuild an engine
+    /// over it without re-seeding.
+    backing: Arc<InMemoryStore>,
     /// Keeps the authoring workspace alive for the harness's lifetime.
     _workspace: Option<tempfile::TempDir>,
 }
@@ -284,6 +287,23 @@ impl Harness {
         Self::start_configured(true, Some(workspace), options).await
     }
 
+    /// A harness with authentication on (dev-token path) and no workspace, so
+    /// a caller can be authenticated while holding a DIFFERENT namespace from
+    /// the one the seeded workflow lives in.
+    #[cfg(not(feature = "auth"))]
+    async fn start_with_auth() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_configured(
+            true,
+            None,
+            HarnessOptions {
+                auth_enabled: true,
+                auth_token: Some(AUTH_ON_TOKEN),
+                ..HarnessOptions::default()
+            },
+        )
+        .await
+    }
+
     /// A harness with a workspace AND authentication on (dev-token path), so a
     /// caller can be authenticated while NOT holding the deploy grant.
     #[cfg(not(feature = "auth"))]
@@ -304,7 +324,7 @@ impl Harness {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let backing = Arc::new(InMemoryStore::default());
         let store: Arc<dyn EventStore> = backing.clone();
-        let visibility: Arc<dyn VisibilityStore> = backing;
+        let visibility: Arc<dyn VisibilityStore> = backing.clone();
         store
             .append(
                 WriteToken::recorder(),
@@ -353,7 +373,52 @@ impl Harness {
         Ok(Self {
             router: http_router(state)?,
             store,
+            backing,
             _workspace: workspace,
+        })
+    }
+
+    /// A NEW server over the SAME durable store.
+    ///
+    /// Everything the process was holding in memory is gone: a fresh engine, a
+    /// fresh `ServerState`, a fresh MCP layer that has never seen a task. Only
+    /// the store survives, which is the whole claim under test — a task handle
+    /// is resolvable because the RUN is durable, not because anything about
+    /// the task was kept.
+    ///
+    /// `owned` re-registers which namespace each workflow belongs to. That
+    /// registry is a test double here (a real server rebuilds it from its own
+    /// durable state at boot), so restoring it is removing an artifact of the
+    /// double rather than helping the thing being measured: no task state is
+    /// carried across, and the MCP layer is genuinely new.
+    async fn restart(&self, owned: &[WorkflowId]) -> Result<Self, Box<dyn std::error::Error>> {
+        let store: Arc<dyn EventStore> = self.backing.clone();
+        let visibility: Arc<dyn VisibilityStore> = self.backing.clone();
+        let engine = Arc::new(
+            EngineBuilder::new()
+                .store_arc(Arc::clone(&store))
+                .visibility_store_arc(visibility)
+                .scheduler_threads(1)
+                .build()
+                .await?,
+        );
+        let ownership = StaticWorkflowNamespaces::default();
+        for workflow in owned {
+            ownership.record(workflow.clone(), NAMESPACE)?;
+        }
+        let resolver = NamespaceResolver::from_parts(
+            NamespaceMode::SharedEngine,
+            Some(engine),
+            Arc::new(ownership),
+            Arc::new(StaticScheduleNamespaces::default()),
+        );
+        let state =
+            ServerState::from_parts(resolver, runtime_config(true, &HarnessOptions::default()));
+        Ok(Self {
+            router: http_router(state)?,
+            store,
+            backing: self.backing.clone(),
+            _workspace: None,
         })
     }
 
@@ -1291,8 +1356,26 @@ async fn an_awaited_start_from_a_non_declaring_client_is_minus_32021() -> TestRe
     Ok(())
 }
 
+/// The handle format is a wire contract with clients that hold task ids across
+/// deploys, so it is written out here rather than only produced: a change to it
+/// must break a test that says so.
+fn task_handle_for(workflow: &WorkflowId, run: &RunId, namespace: &str) -> String {
+    format!("run.v1:{workflow}:{run}:{namespace}")
+}
+
+fn task_get(task_id: &str) -> Value {
+    rpc(
+        "tasks/get",
+        &json!({ "_meta": meta(true), "taskId": task_id }),
+    )
+}
+
+/// A start that FAILS is answered inline, with no task at all.
+///
+/// A task pointing at a run that never started could never resolve, and an
+/// unresolvable handle would hide the error that produced it.
 #[tokio::test]
-async fn an_awaited_start_from_a_declaring_client_is_a_durable_task() -> TestResult {
+async fn an_awaited_start_that_fails_is_answered_inline_and_mints_no_task() -> TestResult {
     let harness = Harness::start(true).await?;
     let (status, value) = harness
         .post(
@@ -1309,42 +1392,178 @@ async fn an_awaited_start_from_a_declaring_client_is_a_durable_task() -> TestRes
         )
         .await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(value["result"]["resultType"], "task");
-    assert_eq!(value["result"]["status"], "working");
-    let task_id = value["result"]["taskId"]
-        .as_str()
-        .ok_or("taskId must be a string")?
-        .to_owned();
-
-    // Durably created BEFORE the response was written: a tasks/get issued the
-    // instant the client reads the result already resolves.
-    let get = rpc(
-        "tasks/get",
-        &json!({ "_meta": meta(true), "taskId": task_id.clone() }),
+    assert_eq!(value["result"]["resultType"], "complete");
+    assert_eq!(value["result"]["isError"], true);
+    assert!(
+        value["result"].get("taskId").is_none(),
+        "a start that failed must not hand back a task: {value}"
     );
-    let (status, value) = harness.post(&get, &[]).await?;
+    Ok(())
+}
+
+/// A task is the RUN, projected. It advertises no lifetime, it reports the
+/// run's own status, and — because the run is one generation of a chain — it
+/// settles when THAT run ends rather than when the chain does.
+#[tokio::test]
+async fn a_task_projects_the_run_it_names_and_never_expires() -> TestResult {
+    let harness = Harness::start(true).await?;
+
+    // Generation two is still running, so its task is `working`.
+    let live = task_handle_for(&workflow_id(), &second_run(), NAMESPACE);
+    let (status, value) = harness.post(&task_get(&live), &[]).await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         value["result"]["resultType"], "complete",
         "tasks/get answers `complete`; `task` marks a CreateTaskResult and nothing else"
     );
-    assert_eq!(value["result"]["taskId"], task_id);
+    assert_eq!(value["result"]["taskId"], live);
+    assert_eq!(value["result"]["status"], "working");
+    // `ttlMs` is REQUIRED and nullable, and `null` is the extension's own
+    // spelling of unlimited. Nothing is stored, so nothing expires.
+    assert_eq!(value["result"]["ttlMs"], json!(null), "{value}");
 
-    // The start could not succeed (the type is not deployed), so the task
-    // settles COMPLETED carrying an isError tool result — never `failed`, which
-    // is reserved for a JSON-RPC error.
-    let mut settled = Value::Null;
-    for _ in 0..200 {
-        let (_status, value) = harness.post(&get, &[]).await?;
-        if value["result"]["status"] != json!("working") {
-            settled = value;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+    // Generation one ended in continue-as-new. That run is OVER even though the
+    // chain carries on, so its task is settled — a chain-wide projection would
+    // have left it `working` forever.
+    let ended = task_handle_for(&workflow_id(), &first_run(), NAMESPACE);
+    let (status, value) = harness.post(&task_get(&ended), &[]).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["result"]["status"], "completed", "{value}");
+    // A run that ended is a tool that SUCCEEDED at reporting how it ended.
+    assert_eq!(value["result"]["result"]["isError"], false);
+    assert_eq!(
+        value["result"]["result"]["structuredContent"]["status"],
+        "ContinuedAsNew"
+    );
+    assert_eq!(
+        value["result"]["result"]["structuredContent"]["run_id"],
+        first_run().to_string()
+    );
+    assert_eq!(
+        value["result"]["result"]["structuredContent"]["awaited"],
+        true
+    );
+    assert!(value["result"].get("error").is_none());
+    Ok(())
+}
+
+/// 🔴 The point of the whole change: a task outlives the process that issued
+/// it. The server here is genuinely new — new engine, new state, new MCP layer
+/// that has never seen this task — and the handle still resolves, because the
+/// run it names is durable and the task was never anything but a view of it.
+#[tokio::test]
+async fn a_task_survives_a_server_that_never_saw_it() -> TestResult {
+    let harness = Harness::start(true).await?;
+    let handle = task_handle_for(&workflow_id(), &second_run(), NAMESPACE);
+    let (status, before) = harness.post(&task_get(&handle), &[]).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(before["result"]["status"], "working");
+
+    let restarted = harness.restart(&[workflow_id()]).await?;
+    let (status, after) = restarted.post(&task_get(&handle), &[]).await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the task must resolve on a server that never saw it: {after}"
+    );
+    assert_eq!(after["result"]["taskId"], handle);
+    assert_eq!(after["result"]["status"], before["result"]["status"]);
+    assert_eq!(after["result"]["createdAt"], before["result"]["createdAt"]);
+    Ok(())
+}
+
+/// A handle is DERIVED, not secret, so a caller can write one down for work
+/// that is not theirs. Every task method therefore re-authorizes against the
+/// run itself, through the same namespace guard `describe_run` passes.
+///
+/// The positive control matters as much as the refusal: without proving the
+/// authorized caller CAN read this exact handle, a refusal would only be
+/// evidence that the handle was bad.
+#[cfg(not(feature = "auth"))]
+#[tokio::test]
+async fn a_valid_handle_is_refused_to_a_caller_who_does_not_hold_the_namespace() -> TestResult {
+    let harness = Harness::start_with_auth().await?;
+    let handle = task_handle_for(&workflow_id(), &second_run(), NAMESPACE);
+    let holder: &[(&str, &str)] = &[
+        ("authorization", "Bearer mcp-authoring-secret"),
+        ("x-aion-subject", "holder"),
+        ("x-aion-namespaces", NAMESPACE),
+    ];
+    let stranger: &[(&str, &str)] = &[
+        ("authorization", "Bearer mcp-authoring-secret"),
+        ("x-aion-subject", "stranger"),
+        ("x-aion-namespaces", "some-other-tenant"),
+    ];
+
+    let (status, value) = harness.post(&task_get(&handle), holder).await?;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the handle must be valid for its holder, or the refusal below proves nothing: {value}"
+    );
+    assert_eq!(value["result"]["status"], "working");
+
+    for method in ["tasks/get", "tasks/update", "tasks/cancel"] {
+        let body = rpc(
+            method,
+            &json!({
+                "_meta": meta(true),
+                "taskId": handle.clone(),
+                "inputResponses": {},
+            }),
+        );
+        let (status, value) = harness.post(&body, stranger).await?;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "{method} must refuse a caller without the namespace: {value}"
+        );
+        assert_eq!(value["error"]["code"], -32602, "{method}: {value}");
+        // The refusal must not distinguish "not yours" from "no such task":
+        // that distinction is exactly what a constructible handle would let a
+        // caller use to probe for another tenant's work.
+        let message = value["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            !message.contains("not permitted") && !message.contains("namespace"),
+            "the refusal must not say WHY: {message}"
+        );
     }
-    assert_eq!(settled["result"]["status"], "completed", "{settled}");
-    assert_eq!(settled["result"]["result"]["isError"], true);
-    assert!(settled["result"].get("error").is_none());
+    Ok(())
+}
+
+/// A handle whose namespace has been swapped for one the caller DOES hold must
+/// not reach the run: the namespace in a handle is read, never trusted.
+///
+/// This is a separate property from the caller guard above and does not depend
+/// on it — the refusal here comes from the run not living in the namespace the
+/// handle claims, which is what stops a handle being rewritten into one a
+/// caller happens to be entitled to.
+#[cfg(not(feature = "auth"))]
+#[tokio::test]
+async fn a_handle_with_a_forged_namespace_does_not_reach_the_run() -> TestResult {
+    let harness = Harness::start_with_auth().await?;
+    let stranger: &[(&str, &str)] = &[
+        ("authorization", "Bearer mcp-authoring-secret"),
+        ("x-aion-subject", "stranger"),
+        ("x-aion-namespaces", "some-other-tenant"),
+    ];
+    let forged = task_handle_for(&workflow_id(), &second_run(), "some-other-tenant");
+    let (status, value) = harness.post(&task_get(&forged), stranger).await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{value}");
+    assert_eq!(value["error"]["code"], -32602);
+    Ok(())
+}
+
+/// A run id that is not one of the workflow's runs is refused rather than
+/// silently served the workflow's latest run.
+#[tokio::test]
+async fn a_handle_naming_a_run_that_is_not_the_workflows_is_refused() -> TestResult {
+    let harness = Harness::start(true).await?;
+    let stray = RunId::new(Uuid::from_u128(0xdead_beef));
+    let handle = task_handle_for(&workflow_id(), &stray, NAMESPACE);
+    let (status, value) = harness.post(&task_get(&handle), &[]).await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{value}");
+    assert_eq!(value["error"]["code"], -32602);
     Ok(())
 }
 
@@ -1882,32 +2101,23 @@ async fn save_and_deploy_without_the_deploy_grant_are_refused_deploy_denied() ->
 
 // ---------------------------------------------------------------- tasks (cont)
 
+/// Cancellation is cooperative, and this server never honours it: the run
+/// behind a task is durable, and a durable run is not something an MCP
+/// client's disinterest may kill. The acknowledgement is the whole obligation
+/// — the extension defines no `cancel_requested` status, so there is nowhere a
+/// later read could show that one was asked for.
+///
+/// The task's `statusMessage` is what tells a caller this, on every read, and
+/// it names the tool that DOES stop a run.
 #[tokio::test]
-async fn tasks_cancel_is_acknowledged_empty_and_stops_the_wait() -> TestResult {
+async fn tasks_cancel_is_acknowledged_empty_and_leaves_the_run_alone() -> TestResult {
     let harness = Harness::start(true).await?;
-    let (_status, value) = harness
-        .post(
-            &call(
-                "start_run",
-                &json!({
-                    "namespace": NAMESPACE,
-                    "workflow_type": "never_deployed",
-                    "await_completion": true,
-                }),
-                true,
-            ),
-            &[],
-        )
-        .await?;
-    let task_id = value["result"]["taskId"]
-        .as_str()
-        .ok_or("taskId must be a string")?
-        .to_owned();
+    let handle = task_handle_for(&workflow_id(), &second_run(), NAMESPACE);
     let (status, value) = harness
         .post(
             &rpc(
                 "tasks/cancel",
-                &json!({ "_meta": meta(true), "taskId": task_id }),
+                &json!({ "_meta": meta(true), "taskId": handle.clone() }),
             ),
             &[],
         )
@@ -1917,6 +2127,20 @@ async fn tasks_cancel_is_acknowledged_empty_and_stops_the_wait() -> TestResult {
     assert!(
         value["result"].get("taskId").is_none(),
         "the acknowledgement is EMPTY beyond the envelope"
+    );
+
+    let (status, value) = harness.post(&task_get(&handle), &[]).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        value["result"]["status"], "working",
+        "cancelling the task must not have touched the run: {value}"
+    );
+    let message = value["result"]["statusMessage"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        message.contains("does not stop it") && message.contains("cancel"),
+        "the task must say plainly that cancelling it leaves the run alone: {message}"
     );
     Ok(())
 }

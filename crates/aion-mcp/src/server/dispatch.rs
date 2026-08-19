@@ -21,7 +21,6 @@ use crate::protocol::headers::{
 };
 use crate::protocol::jsonrpc::IncomingMessage;
 use crate::protocol::meta::RequestMeta;
-use crate::tasks::store::TaskStore;
 use crate::tools::service::{ToolCatalog, ToolService};
 
 use super::config::McpServerConfig;
@@ -134,25 +133,27 @@ fn mcp_name_source(method: &str, params: &Map<String, Value>) -> Option<String> 
 pub async fn route<S: ToolService>(
     service: &Arc<S>,
     config: &McpServerConfig,
-    tasks: &TaskStore,
     caller: &S::Caller,
     message: &IncomingMessage,
     meta: &RequestMeta,
 ) -> Result<Value, ProtocolError> {
+    let service = service.as_ref();
     match message.method.as_str() {
         "server/discover" => Ok(discover_result(
             config,
             &meta.client_capabilities,
             service.instructions(),
         )),
-        "tools/list" => Ok(tools_list_result(service.as_ref(), config)),
+        "tools/list" => Ok(tools_list_result(service, config)),
         "tools/call" => {
-            let call = decode_call(service.as_ref(), &message.params)?;
-            execute_call(service, config, tasks, meta, caller, call).await
+            let call = decode_call(service, &message.params)?;
+            execute_call(service, config, meta, caller, call).await
         }
-        "tasks/get" => tasks_get(config, tasks, meta, &message.params),
-        "tasks/update" => tasks_update(config, tasks, meta, &message.params),
-        "tasks/cancel" => tasks_cancel(config, tasks, meta, &message.params),
+        // Every task method carries the caller: the handle is constructible, so
+        // possession of it authorizes nothing on its own.
+        "tasks/get" => tasks_get(service, config, caller, meta, &message.params).await,
+        "tasks/update" => tasks_update(service, config, caller, meta, &message.params).await,
+        "tasks/cancel" => tasks_cancel(service, config, caller, meta, &message.params).await,
         other => Err(ProtocolError::MethodNotFound {
             method: other.to_owned(),
         }),

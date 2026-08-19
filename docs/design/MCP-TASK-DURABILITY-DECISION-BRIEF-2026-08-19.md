@@ -193,7 +193,13 @@ nothing; no server behaviour depends on its value.
 
 ## Status
 
-Design only. Nothing implemented. Verified against the running binary
+**BUILT 2026-08-19** — see `gate-logs/mcp-task-durability-BUILT.md` for the
+record, the gates, and the two witnessed proofs (restart survival, and an
+unauthorized read refused on a VALID handle, watched go red under a mutation).
+Not deployed: a rebuilt binary rides the release line with a battery.
+
+Before the build, this document was design only. It was verified then against
+the running binary
 (`gate-logs/mcp-awaited-start-verified.md`): 13 tools live, `start_run` carries
 `await_completion`, and an awaited start returns a task that `tasks/get` reports
 `completed` with the run's terminal status.

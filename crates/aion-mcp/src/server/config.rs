@@ -1,9 +1,12 @@
 //! Server configuration.
 //!
 //! Every value here is supplied by the host. Nothing in this crate invents a
-//! timeout, a lifetime, or a cache lifetime: the host owns those, because the
-//! host is what knows how fast its work moves and how long its operator wants
-//! an abandoned task to hold memory.
+//! timeout or a cache lifetime: the host owns those, because the host is what
+//! knows how fast its work moves.
+//!
+//! There is no task lifetime here, because there is nothing to expire. A task
+//! is a projection of durable work the host already stores; it holds no
+//! executor and no memory, so no number bounds it and none has to be guessed.
 
 use crate::protocol::meta::Implementation;
 use crate::protocol::result::{CacheHints, CacheScope};
@@ -17,9 +20,10 @@ pub struct McpServerConfig {
     pub discover_cache: CacheHints,
     /// Cache hints for `tools/list`.
     pub tools_list_cache: CacheHints,
-    /// Lifetime of a created task, in milliseconds. `None` is unlimited.
-    pub task_ttl_ms: Option<u64>,
     /// The poll interval a client is asked to honour for a created task.
+    ///
+    /// A hint, and only a hint: no server behaviour depends on it, and a client
+    /// that ignores it is not doing anything the server has to defend against.
     pub task_poll_interval_ms: u64,
     /// Origins permitted on the `Origin` header of an MCP request.
     ///
@@ -46,7 +50,6 @@ impl McpServerConfig {
         server_info: Implementation,
         discover_ttl_ms: u64,
         tools_list_ttl_ms: u64,
-        task_ttl_ms: Option<u64>,
         task_poll_interval_ms: u64,
         allowed_origins: Vec<String>,
     ) -> Self {
@@ -54,7 +57,6 @@ impl McpServerConfig {
             server_info,
             discover_cache: CacheHints::new(discover_ttl_ms, CacheScope::Private),
             tools_list_cache: CacheHints::new(tools_list_ttl_ms, CacheScope::Private),
-            task_ttl_ms,
             task_poll_interval_ms,
             allowed_origins,
         }
@@ -76,7 +78,6 @@ mod tests {
             Implementation::new("aion", "0.12.0"),
             60_000,
             300_000,
-            Some(3_600_000),
             1_000,
             origins,
         )

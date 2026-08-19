@@ -6,6 +6,7 @@ use serde_json::{Map, Value};
 
 use super::annotations::{AnnotationError, HeaderBinding, header_bindings};
 use super::descriptor::Tool;
+use crate::tasks::resolve::{TaskProjection, TaskResolveError};
 
 /// A published set of tools, validated once at construction.
 ///
@@ -186,7 +187,7 @@ pub struct ToolCall {
 /// tool's declared `outputSchema`; the dispatcher checks that before answering,
 /// so a schema violation is the server's fault and is reported as one rather
 /// than shipped to the model.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolOutcome {
     /// The structured result.
     pub structured: Value,
@@ -227,8 +228,13 @@ impl ToolFailure {
 pub enum ToolTaskDecision {
     /// Execute inline and answer with a `CallToolResult`.
     Inline,
-    /// Execute as a task: the server answers with a `CreateTaskResult` and the
-    /// call runs on in the background.
+    /// Execute as a task: the call is still performed and confirmed before the
+    /// server answers, but the answer is a `CreateTaskResult` naming durable
+    /// work that outlives the request — and outlives this process.
+    ///
+    /// Nothing runs on in the background. The server holds no executor, no
+    /// thread, and no record: the handle names work the HOST already stores
+    /// durably, and every later read projects that work afresh.
     ///
     /// The decision is the SERVER's, per the extension: a client never signals
     /// a preference on the request. When the client did not declare the tasks
@@ -248,10 +254,12 @@ pub enum ToolTaskDecision {
 pub trait ToolService: Send + Sync + 'static {
     /// The host's per-request caller identity.
     ///
-    /// `Clone + 'static` because a task-shaped call outlives the request that
-    /// created it and must keep executing under the SAME identity that was
-    /// authorized at creation — never a re-derived or ambient one.
-    type Caller: Clone + Send + Sync + 'static;
+    /// Every method here takes it by reference, including the task methods: a
+    /// task handle is derived from identifiers the caller already holds, so it
+    /// is constructible rather than secret, and the authorization that guards
+    /// the work must be applied on every read rather than assumed from
+    /// possession of the handle.
+    type Caller: Send + Sync + 'static;
 
     /// The published catalog. Must be the same set for every caller on every
     /// request (it may narrow by the authorization presented, but never by
@@ -278,6 +286,37 @@ pub trait ToolService: Send + Sync + 'static {
     /// able to correct.
     async fn call(&self, caller: &Self::Caller, call: ToolCall)
     -> Result<ToolOutcome, ToolFailure>;
+
+    /// Mint the handle naming the durable work a task-shaped call just started.
+    ///
+    /// Called only after [`ToolService::call`] has SUCCEEDED, so the work is
+    /// confirmed to exist before any task refers to it — there is never a task
+    /// pointing at work that failed to start.
+    ///
+    /// The handle must be derivable from the work alone and must stay valid
+    /// across a restart of this process: it is the only thing standing between
+    /// a client and work that may outlive the server many times over. `None`
+    /// says this host cannot name the work behind that outcome, which is a
+    /// server defect (the same host said the call was task-shaped) and is
+    /// reported as an internal error rather than as a task nobody can resolve.
+    fn task_handle(&self, call: &ToolCall, outcome: &ToolOutcome) -> Option<String>;
+
+    /// Resolve a handle by reading the durable work it names, under this
+    /// caller's own authorization.
+    ///
+    /// This is the ONLY answer to "what is this task doing", used both when the
+    /// task is created and on every later `tasks/get`, so there is no second
+    /// truth that could disagree with the first.
+    ///
+    /// # Errors
+    ///
+    /// [`TaskResolveError`] when the handle is not one this host issues, names
+    /// work this caller may not read, or names work that cannot be read at all.
+    async fn resolve_task(
+        &self,
+        caller: &Self::Caller,
+        task_id: &str,
+    ) -> Result<TaskProjection, TaskResolveError>;
 }
 
 #[cfg(test)]

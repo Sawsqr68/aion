@@ -228,25 +228,14 @@ pub const DEFAULT_MCP_DISCOVER_TTL_MS: u64 = 60_000;
 /// is a restart. Overridable per deployment.
 pub const DEFAULT_MCP_TOOLS_LIST_TTL_MS: u64 = 300_000;
 
-/// Default `mcp.task_ttl_ms`: how long a created task lives before the server
-/// may fail and delete it. One hour, which bounds what a client that walked
-/// away can hold. A run that legitimately takes longer is not lost by this: the
-/// task is only the WAIT, and the run remains reachable through the handles the
-/// task's creation returned. Set `0` for an unlimited lifetime.
-pub const DEFAULT_MCP_TASK_TTL_MS: u64 = 3_600_000;
-
 /// Default `mcp.task_poll_interval_ms`: the interval a created task asks its
 /// client to poll at. One second. Overridable per deployment.
+///
+/// There is no companion task LIFETIME, and deliberately so. An MCP task on
+/// this server is a projection of a durable run rather than a record held in
+/// memory, so nothing expires and no lifetime has to be chosen; `ttlMs` is
+/// always `null`, which is the extension's own spelling of unlimited.
 pub const DEFAULT_MCP_TASK_POLL_INTERVAL_MS: u64 = 1_000;
-
-/// Default `mcp.await_poll_interval_ms`: how often an awaited `start_run`
-/// re-reads the run's projected status server-side. Five hundred milliseconds —
-/// fast enough that a short run's completion is not noticeably delayed, slow
-/// enough that a long run costs one history read every half second.
-pub const DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS: u64 = 500;
 
 /// Operator-facing message for an explicitly zero `mcp.task_poll_interval_ms`.
 pub(crate) const MCP_TASK_POLL_INTERVAL_REQUIRED: &str = "mcp.task_poll_interval_ms must be a positive number of milliseconds when set (zero would ask every client to poll in a tight loop); omit mcp.task_poll_interval_ms to use the default, or set it to a positive value";
-
-/// Operator-facing message for an explicitly zero `mcp.await_poll_interval_ms`.
-pub(crate) const MCP_AWAIT_POLL_INTERVAL_REQUIRED: &str = "mcp.await_poll_interval_ms must be a positive number of milliseconds when set (zero would spin the server re-reading history without pause); omit mcp.await_poll_interval_ms to use the default, or set it to a positive value";

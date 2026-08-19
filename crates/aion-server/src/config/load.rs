@@ -1012,15 +1012,10 @@ mod tests {
             runtime.mcp.task_poll_interval_ms,
             crate::config::DEFAULT_MCP_TASK_POLL_INTERVAL_MS
         );
-        assert_eq!(
-            runtime.mcp.task_ttl_ms,
-            Some(crate::config::DEFAULT_MCP_TASK_TTL_MS)
-        );
         Ok(())
     }
 
-    /// Explicit `[mcp]` values parse and round-trip, and `task_ttl_ms = 0` is
-    /// the operator's way of saying "unlimited" — which the wire spells `null`.
+    /// Explicit `[mcp]` values parse and round-trip.
     #[test]
     fn mcp_section_parses_and_round_trips() -> Result<(), Box<dyn std::error::Error>> {
         let config = ServerConfig::from_slice(
@@ -1037,9 +1032,7 @@ mod tests {
                 allowed_origins = ["http://localhost:5173"]
                 discover_ttl_ms = 1000
                 tools_list_ttl_ms = 2000
-                task_ttl_ms = 0
                 task_poll_interval_ms = 250
-                await_poll_interval_ms = 125
             "#,
         )?;
         let (_store, runtime) = config.into_parts();
@@ -1047,17 +1040,21 @@ mod tests {
         assert_eq!(runtime.mcp.allowed_origins, vec!["http://localhost:5173"]);
         assert_eq!(runtime.mcp.discover_ttl_ms, 1_000);
         assert_eq!(runtime.mcp.tools_list_ttl_ms, 2_000);
-        assert_eq!(runtime.mcp.task_ttl_ms, None, "zero means unlimited");
         assert_eq!(runtime.mcp.task_poll_interval_ms, 250);
-        assert_eq!(runtime.mcp.await_poll_interval_ms, 125);
         Ok(())
     }
 
-    /// A zero poll interval is a busy loop, not a fast one. It is refused at
-    /// startup with an operator-facing message rather than accepted.
+    /// The retired MCP knobs are REFUSED, by name, rather than accepted and
+    /// ignored.
+    ///
+    /// An MCP task is now a projection of a durable run: it holds no executor
+    /// and expires never, so neither a task lifetime nor a server-side await
+    /// interval has anything left to bound. An operator whose file still sets
+    /// one is told so at boot — silently ignoring the key would leave them
+    /// believing a lifetime was in force when nothing enforces one.
     #[test]
-    fn zero_mcp_poll_intervals_fail_startup_validation() {
-        for key in ["task_poll_interval_ms", "await_poll_interval_ms"] {
+    fn the_retired_mcp_task_knobs_are_refused_by_name() {
+        for key in ["task_ttl_ms", "await_poll_interval_ms"] {
             let source = format!(
                 "
                 [runtime]
@@ -1069,16 +1066,46 @@ mod tests {
 
                 [mcp]
                 enabled = true
-                {key} = 0
+                {key} = 1000
             "
             );
-            let result = ServerConfig::from_slice(source.as_bytes());
-            let message = match result {
+            let message = match ServerConfig::from_slice(source.as_bytes()) {
                 Err(crate::ServerError::Config { message }) => message,
                 _ => String::new(),
             };
-            assert!(message.contains(key), "{key} must be refused: {message}");
+            assert!(
+                message.contains(key),
+                "{key} must be refused by name: {message}"
+            );
         }
+    }
+
+    /// A zero poll interval is a busy loop, not a fast one. It is refused at
+    /// startup with an operator-facing message rather than accepted.
+    #[test]
+    fn a_zero_mcp_poll_interval_fails_startup_validation() {
+        let result = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [mcp]
+                enabled = true
+                task_poll_interval_ms = 0
+            ",
+        );
+        let message = match result {
+            Err(crate::ServerError::Config { message }) => message,
+            _ => String::new(),
+        };
+        assert!(
+            message.contains("task_poll_interval_ms"),
+            "a zero poll interval must be refused: {message}"
+        );
     }
 
     /// The same zero on a DARK surface is not a boot failure: nothing reads it,

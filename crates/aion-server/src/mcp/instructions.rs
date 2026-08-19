@@ -55,9 +55,12 @@ START AND WAIT. start_run returns handles immediately. Set await_completion to b
 task instead: you get a taskId at once, the run proceeds, and tasks/get carries the outcome \
 when it lands. That needs the tasks extension declared on your request \
 (io.modelcontextprotocol/tasks, implemented against draft revision {TASKS_EXTENSION_PIN}); \
-without it the call is refused rather than quietly turned into a plain start. Cancelling that \
-task stops your WAIT, not the run. Stopping the run is the cancel tool, and cancel is \
-destructive: it records a terminal cancellation the run cannot be talked out of.\n\
+without it the call is refused rather than quietly turned into a plain start. A task here IS \
+the run, read through the task model — it never expires, it survives a server restart, and \
+you may hold its taskId for as long as the run lasts. tasks/cancel changes NOTHING: it is \
+acknowledged and the run carries on, because a durable run is not something a client's \
+disinterest may kill. Stopping the run is the cancel tool, and cancel is destructive: it \
+records a terminal cancellation the run cannot be talked out of.\n\
 \n\
 AUTHORING IS A LOOP, NOT A GUESS. The server holds one AWL workspace. list_documents and \
 read_document show what exists; check_document runs the checker over source you are drafting \

@@ -1,7 +1,6 @@
 //! The MCP runtime: the server object and its construction from config.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use aion_mcp::protocol::meta::Implementation;
 use aion_mcp::{McpServer, McpServerConfig};
@@ -27,15 +26,13 @@ impl McpRuntime {
     ///
     /// [`ServerError::Config`] when a published tool schema fails to compile.
     pub fn build(state: ServerState, config: &ResolvedMcpConfig) -> Result<Self, ServerError> {
-        let service =
-            AionToolService::new(state, Duration::from_millis(config.await_poll_interval_ms))?;
+        let service = AionToolService::new(state)?;
         let server = McpServer::new(
             Arc::new(service),
             McpServerConfig::new(
                 Implementation::new("aion", env!("CARGO_PKG_VERSION")),
                 config.discover_ttl_ms,
                 config.tools_list_ttl_ms,
-                config.task_ttl_ms,
                 config.task_poll_interval_ms,
                 config.allowed_origins.clone(),
             ),

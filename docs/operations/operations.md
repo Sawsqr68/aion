@@ -329,16 +329,18 @@ allowed_origins = []                    # default; EMPTY means no browser
                                         # requires)
 # discover_ttl_ms = 60000               # default; ttlMs on server/discover
 # tools_list_ttl_ms = 300000            # default; ttlMs on tools/list
-# task_ttl_ms = 3600000                 # default (1h); how long a created task
-                                        # lives before the server may fail and
-                                        # delete it. 0 = unlimited. The task is
-                                        # only the WAIT: the run it started
-                                        # stays reachable through the handles
-                                        # the task creation returned
 # task_poll_interval_ms = 1000          # default; pollIntervalMs advertised to
-                                        # a task's client
-# await_poll_interval_ms = 500          # default; how often an awaited
-                                        # start_run re-reads the run's status
+                                        # a task's client. A hint only —
+                                        # nothing on the server depends on it
+#
+# There is NO task lifetime setting, and none is coming. An MCP task here is
+# the run itself read through the task model: nothing is stored, nothing is
+# held, so nothing expires. `ttlMs` is always null (the extension's spelling of
+# unlimited), a task survives a server restart because the run does, and a task
+# nobody ever polls costs the server nothing at all. If you are upgrading and
+# your file still sets `task_ttl_ms` or `await_poll_interval_ms`, the server
+# refuses to boot and names the key — silently ignoring it would leave you
+# believing a lifetime was in force when nothing enforces one.
 
 # Managed-worker supervision. NO DEFAULTS and no partial section: write every
 # key below to commission it, or omit the section entirely and the server

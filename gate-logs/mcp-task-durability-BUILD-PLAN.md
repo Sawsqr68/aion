@@ -5,6 +5,20 @@ Design brief: `docs/design/MCP-TASK-DURABILITY-DECISION-BRIEF-2026-08-19.md`
 **RATIFIED by Waffles 2026-08-19T07:31Z. Build approved as briefed.**
 Nothing implemented yet at the time of writing — this is the plan, not a record.
 
+> **BUILT 2026-08-19.** The record of what was actually done, including the
+> two places the build departed from this plan, is
+> `gate-logs/mcp-task-durability-BUILT.md`. Read that first; this file is kept
+> for the reasoning behind each decision.
+>
+> Departures: (1) `status_message` was hoisted out of the `Working` variant
+> onto `TaskProjection`, so a settled task can carry prose too; (2) the
+> `Finished` state carries the tool name + `ToolOutcome` rather than a rendered
+> `Value`, so the MCP layer stays the single renderer and a task's result
+> cannot drift from the inline form. `TaskState::Failed` therefore does not
+> exist — `failed` is reachable only from a render failure, which is the
+> server breaking its own output schema. (3) The projection is RUN-scoped
+> rather than chain-scoped; see the BUILT record for why.
+
 ## Settled before building (both discharged)
 
 - **Cancel = option (a)**, ruled by Waffles. And his design note is **settled

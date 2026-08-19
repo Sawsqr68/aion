@@ -18,11 +18,10 @@ use super::{
     config_error,
     defaults::{
         CLUSTER_BROADCAST_CAPACITY_REQUIRED, DEFAULT_GRPC_ADDRESS, DEFAULT_HTTP_ADDRESS,
-        DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS,
-        DEFAULT_MCP_DISCOVER_TTL_MS, DEFAULT_MCP_TASK_POLL_INTERVAL_MS, DEFAULT_MCP_TASK_TTL_MS,
-        DEFAULT_MCP_TOOLS_LIST_TTL_MS, DEFAULT_OBSERVABILITY_MAX_EVENT_BYTES,
-        DEFAULT_OBSERVABILITY_MAX_STREAM_EVENTS, EVENT_BROADCAST_CAPACITY_REQUIRED,
-        MCP_AWAIT_POLL_INTERVAL_REQUIRED, MCP_TASK_POLL_INTERVAL_REQUIRED,
+        DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, DEFAULT_MCP_DISCOVER_TTL_MS,
+        DEFAULT_MCP_TASK_POLL_INTERVAL_MS, DEFAULT_MCP_TOOLS_LIST_TTL_MS,
+        DEFAULT_OBSERVABILITY_MAX_EVENT_BYTES, DEFAULT_OBSERVABILITY_MAX_STREAM_EVENTS,
+        EVENT_BROADCAST_CAPACITY_REQUIRED, MCP_TASK_POLL_INTERVAL_REQUIRED,
         OBSERVABILITY_MAX_EVENT_BYTES_REQUIRED, OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED,
     },
 };
@@ -535,26 +534,15 @@ pub struct McpConfig {
     ///
     /// [`DEFAULT_MCP_TOOLS_LIST_TTL_MS`]: super::DEFAULT_MCP_TOOLS_LIST_TTL_MS
     pub tools_list_ttl_ms: Option<u64>,
-    /// How long a created task lives before the server may fail and delete it.
-    ///
-    /// Zero means UNLIMITED and is written that way on the wire (`ttlMs: null`).
-    /// An unlimited task is a real operator choice for a workflow that
-    /// legitimately runs for months; it is not the default, because a task
-    /// nobody polls holds an executor for as long as it lives. Defaults to
-    /// [`DEFAULT_MCP_TASK_TTL_MS`].
-    ///
-    /// [`DEFAULT_MCP_TASK_TTL_MS`]: super::DEFAULT_MCP_TASK_TTL_MS
-    pub task_ttl_ms: Option<u64>,
     /// The `pollIntervalMs` advertised on a created task. Defaults to
     /// [`DEFAULT_MCP_TASK_POLL_INTERVAL_MS`].
     ///
+    /// A hint to the client and nothing more: no server behaviour depends on
+    /// it. There is no task lifetime beside it, because an MCP task here is a
+    /// projection of a durable run and has nothing to expire.
+    ///
     /// [`DEFAULT_MCP_TASK_POLL_INTERVAL_MS`]: super::DEFAULT_MCP_TASK_POLL_INTERVAL_MS
     pub task_poll_interval_ms: Option<u64>,
-    /// How often an awaited `start_run` re-reads the run's projected status.
-    /// Defaults to [`DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS`].
-    ///
-    /// [`DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS`]: super::DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS
-    pub await_poll_interval_ms: Option<u64>,
 }
 
 impl McpConfig {
@@ -576,9 +564,6 @@ impl McpConfig {
         if self.task_poll_interval_ms == Some(0) {
             return config_error(MCP_TASK_POLL_INTERVAL_REQUIRED);
         }
-        if self.await_poll_interval_ms == Some(0) {
-            return config_error(MCP_AWAIT_POLL_INTERVAL_REQUIRED);
-        }
         Ok(())
     }
 
@@ -598,18 +583,10 @@ impl McpConfig {
             tools_list_ttl_ms: self
                 .tools_list_ttl_ms
                 .unwrap_or(DEFAULT_MCP_TOOLS_LIST_TTL_MS),
-            task_ttl_ms: match self.task_ttl_ms.unwrap_or(DEFAULT_MCP_TASK_TTL_MS) {
-                0 => None,
-                value => Some(value),
-            },
             task_poll_interval_ms: self
                 .task_poll_interval_ms
                 .filter(|value| *value > 0)
                 .unwrap_or(DEFAULT_MCP_TASK_POLL_INTERVAL_MS),
-            await_poll_interval_ms: self
-                .await_poll_interval_ms
-                .filter(|value| *value > 0)
-                .unwrap_or(DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS),
         }
     }
 }
@@ -637,12 +614,8 @@ pub struct ResolvedMcpConfig {
     pub discover_ttl_ms: u64,
     /// `ttlMs` on `tools/list`.
     pub tools_list_ttl_ms: u64,
-    /// Task lifetime; `None` is unlimited.
-    pub task_ttl_ms: Option<u64>,
     /// Advertised client poll interval for a task.
     pub task_poll_interval_ms: u64,
-    /// Server-side poll interval for an awaited start.
-    pub await_poll_interval_ms: u64,
 }
 
 /// Agent-observability transcript settings from `[observability]`: retention
