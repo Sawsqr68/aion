@@ -5687,3 +5687,40 @@ not by hiding the limit.
 (runtime/handle.rs:149). Exposing it builder-driven is correct per NO-ARBITRARY-LIMITS
 (operator's lever, default deferred to beamr) and would also serve as the confirming
 causation instrument — but is NOT the cure and must never be presented as one.
+
+## ZU-44 — 2026-08-19T03:3xZ — ARTEMIS TOOK #85; my "200 waits" needs correcting
+
+**ARTEMIS OWNS IT** (DM b337ce2b, m=5125). Their hypothesis WITH AN ADDRESS: beamr's JIT
+has an admission guard `reject_deopt_after_side_effect` (jit/ir_control.rs:581) built on
+"a deopt RESTARTS the compiled function interpreted FROM ITS ENTRY" — it reasons about
+EFFECTS, not SUSPENSION. Hole: `jit_call_interpreted` (jit/runtime.rs:79) maps a nested
+`Ok(ExecutionResult::Waiting)` to a DEOPT (runtime.rs:194-196) AFTER restoring the
+caller's saved code position (runtime.rs:180-183) → process left Waiting with a live
+suspension whose park position points INSIDE the callee while code position is reset to
+the compiled caller's ENTRY, deopt carrying no suspend signal. = "right value, wrong
+destination". They're building a red-first probe w/ positive control (JIT disabled) + a
+compiled-witness. Will report even if refuted.
+**THEY CONFIRMED AT THE BYTES**: profiler saturating_add + `new_count >= threshold`
+(profiler.rs:260-268) ⇒ jit_threshold u32::MAX PINS then FIRES. AND their own finding:
+**SchedulerConfig has NO jit disable field at all** — only the compile-time cargo feature
+(in beamr's defaults) ⇒ a live JIT defect has NO lever short of a rebuild. They offered
+to ship a runtime disable knob as its own small release; **I ACCEPTED** (hazard is
+independent of this bug; I still refuse it as a fix for #85).
+**⚠️ MY "200 WAITS" IS ACTIVITY-SPECIFIC — CORRECTION SENT**: sleep_wall (sleep-ONLY, no
+worker) reached **785 sleeps STILL RUNNING** vs nosleep_wall (activity-only) dead at 200.
+So sleeps and activities are not equal heat, maybe not the same heat at all. REFRAMES
+watch_inbox: it reported the SLEEP's arg `<<"3000">>` but the ACTIVITY path likely did
+the heating — the argument names the caller IN FLIGHT, not the path that caused the
+compile. Verdict pending (task bx1qgd6bf, 900-round bound): a CLEAN COMPLETION at 900
+would be a sharp discriminator (pure sleeps never trigger it).
+**OWED TO ARTEMIS**: (a) both .awl files — SENT inline; (b) third workflow shape with a
+DIFFERENT import profile to test whether the misdelivery destination is
+position-dependent or always gleam_json_ffi:object/1 (2 shapes agree so far = mildly
+function-specific, but both share the generated-module skeleton) — NOT YET BUILT.
+**TOM'S PAGE CORRECT** (:2722): "OLD RIVER · BLENDED WHISKY · 40% ALC/VOL" + 1127 g +
+700 mL/40% + honest basis line. Fixed en route: label_text was raw OCR dicts (ocr_tokens
+yields dicts — take t["text"]); AWL type lacked label_text (redeployed 637ef5f0); worker
+reads doc AT LAUNCH so every edit needs a relaunch (bx4de1bbr current).
+**INSTRUMENT SCAR**: my verification `until tail -1 | grep -q OLDRIVER` passed instantly
+on the PREVIOUS record — a check that passes on stale state measured nothing. Cure: gate
+on wc -l INCREASING, never on content that already exists.
