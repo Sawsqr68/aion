@@ -5868,3 +5868,73 @@ Server restarted 03:41Z (pid **97374**, repo root, versions non-empty); log rota
 Live: stocktake page :2722, counting worker pid 55151, release_ops + gate workers up.
 **Tom's words: "You should have watched."** — I had watchers on my lab instruments and none
 on his pipeline. Fixed; the watch caught this death. **Watch the PRODUCT, not just the experiment.**
+
+## ZU-47 — 2026-08-19T04:2xZ — PROPORTIONALITY CONFIRMED EXACTLY; mitigation deployed and PROVEN LIVE
+
+### 🔴 THE DECISIVE RESULT — both predicted numbers hit EXACTLY
+Predictions were banked in `ablative/docs/tracking/battery-queue-20260818.md` line 19
+**BEFORE** the runs (Waffles's GO 04:13Z made the positive control line 19's own
+acceptance leg), so they cannot be retrofitted.
+
+| arm | threshold 1000 (beamr default) | threshold 100 | predicted |
+|---|---|---|---|
+| sleep_wall (NO worker, NO activity) | ~1003 sleeps | **exactly 100 sleeps** | ~100 |
+| nosleep_wall (activity arm) | exactly activity:200 | **exactly `activity:20`**, 20 completed | ~20 |
+
+Same error faces at both thresholds: `VM execution error: bad argument` (sleep),
+`{bad_generator, <<"activity:20">>}` (activity).
+
+**⇒ THREE CONCLUSIONS:**
+1. **The compile correlation is CAUSAL, not adjacent.** The death point moves by exactly
+   the factor the threshold moves by. (I had promised Waffles and Artemis I'd report the
+   opposite result the same night if it came out that way.)
+2. **CLEAN CALIBRATION, consistent at two thresholds**: sleep = **1 counted call per
+   wait** (100→100, 1000→~1003); activity = **5 counted calls per activity** (100→20,
+   1000→200). My old "200 waits" and Artemis's "~5 calls per wait" were the same fact
+   from two ends; the sleep arm pins the unit. Two thresholds agreeing on both constants
+   is what makes this a measurement rather than a fit.
+3. **The knob is LIVE end to end** — this IS the acceptance leg for line 19. The
+   mitigation on Tom's box no longer rests on an absence argument.
+
+### ⚑ THE FAST ACCEPTANCE INSTRUMENT FOR ARTEMIS'S FIX (offered, and the key gift)
+Their PROPAGATE fix must be proven **in a world where compilation actually happens** —
+a green from an arm that never compiled is worth nothing (the trap that ate sleep_wall
+run 1). At beamr's default that costs ~1000 calls per arm; **at threshold 100 it costs
+100 and 20.**
+> **Acceptance: `--jit-threshold 100`; sleep_wall 400 rounds + nosleep_wall 200 rounds.
+> BOTH must run to COMPLETION *and* the compile witness
+> (`grep -c cranelift_jit::backend`) must be NON-ZERO.**
+Both halves required: completion alone is satisfiable by an arm that never compiled; a
+non-zero witness alone says nothing about correctness. The arms are **calibrated RED**
+at threshold 100 today, so the positive control already exists on file.
+
+### DEPLOYED AND HOLDING
+Tom's server: `aion server --jit-threshold 4294967295`, binary sha256
+**18f89a62c7a6e388d3794c2c642231b4ba2638d0020ae374efb5bb59f10c9334** (prev 81c86913 kept
+as `aion.0181.prev`), built at release base 67e0b8d9f (v0.18.1 / beamr 0.19.2).
+Tom's pipeline wf **1da202ec**: passed **1124 events with compiles=0**, against three
+prior deaths at 1009. (Target 1300 for margin.)
+Source: investigate-workflow **de32aa1ba** (pushed); deployed bytes branch
+**jit-threshold-on-0181 96b68ecba** in worktree wt-fix-77.
+Change wired through ALL THREE doors incl. `AION_RUNTIME_JIT_THRESHOLD` + docs
+(operations.md: flag table + `[runtime]` TOML block + env allowlist).
+
+### PROBE RIG (reusable — this is how to run the acceptance)
+`/Users/tom/.aion/probe100/{data,authoring}` (⚠️ store MUST live under an owner-only
+path — the path-safety gate REFUSES `/private/tmp`, mode 1777, sticky bit not accepted);
+config at `scratchpad/probe100/probe-config.toml` (ports 9099/59051/59061; **explicit
+`store.data_dir` required** — with an explicit `--config` the data root otherwise
+resolves to the HOME default, which another live writer holds).
+Worker: `probe_worker.awl`, minimal `scan_inbox` → constant empty list. ⚠️ `aion worker`
+**requires** all three `--reconnect-*` flags (no assumed defaults).
+🔴 **RUN ARMS SEQUENTIALLY ON A FRESH SERVER EACH** — both route through the shared
+`gleam_json_ffi` module, so concurrent arms cross-contaminate the counter and one would
+kill the other early, looking like a confirmed prediction while measuring cross-talk.
+
+### TOM'S LIVE WORD
+"Artemis has to get moving on it. She said fix is authored... work with them to get
+everything going. And finished." ⇒ I offered Artemis the acceptance instrument + asked
+what they need, and said that if the **publish ordering** (beamr must not hit the index
+before Athena's wave and Hermes's liminal-rs 0.6.1, both certified against 0.19.2) is
+what stands between Tom and a fixed engine, I'll put it to Waffles as a sequencing
+DECISION rather than let it sit as a background constraint.
