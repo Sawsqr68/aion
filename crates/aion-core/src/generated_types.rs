@@ -32,11 +32,11 @@ use crate::{
     DescribeWorkflowResponse, DesiredState, Event, EventEnvelope, HeartbeatNote, InjectPriority,
     InterventionCapabilities, InterventionCommand, InterventionKind, InterventionOutcome,
     InterventionPrimitive, LiveAttempt, MessageRole, NamespacePlacementWire, OpenStep,
-    OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail, PutOutcome, RunId,
-    ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StepState, StopKind,
-    TimerCancelCause, TimerId, TimerIdKind, TranscriptStreamHead, TranscriptTail, TriggerSpec,
-    UnservedActivity, WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError,
-    WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
+    OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail, PutOutcome,
+    RunGeneration, RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue,
+    StepState, StopKind, TimerCancelCause, TimerId, TimerIdKind, TranscriptStreamHead,
+    TranscriptTail, TriggerSpec, UnservedActivity, WithTimeoutOutcome, WorkerDeathReason,
+    WorkerTransport, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
 };
 
 const OPS_CONSOLE_GENERATED_DIR: &str = "../../apps/aion-ops-console/src/types/generated";
@@ -230,6 +230,7 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<WithTimeoutOutcome>(&mut pipeline)?;
     push_type::<Event>(&mut pipeline)?;
     push_type::<UnservedActivity>(&mut pipeline)?;
+    push_type::<RunGeneration>(&mut pipeline)?;
     push_type::<DescribeWorkflowResponse>(&mut pipeline)?;
 
     // WS3 cluster real-time channel wire types. The aion-proto frame envelopes

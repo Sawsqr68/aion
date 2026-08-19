@@ -4922,3 +4922,1319 @@ Loop: re-arm EVERY turn (ScheduleWakeup, sentinel `<<autonomous-loop-dynamic>>`)
 - Hermes landed liminal currency lane (his repo, ed88fd8) — situational.
 - AFTER #57/#59 land: dispatch #12 (worktree needs rebase to current main; queue slot for cold build), then #15; #28 re-arm on next binary swap (running server binary is still d4317268f pre-#47); #50-TS lane w/ decoder-exhaustiveness rider (comment on #50); then #34, #6; version cycle after lane-1 (haematite 0.9.0 + binary swap + aion 0.19-admitting publish, tell Athena).
 - Acceptance verdict for Tom = worker surviving a full day of real work; clock started 08:46Z (Waffles told Tom). ONE message to Tom when cluster landed AND second-device test running — no drip.
+
+## ZU-7 — 2026-08-18 ~11:52Z PRE-COMPACT SNAPSHOT #2 (read AFTER ZU-6; this supersedes its pending list)
+- I am on branch investigate-workflow (bc0723533) in the aion MAIN TREE — main is at bb3b77053 (adjudication-inputs commit). Return to main when needed; branch NOT landed (lands via normal gate later; it's deployed and working meanwhile).
+- FLEET-DEV COMMISSION (Tom's, top of board): DELIVERED TO FIRST FLIGHT. workflows/investigate/{investigate.awl,investigate_worker.awl,bin/*.sh,README.md} on branch investigate-workflow. Deployed to estate server as investigate$0bfed07c. Workers RESIDENT on aion-workflows (aion@192.168.50.205): investigate-ops-workflows (aion worker awl, gRPC 192.168.50.40:50051, ~/fleet/ops-worker.log) + investigator-workflows (aion worker agent, task-queue investigator, liminal 50061, ~/fleet/agent-worker.log; RELAUNCHED 11:45:20Z with PATH incl ~/.cargo/bin — norn spawn env is per-deployment value). Scripts at /home/aion/fleet/bin (sha256s in transcript; source of truth = repo bin/).
+- **FIRST FLIGHT 7729325f LANDED 11:50:00Z: Completed, outcome=filed, verdict=Reproduced**, report filed https://github.com/ablative-io/aion/issues/63#issuecomment-5327753425, control_reply "[workspace]", teardown_ok true, session 48c2f1fd (gpt-5.6-sol via norn). Mid-run worker heal (norn-not-on-PATH → retry absorbed → healed worker continued SAME run) = the durability demo. Report quality HIGH: found the taxonomy gap + the DUPLICATED classifier (aion-toolchain/src/gleam_failure.rs "kept identical" + 4 more copied test_support/gleam.rs harnesses) + proposes centralization. I MUST grade this report honestly (fleet-loop measurement, Waffles seq=90) and TELL WAFFLES flight landed (not yet told at snapshot time!).
+- RED-FIRST ARMS: proven = unsupported_tracker (run 1d222ce3, typed payload in failure details), unprovisioned (run 04f4459e, git stderr + node). Script faces all proven locally (clone dest-exists/id-shape/success, read-report absent/bad-json/typed-parse, teardown root+id guards, file-report absent+gh-fail). STILL OWED (hard gate for UNSUPERVISED dispatch, line does not move): unmeasured (wrong control_expect), unreported (agent writes nothing), unfiled (bad repo target), unanswered (stop_reason — needs norn limit knob or named-debt ruling). Waffles seq=100 resequence: proofs behind flight, before autonomy.
+- #64 (beamr VM hang on KVM/Debian-cloud): capture pack SENT to Artemis (dm:b337ce2b-336a-4856-a9d8-54c90496c9fa) 11:5xZ. VERDICT SHAPE: LIVELOCK not deadlock — full thread complement steady (24 io-uring, 12 VMs), all futex/epoll parked stacks, io_uring_disabled=0, strace 30s: sched_yield 381,924 + futex 90,436 (90,422 errors=timed-wait spins) + io_uring_enter 34,982. Init exonerated. Artemis owns if VM-internal (her stated stance: unbounded-init = hers; this is post-init livelock — her call). Hang reproduces on demand ~90s: timeout 600 cargo test -p aion-awl --test runtime_codecs on the box. Artifacts: box /tmp/hang-strace.txt /tmp/hang-capture-run.log ~/lane1-repro/hang-1/.
+- LANE-1 repro loop v2 RUNNING since 11:43:52Z (watcher b0zubmhf9): cargo test --workspace --exclude aion-awl (deviation declared per #64) + timeout 2400/run, 10 runs or first red, ~/lane1-repro/. Adjudication inputs PRE-WRITTEN gate-logs/lane1-racing/ADJUDICATION-INPUTS.md (main bb3b77053): reduced-green ≠ overturns Mac red; red-with-text = prize.
+- ACCEPTANCE DAY rocketfish: 8 runs. Run 6 Completed-with-verdict (#58 CLOSED). Run 7 = #60 discriminator CLEAN (#60 closed; ICE was stale multi-era target, purged 108G; RAM unexonerated on record). Run 8 zero findings (exactly declared set). Rows minted today: #60(closed) #61(capacity/Qdrant co-tenancy) #62(fix BUILT: O_PATH fchmod EBADF + probe_readable acquisition principle; stack head a3a2d466c GREEN both platforms: mac 1157/1157+clippy0, linux 1143/1143+clippy0) #63(INVESTIGATED by first flight) #64(livelock, Artemis).
+- STACK #57+#59+#62 head a3a2d466c on branch 62-linux-tighten (worktree aion-wt-59-linux-green). Queue line 6 amended (three-row stack, docs ebcc96b). Battery watcher b4fry7e3r polls token file (fires when lines 3-5 DONE + estate Mac quiet; slot 3 DONE, 4 Themis SEAT-REG, 5 Hermes pending; NEW lines 8 Apollo, 9 Athena, 10 Themis SLEEP-003 added). After battery green: land stack on main, close #57/#59/#62, clean worktree targets same breath, move rocketfish to new main, fire run 9 expect FULLY GREEN.
+- Rocketfish workspace on main eb485832a, branch main, worker lane_gates pid 1418917 alive. EXPECTED-REDS current through run 8 (main dbcfdf391... wait main moved to bb3b77053; EXPECTED-REDS committed at dbcfdf391).
+- Themis probe debt DISCHARGED (P7 permanent co-tenancy ruling, fulcrum b8d221e). No further windows owed.
+- PROMISE unchanged: ONE message to Tom when cluster landed AND second-device test running — no drip (Waffles relays stages meanwhile).
+- Fleet-53 (Waffles' raw stunt): superseded by this build; its report/PR may still arrive for my adjudication as row owner.
+- Identity question (fleet runs under Tom's auth vs dedicated credential) with Tom; e2e rode his standing acceptance (paper §6.3).
+- ZU-7b: NEXT COMMISSION (Waffles seq=105, Tom's): FLEET_DEV ON THE BOX — first task = GAP READ of workflows/fleet-dev/fleet_dev.awl against box deployment, NOT a build. Tom's constraint: mechanical steps (clone/push/git-shaped) = DETERMINISTIC STRUCTURED ACTIVITIES typed in/out, no agent improvising git. Waffles' expected delta: investigate's ops legs (clone/teardown reusable) + NEW push-with-receipt activity (typed refusal on rejection) + blackboard root workspace_root-relative + fanout/fanin/gates scripts currently Mac-authored (counsel harness npx path is Mac's /opt/homebrew — box has NO npx). Supervised first run carries a REAL fulcrum brief (Themis shaping; Tom named fulcrum as test cargo). Report honest delta to Waffles when read. Flight-landed message SENT (seq=106) incl. HIGH report grade + duplicated-classifier finding.
+
+## ZU-8 — 2026-08-18T12:0xZ (post-compact turn: gap read delivered, slot-6 firing, #64 capture running)
+
+- **GAP READ DELIVERED + ACCEPTED** (Waffles seq=112): gate-logs/fleet-dev-box/GAP-READ.md,
+  commit 53a6f807c (investigate-workflow). D1 = the find: worker `run json` discards stdout on
+  nonzero exit (repo_gates_worker.awl:38-42) → the five server-run mechanical actions need the
+  exit-zero-always typed facing on the box or a red gate loses its findings. Re-facing REQUIRED
+  per Waffles.
+- **D4 SETTLED BY TOM'S WORD** (via Waffles seq=113): "I've authenticated both Claude and Norn on
+  that box" — counsel MAY go resident under his auth on THIS box; dedicated fleet identity = rec
+  at box three. Runtime mechanics mine: box has bunx (/home/aion/.bun/bin/bunx), NO node/npx;
+  claude binary location unverified (auth is Tom's word; verify binary+handshake at preflight).
+  Counsel harness → bunx + preflight: production-argv ACP handshake proof before seating.
+  My hybrid judgment (seq=113 out): counsel-home split ALSO clears — plan/judge touch the tree at
+  two phase-bounded moments; git as transport (plan/briefs travel IN COMMITS; push-with-receipt +
+  pull mirror at the boundaries) = zero-credential fallback, no longer forced.
+- **SLOT-6 BATTERY FIRING** since ~11:53Z on aion-wt-59-linux-green (head a3a2d466c): 3 legs
+  (test --workspace, clippy --workspace, clippy -p aion-server), manifest at
+  gate-logs/62-stack-battery/manifest.txt, watcher bnfrb9gsa. On DONE: land stack on main, close
+  #57/#59/#62, cargo clean worktree same breath, mark queue line 6 DONE + push, move rocketfish,
+  gates run 9. Waffles line 7 preps on my DONE.
+- **LANE-1**: FT-3 = closure oracle toolchain pin (Mac OTP29/gleam1.17.0 vs box OTP27/gleam1.18.1),
+  receipt ~/lane1-repro/false-trigger-3/. v3 died rc=127 (detached PATH). Loop v4 queued BEHIND
+  capture (auto-chains): --no-fail-fast + --exclude aion-awl (#64) + --skip closure oracle, PATH
+  pinned. QUEUE LINE 12 TAKEN (docs c930eb6): instrumented nextest full-capture Mac run = the
+  definitive instrument. Disposition lean on record: closure test declares its pin, refuses-with-
+  name off-pin (fix-lane item).
+- **#64 CAPTURE RUNNING** (Artemis m=3317 protocol, launched 11:58:49Z, watcher by0qpn20i):
+  clocksource=kvm-clock; 24 io_uring fds; fdinfo t0 12:01:49Z + t1 12:01:59Z TAKEN; solo runs
+  (pipes/duration_boundary/fork_generality) then --test-threads=1 in progress; artifacts
+  ~/lane1-repro/hang-2/. On CAPTURE-COMPLETE: compute SqTail-vs-CqHead deltas per fd, send pack
+  to Artemis (persistent delta = op-submitted-never-completed CONFIRMED; all drained = her
+  candidate dies, look at timers/kvm-clock).
+- **DISPOSALS DONE** (Waffles seq=107): #65 minted (classifier one-truth-in-six; open question:
+  does divergence checker reach the PRODUCTION copy — read not assume); #63 comment = adjudicated
+  refusal of unconditional File-IO-failure title (comment 5327882972).
+- **ROWS POSTED** on aion/builds (Tom's commissions, seq=109/110, sequenced behind pipeline):
+  push-triggered gates 8a12bbbf; update subscriptions + design paragraph (MCP ephemeral arm +
+  Meridian-DM durable arm over ONE subscription record; feed = lifecycle→signal bridge;
+  delivery-as-activity) e149af83.
+- **INSTRUMENT LAW 4th exhibit**: pgrep -f pattern matched MY OWN ssh command line → pgroup
+  self-kill. Bracket-escape ([r]epro) now standard; Waffles sealed it into the law.
+- Pipeline order unchanged: red-first arms (hard gate) → fulcrum brief supervised fleet_dev run
+  (Themis shaping) → battery landing → lane-1 verdict → #64 pack. PROMISE standing: ONE message
+  to Tom at cluster-landed + second-device-running.
+
+## ZU-8b — 12:25Z FLEET_DEV FLIGHT ONE AIRBORNE (Tom's dispatch-now order, seq=119/120)
+
+- Workflow 890793f6-d0f2-423d-aabb-0091014deeea, run 8bc3225c, name fleet-63-first,
+  started 12:19:04Z. Monitor bzhqni13v (persistent, polls describe).
+- Sequencing OVERRIDDEN by Tom: dispatch now, hardening (remaining arms, full red-first
+  battery of fleet faces) BEHIND the flight, gates unsupervised operation only.
+- Cargo: #63 classifier fix. Branch fleet-63 (6087cf216) = origin/main + .fleet-gate.sh
+  (box-scoped gate: aion-toolchain tests + awl-package sdk_closure_freshness minus closure
+  oracle + clippy on both; exclusions declared IN script per #64 + FT-3). Result branch
+  fleet-63-result. Input JSON at scratchpad/fleet-63-input.json.
+- Deployed fleet_dev$96848177a7a79ba9 (16 steps). Workers on box (PATH incl .bun+.local):
+  fleet-ops-workflows (awl, 8 actions, pid 166957), fleet-counsel-workflows (ACP/bunx,
+  plan+judge, pid 166958), fleet-dev-workflows (norn, delegate, pid 166959). Logs
+  ~/fleet/fleet-{ops,counsel,dev}-worker.log.
+- RECEIPTS: clone ok head=6087cf216; counsel control EXACT "fleet-counsel-tree-ok"
+  end_turn session 590fa093 — SEATED ACP HANDSHAKE PROVEN (resident Claude under Tom's
+  box auth); dev control EXACT "fleet-dev-tree-ok" session b946324f. Planner running
+  (seq 13+, plan step).
+- Flight path remaining: plan → plan_check → fanout → 2 legs parallel (copies/production)
+  → fanin → report_check → gate (max 3 visits, fix_round loop via committed
+  .fleet/gates/RED-LATEST.md) → judge (token JUDGE-CLEAR-FLEET-63) → push → teardown → done.
+  Failure routes KEEP tree at /home/aion/fleet/runs/fleet-63-first.
+- Script sha256 (Mac=box verified fleet-clone 47d31cd7…): full list in gate-logs/… bin/
+  committed at fc48a02f2.
+- Waffles seq=121/122 sent (dispatch + controls). Tom watching console.
+
+## ZU-8c — 12:35Z (concurrency live; #64 verdict; ceilings struck)
+
+- **NO-DEADLINES directive (Tom, seq=123)**: agent/workflow timeouts struck (86ec121cc),
+  grammar accepts unbounded — no engine row. Deployed fleet_dev$2330baef; running flight
+  pinned to old module; workers reseat on new doc AFTER flight lands (box doc synced).
+- **FLIGHT ONE mid-air**: planner CAUGHT MY PREMISE ERROR (aion-awl copy ≠ other four,
+  398 vs 796 lines — amend #65 topology claim when flight lands); plan_check exit 0
+  (committed at HEAD first try); fanout cut both legs; 2 builder children running
+  (a4bad07b, 7336a6cf). Monitor bzhqni13v.
+- **FLIGHT TWO airborne**: investigate-51, workflow 944e8e2b-8e5b-46fd-b7f3-91c0e3f32bd5
+  (~12:33Z), same seated workers, input adapted from first-flight template (scratchpad/
+  investigate-51-input.json). Concurrency demo per Tom seq=127. Monitor bt2pbhwij.
+- **#64 CAPTURE VERDICT (sent Artemis m=3318)**: all 24 rings VIRGIN (zero SQEs ever,
+  both snapshots) — her io_uring candidate DEAD by her criterion; ALL solo tests hang
+  individually + threads=1 hangs; kvm-clock; TIMER branch now prime. Artifacts
+  ~/lane1-repro/hang-2/. Her call next.
+- **Lane-1 v4** live (12:27:09Z run 1, --no-fail-fast + PATH + both skips).
+- **Capture gaps named (hardening list, Waffles seq=128)**: session transcripts →
+  .fleet/sessions/ capture leg; green gate logs die with teardown; leg branch refs
+  not pushed.
+- Slot-6 battery still running (watcher bnfrb9gsa).
+
+## ZU-8d — 13:05Z night cycle rolling
+
+- **FIX ROUND LIVE (flight one)**: children home, fanin+report_check green, GATE RED exit 127
+  ("cargo: not found" — gate entry's $HOME PATH line didn't survive the worker run env; 6th
+  env-class bug today, MINE, caught by the machine). Findings committed to RED-LATEST.md,
+  workflow routed fixable, dev seat IN FIX ROUND (no intervention — this IS the clause-2 demo).
+  Waffles holds Tom's milestone DM for the round-2 verdict, whole-arc either way.
+- **INVESTIGATIONS 4/4 Reproduced-high-filed**: #63, #51 (5328273976), #53 (5328498187:
+  fill_home_defaults adopts ~/.aion/data), #13 (5328523850: term_to_payload err discarded
+  by .ok()). Dispatched next: investigate-9 (4f8ea267) + investigate-56 (1ef78cdb),
+  monitor bo080db2q. Dev-flight backlog order: hardening cargo → #51 → #53 → #13 fixes.
+- **Line-6 population audit ACCEPTED** (Waffles): #62 leg = aion-server unit population
+  (1143/1143, reconciles my old record), #59 leg = lane_gates_worker crate; gleam runtime
+  covered by Mac leg; lands with populations named. Battery (relaunched 12:50, tracked task
+  bv1v2gwhi) still running.
+- **Rulings**: rocketfish RAM = 2×16G IS the build ("it's the Galaxy") — dead-stick closed;
+  memtest = scheduled-downtime item. Rocketfish erl/gleam provisioning HELD until Artemis's
+  #64 loader verdict (my blast-radius argument accepted, overruled Waffles' tonight-ops).
+  Rocketfish census: gleam/erl/erlc ALL absent (clean never-provisioned).
+- **#64**: round-4 (bt full) artifacts on box hang-4/; round-5 loud loader RERUNNING (first
+  pass = non-run: empty CLI var, 2115 fake failures, killed by own law; binary is
+  target/debug/beamr). Census: box OTP27/gleam1.18.1 vs Mac OTP29/gleam1.17.0; rocketfish
+  never ran gleam tests (no erl) — "box class" was the toolchain.
+- **Scoping docs owed tonight**: rocketfish (RAM story closed, memtest downtime item, class
+  of work = gates-offload; dev seat = measurement question) + Dean-Mac (auth list for Tom's
+  docket: claude, norn, gh; python double-fork launch; which seats). Cron 47fabb1d ticks :43.
+
+## ZU-8e — 13:07Z PRE-COMPACT HANDLE SHEET (read with ZU-8d)
+
+LIVE MONITORS/TASKS (harness re-invokes on events — do not re-create):
+- bzhqni13v = flight one 890793f6 (fleet_dev, IN FIX ROUND — next event decides the arc; on
+  green→judge→push→teardown→done: report Waffles, close #34 with receipt, close #63 via
+  result branch fleet-63-result review, amend #65 topology (planner: aion-awl copy differs,
+  398 vs 796 lines), THEN dispatch hardening cargo (link 1, base_ref investigate-workflow)
+  and reseat workers on ceiling-free doc fleet_dev$2330baef).
+- bo080db2q = investigate-9 (4f8ea267) + investigate-56 (1ef78cdb).
+- bv1v2gwhi = slot-6 battery (Mac, manifest gate-logs/62-stack-battery/manifest.txt in
+  aion-wt-59-linux-green; on BATTERY-COMPLETE all rc=0: land stack 62-linux-tighten→main,
+  close #57/#59/#62, cargo clean worktree same breath, DONE mark on queue line 6 WITH
+  populations as accepted (docs repo battery-queue-20260818.md), notify Waffles (his line 7
+  preps), move rocketfish workspace to new main, gates run 9).
+- bnfrb9gsa = stale first battery watcher (fires on same manifest — harmless duplicate).
+- Round-5 loud loader RERUNNING detached on box (no watcher armed for rerun! check
+  ~/lane1-repro/hang-5/CAPTURE.txt for ROUND5-COMPLETE + loader-failures.txt → ship to
+  Artemis: real failures = her lane + the failing .beam bytes; zero failures = hypothesis
+  needs new branch). Round-4 artifacts hang-4/ (bt full + vm-slice grep; empty slice grep =
+  consistent per her pre-statement).
+- Cron 47fabb1d = :43 watch tick (Waffles day-file staleness >90min → DM Tom = the alarm).
+- Lane-1 v4 loop on box (loop.log; FIRST-RED or TEN-GREEN; adjudicate per
+  gate-logs/lane1-racing/ADJUDICATION-INPUTS.md).
+DISPATCH TEMPLATES: scratchpad/investigate-63-input.json (base), 51/53/13/9/56 variants;
+fleet input scratchpad/fleet-63-input.json. Investigate dispatch = jq .issue/.investigate_prompt
+edit + aion start investigate --input-file X --name investigate-N.
+CHAIN (approved): after current: #48, #13-fix, #9-fix, #56-fix, #22+#23, assistant cluster,
+then engine-deep one at a time (#46,#12,#15,#14,#18,#6,#52,#49), docs #10/#11/#17 filler.
+#28 = hazard (firing IS diagnosis, notice-then-swap ruling). #34 close at flight-one landing.
+OWED TONIGHT: rocketfish scoping doc + Dean-Mac scoping doc (auth list → Waffles → Tom's
+docket). Night promise: Waffles gets phase-boundary DMs; Tom gets milestones via Waffles only.
+
+## ZU-9 — post-compaction cycle: flight one's whole arc, #64 CLOSED to Artemis, wave 3, slot-6 re-battery (2026-08-18 ~13:20Z)
+
+**FLIGHT ONE (890793f6) — the arc is complete and the record needs its own reconciliation.** Server status reads **Failed**, and a future audit must NOT count it a failed flight: gate round 1 red (exit 127, cargo not found) → dev seat autonomously fixed it (`fix(gates): bind box toolchain home`, 360d1dc1) → gate round 2 GREEN (28 toolchain tests) → judge final_message EXACTLY `JUDGE-CLEAR-FLEET-63` → flagged anyway because MY wiring compared `judged.text` (the narrated stream) not `final_message`. Clause-2 demo SUCCEEDED; the flag was false-safe. Fix: all three exact-token sites (counsel_control, dev_control, judgement) now compare `.final_message` — commit **3e38b76b9** on investigate-workflow (pushed), deployed **fleet_dev$b2f84ef5** (route changed, all old versions superseded; norn sets final_message==text by contract so dev compares unchanged in effect). Salvage: I pushed **fleet-63-result at 360d1dc1** by hand from the kept tree. MY REVIEW DONE at the bytes: production = adjudicated spec exactly (conditional File-IO on five package markers, 8 pins, P8 negative); four shared copies land at ONE identical blob hash; aion-awl variant same gate in Registry/Sources idiom. FIT TO LAND — queued behind slot-6 (one at a time, gates between). Landing plan: cherry-pick c759dd7f (copies) + efe2496d (production) onto main, gate on Mac (cargo test -p aion-toolchain, -p aion-awl --test emitter, clippy), then close #63 + #34 together (Waffles: "clean pair"), teardown fleet-63-first tree after. Kept tree: /home/aion/fleet/runs/fleet-63-first (repo clean, HEAD 360d1dc1).
+
+**#64 CLOSED AT MY SEAT — Artemis owns the fix.** Round-5 first pass was ANOTHER non-run (mid-flight script edit; running sh had stale parse — never edit a running script). Round-5b (fresh script artemis-64-round5b.sh, binary pre-proven by hand): **36/2115 beams fail, every one the SAME module** — gleam_stdlib `gleam@dynamic@decode.beam` (gleam 1.18.1), "instruction 392: Y register index 5 outside frame size 1". sha256 8cae51db…, canonical path in hang-5/loader-failures-5b.txt. Artemis reproduced locally and closed the bisect [m=1128]: **beamr VALIDATOR GAP** — label 58 is a shared failure island of index/5, legal BEAM reachable only by jump from a frame-7 region; OTP validates by CFG walk, beamr validates frames LINEARLY so the island checks against the stale frame of the CallLast{deallocate:1} above it. OTP-27 erlc places islands after other tails more aggressively than 29 = the whole "box class". Her fix lane: frame-model reset at unconditional transfers + Trim + regressions. My sweep STOOD DOWN; ~/lane1-repro stays intact until she releases it. **Owed at my seat: mint the two aion-side rows** — (1) best-effort gleam beam load swallows validator refusal (`let _ = load_module_with_origin` — grep for the site), (2) unguarded receive waits forever on a child that undef-crashed. Also: flight one's copies report showed the same BEAM-validation red in aion's own e2e on box toolchain — box gleam e2e gates must exclude-and-name until her fix lands.
+
+**Investigations 6/6 then wave 3 airborne.** inv51/53/13/63 prior; tonight inv56 (on_first_ready guard skips ready-file rewrite on every redial after first; fix = rename on_register, unconditional call, bounce regression) and inv9 (activity_error stamps Terminal regardless of worker class; kind is retry-disposition; fix = additive reported_kind split, do NOT naively preserve Retryable — kills terminality consumers) — both filed Reproduced/high, teardown clean. Ramp 2→3: **investigate-22 = d602cf8c-b9dc-4a78-9b1c-1a382b7c1b23, investigate-23 = b2eafb2d-86f6-42a4-9821-15f80ac81b98, investigate-46 = f42d179a-3902-4271-88ee-2cd62ef00375** (monitor bsxeblprl; inputs in scratchpad investigate-{22,23,46}-input.json; template law: threshold "night-cycle:chain", deliverable schema with issue number swapped). NOTE for #23 grading: `aion start --name` already exists (#211, durable display name recorded on start) — the gap is console rendering/Assistant naming/filterability, expect partial-AlreadyFixed territory.
+
+**Slot-6 battery: GREEN then DIVERGED-law rerun.** First battery (bv1v2gwhi) ALL GREEN at a3a2d466c (test_rc=0, clippy_workspace_rc=0, clippy_p_server_rc=0) — but origin/main (bb3b77053) is NOT an ancestor (merge-base e98693d7), so I merged origin/main into 62-linux-tighten → **8e230ca0c** (clean merge) and the battery RE-RUNS on the merged tree (task **bt9u6rfuf**, ~25 min from 13:17Z). On green: push 8e230ca0c as main, close #57/#59/#62, DONE mark on queue line 6 NAMING populations (aion-server lib unit population 1143; lane_gates_worker crate 10+1+doc; gleam runtime = Mac leg on pinned toolchain), notify Waffles (line 7 preps), cargo clean + dissolve worktrees 57-time-glue + 59-linux-green, move rocketfish workspace to new main. THEN land fleet-63-result substance.
+
+**Hardening flight (chain link 1) airborne: fleet-hardening-1 = 34137bbd-a4bf-409c-8564-142acaf0374b** (monitor b4e5hfedx), on fleet_dev$b2f84ef5, base_ref investigate-workflow, single leg "capture", gate .fleet-hardening-gate.sh (awl check both docs + sh -n all bin scripts, PATH bound). Scope = the three capture gaps (session transcripts → .fleet/sessions/ with typed absences; green gate tails → .fleet/gates/green-N.md; leg branch refs → .fleet/legs-merged.md). Input: scratchpad/fleet-hardening-1-input.json. On landing: re-install bin scripts to /home/aion/fleet/bin + redeploy docs AT MY HANDS.
+
+**Rulings folded in:** Waffles' #53 exhibit — line-6 battery test servers wrote ARMED/DISARMED into the ESTATE death log (~/.aion/logs/aion-server.death.log) via fill_home_defaults adoption; count "test suites pollute the estate death log" among #53's cured symptoms. Rocketfish scoping doc must pin a KNOWN-GOOD toolchain mix named by Artemis's fix lane, never latest-by-default. Box workspace-clippy claim (unnecessary_wraps, aion-server/src/filesystem.rs:180) — Mac battery clippy_workspace_rc=0 at a3a2d466c contradicts it; treat as newer-clippy forward-compat canary, verify at landing, micro-fix if real.
+
+**Next in chain after current flights:** #51 fix flight (build input from inv51 verdict comment 5328273976 — remove_if_pid Removed/Absent/Replaced trichotomy + recorder backstop), then #53 fix, then approved order. Owed docs: rocketfish + Dean-Mac scoping (tonight), #65 topology amendment (aion-awl copy divergent-by-design, DIVERGENT_COPIES list at crates/aion/tests/test_support/gleam.rs:130-139 + stale-prose finding: its rationale claims aion-awl "has no dependency-layer classification", false per :40-58), #34 close receipt = flight one arc. Cron 47fabb1d still armed (:43 ticks + Waffles day-file staleness).
+
+## ZU-10 — night grants, slot-6 LANDED, Dean staged, #64 fix landed upstream, line 12 pending (2026-08-18 ~13:37Z)
+
+**Night grants (Tom via Waffles, before sleep):** blanket technical authority — decisions ours, approval blanket; restart authority (rocketfish memtest reopened, my sequencing); PUBLISH PROPAGATION = named night priority (line 12 → aion family publish on its gates, or honest hold); morning scoreboard = completed workflows + versions + zero idle seats; "gates decide, volume never does" (Waffles' held line).
+
+**SLOT-6 LANDED: main = 8e230ca0c** (merged tree battery ALL GREEN 13:14-13:28Z: test/clippy-workspace/clippy-p-server all rc=0). #57/#59/#62 CLOSED with populations-named receipt. Queue line 6 marked DONE and pushed. Worktrees 57-time-glue + 59-linux-green still to dissolve (59 in use for line 12 — dissolve after).
+
+**Line 12 = NEXT ON MAC, Waffles reordered me ahead of his line 7.** Form (queue lines 79-89): nextest FULL per-test output capture, full suite, clean aion main tree (use aion-wt-59-linux-green — already at exactly 8e230ca0c, warm target), ~6 min warm, 2-of-3 historical fire odds, quiet gate = pgrep -x cargo/rustc/cargo-nextest empty. BLOCKED at 13:34Z by Artemis's beamr battery (pid 46658, HER release battery, propagation upstream — correct order anyway). FIRE THE MOMENT IT EXITS. Target: query_racing_completion_yields_payload_or_typed_error_without_events (crates/aion/tests/engine_query.rs:693). If red WITH text → fix red-first in lane → aion publishes tonight; quiet → one more no-fire point, honest hold. DM Waffles verdict either way; his manifold fires behind me.
+
+**Lane-1 v4 adjudicated:** FIRST-RED rc=101 at 13:00Z = #64 CONTAMINATION (failing targets are the gleam e2e battery; racing test NOT the red) — banked at box ~/lane1-repro/V4-ADJUDICATION.md. Box hunt under crates-io beamr closed as unviable.
+
+**#64 FIX LANDED upstream: beamr main b284beb** (Artemis [m=1954]: linear frame check → control-flow state; no-fall-through resets frame to unknown; Trim now tracked; 3 regressions; battery 9/9 at 3f14819). Her sweep-release for ~/lane1-repro given but HELD by me until her confirm ask completes: **box confirmation run LIVE** (detached, ~/artemis-confirm/CONFIRM.txt, marker CONFIRM-COMPLETE; aion 8e230ca0c + [patch.crates-io] beamr path b284beb; runtime_codecs full binary, timeout 2400; Cargo.toml reverted in-script). If clean → box hunt viable again under declared patch caveat + gleam-e2e exclusions narrow after beamr RELEASE propagates. My #66/#67 rows minted (harness swallow / finish_call death-awareness), stand un-diminished per Artemis.
+
+**BOX DISK CRISIS RESOLVED:** was 98%/4.7G free; /home/aion/aion (dead old checkout) had a 120G target — occupancy-checked (no cwd, fuser clean), removed → 38%/119G free. fleet-63-first kept tree = 40G more, freed at teardown after #63 lands.
+
+**Dean-Mac staged to auth edge (full seats per Tom's blanket protocol):** aion 0.17.0 swapped by rename (sha 8e64cc0a…, 0.15.0 kept aside), ~/fleet/{docs,bin,runs,logs}, scripts root-guard re-pinned to /Users/deanwhiting/fleet/runs, launch-workers.py (double-fork, namespace "dean", server 100.67.104.58:50051/50061 both REACHABLE, identities dean-fleet-{ops,counsel,dev}-workflows). Tom's go-live: claude login, norn --account default, python3 ~/fleet/bin/launch-workers.py, verify 3 logs. gh CLOSED (Deanofish has write, per Waffles' measurement; dedicated fleet credential = daylight item). DISK FLAG: 99% full/16Gi — counsel+light-ops OK, dev/gates legs need ~40Gi cleared (routed to Seth Crackers). Box toolchain = KNOWN-GOOD gleam 1.17.0/OTP 29.
+
+**Rocketfish memtest LIVE** (detached ~/memtest/RESULT-20260818.txt, marker MEMTEST-COMPLETE, 20G of 31G partial, Qdrant left running — zero-downtime call; Arch box, pacman, memtester installed; a first false-start rc=1 memtester-absent was caught and relaunched — verify final rc, not just marker). Scoping doc update owed: memtest reopened-tonight note.
+
+**Investigations 13/13** (all Reproduced/high, filed, teardown clean): wave 4 = inv19 (mode derived from terminal history + live-attempt count only), inv20 (transcript source limited to live intervenable attempts — retained attempts never consulted), inv21 (opening prompt asserts Aion repo unconditionally), inv24 (worker registers without CLI preflight). Wave 5 building via subagent (#12/#15/#14/#18/#6 inputs → then dispatch, ramp 4→5).
+
+**Flights live:** hardening 34137bbd (events 21, leg open) monitor b4e5hfedx; #51 b5a2c776 (events 21, leg open) monitor bfuvxv0ro. On landing: MY review at bytes, then land per chain (hardening: re-install /home/aion/fleet/bin + redeploy docs; #51: land on main with Mac gates). fleet-63-result REVIEWED FIT — lands after line 12 frees the Mac (cherry-pick c759dd7f + efe2496d onto main, targeted gate: cargo test -p aion-toolchain, -p aion-awl --test emitter, clippy both, then close #63+#34 with the reconciliation note: run status Failed = false-flag wiring, fixed 3e38b76b9, deployed b2f84ef5).
+
+## ZU-11 — #28 fired+cured, flights died to transport budget, hardening SALVAGED+LANDED, publish HELD (2026-08-18 ~14:00Z)
+
+**LINE 12: NO FIRE.** 5099/5099 nextest full capture at 8e230ca0c, racing test PASS 0.845s (log: 59-linux-green worktree gate-logs/line12/run-1.log). **PUBLISH HOLDS tonight (Waffles' ruling)** — record does not name the fourth outcome; downstream (frame's hop) named+accepted. ORDERED durable disposal: harden the racing test's fourth outcome into a TYPED ADMISSION (engine_query.rs:693) — MY SEAT, code next, verify behind Waffles' manifold (his window on Mac now). 2-3 opportunistic bounded reruns approved as accumulation only.
+
+**#28 FIRED AND WAS PUT DOWN** (full arc): 5-way wave-5 hit the documented signature — inv15/14 died mid-flight 13:41-42Z (invalid correlation id), then EVERY new dispatch died at first activity (r2 redispatches, inv18, inv6 — six casualties). Restart under the hazard ruling: SIGTERM 13:44:34 → clean drain (Parked, 35s) → double-fork relaunch same binary (sha-verified 8e64cc0a pre-kill) → WAL recovery clean → versions ok. **inv12 + both flights SURVIVED the park-and-resume** (durability story under real fire — morning-report gold). Casualty evidence on #28; charter MOVED UP: #28 fix = most valuable chain link (wedge ceiling ~15 runs blocks saturation); standing mitigation = 90s restart at my discretion. investigate-28 DISPATCHED: 4ae16aba-6f76-4a89-89ae-ca7bdc16177f. Waffles' watchdog raced my relaunch (his full-path pattern couldn't see bare-argv — fifth exact-match exhibit) and was KILLED by him; my respawner replaces it (below).
+
+**THEN the flights died anyway — transport budget, not #28:** legs' delegate activities hit "transport-exhausted… 262497ms across 2 worker losses, past 120000ms budget (4 heartbeat windows)… never ran" (it HAD run — server's belief only). Cause chain: outage counted worker lost; ActivityAdoptionOffered had NO taker because **agent workers never redial after MID-DISPATCH disconnect** — minted as **#69** (dev worker logged "failed to reply DispatchResponse: broken pipe" 13:47:19 then sat; counsel re-registered fine = was between dispatches; its silence = inv56's gap performing live). Mitigation WITHOUT destroying live norn sessions: **seated second workers** fleet-dev-workflows-2 + investigator-workflows-2 (both registered instantly, queues healthy — proves wedge is per-process). Design note for hardening-2: transport-exhausted is infrastructure-shaped and should route a bounded leg re-open in fleet_dev.awl, not kill the run; also flagged/red paths don't capture plan/judge sessions.
+
+**HARDENING SALVAGED AND LANDED** (spent-work law paid): capture leg had COMMITTED its work before the flight died. Manual pipeline at my hands: fanin clean → reports present → gate GREEN (builder extended gate with behavioral checks 1-10). MY review at the bytes PASSED (green-tail commit + HEAD verification in fleet-gates.sh; session capture per-leg inline after each delegate + batch capture_sessions step on clear path; fleet-sessions.sh honors typed-absence/exit-zero/shape-guards; fanin leg-ref records). Pushed fleet-hardening-result (fbd342f9), **merged into investigate-workflow (bfa1c5a88, pushed)**, scripts+docs synced to box /home/aion/fleet/{bin,docs}, ops worker RESEATED on new doc (pids 48252x), **deployed fleet_dev$853f24f6** (current). Dean's staged copies now DRIFTED — re-sync at go-live.
+
+**#51 SALVAGE PENDING:** leg norn session 409998 STILL BUILDING (22+ min, uncommitted completion.rs/mod.rs/reopen.rs edits in /home/aion/fleet/runs/fleet-51-fix/legs/reopen). When it commits+finishes: manual fanin → gate (.fleet-51-gate.sh) → my review → push fleet-51-result → land with Mac gates. WATCH: ps norn pid 409998 on box; worktree commit state.
+
+**Also this window:** #68 minted (correlation-id wedge record) — investigate-28 covers the mechanism hunt. Four casualty investigations REDISPATCHED as r3: inv15=964f9a1f, inv14=924a4d9b, inv18=7cb362e3, inv6=275ec613 (NO monitor armed yet — arm or poll on wake). **RESPAWNER ARMED** at my seat (Mac pid 89386, ~/.aion/respawner/: two-factor pid+start-time identity, port-health precheck 3-strikes, HOLD file for planned drains — touch HOLD before any planned server restart!). Server = pid 22298 seeded. Rocketfish memtester relaunch pending verify (bo9q8bjj4 bg task — check ~/memtest/RESULT-20260818.txt for real memtester output, first attempt was rc=1 memtester-absent, pacman installed it). Artemis confirm run live (~/artemis-confirm/CONFIRM.txt). Dean staged (auth edge). Queue: Waffles manifold on Mac now → then my typed-admission verify + fleet-63 landing gate (cherry-picks c759dd7f+efe2496d → close #63+#34).
+
+## Tick :43 (14:43Z 2026-08-18) — night-watch line
+Waffles day-file FRESH (13:49Z bank — his line-7 frame battery runs on the Mac now; land-stack battery queued behind it via quiet-watcher bstjd3xq2). inv15r3/14r3/18r3/6r3/28 all Running ev=8. CORRECTION to ZU-11: inv12 did NOT fully survive the restart — its in-flight activity died transport-exhausted at 13:50 (same class as the flights, worker loss + no adoption taker, #69); redispatched as investigate-12-r2. Post-restart run count ~8 — #28 ceiling watch armed (mitigation: 90s restart at my discretion, HOLD file first). Artemis confirm still building. Rocketfish memtester mid-patterns (Checkerboard ok).
+
+## ZU-12 — worker-plane idle decay collared, babysitter armed, confirm NEGATIVE (2026-08-18 ~14:45Z)
+Post-restart wave (15r3/14r3/18r3/6r3/28 + 12r2 + probe 15-r4's first attempt) ALL died to 4×600s activity timeouts with ZERO norn sessions spawned: fresh worker registrations silently decay idle (~45 min) — server drops to connected_workers=0, worker never notices (logs end at registration), dispatches go into the void. #69 EXTENDED with idle-decay evidence (symmetric keepalive gap). **BABYSITTER armed on box** (~/fleet/babysitter/, 60s poll, 0-with-live-pidfile → KILL+relaunch, logged; proven: bounced both zombies, dev+investigator back to 1). CANARY: inv15-r4 = 7a185730 mid-retry — if its next attempt runs a real session, redispatch casualties (14,18,6,28,12 — inputs in scratchpad) SERIALLY 2-3 at a time. **Artemis confirm rc=124 — b284beb does NOT clear the aion hang** (stmt_parity child_call wedged; either second refused shape hidden by #66 swallow, or #67 receive leg independent; her scene preserved, release rescinded; suggested loud-loader rerun vs b284beb). Land-stack battery KILLED mid-run to yield the Mac to Waffles' frame-regression differential (contention law; his verdict ~15 min) — REFIRE gate-logs/land-stack battery in aion-wt-59-linux-green (branch land-stack) when Mac quiet. Box exhibits parked for later: box-local aion server spinning 82.6% CPU (leftover? not in our dispatch path — investigate before killing), ghost test server running from the DELETED /home/aion/aion/target inode (fuser missed it — occupancy law scar: fuser on dir ≠ deleted-inode execs). Cron :43 tick done at 14:43 (day-file fresh 13:49Z).
+
+## ZU-13 — PRE-COMPACT HANDLE SHEET (2026-08-18 ~15:05Z) — READ FIRST ON RESUME
+
+**LIVE FLIGHTS + MONITORS:**
+- Canary inv15-r4 = 7a185730-4823-424d-82b0-28f47e98547a (monitor bu9o1vysm) — session live, plane proven. On landing: grade verdict (issue #15).
+- inv14-r4 = 7e564d06-1aa5-4789-b78e-0bfe5a85b1c6, inv18-r4 = 2f878b77-a6ee-4d36-a230-3d9494b8a4dd (JUST dispatched, NO monitor armed — arm one or poll).
+- STILL-OWED redispatches: inv6, inv28, inv12 (inputs scratchpad/investigate-{6,28,12}-input.json) — dispatch ONLY after the planned pre-wedge restart below.
+
+**#28 HEADROOM CRITICAL: ~14-15 runs since 13:45 restart; ceiling ~15.** PLANNED RESTART before dispatching the last three: (1) `touch ~/.aion/respawner/HOLD` (respawner MUST be held or it fights the drain), (2) kill -TERM the server pid in ~/.aion/respawner/server.pid, wait exit (death log DISARMED line), (3) relaunch full-path argv from repo root via python double-fork (see respawner.sh spawn()), (4) verify port+versions, (5) update server.pid/server.started from lsof :50051, (6) rm HOLD. Box workers will decay → babysitter bounces them within 60s. 90s total; my discretion, no approval needed (Waffles' ruling).
+
+**MAC QUEUE:** Waffles' frame-regression differential running (his verdict due; frame 0.5.1/0.3.2 suspected breaking manifold boot). WHEN MAC QUIET: refire land-stack battery — worktree aion-wt-59-linux-green, branch land-stack (= main 8e230ca0c + fleet-63 substance + fleet-51 merge + blackboard-strip, ALL REVIEWED FIT), command shape in gate-logs/land-stack/ (test.log/clippy.log/clippy-server.log + manifest). On ALL rc=0: push land-stack as main, close #63 (result branch fleet-63-result 360d1dc1) + #34 (receipt = flight one clause-2 arc) + #51 (result branch fleet-51-result ae1f5f60, salvaged; landing note must carry the Failed-status reconciliation: runs 890793f6/34137bbd/b5a2c776 read Failed for instrument/transport reasons, work landed), teardown box run trees fleet-63-first + fleet-51-fix + fleet-hardening-1 (fleet-teardown.sh, frees 40G+), dissolve worktrees 57-time-glue + 59-linux-green (cargo clean first), update rocketfish + box ~/stack/aion checkouts to new main.
+- THEN typed-admission verify: engine_query.rs racing-test hardening (ORDERED by Waffles) — I have NOT yet edited; add stage+iteration context to every bare `?` in query_racing_completion_yields_payload_or_typed_error_without_events (crates/aion/tests/engine_query.rs:693, loop sites: start, warm-up query/decode, signal_outcome, race decode, result await, terminal read), verify with cargo test -p aion-rs --test engine_query when Mac free, land on main.
+
+**STANDING INFRA (all mine, all live):** Mac respawner pid ~89386 (~/.aion/respawner/, HOLD-file discipline). Box babysitter (~/fleet/babysitter/babysitter.sh, 60s, logs). Second workers via pidfiles in babysitter dir. Server = Mac pid 22298 (0.17.0, bare argv — switch to full-path argv at next restart per co-signed form). fleet_dev$853f24f6 current deployment. Counsel queue=1 (original worker), dev/investigator=1 (babysat -2 workers).
+
+**OPEN THREADS:** (1) Artemis: her b284beb does NOT clear runtime_codecs hang (rc=124, stmt_parity child_call wedge; ~/artemis-confirm/ + ~/lane1-repro preserved, release rescinded) — await her reply; offered loud-loader rerun vs b284beb. (2) Waffles differential verdict → his manifold split decision. (3) Rocketfish memtester running (~/memtest/RESULT-20260818.txt, MEMTEST-COMPLETE marker + parse memtester output for failures, first launch was a caught non-run). (4) Dean-Mac at auth edge (Tom's logins owed; scripts there DRIFTED vs landed hardening — re-sync ~/fleet/bin + docs at go-live). (5) Box exhibits: box-local server 82.6% CPU spin (investigate, maybe kill), ghost server from deleted inode. (6) Night chain after landings: #53 fix flight (inv53: fill_home_defaults), then #48, #9, #56, #22+#23 (Assistant-only reshape per inv23), #19/#20/#21/#24 fixes, #46, #66/#67 (aion loudness rows), engine-deep from investigations landing tonight. (7) #65 amendment posted; #68 minted (correlation record); #69 minted+extended (idle decay; babysitter = scaffolding not fix). (8) Morning report cargo: durability story (park-and-resume under real fire), #28 wedge arc, worker-plane decay, publish HOLD rationale, scoreboard (13→+N investigations, hardening+#51 landed, slot-6 landed, Dean staged, memtest partial).
+
+**LAWS RE-LEARNED TONIGHT (cite before acting):** never edit a running script (round-5 non-run); fuser-on-dir misses deleted-inode execs (ghost server); a quiet-watcher firing between another agent's battery runs = contended instrument (killed my battery to save his differential); transport-exhausted kills flights whose sessions are ALIVE — salvage the worktrees (both flights' work landed tonight via manual pipeline: fanin → report-check → gate → my review → fleet-push).
+
+## ZU-14 — post-compaction resume trace (2026-08-18 ~15:10Z)
+
+- **inv14-r4 + inv18-r4 LANDED Reproduced, filed** (#14 14:45:23Z schedule-namespace chain; #18 14:47:23Z outbox cancellation race). Canary inv15-r4 still mid-agent-leg (no ceiling). Pre-wedge restart WAITS for it, then inv6/28/12 dispatch.
+- **Battery queue**: line 12 marked DONE (no-fire, late marking named); line 13 appended = land-stack landing battery, now ALSO carrying the typed-admission racing-test hardening (commit 30e060046 on land-stack, compile-checked -j2 warm). One slot covers Waffles' ordered disposal + the landing stack. Fires behind lines 7-11.
+- **#64 RESOLVED AGAINST MY NEGATIVE**: Artemis proved my rc=124 was a NON-RUN — [patch.crates-io] semver-dropped SILENTLY (0.19.1 checkout vs ^0.18.2), run tested registry 0.18.2 pre-fix; clean compile was itself the disproof (0.19.x adds ParsedModule.type_chunk → E0063 if patch in force). Fix-in-force on box mix: hanger 1.87s pass, runtime_codecs 28/28. **aion#70 minted**: migrate to beamr ≥0.19.2, type_chunk census, LOCK-witness acceptance; box gleam-leg exclusion lifts when it lands. Trap folded into scoping doc + memory (a-patch-is-witnessed-at-the-lock). Box artifacts swept per re-grant (13G freed, 121G free).
+- **Rocketfish memtester: INCOMPLETE** — rc=143 SIGTERM 14:17Z by earlyoom (active; swap 7/7 full, qdrant 13.5G on 31G box); 13 tests clean, 0 failures; marker NOT rc-gated (the rc line is the truth). No further in-OS attempts; offline pass at Tom's window stands. Scoping doc updated.
+- **NEW EXHIBIT → Artemis**: both 0.17.0 servers burn ~80% core LOAD-INVARIANT (Orpha's box server 368 CPU-min/7.5h, zero connections; Mac server 55/67 min). Sample of Mac pid 22298: all threads parked except beamr scheduler — steal_half_from + swtch_pri = work-stealing spin. Asked Artemis re spin-park default. Sample at scratchpad/server-sample.txt. Ghost deleted-inode test server (pid 173374, loopback-only) KILLED; Orpha's server (pid 30318) untouched — hers.
+- Waffles day-file 6 min fresh at staleness check. Worker plane 1/1/1 healthy.
+- TICK 14:56Z: canary inv15-r4 still mid-agent-leg (18 min, no ceiling); plane 1/1/1; Mac busy (Waffles line-7 cargo test pid 89507); his day-file 1 min fresh — no alarm. No link cleared; restart+inv6/28/12 still gated on canary, line 13 gated on lines 7-11.
+- 15:1xZ: scheduler-burn exhibit CLOSED as a defect-shaped config default — Artemis: no spin bug, 5ms idle tick (signed §3.8) × per-core-per-VM default. Discriminator on box pid 30318 CONFIRMED even spread (18,145s/22,662s in beamr-sched, ~1030s × 16 workers, no hot thread). **aion#71 minted**: builder-plumbed thread_count for server-embedded VMs, value = discussion item, measure at one server first. Artemis's upstream lanes: embedded sizing rule + event-driven idle (next-timer-deadline park, needs §3.8 re-sign). Night-chain fix queue grows: #70 (beamr floor migration), #71 (scheduler sizing).
+- 15:1xZ: idle_burn gauge (Artemis's instrument) building detached on box ~/idle-burn/ (RESULT.txt, 5 legs: default-x1/w1-x1/w2-x1/default-x4/w1-x4; parse rule = 5 MEASURE lines + per-leg READY workers_each, NOT the completion marker; "0" arg may parse Some(0) not default — judge that leg by its READY line). Field datum banked by Artemis on beamr#24. #71 fix lane starts with this before/after.
+
+## ZU-15 — canary post-mortem, restart executed, chain refilled (15:26–15:40Z)
+
+- **Canary inv15-r4 was DEAD IN FLIGHT, not slow**: no norn/claude process on the box; its session file stalled at ~4KB since 14:42. Chronology: 14:38:09 babysitter relaunched investigator-2 (pid 498536); 14:38:09/31 that worker took the canary's probe+investigate dispatches; 14:39:09 its registration read 0 (the #69 decay hitting a 60s-old registration — or #69's mid-dispatch disconnect) and the babysitter killed it BY ITS RULE (kill lost nothing: a dead registration can't deliver a reply). ENGINE FACT: 46 min Running on a dead executor, idle worker on queue the whole time, zero recovery events — the no-heartbeat investigate activity has NO arming edge. **#72 minted** (worker-death recovery must not be contingent on heartbeat config). Babysitter left as-is (behaved correctly; busy≠gone conflation theory REFUTED by inv14/18 surviving probes while busy).
+- **Canary cancelled clean** 15:26:35Z (cancel of a wedged-activity workflow works).
+- **PRE-WEDGE RESTART EXECUTED** per procedure, with one defect found: server IGNORED TERM 60+s — sample shows main returned, hung in tokio BlockingPool::shutdown → Condvar wait (a spawn_blocking task never exits; 13:45Z drain was clean — delta = wedged dispatch + live liminal conns). **#73 minted** (graceful-drain hang; sample at scratchpad/shutdown-sample.txt). KILLed → double-fork relaunch FULL-PATH argv (co-signed form now live) → up in ~5s, workers re-registered in-band, versions non-empty. server.pid=92628, server.started updated, HOLD released. Queues 3/3/1.
+- **CHAIN REFILLED**: inv6-r4=6d704a35-2f78-42b1-88de-bf872212e845, inv28-r4=6f7c8bf4-37b7-427b-88af-5320a5f2fae5, inv12-r4=e5d37cc0-aefd-4c27-9b11-4cfc17974c1a, inv15-r5=2caa6279-af4f-42c0-ba7b-c77ba057e9c4. Monitor bmc4kt2qg armed (per-flight terminal lines + ALL-FOUR-TERMINAL).
+- **idle_burn gauge COMPLETE** on box (~/idle-burn/RESULT.txt, rc-gated, 5/5 MEASURE lines): default-x1(16w)=9.0%, w1-x1=1.7%, w2-x1=2.0%, default-x4=31.3%, w1-x4=6.2% — ~5x reduction, linear in instances; "0" arg maps to default (workers_each=16 witnessed). #71's before/after basis.
+- Mac QUIET but lines 7-11 not DONE — line 13 keeps waiting per file law.
+- Issues minted tonight now: #66 #67 #68 #69 (extended) #70 #71 #72 #73.
+- 15:4xZ: inv6-r4 LANDED Reproduced/filed (20 evidence rows; correctly flags two stale issue claims vs current code — liminal plain path now queue_plain_dispatch but still one-at-a-time; max_concurrency unread on liminal path). Monitor bmc4kt2qg had a zsh word-split bug (unquoted $ids = one word — only watched flight 1, printed last label); replaced with b2lcrqflf (printf|while read, shell-agnostic) over inv28/inv12/inv15-r5. LAW: monitor scripts run under zsh here — never rely on unquoted word splitting.
+- 15:5xZ: inv12-r4 LANDED Reproduced/filed (29 rows; deploy-only raises tonic receive ceiling, worker plane at 4MiB default → oversized result kills inbound task, teardown mislabels as worker loss) and inv15-r5 LANDED Reproduced/filed (15 rows; HTTP start + worker registration still credential-empty on forwarded mint). 17/18 investigations Reproduced+filed; only inv28 in flight. Queue file unmoved (line 7 not marked DONE; last commit = mine).
+
+## ZU-16 — investigation sweep COMPLETE, fix chain restarted (16:0xZ)
+
+- **inv28-r4 LANDED Reproduced/filed (10 rows) → 18/18 INVESTIGATIONS COMPLETE, every issue Reproduced with a filed verdict.** inv28's theory: the ~15-run #28 ceiling = beamr JIT hotness threshold crossing on complex workflows (the known empty-NativeServices/compiled-frame blocker), scheduler-scoped, restart clears the counters. Reframes #28 as the beamr JIT blocker surfacing through aion — Artemis's lane; flag in morning arc.
+- **#53 FIX FLIGHT DISPATCHED**: fleet-53-fix = bc708e71-b9d5-42c8-bc7c-3763ec2366d7 (run 41ecf0f8). Base branch fleet-53 = origin/main + .fleet-gate.sh (aion-server --lib population + crate clippy, #64 exclusion named), pushed 80b4c00c0. Input scratchpad/fleet-53-input.json (single leg "refusal"; binding spec: refusal edge ONLY — derived home + existing home store + absent cwd candidate => typed ServerError naming both paths + both remedies; first boot and explicit AION_HOME unchanged; red-first mandatory; workspace-dir arm out of scope unless counsel argues it as same-class defect; judge token JUDGE-CLEAR-FLEET-53). LESSON: legs[] entries REQUIRE per-leg "repo" (typed admission refused without it).
+- Monitor armed on the flight (2-min poll, terminal only). Worktree wt-fleet-53 in scratchpad (dissolve after landing).
+- Next chain links after #53: #48, #9, #56, #22+#23 (Assistant-only reshape), #19/#20/#21/#24, #46, #66/#67.
+- 15:46Z Waffles: line 7 DONE (manifold landed de4d49c; frame bump EXONERATED via four-arm differential — pre-existing suite-conditional estate-boot race, MarkerSettlementBackpressure no-node-handling class; race row to be minted his side). Cascade open: 8 Apollo → 9 Athena → 10 Hermes → 11 Themis → my 13. His release rebuild rides his slot tail. Mint ledger #66-#73 = its own morning-report section per his read.
+- TICK 15:51Z: fleet-53-fix Running (13 events, counsel plan leg live since 15:42); plane 3/3/1; Waffles day-file 3 min fresh — no alarm. Cascade lines 8-11 ahead of my 13; no link to fire this tick.
+
+## ZU-17 — SATURATION WAVE (15:55-16:05Z, Tom at console per Waffles relay)
+
+- Tom's word via Waffles 15:55Z: push concurrency, he wants to SEE it; second-seat worker launches at my hands.
+- Workers launched box-side: fleet-dev-workflows-3, fleet-counsel-workflows-3, investigator-workflows-3 (pidfiles in ~/fleet/babysitter/, logs ~/fleet/*-3-worker.log; NOTE babysitter only guards the -2 pidfiles — -3 workers unguarded by design for now).
+- FIVE investigations dispatched on the night's own mints, running CONCURRENT with fleet-53-fix:
+  inv66=dc6c26d4-5916-4263-a335-495fedad1434, inv67=d1081e6b-dc92-4341-b1d7-444ad80200ec, inv69=bf819c06-b0c9-400f-b0aa-f733594d057c, inv72=3a83df9b-a3de-4fc6-9b10-1f9506ec033d, inv73=38c524ac-6c75-4dc9-b6d2-0fbfc61cbd6e. Monitor armed (split-safe pattern). Inputs scratchpad/investigate-{66,67,69,72,73}-input.json (template law honored; per-issue YOUR TASK loci: 66/67 harness.rs swallow+park, 69 worker redial+registry expiry, 72 connection-death→dispatch settlement gap, 73 spawn_blocking census).
+- Six workflows live at once. #28 headroom: fresh restart 15:29Z, ceiling ~15 runs — 6 concurrent flights spend it fast; NEXT RESTART LIKELY OWED before a second saturation wave. Watch for correlation wedge on any flight.
+- 16:1xZ: inv66 LANDED Reproduced/high (build_vm assigns load_module_with_origin Result to `let _` at harness.rs:393 — every refusal discarded; embedded-module path 403-405 propagates properly, the contrast IS the fix shape) and inv67 LANDED Reproduced/high (unlinked spawn_opt worker + unbounded receive; finish_call's run_until_exit success = wrapper tombstone only — worker undef-crash strands it alive). Both filed. inv69/72/73 + fleet-53-fix still live.
+- 16:2xZ: inv72 LANDED AlreadyFixed/high — REFUTED BY THE LIVE EXHIBIT at my gate: both closing commits (65616f633, a4370660b) verified ancestors of the v0.17.0 cut, so the wedge happened ON a binary containing the cited settlement chain. Reconciliation posted on #72: the chain arms on CONNECTION CLOSE; silent registration decay (#69) removes the worker WITHOUT the close-notifier path → settlement never fires. Issue NARROWED not closed — reshaped acceptance: settlement on every believe-worker-gone path incl. lease expiry; #69+#72 likely one root. (Law applied: a measurement outranks a code-reading verdict it contradicts; re-measure-the-blocker caught the release ancestry.)
+
+## ZU-18 — VERDICT→FIX CONVERSION WAVE (16:0x-16:2xZ, Tom's explicit go via Waffles)
+
+- inv69 LANDED Reproduced/high (reply_agent_dispatch swallows broken-pipe, returns () — no direct Dropped path; indirect redial exists via silence monitor, so #69's strongest claim weakened but the deterministic edge is absent; fix spec: typed transport failure + per-connection drop notifier + serve_until_drop observes → run_redial_loop). inv73 LANDED AlreadyFixed/high — reconciled at my gate like #72: closing commit 7769d058 (DrainState latch) IS in the v0.17.0 cut and covers the SELECTION arm; tonight's hang = the HELD-REPLY arm (delivered-never-replied + decayed registration). Reconciliation comments posted on BOTH #72 and #73; each narrows, neither closes.
+- **TWO MORE fleet_dev FLIGHTS UP** (Tom wants fleet_dev visible on console):
+  - fleet-66-67-loudness = 249dad61-9469-42d8-b523-31a29e061a94 (run dfbfff93). Base fleet-66-67 (gate: loudness_ self-tests must exist+pass; fast-named-red instrument — the previously-hanging stmt_parity test under timeout 120 must terminate and carry LOAD-REFUSAL: token, OR go green if mix loadable; clippy -p aion-awl). One leg "loudness", both issues one surface, binding spec = retention record + token + every Vm error boundary appends refusals + death-aware finish_call (exit-event subscription, typed Result) + red-first.
+  - fleet-70-beamr-floor = 6aa7f074-67c9-4a17-9941-1272977cb8b1 (run 57118390). Base fleet-70 (gate: LOCK WITNESS zero beamr <0.19.2 + FULL workspace test NO gleam exclusions — runtime_codecs green on box mix IS the proof + workspace clippy). One leg "migrate", binding spec = floor bump + transitive-pin census (third-party old pin = STOP and report) + type_chunk decided from beamr source with written reasoning + API census + no ride-along rewrites.
+- Sequencing: #69/#72 fix flight HELD until fleet-70 lands (worker-plane surfaces + likely shares root; also #28 headroom). #53 flight still Running. FOUR fleet_dev capable of console visibility tonight: 53, 66-67, 70, then 69/72.
+- Monitor bm* replaced: new monitor over three flights (2-min poll). Inputs at scratchpad/fleet-{66-67,70}-input.json.
+
+## ZU-19 — fleet-53 instrument failure + three-way gate hardening (16:2xZ)
+
+- **fleet-53-fix FAILED gates_red on an INSTRUMENT bug, not code**: gate ran with EMPTY HOME → PATH="/.cargo/bin:..." → "cargo not found" red on all 3 rounds; the fix agent was correctly walled out of the gate script so it could not repair the instrument. The leg's code work (commit 2360685a + fix-round commits) is intact in the box merged tree.
+- **Hardening landed everywhere**: .fleet-gate.sh on branches fleet-53/fleet-66-67/fleet-70 now (a) puts /home/aion/.cargo/bin absolute FIRST in PATH, (b) defaults HOME=/home/aion when empty (cargo needs HOME for registry+rustup). Pushed to origin; cherry-picked into BOTH live flights' box clones (fleet-66-67-loudness repo @be607848, fleet-70-beamr-floor repo @864fecab) BEFORE their gates fire.
+- **fleet-53 SALVAGE running**: gate script fixed in its merged tree (head d0a96201), detached salvage gate launched 16:29:09Z (SALVAGE-GATE.txt, rc-gated + DONE marker). On green: my review of the diff → push fleet-53-result → close #53. On red: real findings, feed a fix.
+- OPEN QUESTION for a future row: WHY is HOME empty in the workflow's gate action context (worker plain-activity env contract) — attribute before minting.
+- TICK 16:5xZ: salvage-gate red #2 was CONTENTION not code — every failure EMFILE "Too many open files" building test runtimes (soft ulimit 1024 vs hard 524288, two flight builds + 9 workers concurrent). Contended-red-is-not-red applied: gates now raise ulimit -n 65536 (4th hardening commit on all three branches, synced into all three box clones). Salvage relaunched 16:53:38Z @e3e54fd1. Flights 66-67 + 70 Running. Waffles day-file 15 min fresh — no alarm. ALSO: my own tick probe hit the zsh word-split trap AGAIN (unquoted $pair in for-loop) — server was healthy, probe was broken; law reconfirmed, quote and use read -r. Waffles has a deadman watch armed on server pid 92628 (coordinates with my respawner, does not spawn).
+
+## ZU-20 — fleet-53 SALVAGED GREEN AND REVIEWED (16:57-17:1xZ)
+
+- Salvage gate rc=0 at 16:57:21Z (honest instrument: PATH+HOME+ulimit hardened). MY REVIEW AT THE BYTES: select_store_default split (authoring arm untouched — spec arm 7); refusal ONLY on Derived+absent-cwd+existing-home-store; first boot + explicit home preserved; inspect_candidate refuses to read permission errors as absence (hardening, in scope); typed ServerError names both paths + both remedies. Tests: 4 spec arms + symlink edges (a_symlinked_derived_home_store..., a_symlinked_legacy_candidate...); red-first evidence in report (3 refusal tests FAILED pre-change); 109 passed. **REVIEWED FIT. fleet-53-result pushed = e3e54fd1.**
+- #53 landing plan: rides the NEXT stacked landing (line 14 after land-stack): fleet-53-result + fleet-66-67-result + fleet-70-result (as they green) on new main + one Mac battery. #53 closes with that receipt.
+- Flight-instrument arc tonight: HOME-empty → PATH fix → HOME default → EMFILE ulimit — four hardening commits, all three branches + all three box clones synced each time. The workflow's gate env contract (why HOME is empty) still owed an attribution row.
+
+## ZU-21 — fleet-66-67 SALVAGED (17:16-17:3xZ)
+
+- Flight Failed on API 529 Overloaded (4/4 attempts, judge session) — EXTERNAL capacity, after gates went GREEN round 2 (round-1 red was real: stale exit-event lag; fix round landed 70676af9 "test(awl): fail loudly on stale exit-event lag"). My review SUBSTITUTES for the dead judge (cut-ceremony law): walls clean (no bypasses, scope exactly runtime_codecs/, zero surviving run_until_exit), LOAD-REFUSAL: token at its single formatting site in new loudness.rs (LoadRefusal/LoadRefusalLog machinery + 13 loudness_ self-tests in loudness_selftests.rs), green-2 leg-2 = fast NAMED red rc=101 on the refused mix — the instrument measured the fix. **REVIEWED FIT. fleet-66-67-result pushed.**
+- Failed-status reconciliation to carry at close: runs bc708e71 (fleet-53) and 249dad61 (fleet-66-67) read Failed for instrument/external reasons; both deliveries salvaged, gated green, reviewed, result branches pushed.
+- fleet-70 still flying — 529 risk noted; same salvage pattern applies if it dies post-gates.
+- 17:3xZ: **#74 minted** (Waffles' pattern-read, my authoring): retryable-class exhaustion downstream of mechanical green should PARK the flight on a durable timer, not fail it — verdict-as-data (#58) + the #33 refusal taxonomy; two candidate shapes (AWL catchable vs engine retry-policy park), built-vs-expressible check named for shape 1. Night mint ledger now #66-#74 (nine).
+- TICK 17:51Z: fleet-70 Running (43 events, activity live since 17:45 — gates/fix territory); Waffles day-file 17 min fresh — no alarm. Line-14 stack holds 53 + 66-67 results; nothing to fire until fleet-70 terminals or the Mac cascade reaches line 13.
+- 18:2xZ: SLEEP-REAP window RULED (Themis's cargo, via Waffles): flies at fleet-70's terminal (seat gate), may fly concurrent with my #69/#72 fix flight, but LANDS strictly after the #69/#72 result (reaper consumes worker-plane semantics the settlement fix firms up); its brief must name its file surface for a mechanical collision check; if surfaces collide at authoring time, dispatch pulls back behind #69/#72. SLEEP-003 landed fulcrum main 1dcf24a at Waffles' hands.
+- 18:5xZ: fleet-70 round-2 red = LLD CRASHING (LLVM stack dumps, multiple test binaries — 16-way parallel links of 300-rlib test binaries spiking past the 31G box; third contention class tonight after fd and HOME). Gate hardened IN FLIGHT: cargo test/clippy bound to -j 4 (origin fleet-70 + box clone 8e6bce6d) before round-3 gates fire. Round-2 fix agent has been running since 18:27 — it may correctly conclude the linker crash is environmental; round 3 runs on the bounded instrument either way. Instrument-hardening ledger for the flights now: PATH → HOME → ulimit → -j bound.
+- TICK 18:52Z: fleet-70 fix-round-2 agent still live (since 18:27); bounded gate (8e6bce6d) sits in its tree for round 3. Waffles day-file 21 min fresh — no alarm. No other links to fire.
+- TICK 19:51Z: fleet-70 fix-round-2 ALIVE AND WORKING (84 min in — liveness verified properly this time: rustc cwd = its repo, session b82c9a61 written 19:50:32; canary lesson applied). Bounded gate staged for round 3. Waffles 19 min fresh — no alarm.
+
+## ZU-22 — console refill wave (20:49-21:0xZ, Tom's ask via Waffles)
+
+- FOUR investigations dispatched on un-investigated rows: inv16=831dd986 (namespace/placement shard-routing bypass), inv34=ced22320 (red-gate repair leg — likely AlreadyFixed by tonight's fleet_dev fix rounds, verdict will say), inv50=1cea8834 (Py/TS SDK liveness ping exclusion), inv54=76b2bd3e (haematite shard-actor timeout under load). Monitor armed.
+- THROTTLE RULING, on the record: #28 headroom since 15:29Z restart ≈ 6 runs left; fleet-70's remaining gate+judge dispatches get the margin — NO restart while it flies, so the wave is capped at 4. REMAINING un-investigated queue for the post-fleet-70 wave: #5, #10, #11, #17, #29, #30, #31, #43, #44, #48, #49, #52, #55, #65 (± #61 ops-shaped, skip).
+- TICK 20:51Z: five workflows live (inv16/34/50/54 + fleet-70 fix round); Waffles day-file 0 min fresh — no alarm.
+- 20:5xZ RESERVE MEASUREMENT (Tom pushing the cap via Waffles): runs since 15:29Z restart = 12 (fleet-53, inv66/67/69/72/73, fleet-66-67, fleet-70, inv16/34/50/54); wedge onset estimate ~15 from TWO observations (error bars ≈ the estimate); mechanism = JIT-hotness odometer shared by fleet-70's landing legs — new runs advance it. 12/~15 spent → remainder IS the reserve. Cap stands as a measurement; Tom can overrule eyes-open; restart + 14-row flood at fleet-70's terminal.
+
+## ZU-23 — PRE-COMPACT HANDLE SHEET #2 (2026-08-18 ~21:1xZ) — READ FIRST ON RESUME
+
+**LIVE FLIGHTS + MONITORS (all statuses Running at 20:51Z):**
+- fleet-70-beamr-floor = 6aa7f074-67c9-4a17-9941-1272977cb8b1 (monitor b1raiuzgb). Fix-round-2 session since 18:27 (session b82c9a61, 227MB, alive). Bounded gate (-j 4, commit 8e6bce6d) staged in its tree for round 3. ON TERMINAL: (a) Failed post-green or environmental → SALVAGE per pattern (manual gate in its repo /home/aion/fleet/runs/fleet-70-beamr-floor/repo → my review → push fleet-70-result); (b) Completed → review + verify result branch; EITHER WAY then: RESTART server per ZU-13 six-step procedure (respawner HOLD → TERM → likely KILL per #73 → double-fork FULL-PATH argv from repo root → verify → update pid files → rm HOLD), THEN fire the 14-row investigation flood (#5/#10/#11/#17/#29/#30/#31/#43/#44/#48/#49/#52/#55/#65 — build inputs by template law from scratchpad/investigate-9-input.json with per-issue YOUR TASK), THEN tell Waffles so SLEEP-REAP dispatches (Themis's fulcrum cargo — flies at fleet-70 terminal, lands after #69/#72 result), THEN author the #69/#72 fix flight (aion-side: worker drop-notifier + serve_until_drop from inv69 spec; server-side settlement-on-decay from my #72 reconciliation — settlement must fire on lease/registration expiry, not just socket close).
+- inv16=831dd986, inv34=ced22320 (expect AlreadyFixed → close #34), inv50=1cea8834, inv54=76b2bd3e (monitor ber9ifhap). ON LANDING: grade verdict (describe → WorkflowCompleted result.payload.report), verify gh comment landed, bank grade line.
+- RESERVE MEASUREMENT LIVE: 12 of ~15 runs spent since 15:29Z restart; remainder reserved for fleet-70's landing legs; Tom may overrule eyes-open (Waffles carries the number). NO new dispatches before fleet-70 terminals unless Tom overrules.
+
+**RESULT BRANCHES STAGED FOR LINE-14 STACK** (after line-13 land-stack lands on Mac): fleet-53-result e3e54fd1 (REVIEWED FIT, closes #53), fleet-66-67-result b279d436 (REVIEWED FIT, closes #66+#67), + fleet-70-result when home (closes #70, lifts #64 box exclusion, unholds rocketfish provisioning per scoping doc). Line-14 = stack results on post-line-13 main + ONE Mac battery + close issues with Failed-status reconciliation (runs bc708e71/249dad61 read Failed for instrument/external reasons — HOME-empty gate env, API 529 storm; deliveries salvaged green).
+- Mac battery queue (docs tracking/battery-queue-20260818.md): lines 8 Apollo, 9 Athena, 10 Hermes, 11 Themis ahead of my line 13 (land-stack battery in aion-wt-59-linux-green, ALSO carries typed-admission commit 30e060046). Marking line-13 DONE includes cargo clean covering line-12's retained target.
+
+**INSTRUMENT-HARDENING LEDGER (all four on branches fleet-53/66-67/70 + box clones)**: absolute /home/aion/.cargo/bin first in PATH; HOME=/home/aion default when empty; ulimit -n 65536; cargo -j 4 bound (fleet-70 only). WHY-HOME-EMPTY in the workflow action env = attribution row still owed.
+**HEARTBEAT LEDGER**: every :43 tick ALSO appends one line to docs tracking/vesper-tick-heartbeat-20260818.md on origin/main (Waffles' staleness instrument reads there; 3 of my ticks were invisible to him before this).
+**STANDING INFRA**: server pid 92628 (full-path argv, 0.17.0, restarted 15:29Z); respawner armed (HOLD discipline); box babysitter (60s); workers: orig + -2 (babysat) + -3 (dev/counsel/investigator, launched 15:55Z, unguarded). Waffles has a deadman watch on pid 92628 (verifies my respawner first, never spawns).
+**NIGHT LEDGER**: mints #66-#74 (nine). Investigations complete: 18 originals + 66/67/69/72/73 + 16/34/50/54 in flight = on landing 27 total. Reconciliations posted on #72 and #73 (AlreadyFixed refuted/narrowed by tonight's live exhibits — release-ancestry checks). #70/#71 evidence: idle_burn box results (~/idle-burn/RESULT.txt, 5 legs, ~5x reduction, "0"→default); Artemis field datum on beamr#24.
+**OPEN THREADS**: rocketfish memtester INCOMPLETE (earlyoom kill; offline pass at Tom's window stands); Dean-Mac at auth edge (scripts DRIFTED, re-sync at go-live); #74 shape decision (AWL-catch vs engine park); morning report cargo = the whole COMPACT-66-STATE arc + "three Failed columns, three salvaged deliveries" + scoreboard.
+- 21:1xZ: inv34 LANDED Reproduced/high — TRUE AT MAIN: fix-round machinery lives on investigate-workflow branch (bfa1c5a88+) + deployed fleet_dev$853f24f6, NOT at main HEAD. ZU-13 close plan CORRECTED: #34 closes when the awl+bin hardening commits land on main — ADD THEM TO THE LINE-14 STACK (cherry-pick from investigate-workflow: fleet_dev.awl + workflows/fleet-dev/bin hardening). Reconciliation comment posted on #34.
+- 21:2xZ: inv50 LANDED Completed, graded FIT (Reproduced, NARROWED): Python side FIXED by ancestor a437314b3 (answers ping from runtime, no action slot taken) — TypeScript still has the full gap (generated protocol exposes livenessPing/livenessAnswer but WorkerSessionEvent/WorkerSession/GrpcWorkerSession.receiveTasks silently DISCARD the ping frame; TS workers can never serve the two-consecutive-answer opening probation → dispatch-excluded from registration onward). Acceptance not met on either arm: Python tests are grpc.aio stubs, not a real liminal-listener dispatch-selection proof. Comment issuecomment-5333942220. #50 stays open scoped to the TS SDK + real-server acceptance.
+- 21:2xZ: inv16 LANDED Completed, graded FIT (Reproduced): HTTP POST /namespaces + PUT placement authorize then write DIRECT through local NamespaceStore, bypassing the registry-shard routing that automatic minting (route_for) and workflow-start forwarding honor. No public gRPC equivalent exists (internal MintNamespace is owner-side only, empty ack, no placement op). Non-owner nodes: typed NotOwner fence → creates NOTHING → ingress-node-dependent control-plane failure, no divergence. Comment issuecomment-5333947963.
+- REMAINING IN FLIGHT: inv54 (76b2bd3e) + fleet-70 fix-round-2 (monitor b1raiuzgb). Reserve unchanged: 12/~15.
+- 21:0xZ: inv54 LANDED Completed, graded FIT (Reproduced — the deepest of the night): haematite 0.8.3 private DEFAULT_TIMEOUT=5s (crates.io bytes: db/startup.rs:30 → shard/actor/handle.rs:912 recv_timeout → ShardError::ReplyTimeout). Under beamr scheduler starvation a LIVE actor answers late → timeout proves LATENESS not death. api_error/database_error erase to StoreError::Backend → HTTP 500 terminal-looking. Exhibit e2e adopted_declared_body_dispatch_executes_after_recovery: red in contended batteries, green isolated + uncontended (contended-red-is-not-red, measured). Acceptance shape named: configurable/derived finite bound + typed retryability; never infer death from expiry. Comment issuecomment-5333972490. FIX DIRECTION crosses into the haematite crate (timeout config surface) — cross-repo thread for the morning report.
+- ALL FOUR investigations terminal + graded FIT (16/34/50/54). Investigation total tonight: 27 landed, 27 graded. Monitor ber9ifhap ended clean.
+- 21:0xZ fleet-70: fix session done + committed (62e42469 closure pins/chunk contract, 9e38ff21 BEAM artifacts 0.19.2, 012e2ada transcript). GATE ROUND 3 LIVE — gates-round-3.log written 20:56Z, workspace compile deep in the graph (aion-cli). Workflow genuinely progressing; monitor b1raiuzgb armed; loop tick doubles as poll.
+- Box worker fleet confirmed healthy: 8 workers live (orig + -2 babysat + investigate/fleet pairs), babysitter loop running. Earlier "no processes" read was MY grep matching kworker — instrument error, corrected.
+- 21:0xZ TOM OVERRULED (via Waffles): fly all 14 rows parallel. I built all 14 investigate input JSONs (scratchpad, issues 5/10/11/17/29/30/31/43/44/48/49/52/55/65, per-issue YOUR TASK tailored) — then TOM'S ORDER CHANGED before any dispatch: "I want FOLLOW THROUGH" — STOP new investigations, PIVOT ALL CAPACITY TO COMPLETION. Zero of the 14 flew; inputs staged on the shelf.
+- COMPLETION ORDER (Tom via Waffles, in force): (1) line-13 battery NOW; (2) line-14 behind it; (3) author+fly #69/#72 fix flight; (4) fleet-70 continues per its own gate. Every landing closes its issues WITH RECEIPT in the same motion; each landing hash DM'd to Waffles.
+- 21:0xZ LINE-13 FIRED: battery live in aion-wt-59-linux-green at 30e060046, Mac quiet (exact-name pgrep empty), all lines above DONE, origin/main UNMOVED at 8e230ca0c (no re-merge). Legs: nextest workspace / clippy workspace / clippy -p aion-server → gate-logs/land-stack/MANIFEST.txt. Task bpm6pwfq6. ON ALL-GREEN: push as main, close #63+#51 with receipts (NOT #34 — that closes on line-14 with the awl/bin cherry-picks per my banked correction), mark line 13 DONE in battery-queue file, cargo clean worktree target (covers line 12's), DM hash to Waffles. THEN line-14 stack: fleet-53-result e3e54fd1 + fleet-66-67-result b279d436 + investigate-workflow awl/bin hardening cherry-picks; one battery; closes #53/#66/#67/#34.
+- 21:1xZ FULL STOP ON TOM'S WORD (verbatim via Waffles: "Stop everything, leave me, stop everything"). EXECUTED, state durable, nothing deleted:
+  * line-13 battery STOPPED mid-run (task bpm6pwfq6 + cargo/nextest killed; worktree wt-59 intact at 30e060046, battery script staged at gate-logs/land-stack/run-battery.sh — RE-RUNNABLE as-is; partial MANIFEST + leg1 log kept).
+  * fleet-70 CANCELLED (aion cancel 6aa7f074 accepted=true; Tom's word = the human verb). Spent work durable: box clone /home/aion/fleet/runs/fleet-70-beamr-floor/repo at 012e2ada (fix commits 62e42469 + 9e38ff21), gates-round-{1,2,3}.log kept. Salvage pattern applies whenever the night resumes.
+  * Box quiesced: babysitter killed, all 8 workers KILLed, gate compile killed, BOX aion server (pid 30318, separate local instance) exited on TERM. Box census CLEAN. (Instrument note: first quiesce attempt self-matched — pkill pattern lived in my own remote shell's argv, rc=255; the actuator-outside-its-target law, again, live. Bracket-pattern retry clean.)
+  * Mac: respawner HOLD down FIRST, then server pid 92628 exited ON TERM (clean this time — no held-reply hang). Respawner loop alive but held by HOLD (designed armed-but-held state). Log tail + stray ssh closed. MAC CENSUS CLEAN.
+  * NOT flown: the 14 investigation inputs (built, shelved in scratchpad). Line-14 stack fully staged on branches (fleet-53-result e3e54fd1, fleet-66-67-result b279d436, five workflows/ cherry-picks bc0723533..7427ca163 — verified workflows/-only, no crates/ overlap). #69/#72 fix flight unauthored.
+  * NIGHT CYCLE OVER on Tom's word. NOTHING resumes without his word. No DMs to Tom (he said leave me). Loop wakeups STOPPED. Meridian messages still wake this seat.
+RESUME SHEET (when Tom's word comes): (1) rm ~/.aion/respawner/HOLD → respawner brings the Mac server up, or double-fork launch per ZU-13; (2) re-fire line-13 battery script as-is; (3) on green: land main, close #63/#51, line-14 stack per the staged plan; (4) fleet-70: salvage from the box clone (gate re-run + my review + push fleet-70-result) — do NOT redispatch, the work is done and kept; (5) box workers relaunch per ~/fleet/babysitter + launch commands in worker logs; (6) 14 inputs ready to fly on his word.
+- 21:2xZ TOM AT THE CONSOLE: server start failed (new binary's haematite requires node_cache_budget; old home store's persisted config.json predates the key). Tom's word: "clear all the previous data." Done: ~/.aion/data → ~/.aion/data-cleared-20260819T0720, repo ./aion-data → ./aion-data-cleared-20260819T0720 (both KEPT, nothing destroyed; pre-v2 backup dir also still present). Fresh store minted with the TOML budget (1 GiB). Server UP pid 11431 (double-fork, repo root, full-path argv), HTTP 200, versions = embedded assistant + update_check routed. Respawner loop was DEAD (full-stop casualty) — relaunched via python double-fork (zsh setsid attempt failed first: macOS has no setsid, the known trap). pid files updated, loop ARMED, no HOLD. Workers remain DOWN everywhere (box quiesced on the stop order) — nothing serves agent queues until Tom asks.
+- 21:5xZ TOM'S WORD: fix #75 in the server, then "are we putting together a release?" — EXECUTED:
+  * Fix built in main tree, landed via wt-fix-75: config_migration.rs adoption (recorded ruling wins, atomic write, corrupt-refused-untouched), all three open arms wired incl. server boot. Battery on the landed tree: 5107/5107 nextest, clippy workspace + -p aion-server clean, fmt red = PRE-EXISTING main drift (filesystem.rs blank line), swept as own commit. main: 8e230ca0c → 4437e4a80 (fix 1fb7f6cef). #75 auto-closed by landing; receipt comment 5334497540.
+  * RELEASE v0.18.0 cut: workspace 0.17.0→0.18.0 (91 refs, 19 manifests + lock), commit 84de5e6f1 = main tip, tag v0.18.0 pushed. Minor not patch: open() signature gained the budget param.
+  * crates.io reality: family was published only to 0.15.0 (2026-08-13); 0.16/0.17 tagged, never published. Publish chain for all 21 crates at 0.18.0 LIVE (task b52o26nj3, topo order, verify on, log wt-fix-75/gate-logs/fix-75/publish-0.18.0.log). Token present on this Mac.
+  * Server on Tom's Mac: pid 11431 healthy, fresh store (old stores kept aside as *-cleared-20260819T0720). Respawner armed.
+- 22:0xZ v0.18.0 PUBLISHED, 21/21 INDEX-CONFIRMED with checksums: aion-core 40ef6a7d…, aion-package 755ace47…, aion-integrations 3dbdc86f…, aion-proto-generated 1b4ec920…, aion-store d014a3eb…, aion-proto 5f669321…, aion-worker 665c74be…, aion-awl 61dfaf55…, aion-awl-lsp 40ebd01d…, aion-awl-package 9182bc4b…, aion-store-haematite cc0138b9…, aion-rs 0c68ee25…, aion-client 60701111…?, aion-integration-acp c11bd452…, aion-integration-norn 0ddf539c…, aion-darwin-acl bdb372f8…, aion-mcp 702d9a5a…, aion-toolchain 6fecb4c8…, aion-server c2314a30…, aion-cli 4cd8c040…, aion-integration-cli 9bfcf3a6…. First-attempt chain stopped on dev-dep ordering (aion-awl dev-depends on aion-worker); reordered with full-graph topo (no cycles), resumed on SKIP logic. #76 minted (tagged-never-published drift, 0.16/0.17). From-index install verification of aion-cli 0.18.0 running as the final leg.
+- 22:0xZ WAFFLES HEADS-UP (banked, NOTHING DISPATCHES until Tom's word): Tom ordered the whole process codified into AWL workflows — "development through awl, his box free." Eight-class problem inventory going to him; authoring is MINE when he says go; acceptance = each failure class STRUCTURALLY impossible, not discouraged. Known classes so far: issue-lifecycle chain (investigations can't terminate as verdict files), release ceremony gated on publish-and-index-verify (#76 + full-graph topo addendum, comment 5334644999), exit-file discipline in step definitions, everything on the fleet through the server, local battery queue + gate scripts struck, server moves off Tom's Mac to the Linux box after landing.
+- STEP-VOCABULARY SEED (thinking ahead, no build): verbs I already know the workflows need from tonight's live record — clone_at(ref), gate(script, rc-manifest, contended-red-retry), verify_at_index(crate, version -> checksum), adopt_or_refuse(config migration shape), publish_topo(full-graph order, dev-dep aware), close_issue(receipt), land(battery-on-merged-tree, diverged-tree re-run), salvage(kept-tree, review, push-result), census(exact-name pgrep), restart(HOLD-first, two-factor identity). Each step's failure mode from tonight has a structural cure candidate.
+- 22:0xZ WAFFLES class-8 rider for the mapping (banked): habit-beats-standing-orders has NO step-verb cure — it needs the ARTIFACT STRIKE at the seat layer: when a practice retires, its tooling leaves the disk in the same motion (battery-queue file, gate scripts, respawner recipes, monitor scripts — one truth: the workflow, or nothing). Vocabulary review must flag any verb that would leave a dead practice's tooling on disk. Same law as one-truth-in-two-places: the cure is SUBTRACTION.
+- 22:1xZ RELEASE PROVEN AT THE ARTIFACT, full circle: from-index `cargo install aion-cli --version 0.18.0 --locked` rc=0, binary reports 0.18.0 (published graph closes from the registry alone). Then the shipped binary booted against a BYTE COPY of the actual store that refused at 21:08Z (data-cleared-20260819T0720, verified pre-budget): HTTP 200, migration log line fired ("adopted node_cache_budget into a pre-budget store config"), budget recorded {"bytes":268435456}. The exact live failure, cured by the exact shipped artifact. Bonus witness: the server's path-safety gate correctly refused the first staging under /private/tmp (world-writable ancestor) — the exhibit ran under owner-only ~/.aion. Exhibit scratch cleaned; Tom's live server untouched (pid 11431, 8080 green). #75 arc CLOSED end to end: minted from live exhibit → fixed → landed → released → published → index-confirmed → shipped-artifact-cures-the-exhibit.
+- 22:1xZ TOM'S WORD: restart allowed, nothing running. Used it to put the RELEASED artifact on his Mac: swapped ~/.cargo/bin/aion by rename (old 0.17.0 8e64cc0a… kept as aion-0.17.0-retired-20260819; new = the from-index install, sha 61c37a91…). Server now pid 67099, banner 0.18.0, haematite store, assistant+update_check routed, 8080 green.
+- THE RESTART WAS A LIVE FIRE DRILL THAT FOUND TWO RESPAWNER DEFECTS (its first-ever real spawn):
+  (1) port_healthy matched curl's "000" (connection refused still prints an http_code) — a DEAD port read as healthy forever; the loop "adopted" a nonexistent listener every 20s and never spawned. Fixed: grep -qE "^[1-5][0-9][0-9]$". My own law — an alarm needs its channel proven — against my own instrument.
+  (2) spawn's bare `python3` resolved inside the loop's sh to ~/.local/bin/python3 — a LINUX x86-64 ELF on this Mac ("cannot execute binary file"), dead cruft shadowing the real python. Fixed: absolute /usr/bin/python3. RIDER: ~/.local/bin/python3 is class-8 material (dead tooling on disk shadowing live paths) — flag for the strike list.
+  (3) Operational law re-learned: editing a RUNNING sh script does not take effect (and risks corruption) — kill and relaunch the loop to pick up edits.
+- Respawner has now proven a real spawn end-to-end: detect dead → spawn → pid files written → port green. First verified full cycle.
+- 22:2xZ TOM'S GO on codification (via Waffles, with his words: separate single-purpose workflows + one that brings them together; commands whole-cloth, no local scripts). Six formal acceptance criteria received (composition; whole-cloth; eight classes inexpressible; strike-in-same-motion; #76 ceremony; #75 arc as reference trace). DESIGN SURFACE DELIVERED: workflows/CODIFICATION-DESIGN.md, commit f668e1886 — six workflows, structural inexpressibility per class, strike-list column, open questions. Awaiting Waffles' review + canonical eight-class inventory verbatim (I hold only 4 and 8 in his words) + §6 rulings. AUTHORING STARTS ON HIS REVIEW. Supreme-orders boot-read file in Waffles' draft, will route to me.
+- 22:2xZ HANDOFF ASSESSMENT (Tom's tail-call request, via Waffles): SUPPORTED TODAY. Proven live on the local server: spawn+terminal-route chain — successor started .302, parent terminal .330, successor finished .370 (survived parent). Engine semantics: record-then-spawn (ChildWorkflowStarted durably recorded BEFORE start request; startup recovery sweep repairs unstarted records — child/spawn.rs, exactly-once). Children not process-linked. GAP MINTED #77: child records parent_run_id null — link one-directional; interim = lifecycle input threaded through stages (proven, "arc-test-75"). Toy pair handoff_a/handoff_b stays deployed as the #77 exhibit. COMPOSITION CHANGE queued for design doc: issue_lifecycle = handoff CHAIN of thin per-stage wrappers (each runs its stage as short blocking child then spawns the next), not a six-child orchestrator. Release-set join: collector via send…to or declared input — decided with release_ceremony draft.
+- AUTHORING VOCABULARY FACTS BANKED: run bodies = ONE command, program literal, params never code; sh -c '<full script>' -- $p1 $p2 is the whole-cloth vehicle (single quotes literal inside, \" for shell quotes, NO $$ inside single quotes); worker-doc bodies run on the WORKER host, workflow-doc bodies on the SERVER; nonzero exit = retryable activity failure → EXIT-ZERO-ALWAYS + typed JSON refusal stays the law; gate legs = CLOSED typed action vocabulary (caller can never choose the program — class-1 cure is the language itself); sequence/distribute+collect for ordered/parallel tracks; command text sealed into content hash (worker-contract.v5).
+===== ZU-24: PRE-COMPACT HANDLE SHEET #3 (22:2xZ 2026-08-18) — READ FIRST ON RESUME =====
+CONTEXT: Tom at console, estate LIVE again on his word. Night's full-stop superseded by his direct orders. Server = released 0.18.0 from-index binary, pid 67099 (respawner armed + fixed). v0.18.0 published 21/21 index-confirmed. #75 closed end-to-end. #76 minted (release drift). #77 minted (child parent_run_id null).
+NOW IN FLIGHT — CODIFICATION AUTHORING (Tom's go + Waffles' acceptance criteria + approved design at workflows/CODIFICATION-DESIGN.md, commit dccaa0b52):
+1. **gate.awl WRITTEN** at workflows/gate/gate.awl — NOT YET CHECKED. Next: write workflows/gate/gate_worker.awl (worker doc, queue gate_ops, whole-cloth sh -c bodies for: probe_tree, run_test_workspace, run_clippy_workspace, run_clippy_crate, run_test_crate_lib, run_fmt_check, run_lock_witness — LegProbe {kind,rc,contended,log_path,refusal}, exit-zero-always, printf JSON, contention grep "Too many open files|LLVM ERROR|signal: 11|SIGSEGV", logs to $tree/.gate/$kind.log, PATH/HOME/ulimit hardening inline). Then `aion awl check` both + fmt. Body syntax law: run json "sh -c '<script no single quotes, \" for every quote>' -- $p1 $p2"; params positional $1..$n inside; $ literal in single-quote region.
+2. **TOM AUTHORIZED #77 NOW** (verbatim via Waffles 22:27Z: "fairly small fix to get the parent to wear a child and child to wear a parent... let's get that fixed and let's get these workflows written up and I'd like to start seeing some of these"). Fix shape: ChildWorkflowSpawnRequest (engine_seam.rs:~111) carries parent_workflow_id — thread parent workflow+run id into child's WorkflowStarted (recorder.rs:938 area = parent-side record; the CHILD-side start must wear parent_run_id, currently null) + surface in list/describe summaries. Acceptance: re-run handoff exhibit (deployed types handoff_a/handoff_b on local server; scratchpad/handoff-proof/*.awl) → child summary names parent; 3-hop chain traversable tail→head. Land at full #75-arc discipline (fix→battery→main→close #77→ships next release).
+3. **WAFFLES' STEER** (accepted): land #77 early (multiplies console legibility of all chains); each workflow lands THEN RUNS VISIBLY on real work in Tom's console — "runs, not files" is the demo standard.
+4. SEQUENCING MINE: suggest #77 fix next (small, engine), then gate_worker.awl + check + deploy + LIVE RUN of gate on a real tree (e.g. the aion main tree post-#77-fix as its own landing battery = gate's acceptance run), then investigate rework, fix_flight, land, release_ceremony, propagate, issue_lifecycle (handoff-chain shape per approved composition change).
+5. Handoff facts PROVEN: spawn+terminal-route = tail-call TODAY (record-then-spawn, recovery sweep, children survive parent). Lifecycle correlation = `lifecycle` input threaded (interim until #77).
+6. Per-workflow process: each workflow → Waffles review BEFORE landing; he verifies STRIKES at the disk (artifacts actually removed in same motion). Strike list in design doc §4.
+7. Tom's three direction answers still outstanding (release timing, server move, review default) — only release_ceremony's set-declaration + issue_lifecycle's release join might shift.
+8. Instrument fixes tonight banked: respawner port_healthy ^[1-5][0-9][0-9]$ + absolute /usr/bin/python3 + kill-and-relaunch-on-edit law. ~/.local/bin/python3 = dead Linux ELF, class-8 strike candidate.
+===== ZU-25: THE 0.18.1 CONVOY SPRINT (22:4x-23:0xZ) =====
+TOM'S OVERRULES tonight, in order: fix #75 in server → release → "get everything published, no waiting" → max concurrency. Waffles: aion 0.18.1 = CRITICAL PATH for the whole estate convoy (frame embeds aion-rs; frame#4 blocked until aion's published req admits beamr ^0.19; haematite 0.9.1 w/ Apollo, frame-core w/ Athena — off my plate, my lane = pure aion).
+DONE THIS SPRINT:
+- #77 FIXED (wt-fix-77 branch): Event::WorkflowStarted + parent_workflow_id (serde default, legacy-decode pattern), spawn threads parent workflow+run id (nif_child_engine start_child_under_recorded_id derives run id from the history it already reads), WorkflowSummary::from_history projects parent. ~180 construction sites patched. Acceptance test green: spawned_child_records_its_parent_and_the_summary_names_it (child_workflows_e2e). Commit 52bf4aaf5.
+- LANDING BRANCH land-0.18.1 (in wt-fix-77): main + #77 + fleet-70-salvage merge (branch pushed from box: fleet-70-salvage; commits 69040bf3e floor + 9e38ff216 artifacts + 62e42469d pins; .fleet-gate.sh + .fleet/ blackboard STRIPPED in merge f4d91f113) + v0.18.1 cut 3ecf35423. Lock witnesses: beamr 0.19.2, haematite 0.9.0 single rows. HAEMATITE RULING: ^0.8.3 in 0.18.0 was DELIBERATE (emergency isolation); 0.18.1 bumps to 0.9.0 because the beamr floor REQUIRES it (0.8.x pins beamr ^0.18) — salvage tree had already wired it. Frame unifies in one hop.
+- GATE WORKFLOW LIVE: deployed gate$9c89f468, Mac worker gate-ops-mac serving 8 actions (relaunch cmd in this entry's git log). RUN 1 ed77f390: measured green=false in 20s — HOME default named the BOX path on the Mac (env cleared on worker host too) → rustup error 45. THE MACHINERY WORKED (red-as-data, logs named cause). Fixed: HOME host-derived by filesystem fact ([ -d /home/aion ]), worker relaunched (worker reads doc at LAUNCH — restart after edit, same law as respawner). RUN 2 = 3b160233 LIVE NOW on tree 3ecf35423, 5 legs (lock_witness beamr-floor pattern, fmt, test_workspace j8, clippy_workspace j8, clippy_crate aion-server), monitor bsi0mmail.
+ON GREEN: push land-0.18.1 → main; tag v0.18.1; close #70+#77 with receipts (+#34 NOT yet — its workflows/ commits live on investigate-workflow, line-14 concept still pending); publish ceremony 21 crates at 0.18.1 (script pattern $S/publish-0.18.0.sh, full-graph ORDER string already dev-dep-aware); index-confirm w/ checksums → DM Waffles (Athena fires the frame convoy same-minute). ON RED: read legs, fix, rerun — verdict is data.
+===== ZU-26: RUN-2 RED SERVE, STANDING ORDER 9, RUN 3 IN FLIGHT (23:0x-23:1xZ) =====
+- STANDING-ORDERS.md now NINE orders (docs repo, boot-read file — re-read at every compaction). NEW #9 (Tom verbatim 23:02Z, watching run 2): "format check… is a pointless check… Stop using format check." Format checks are NOT gates; formatting is applied mechanically in the authoring loop (fix_flight runs cargo fmt before push), never measured.
+- ORDER-9 STRIKE EXECUTED (same motion): fmt_check deleted from gate.awl vocabulary (12 steps now) + run_fmt_check deleted from gate_worker.awl (7 actions) + refuse_leg accepted-set updated + CODIFICATION-DESIGN.md §1.3 updated + gate-0181-input.json fmt leg stripped. Both docs `aion awl check` clean. New gate version DEPLOYED gate$cd8c7b52 (superseded 9c89f468); worker RELAUNCHED pid 38343 (reads doc at launch). Run 2 untouched per Waffles (aborting a mid-flight landing gate over this would be its own sin).
+- RUN 2 (3b160233) TERMINAL: measured green=FALSE on 3ecf354 — THE GATE'S FIRST REAL RED CATCH, both defects genuine and mine: (1) sdk_closure_freshness — committed AWL SDK closure beams compiled by pre-0.19 toolchain; beamr floor bump changed codegen (test names the cure). (2) clippy doc_markdown — handoff_b backticks in #77 acceptance test. Neither contended. NOTE: cargo test fail-fast stopped the suite after the failing binary — remaining binaries unexecuted (this incident later cited by Tom's v2 extraction requirement).
+- FIXES: reset land-0.18.1 to f4d91f113, fix commit 3858f1218 (regen via scripts/regen-awl-sdk-closure.sh — 47 modules, aion_flow 0.7.0 — + backtick), cherry-picked cut back on top. NEW TIP 90a98598d (release commit stays tip; cut-0.18.1-r1 branch preserves old cut 3ecf35423). Freshness test + targeted clippy verified green at the disk before commit.
+- RUN 3 = 00e9a91b-a327-4f1e-a1e4-2137cf6db5c5 LIVE on 90a98598d, 4 legs (no fmt), monitor bl81yiix5 (zsh trap: `status` is read-only — first monitor died on it). probe_tree + lock_witness already green = relaunched worker's launch proof.
+- HAEMATITE 0.9.1 (Apollo, index-verified by Waffles): ruling banked — tree stays at 0.9.0 as witnessed (both 0.9.x carry beamr ^0.19.2; published req ^0.9.0 is what matters); fresh index resolutions take 0.9.1 on their own. No re-lock, no re-run.
+- V2 GATE VOCABULARY BANKED (Tom via Waffles 23:07Z, sequenced AFTER 0.18.1 arc — publish order outranks): rework worker bodies to ablative/docs/GATE-EXTRACTION-STANDARD.md — (1) JSON message-format + --keep-going/no-fail-fast everywhere (run-2 fail-fast incident is the rationale); (2) tests move to nextest; (3) findings reduced to one JSON object per line (jq shapes lifted whole cloth from the doc); (4) LegProbe grows findings_path (JSONL beside log) + failed_count/error_count/warning_count so routing is on numbers, downstream consumers take findings as data; (5) one landing (fmt strike already done in source, rides the same landing).
+- STAGED FOR GREEN (scratchpad): tag-0.18.1-message.txt (haematite deliberate-isolation rationale per Waffles' ask, run-2 red story), close-70.md + close-77.md (GATE_VERDICT_SUMMARY placeholder; close-77 corrected — gate runs are NOT live proof of #77, server is 0.18.0), publish-0.18.1.sh (order confirmed, log dir exists). Fast-forward confirmed (84de5e6 ancestor); .gate/ untracked, cannot ride.
+ON GREEN (unchanged): push land-0.18.1 → main (tip now 90a98598d); tag v0.18.1 -F tag-message; close #70+#77 (fill verdict); ceremony; index-confirm 21/21 w/ checksums → DM Waffles (run id + verdict payload — his "gate is live" signal to Tom; Athena fires frame convoy same-minute).
+===== ZU-27: RUNS 3-5, VENUE TRUTH, CHANGELOG ORDER, #78/#79/#80 (23:1xZ) =====
+- RUN 3 (00e9a91b) red: awl_assemble pin twins lagged the closure regen (regen script header WARNED of exactly this — battery-scope law, closure regen widens to its pin dependents). REAL MECHANISM SURFACED: run 2's freshness red was VENUE DRIFT — box harvests Gleam 1.18.1/OTP 27, Mac 1.17.0/OTP 29, BEAM bytes follow host toolchain. Salvage pinned box bytes; Mac gate red on them. Repinned to landing venue (Mac) — pins BUNDLE_CHECKSUM 208007cf…, FIXED_INPUT c98c1c08… — full suite's runtime legs rule on beamr accepting OTP 29 beams. #78 MINTED (venue-bound freshness; toolchain unification or canonical-venue refusal; repins must name venue).
+- RUN 4 (dd190b39) CANCELLED BY ME before editing tree mid-measurement (law: tree edits during a run make the verdict incoherent — cancel first). Defect: my repin comment's bare BUNDLE_CHECKSUM doc_markdown — caught by targeted clippy probe BEFORE the gate reached it.
+- TOM'S CHANGELOG ORDER (23:13Z via Waffles): pre-ceremony, dated sections verified. FOUND the Apollo class: nothing dated since 0.16.0. FIXED in cut: libsql retirement → 0.18.0 (where it shipped); 0.17.0 dated + tagged-never-published named (#76); 0.18.1 covers all since v0.18.0 (Artemis two-directional instrument: section exists AND no commit absent — both banked as release_ceremony legs).
+- STACK REBUILDS (release commit stays tip; saved branches cut-0.18.1-r1/r2/r3): tips 3ecf354→90a98598d→1f0608b01→**9ee3b0edc** (= e51dee24b repin + ad5a5ac75 changelog/backtick + cherry-picked cut).
+- RUN 5 = 5ad07e2f-ad5c-4397-ae33-f19c7dfe7504 (gate-0.18.1-landing-r5) LIVE on 9ee3b0edc, 4 legs, monitor b1l62qyuq (extractor FIXED: verdict at data.result.payload — runs 3/4 monitors read one level shallow; zsh `status` read-only trap).
+- MINTED: #78 venue-bound freshness, #79 gate v2 extraction (Tom's verdict-as-data words + changelog leg), #80 node affinity in AWL (Tom's multi-VM direction; gate tree = node-local exhibit; inside namespace>task_queue>node).
+- TOM DM (dm:c9255b2a…): AWL run-command builder syntax question — answered YES with tonight's sh -c pain as evidence; offered to draft syntax through review with #79 landing. HIS TYPO FOLLOW-UP ("awl not owl") needs nothing.
+- Meeting math sent to Waffles: 0.18.1 cannot index-complete by Tom's 9:30; meeting stands on 0.18.0; no rush applied.
+ON GREEN (updated): push land-0.18.1 (9ee3b0edc) → main; tag v0.18.1 -F $S/tag-0.18.1-message.txt; close #70+#77 ($S/close-70.md, close-77.md — fill GATE_VERDICT_SUMMARY); $S/publish-0.18.1.sh; index-confirm 21/21 checksums → DM Waffles run id + verdict payload.
+- ZU-27 addendum (23:2xZ): RUN 5 (5ad07e2f) red — third fail-fast layer: #77 parent projection staled ops-console wire bindings (aion-core export test names own cure AION_UPDATE_BINDINGS=1). Regenerated (+9 lines, exactly parent fields), committed 2a19d2791 below re-cherry-picked cut. TIP NOW **c787c6042**. RUN 6 = a4ebf813-ae96-44d1-93b2-33cc1e86a725 (r6) live, monitor bgrhn6pa8. NOTE: run 6 is the FIRST round reaching heavy aion-rs e2e (closure executes through beamr) — rules OTP-29-beam acceptance; if beamr refuses, venue ruling flips to box-canonical (#78 fork). #81 MINTED (Tom 23:23Z verbatim): verdict delivery into agent sessions — channel mechanism or MCP tasks+subscriptions; notification-never-home law; delivers #79's object. Console packaging test checked: file-set inclusion only, bindings regen can't red it; embed bundle not freshness-pinned in workspace tests (bun-only xtask).
+===== ZU-28: RUN 6 HUSK PIN + FLUSH FINDS THE REAL #77 DEFECT (23:2x-23:4xZ) =====
+- RUN 6 (a4ebf813) red: nested_workflows_e2e:460 HUSK TEST — pinned the pre-#77 defect as contract ("child starts record no parent_run_id" assert None). Waffles named the law: WHEN A FIX LANDS, SWEEP FOR PINS OF THE OLD WORLD (twice tonight: beams, pin). Also: 13 nested e2e green w/ real gleam builds + byte-identical replay = venue engine paths clean (#78 good news).
+- SERIAL PEEL ENDED: full workspace suite locally --no-fail-fast to a FILE (authoring-loop probe; gate still rules committed tree). FLUSH 1 found TWO more:
+  (1) **REAL ENGINE DEFECT in my #77 fix**: parent_run_id SEMANTIC COLLISION — field already meant continue-as-new predecessor; store run_chain.rs root rule = "run with None"; threading spawn parent into it left child chains ROOTLESS ("exactly one root, found 0", namespace_restart). CURE: spawn sets parent_workflow_id ONLY, parent_run_id untouched (one meaning per field); nif_child_engine derivation deleted; recovery sweep shares the fixed site; CAN path (completion.rs) untouched. Summary only ever projected parent WORKFLOW id — run-precision was my gratuitous addition. Both tests re-pinned to state BOTH meanings explicitly; acceptance doc rewritten.
+  (2) aion-server EMBEDS CHANGELOG.md (changelog-embed/ + freshness test naming its cure) — synced cp after the changelog edit.
+- Nested pin edit sequence: my first correction (assert Some(parent_run)) was WRONG — reverted to None + parent_workflow_id assertion (extracted from parent history, never hard-coded).
+- Focused green: nested 14, child_workflows 6, namespace_restart 4, changelog 2. FLUSH 2 (bruusc2vc) running = clean-tree proof. THEN: commit both fixes below cut (stash-reset-commit-cherry-pick dance, cut ref = c787c6042), retarget drafts, RUN 7 = landing verdict.
+- #81 minted + transport RULED (Waffles research 28d24d4, ablative-docs/research/mcp-verdict-delivery-20260818.md): CHANNELS not MCP tasks (tasks moved to unimplemented extension; era-gated; handles can't carry unsolicited verdicts; resource subscriptions list-changed-only). claude/channel experimental capability = meridian's own proven path; fire-and-forget + workflow_status(run_id) reconstruction tool; allowlist constraint. Recorded on #81 with attribution.
+- close-77.md grew the sweep-law line (Waffles ask). Husk-test law + venue receipts all in drafts.
+===== ZU-29: RUNS 7-9 — LINE WALL, #54 GHOST, CLASSIFIER LEARNS (00:1x-00:5xZ) =====
+- RUN 7 (2d3e93c1, tip 21cfa1da9): TESTS GREEN AT LAST; clippy red too_many_lines 122/100 on nested test (my pin expansion). Cure: extraction into assert_child_start_wears_parent helper carrying the doc (no #[allow]). Then FULL local wall: cargo fmt + clippy --workspace + -p twins green. Commit fb7e8254d below re-cherry-picked cut → TIP 67e0b8d9f.
+- RUN 8 (3f93e3ed, tip 67e0b8d9f): red on #54's KNOWN LOAD FLAKE — "timed out waiting for shard actor 1", two outbox lib tests, tree flush-proven green minutes before. Gate didn't self-rerun: classifier grep lacked the signature. FIXED: all 4 legs' contention grep += "timed out waiting for shard actor" (gate_worker.awl commit on investigate-workflow, header cites #54); worker relaunched pid 87917; occurrence noted on #54 thread. CLASSIFIER PATCH ≠ #54 FIX (stated on thread).
+- RUN 9 = ace0bf15-2037-4e37-91ad-bde0e0149667 (r9) LIVE on SAME tip 67e0b8d9f (tree untouched — code never the defect), monitor bbo6g1qkl. Drafts all cite run 9 + 67e0b8d9f (run-id drift audited/corrected; tag message now tells the whole red-serve arc).
+- #82/#83 minted (Hermes MCP handoffs: untyped params 0.18.2-shaped; list_runs decode swallow). MCP deploy-grant-no-auth = design line when server leaves localhost (on ledger).
+- Waffles sweep-chase answered (his ledger was a round behind).
+ON GREEN (unchanged except tip/run): push land-0.18.1 (67e0b8d9f) → main; tag v0.18.1 -F $S/tag-0.18.1-message.txt; close #70+#77 (fill GATE_VERDICT_SUMMARY from run 9 payload); $S/publish-0.18.1.sh; index-confirm 21/21 → DM Waffles.
+===== ZU-30: GREEN LANDING + CEREMONY BLOCKED AT 18/21 (01:0x-01:1xZ) =====
+- RUN 9 GREEN: ace0bf15-2037-4e37-91ad-bde0e0149667 measured green=true head 67e0b8d9f, all 4 legs rc=0 none contended. FIRST GREEN LANDING VERDICT THE GATE EVER SERVED (7 real-defect reds before it). Verdict payload saved $S/verdict-0.18.1.json. Waffles independently verified payload via his own describe.
+- LANDED: main = 67e0b8d9f (pushed 84de5e6f1..67e0b8d9f), tag v0.18.1 pushed (annotated, full-arc message). Close texts FINAL (verdict filled) but HELD — they claim the publish receipt, post when index-confirms make it true.
+- CEREMONY BLOCKED 18/21: aion-server verify FAIL — CONVOY-ORDERING INVERSION, not our code. Mechanism (index-verified): publish strips git sources; registry liminal-sdk 0.7.0 manifest → liminal-rs ^0.5.5 → haematite ^0.8.1 → NOW resolves Apollo's fresh 0.8.3 whose DatabaseConfig gained required node_cache_budget mid-0.8-line (semver break) → E0063 in liminal-rs 0.5.5. Workspace never sees it (git rev 8a36db0 = liminal-rs 0.6.0; Cargo.toml comment documents the stale registry SDK). 0.18.0 verify passed yesterday because 0.8.3 didn't exist yet — environment shifted under the index.
+- HOT RIDER: shipped 0.18.0 fresh installs (no --locked) walk the same registry graph — likely BROKE tonight when 0.8.3 landed. Morning install-proof predates it.
+- BLOCKED/PENDING: aion-server, aion-cli, aion-integration-cli (publish resumes via SKIP script $S/publish-0.18.1.sh the moment liminal is index-live). ESCALATED to Waffles 01:1xZ: (a) liminal publishes from rev 8a36db0 (liminal-rs 0.6.0, liminal-sdk 0.7.1 w/ manifest ^0.6/^0.9, liminal-server 0.9.0, + liminal-protocol), (b) Apollo ruling: yank haematite 0.8.3 vs 0.8.4 with defaulted field (also decides 0.18.0-install healing).
+- Publish log: wt-fix-77/gate-logs/fix-75/publish-0.18.1.log (18 OK rows).
+ON LIMINAL INDEX-LIVE: rerun $S/publish-0.18.1.sh (SKIPs 18) → 21/21 index-confirm w/ checksums → close #70+#77 (texts ready) → DM Waffles receipts (convoy signal) → Tom completion report.
+===== ZU-31: v0.18.1 PUBLISHED — THE ARC CLOSES (01:2xZ) =====
+- RESUME fired on Waffles' signal (liminal-sdk 0.7.1 published by Hermes, manifest liminal ^0.6.0/^0.7.1/^0.9.0; liminal-rs 0.6.0 immune to 0.8.3 edge via haematite =0.9.0; cut from version-only branch byte-identical to rev 8a36db0's code; protocol edge ^0.7.1 deliberate — 0.7.0 lacks a called symbol).
+- CEREMONY COMPLETE: 18 SKIP + aion-server OK + aion-cli OK + aion-integration-cli OK = ALL PUBLISHED. **21/21 INDEX-CONFIRMED with checksums, zero yanked** — table at gate-logs/index-confirm-0.18.1.txt (also scratchpad). Release EXISTS per standing order 4.
+- CLOSES POSTED TRUE: #70 closed w/ lock-witness receipt; #77 auto-closed by landing push 01:01:08Z, receipt comment added (one-meaning-per-field law, sweep-for-old-world-pins lesson).
+- CONVOY SIGNAL SENT to Waffles (aion-rs at index admits beamr ^0.19.2 → frame convoy fires).
+- Apollo's haematite 0.8.x ruling still pending (0.18.0 fresh-install healing) — off my critical path per Hermes's fix.
+- STILL OPEN IN MY LANE (post-arc): codification wave 1 continues (investigate/fix_flight/land/release_ceremony/propagate/issue_lifecycle w/ per-workflow Waffles review), gate v2 #79 (+ #80 affinity, #81 channels), #34 closes when workflows/ lands on main, morning report cargo, Tom's three direction answers.
+===== ZU-32: RELEASE_CEREMONY DRAFT AUTHORED (01:2x-01:4xZ) =====
+- Waffles verified index receipts independently (aion-cli, aion-integration-cli, aion-worker spot-checked, match). Frame convoy FIRED 01:09Z (Athena's nine-site crossing done, lock unifying single, publishes in flight). v0.18.1 arc COMPLETE.
+- release_ceremony.awl (13 steps) + release_ceremony_worker.awl (7 whole-cloth actions) DRAFTED, check+fmt clean, committed on investigate-workflow. NOT deployed — awaiting Waffles review per process. Carries: tag-input-=-confirmation-set (#76 inexpressible), changelog-refuses-first (dated + embed-sync; commits-since evidence to .release/ blackboard), semver leg (check w/ cargo-semver-checks tool-absent=typed-refusal | attest w/ citation, Hermes shape, empty refuses | unknown mode refuses), declared publish_order + index as enforcer, idempotent skip-aware publish_and_confirm (partial = attempted, resumable same-input), push_tag refuses any non-live row, verify_install from index (first binary in install root), released carries all probes as data.
+- THREE REVIEW DELTAS flagged (header + DM): (1) ceremony takes a landed/gated/CUT tree (cut precedes landing gate; cut_witness refuses version mismatch) vs §1.5's cut-inside-ceremony; (2) topo order = declared operator input, cargo/index enforce (compute-action possible later); (3) changelog two-directional: mechanical faces refuse, judgment face travels as evidence.
+- Waffles' two carries folded: semver-surface leg (0.8.3 lesson), attest-with-citation delta-publish shape.
+NEXT (post-review): harden per review → deploy + worker → acceptance = re-run the 0.18.1 ceremony THROUGH the workflow (all-SKIP idempotent pass = live proof, "runs not files") → then continue wave 1 (investigate rework, fix_flight, land, propagate, issue_lifecycle). Still open: #79/#80/#81, #34 (workflows/ to main), morning report cargo, Tom's three direction answers, Apollo 0.8.x ruling (not my lane).
+
+## ZU-33 — 2026-08-19T01:5xZ — line-13 truth + ceremony hardened (READ FIRST with ZU-31/32)
+
+**LINE-13 WAS NEVER DONE — Waffles' relay failed re-measure.** His premise ("substance
+verifiably shipped, 0.18.1 built on it") is FALSE at the artifact: 30e060046 NOT an
+ancestor of main; the 8e230ca0c..67e0b8d9f window is fleet-70+#75/#77+0.18.x only; the
+battery MANIFEST has started=21:03:11Z and NO test_rc (leg 1 died at FULL STOP, never
+re-fired); #63/#51 still open. Cure IN FLIGHT: origin/main merged into land-stack CLEAN
+(195 files, no conflicts) in /Users/tom/Developer/ablative/stack/aion-wt-59-linux-green;
+battery re-fired on merged tree (task bxp9y5c3o, script gate-logs/land-stack/run-battery.sh,
+3 legs → MANIFEST.txt). ON GREEN: push as main, close #63+#51 w/ Failed-status
+reconciliation (NOT #34 — rides line-14), timestamped DONE on queue line 13
+(ablative/docs tracking/battery-queue-20260818.md, head 8556d17), cargo clean wt-59
+target same breath (covers line 12's; ~25G+ → Athena's disk unblock; Mac at ~12Gi free).
+Flag to Athena: her crossing pins aion =0.18.1 — this landing moves main past the cut;
+index unaffected, but flag if her battery reads main not registry.
+
+**CEREMONY REVIEW APPLIED** (commit 29ad550f6, checks+fmt clean, sh -n × 7): Fix 1 =
+in-body 3-read/40s index recheck + truthful refusal (action retry unfirable on exit-zero
+bodies — recorded as comment). Fix 2 = ARRAYS CANNOT RENDER: aion-worker
+shell/template.rs render_value refuses Array/Object/Null at argv substitution — push_tag
+$confirms reference REMOVED (would never have run); confirms stays declared input
+(history = witness); route gate sole guard, cited both docs. Notes a-d applied
+([workspace.package]-anchored version read; convention-in-refusal; absent-embed face
+named + aion-shaped headers; verify_install deliberately unlocked). LIVE DRIVES caught
+2 more: grep -c zero-match trap (prints 0 AND exits 1 → doubled 0, malformed JSON) and
+checksum sed context arithmetic (2+5 dots vs API's 1+3 — EVERY confirm would rc=92).
+Both fixed + proven vs live index; aion-core checksum matches confirmed table.
+NEXT: after battery frees Mac → deploy ceremony + release_ops worker (aion worker awl
+workflows/release_ceremony/release_ceremony_worker.awl, queue release_ops) → acceptance
+= re-serve 0.18.1 input (21 skips, tag idempotent, install proof; verify_install = cold
+cargo install, needs quiet Mac + the freed disk).
+
+**TOM ASK LIVE**: Marimo notebooks as aion workers — keep as notebooks (front end per
+worker) AND serve as workers. Answered yes (Marimo files are plain .py; dual-role via
+Python SDK decorators; notebook IS the worker). Asked where notebooks live; wire first
+one as proof when he answers.
+
+## ZU-34 — 2026-08-19T01:5xZ — disk crisis cleared; line-13 red carried a REAL defect
+
+Mac hit 363Mi free mid-battery (Tom's word: "disk"). Freed: wt-fix-77/target 64G (mine,
+occupancy-checked) + Waffles cleaned beamr 46G + liminal 12G on Tom's word → 128Gi free.
+wt-59 target untouched (warm). Battery bxp9y5c3o died ENOSPC — but the log ALSO held a
+real E0063: 0.18.1's parent_workflow_id field missing from land-stack's OWN reopen
+fixture (crates/aion/src/lifecycle/reopen_tests.rs:553 — file main's sweep couldn't
+reach; textually-clean merge, semantically incomplete). Fixed cac631108 (root fixture →
+both lineage fields None); worktree swept, no sibling deficits. BATTERY RE-FIRED task
+bypgk4f1q at cac631108. Ceremony DEPLOYED release_ceremony$5813553c…; release_ops worker
+live (worker_id=6, dispatch-eligible 01:45:31Z, pid file gate-logs/release-ceremony/
+worker.pid); acceptance input READY at scratchpad/ceremony-0.18.1-input.json (21 crates,
+attest mode citing gate run ace0bf15 — cargo-semver-checks absent on Mac). Waffles
+ratified line-13 path + approved ceremony at bytes of 29ad550f6; HIS HERMES SIGNAL
+(liminal-rs 0.6.1) HANGS ON MY ACCEPTANCE-GREEN SIGNAL. Order: battery green → land
+main+close #63/#51 → DONE mark w/ wt-59 clean rider → start ceremony acceptance
+(aion run or start w/ input file; expect 21 skips + idempotent tag + install proof) →
+signal Waffles. Tom Marimo candidates found: tools/wakewords/train.py,
+thing-finder/pocs/counting, grafeo+tessera examples — awaiting his pointer.
+
+## ZU-35 — 2026-08-19T02:2xZ — CHAIN COMPLETE: line-13 landed, ceremony acceptance GREEN, Marimo live-worker shipped
+
+**LINE 13 DONE** (mark 02:10:56Z, docs ef6e1ae): battery run 2 at cac631108 GREEN
+(nextest 5164/5164, clippy x2 rc=0, ended 02:06:30Z); pushed 67e0b8d9f..cac631108 as
+main (ff); #63+#51 closed w/ receipts + Failed-status reconciliation (NOT #34 — line-14);
+wt-59 target rm'd (58G; Mac 186Gi free after my 64G + Waffles' beamr/liminal cleans on
+Tom's word). E0063 fix cac631108 = the merged-tree battery's first live catch.
+
+**CEREMONY ACCEPTANCE GREEN** — run 02cd1acf-883d-4c8c-a175-0c99b23a8618, outcome
+`released`, 02:11:36–02:15:53Z: 21/21 ALL SKIPPED + ALL LIVE w/ checksums (aion-core
+byte-matches confirmed table), tag idempotent-green, verify_install REAL from-index
+cargo install of aion-cli 0.18.1 (unlocked) reporting its version, changelog both faces
++ 25-commit evidence, attestation w/ gate-run citation, ZERO refusals. Payload:
+scratchpad/ceremony-verdict-0.18.1.json + engine history. "Runs not files" DISCHARGED
+per ZU-32. GREEN SIGNALED to Waffles 02:1xZ — his Hermes liminal-rs 0.6.1 signal
+released. release_ops worker: pid file gate-logs/release-ceremony/worker.pid.
+
+**MARIMO LIVE-WORKER SHIPPED** (Tom's evolving ask, all live): counting walkthrough.py
+now has 🔴 Live section — handler composes the stage functions per dispatch, writes
+out/live/stage{1-5}*.png + jobs.jsonl; notebook mo.ui.refresh(1s) renders last-job
+stage strip + verdict + served count. marimo check rc=0 throughout. Proven: direct
+drive 50/50, engine run 64/64 through relaunched worker (task bpe3eyvna; old bjwzpzk7h
+stopped — worker reads file at launch). marimo edit serving http://localhost:2718
+(--sandbox --headless --no-token, detached, log pocs/counting/.marimo-serve.log; kill
+via lsof -ti :2718). Gotchas banked: preprocess returns (gray, blur);
+distance_transform raw px (normalize by max for PNG); setup-cell imports MUST alias
+around cell names (worker_sys/worker_json/worker_time/WorkerPath); @app.function over
+@activity stacks (registry-based). AWL: pocs/aion/count_scene.awl deployed
+(count_scene_check / queue thing_finder_counting). thing-finder repo is Tom's,
+largely untracked — did NOT commit there. NEXT for this lane: bar stocktake build
+(scale-display seven-segment OCR leg + tare/density standards + per-bottle durable
+session; pieces in pocs/bar/).
+
+## ZU-36 — 2026-08-19T02:4xZ — inbox pipeline LIVE (Tom's drop-a-photo demo)
+
+Tom's evolving demo (all live, all proven): **watch_inbox** durable watcher workflow
+(deployed 8abe4592…; run 8a56de0a live, 200-scan window ~12 min from 02:35Z) scans
+inbox every 3s via scan_inbox action (claim = rename to inbox/claimed/ — no
+double-dispatch, crash leaves in-flight visible), forks **process_photo** children
+(deployed 96c5dc92…) per image, awaits batch, loops (max scans visits). Child:
+count_photo action = count_objects.run mode=yolo (plain yolo11n, ~3s/photo; TILED
+mode is the shelf answer, 40s — offered to Tom, his call). Notebook walkthrough.py
+now serves THREE activities (count_scene, scan_inbox, count_photo) + records carry
+kind/label/stages; live cell renders per-record stage lists (photos: photo-in +
+bottles-found; no fake ground truth — "honest count"). PROVEN: Spirit-of-Scotland
+12 bottles (direct), bar_wall via FULL pipeline (watcher→child 0e6686f6 Completed→
+outbox/bar_wall_yolo.png→live strip). Worker briiuwdz3 (+ultralytics, concurrency 2).
+Marimo serve: RUN mode port 2719 (Tom's config auto_instantiate=false blanks EDIT
+mode — cause of his blank page; stale-tab token-skew was the other layer). Dirs:
+pocs/counting/{inbox,outbox}. **#84 filed**: `visits` in route payload passes local
+awl check, refused at deploy (checker gap + refusal names line 1 / symptom not rule).
+**Server predates 0.18.1** → children show parent:none in console; one restart onto
+0.18.1 lights lineage — offered, NOT done under Tom's live session. Watcher window
+expiry ~02:50Z — restart on Tom's word (same aion start input, scans as desired).
+
+## ZU-37 — 2026-08-19T02:45Z — product surface split (Tom's brief: kill the demo feel + the flicker)
+
+Tom's brief: "lose the product demo kind of feel… self-congratulatory… over-explanatory";
+"refreshing the page every time which is really jarring"; wants "the actual product".
+DONE — SPLIT INTO TWO FILES:
+- **counter.py** (NEW) = the PRODUCT page AND the worker (all three activities moved
+  here: count_scene, scan_inbox, count_photo). Plain voice: title, drop path, current
+  result image, mo.ui.table of jobs (time/source/count/check). No tiers, no emoji, no
+  self-description. Served `marimo run` port **2720** (log .counter-serve.log).
+- **walkthrough.py** = REVERTED to pure explainer (setup block + live cells stripped;
+  marimo check rc=0). No longer a worker.
+FLICKER CURE: `mo.ui.refresh` (periodic repaint) → **`mo.watch.file(JOBS_LOG)`** —
+reactive, redraws only on actual change. mo.watch.{file,directory} confirmed in 0.23.x.
+REAL BUG FOUND+FIXED in the rework: job records pointed at SHARED stage filenames in
+out/live/ — two concurrent photos would overwrite each other's images. Records now
+carry ABSOLUTE per-job paths (outbox/<name>_input.png + _yolo.png); front end resolves
+absolute-or-relative. Proven: whiskey-guide.webp through full pipeline (watcher 8a56de0a
+→ child → 10 bottles → outbox + page). Worker now bnpt6l192 serving counter.py.
+OPEN WITH TOM: (a) he's generating synthetic bar-shelf images — prompt sent (4 classes:
+dense 3-4 row shelves 20-60 bottles w/ occlusion; lighting variants incl. glare; fill
+levels + forward labels for label/scale legs; awkward — blur/angle/shadow); (b) ops
+console "a bit overwhelming" — design conversation he wants later, I offered opinions;
+(c) tiled detector vs fast (his call); (d) server restart onto 0.18.1 for console
+parent→child lineage (offered, not done under his live session).
+
+## ZU-38 — 2026-08-19T02:50Z — VERIFICATION built (Tom: "you need a way of verifying what's going through there is correct")
+
+Tom was RIGHT and it was the sharpest question of the night. Diagnosis: synthetic path
+self-verifies (known N); PHOTO path had NO ground truth — every count was a claim in a
+measurement's font. MEASURED the gap myself: bar_wall fast=6 vs tiled=128 (same photo;
+July README's 128 independently reproduced by me, not cited on trust).
+
+BUILT (counter.py + both AWL docs, all checks clean):
+- **truth.json** truth book keyed by image filename, read by count_photo. NOTHING writes
+  truth from a detector — explicitly commented as the reason (a detector scoring itself
+  measures nothing; seeding 128 would have hidden the very errors we hunt). No entry →
+  `verified: false`, page says "N detected — **unverified** (no ground truth recorded)",
+  never "correct".
+- **PhotoVerdict** grew verified/true_count/detector; records carry detector + truth +
+  correct; table columns detected/actual/error(+/-); header shows "X/Y exact against
+  recorded truth" across the scored set.
+- **Operator truth control** on the page (mo.ui.number + run_button → writes truth.json).
+  One human count makes everything after it measurable.
+- **detector is a JOB INPUT** ("fast"|"tiled") threaded workflow→child→action, recorded
+  per job — fast-vs-tiled is a visible comparison, not my claim. Watcher now defaults
+  tiled (~40s/photo).
+LIVE NOW: page **:2721** (marimo run counter.py), worker bi4twpjvr, watcher bc957fdf
+(400 scans, tiled). PROVEN end-to-end on new contracts: bar_wall_tiled.jpg → 128,
+verified:false, child c79eb8cb Completed. Deployed process_photo c1da100e, watch_inbox
+303c7a2e.
+NEXT: Tom records a real truth → first scored accuracy number. Scale photos (bottle on
+scale, label forward, digits readable) give truth FOR FREE — the frame contains its own
+answer. Port history (stale-tab hazard): 2718/2719 walkthrough, 2720 old counter, 2721 live.
+
+## ZU-39 — 2026-08-19T03:0xZ — beamr JIT defect REPRODUCED IN PRODUCTION; server on 0.18.1
+
+Tom: "I think the watch inbox workflows failed." HE WAS RIGHT — and it was the beamr JIT
+native-services defect, live. watch_inbox bc957fdf Failed 02:57:36Z:
+`{bad_generator, <<"3000">>}` at gleam_json_ffi:object/1 ← aion@workflow@timer:sleep/1
+(3000 = the sleep's OWN duration ms reaching object/1 where a pair-list belongs).
+EVIDENCE CHAIN: failure at **seq 1012**; beamr DEFAULT_JIT_THRESHOLD = **1000**
+(profiler.rs:19) — engine's own sleep went hot, compiled, first external call out of
+the compiled frame broke. Trigger shape matches the recorded one (JIT'd F → bytecode →
+FFI). Running server was **aion 0.18.0 / beamr 0.18.2** (measured: strings on the lsof
+txt binary), i.e. BEFORE the fix.
+REMEDY ALREADY SHIPPED (law: re-measure the blocker first): beamr 0.19.2 carries the
+agreed shape — JitRuntimeContext holds `services` (process/types.rs:304-322); aion
+0.18.1 pins ^0.19.2. So last night's release IS the cure.
+ACTED: verified from-index 0.18.1 binary (sha 81c86913…, strings → beamr-0.19.2),
+swapped /Users/tom/.cargo/bin/aion by RENAME (never cp over a running image; prev kept
+at aion.0180.prev), killed pid 67099, respawner brought up 84023 from repo root on the
+new binary (verified beamr-0.19.2 in the RUNNING image). **Store intact** — 13 versions,
+all types survived. Worker b7joiu21d, watcher cf164116 (2000 scans, tiled).
+**SOAK ARMED** bmkqa35t8: watcher must pass seq>1100 (past the wall) — verdict pending,
+DO NOT claim the fix until it lands.
+**#85 filed** — production reproduction record (operator-facing: the failure names a
+function the author never wrote; any long-lived workflow on pre-0.19.2 dies ~1000 events).
+Tom's first scale image processed: 28 detected on ONE bottle — tiled detector's other
+edge (grid over a close-up over-counts). Named to him honestly + it's the exact case the
+truth book exists for. NEXT BUILD: scale-display weight reading (his images are for that,
+not for counting). Also open: #84 (awl checker gap), console-overwhelm design talk.
+
+## ZU-40 — 2026-08-19T03:2xZ — ⚠️ MY JIT DIAGNOSIS WAS WRONG; #85 IS LIVE ON 0.19.2
+
+**REFUTED BY MY OWN SOAK** (the reason to soak): watcher cf164116 on aion 0.18.1 /
+beamr 0.19.2 FAILED at **seq 1013** — byte-identical error+stack to the 0.18.2 one
+(`{bad_generator, <<"3000">>}` at gleam_json_ffi:object/1 ← aion@workflow@timer
+:-sleep/1-anonymous-0-/1 ← pump:run). So the JIT native-services defect is NOT the
+mechanism. WHY I WAS WRONG (named, it's the lesson): arithmetic fit (1012 vs threshold
+1000) + stack shape matched an ALREADY-DIAGNOSED defect + a real fix had shipped in the
+pinned version — three agreeing signals, and the agreement is what stopped me measuring.
+Corrected to Tom IMMEDIATELY (I had claimed the restart was the cure) and posted the
+correction on #85 (comment 5337078814).
+**WHAT THE EVIDENCE SUPPORTS**: `<<"3000">>` is timer.duration_to_boundary's legitimate
+output (ms as String) — the ONLY arg the suspending call carries. sleep's thunk is
+`pump.run(fn(){ pump.shield(ffi.sleep(boundary)) })` and its OWN comment says a wake
+RE-EXECUTES the call instruction that invoked the suspending NIF. So: a resumed call
+instruction resolving to the WRONG TARGET, right argument to wrong callee. Beamr-owned
+(→ Artemis per estate rule). OPEN, not guessed: is JIT involved at all; import-table vs
+resume-path mis-resolution; do non-sleeping long workflows hit it. NEXT INSTRUMENT:
+minimal repro (workflow = sleep loop only) + a JIT-disabled run to settle the threshold.
+**OPERATOR IMPACT (current releases)**: any single long-lived sleeping-loop workflow dies
+~1000 events. AWL has NO continue-as-new. CURE FOR THE DEMO (in progress, must be built
++ labelled as defect-driven so it's removed when #85 closes): supervisor workflow spawns
+bounded-shift watch_inbox children (parent accrues ~4 events/child → ~250 shifts).
+
+## ZU-41 — bottle reading WORKS (Tom's real product)
+`read_bottle` activity wired to pocs/bar/stocktake.py (Tom had ALREADY built the whole
+reader — OCR, read_weight, match_product, compute_volume; my error was pointing the
+inbox at the bottle COUNTER). VERIFIED AGAINST THE IMAGE BY EYE: his scale photo reads
+OLD RIVER · BLENDED WHISKY · 700mL · 40%ALC/VOL · **1127 g** and the display genuinely
+says 1127 — EXACT. OCR read every token; only the catalogue MATCH failed (invented brand
+vs 12 real entries — expected, I warned him). Added label-declared fallback: parses
+declared_ml/declared_abv from the label (a spirits label states size+strength by law) +
+`basis` field naming what the answer rests on; remaining volume NOT computed without a
+real tare (no label states its own empty-glass weight) — reported as the honest gap, never
+an assumed tare. Deployed read_bottle.awl (f5d4f500). Worker b4s037xhc (+rapidocr
++rapidfuzz). counter.py display REBUILT: bottle records get a stocktake card (label text
+big, weight/size/strength, remaining-or-why-not) + bottles table; count records keep the
+verified/unverified view. marimo check rc=0. PAGE NOT YET RESERVED — was mid-restart when
+context ceiling hit: serve `uvx marimo run --sandbox --headless --host 127.0.0.1 --port
+2722 counter.py` from pocs/counting (kill old: lsof -ti :2721).
+TOM'S LIVE ASK: "front end to reflect that properly, really clearly" — card is built,
+needs serving + a drop to prove it.
+
+## ZU-42 — 2026-08-19T03:2xZ — #85 MECHANISM PROVEN: the JIT CACHE poisons a module permanently
+
+Tom's ruling: "It has to be able to run forever. That's part of the whole pitch… not a
+thing we can enter into a discussion or just accept as a limitation." NO WORKAROUND.
+Built minimal instruments in scratchpad/wall/ (sleep_wall.awl = sleep loop ONLY, no
+worker; nosleep_wall.awl = SAME loop shape, sleep REMOVED, fast activity instead).
+
+**MEASUREMENTS (all on aion 0.18.1 / beamr 0.19.2):**
+1. watch_inbox (3s sleep + activity): died seq 1012, `{bad_generator, <<"3000">>}` —
+   3000 = the SLEEP's own boundary arg. 200 timers + 200 activities done.
+2. nosleep_wall run 1 (FRESH module b5675207): died seq **607**, 201 activities
+   scheduled, last id **200**, `{bad_generator, <<"activity:200">>}` — the ACTIVITY's
+   own identifier. DIFFERENT event count, DIFFERENT arg, SAME 200 waits.
+   → sleep is NOT the cause; the arg is always THE THING BEING WAITED ON.
+3. nosleep_wall run 2, SAME module, same server: died on **activity:0** — the FIRST wait,
+   7 events.
+4. nosleep_wall run 3, same module: **0 activities completed**, died immediately.
+
+**CONCLUSION (differential; only variable = JIT-cache presence):** the hot function in
+the suspend/resume path is JIT-compiled at beamr's DEFAULT_JIT_THRESHOLD=1000 internal
+calls (≈200 waits × ~5 calls). The COMPILED code resumes into the WRONG TARGET — right
+argument, wrong callee (always gleam_json_ffi:object/1 receiving the wait's own value).
+Once compiled, the broken code is CACHED PER MODULE and every LATER run of that workflow
+type dies on its FIRST wait. A server restart clears the cache → cycle repeats.
+**SEVERITY IS WORSE THAN "long workflows die": a workflow TYPE POISONS ITSELF after ~200
+cumulative waits and then fails instantly forever until restart.**
+
+**aion does NOT set jit_threshold** (runtime/handle.rs:149 SchedulerConfig{thread_count,
+nif_private_data, ..Default}) → inherits 1000. beamr exposes
+`SchedulerConfig.jit_threshold: Option<u32>` (scheduler/mod.rs:312). Confirming
+instrument (NOT a cure — memory says the counter saturates and still fires): patch the
+knob through RuntimeConfig (builder-driven per NO-ARBITRARY-LIMITS), rebuild, verify the
+wall MOVES proportionally. Real cure is beamr's compiled-code resume path → ARTEMIS.
+Repro artifacts: scratchpad/wall/{sleep_wall,nosleep_wall}.awl (deployed 1c9fad3f /
+b5675207). sleep_wall run 34d325bf still climbing at bank time (separate module = own
+counter) — expect death ~op 200.
+PAGE FOR TOM: stocktake card serving :2722.
+
+## ZU-43 — 2026-08-19T03:3xZ — repair attempt: two hypotheses REFUTED, escape hatches CLOSED
+
+Tom: "we need to get that finished immediately now." Went into beamr (local source
+/Users/tom/Developer/ablative/stack/beamr, crates/beamr 0.19.2, HEAD 58a7e5d, clean).
+**H1 native-services** — REFUTED earlier (fix present in 0.19.2, JitRuntimeContext carries
+services). **H2 wrong initial_module**: jit/runtime.rs:179 passes `current_module` (the
+CALLER's) to run_with_native_services after setting process current_module/code_position
+to the TARGET — looked like right-arg-wrong-callee. REFUTED by reading
+interpreter/mod.rs:219 `current_module_for_position`: resolution is driven by
+position.module via process.current_module then the REGISTRY, so initial_module is a
+fallback only. Two misses in 30 min in Artemis's JIT ⇒ stopped; a third-hypothesis hot
+patch to the estate's VM is not defensible.
+**ESCAPE HATCHES MEASURED, BOTH CLOSED**: (a) `jit` IS an optional feature in 0.19.2 BUT
+the mislabelling from 0.16.2 SURVIVES — scheduler/mod.rs:220 gates `use crate::jit::{...}`
+on `feature = "threads"`, not `jit`; making it genuinely disableable = 10+ files, 18 sites
+in scheduler/mod.rs alone = a VM-core refactor needing beamr's own gate. (b)
+jit_threshold: profiler.rs record_call uses `counter.saturating_add(1)` then
+`new_count < threshold` — so u32::MAX STILL FIRES (~4.29e9 calls ≈ 860M waits). A delay,
+not a cure; refused as a fix and NOT applied (would also be a magic value).
+**HANDED TO ARTEMIS** (DM sent): mechanism + symptom + repro + the note that my July
+attribution was wrong so they don't start from it. aion#85 comments 5337078814 (correction)
+and 5337131281 (mechanism table).
+**SAFE-OPERATION FACTS for the demo**: <200 waits per workflow TYPE per server lifetime is
+safe; restart clears the poisoned module state. Keep the pipeline inside that KNOWINGLY —
+not by hiding the limit.
+**LEGITIMATE aion-side gap noted (not done)**: aion never surfaces beamr's jit_threshold
+(runtime/handle.rs:149). Exposing it builder-driven is correct per NO-ARBITRARY-LIMITS
+(operator's lever, default deferred to beamr) and would also serve as the confirming
+causation instrument — but is NOT the cure and must never be presented as one.
+
+## ZU-44 — 2026-08-19T03:3xZ — ARTEMIS TOOK #85; my "200 waits" needs correcting
+
+**ARTEMIS OWNS IT** (DM b337ce2b, m=5125). Their hypothesis WITH AN ADDRESS: beamr's JIT
+has an admission guard `reject_deopt_after_side_effect` (jit/ir_control.rs:581) built on
+"a deopt RESTARTS the compiled function interpreted FROM ITS ENTRY" — it reasons about
+EFFECTS, not SUSPENSION. Hole: `jit_call_interpreted` (jit/runtime.rs:79) maps a nested
+`Ok(ExecutionResult::Waiting)` to a DEOPT (runtime.rs:194-196) AFTER restoring the
+caller's saved code position (runtime.rs:180-183) → process left Waiting with a live
+suspension whose park position points INSIDE the callee while code position is reset to
+the compiled caller's ENTRY, deopt carrying no suspend signal. = "right value, wrong
+destination". They're building a red-first probe w/ positive control (JIT disabled) + a
+compiled-witness. Will report even if refuted.
+**THEY CONFIRMED AT THE BYTES**: profiler saturating_add + `new_count >= threshold`
+(profiler.rs:260-268) ⇒ jit_threshold u32::MAX PINS then FIRES. AND their own finding:
+**SchedulerConfig has NO jit disable field at all** — only the compile-time cargo feature
+(in beamr's defaults) ⇒ a live JIT defect has NO lever short of a rebuild. They offered
+to ship a runtime disable knob as its own small release; **I ACCEPTED** (hazard is
+independent of this bug; I still refuse it as a fix for #85).
+**⚠️ MY "200 WAITS" IS ACTIVITY-SPECIFIC — CORRECTION SENT**: sleep_wall (sleep-ONLY, no
+worker) reached **785 sleeps STILL RUNNING** vs nosleep_wall (activity-only) dead at 200.
+So sleeps and activities are not equal heat, maybe not the same heat at all. REFRAMES
+watch_inbox: it reported the SLEEP's arg `<<"3000">>` but the ACTIVITY path likely did
+the heating — the argument names the caller IN FLIGHT, not the path that caused the
+compile. Verdict pending (task bx1qgd6bf, 900-round bound): a CLEAN COMPLETION at 900
+would be a sharp discriminator (pure sleeps never trigger it).
+**OWED TO ARTEMIS**: (a) both .awl files — SENT inline; (b) third workflow shape with a
+DIFFERENT import profile to test whether the misdelivery destination is
+position-dependent or always gleam_json_ffi:object/1 (2 shapes agree so far = mildly
+function-specific, but both share the generated-module skeleton) — NOT YET BUILT.
+**TOM'S PAGE CORRECT** (:2722): "OLD RIVER · BLENDED WHISKY · 40% ALC/VOL" + 1127 g +
+700 mL/40% + honest basis line. Fixed en route: label_text was raw OCR dicts (ocr_tokens
+yields dicts — take t["text"]); AWL type lacked label_text (redeployed 637ef5f0); worker
+reads doc AT LAUNCH so every edit needs a relaunch (bx4de1bbr current).
+**INSTRUMENT SCAR**: my verification `until tail -1 | grep -q OLDRIVER` passed instantly
+on the PREVIOUS record — a check that passes on stale state measured nothing. Cure: gate
+on wc -l INCREASING, never on content that already exists.
+
+## ZU-45 — 2026-08-19T03:4xZ — Artemis caught MY confound; two decisive instruments in flight
+
+**ARTEMIS'S CATCH (correct, and it's my own law):** sleep_wall's 900-round bound sits
+BELOW the 1000-CALL threshold if a sleep costs ~1 call ⇒ a clean completion proves
+NOTHING (the arm never compiled). Outcome as predicted: **run 1 COMPLETED CLEAN at 901
+sleeps — CONFOUNDED, discarded as evidence.** "A green from an arm that never compiled is
+worth nothing" (cf. mutation-must-sit-on-the-tests-path / power-fitted-in-one-world).
+**DECISIVE ARM RUNNING (task b1gk11vbm)**: sleep_wall RUN 2 (wf 2a09c6e0), 2000 rounds, on
+the SAME module 1c9fad3f — the profile/cache PERSIST per (module,function,arity) per
+scheduler (proven by nosleep_wall runs 2/3 dying at wait 0), so run 2 starts carrying run
+1's ~900 calls and crosses 1000 within ~100 sleeps with huge margin. TWO-SIDED: early
+death ⇒ compiled sleeps break; clean 2000 ⇒ compiled sleeps resume CORRECTLY (the real
+discriminator for Artemis's Waiting→deopt hypothesis). ~33 min. NOTE: did NOT need the
+jit_threshold lever — persistence gave the same power for free.
+**DESTINATION PROBE RUNNING (task bcqoiy1fe)**: shape3_wall.awl (deployed d7cbc819, wf
+e9c9d386, 400 rounds) — deliberately DIFFERENT import profile (2 workers/2 actions, extra
+types, Float+String+List fields) so the function/import tables differ. Q: does the
+misdelivery ALWAYS land in gleam_json_ffi:object/1 (function-specific) or does it MOVE
+(position-dependent)? Different bugs. Priced my earlier "two shapes agree" DOWN to ~one
+observation — both are AWL-generated and share a module skeleton.
+**WITNESS QUESTION ANSWERED (aion's gap, not beamr's)**: `Scheduler::jit_cache()` is
+already public (beamr scheduler/mod.rs:1996) + `JitCache::lookup(key)` — a consumer CAN
+ask "did this MFA compile" today. aion holds the scheduler and never asks
+(crates/aion/src/runtime/ mentions jit NOWHERE). Told Artemis not to spend a release on
+it. Cache OBSERVABILITY exists; cache CONTROL does not — only the second needs them, and
+their disable-knob release stands on its own.
+**MY OWED ROWS**: (a) aion surfaces JIT-compiled observability (new); (b) aion surfaces
+beamr's jit_threshold builder-driven (ZU-43, instrument-only, never mitigation).
+
+## ZU-46 — 2026-08-19T04:0xZ — #85 MECHANISM CONFIRMED BOTH SIDES; jit_threshold wired; I OVERRAN A BOX HOLD
+
+**🔴 BOX HOLD ACTIVE (Waffles, 02:24Z), released only by Waffles striking the line in
+`ablative/docs/tracking/battery-queue-20260818.md`.** NOTHING fires or compiles.
+**I OVERRAN IT**: cargo check ×3 + clippy ×2 at 03:45–03:56Z; learned of it 03:58Z from
+Artemis (it had traveled DM-only until Waffles's 03:52Z ruling: **HOLDS NOW LIVE IN THAT
+FILE — the token file is the broadcast surface, DMs are couriers**). Self-reported to
+Waffles + annotated on my own **line 19** (claimed; build NOT started). Also put my 03:41Z
+Tom-server restart to Waffles to rule on rather than classifying it myself.
+⇒ **LAW: re-read the token file AT HEAD before taking load, not once per session.** I had
+read it earlier, found no hold, and carried "no hold" as a fact about the world when it was
+only a fact about a file at a moment.
+
+### The two instruments landed — both verdicts
+- **sleep_wall run 2 (b1gk11vbm): FAILED at 102 sleeps** (run 1 clean at 901, same module
+  1c9fad3f, cumulative ~1003 vs threshold 1000). **Compiled sleeps BREAK.** No worker, no
+  activity in that arm ⇒ the defect is the durable **wait/resume path itself**. Face:
+  `VM execution error: bad argument`.
+- **shape3_wall (bcqoiy1fe): destination does NOT move.** Different import profile (2
+  workers/2 actions, Float+String+List), different module hash d7cbc819 — *identical*
+  destination `gleam_json_ffi:object/1` line 63 `-object/1-lc$^0/1-0-`, identical death
+  point (activity 200, 607 events, byte-identical to nosleep_wall). Function-specific.
+
+### 🔴 THE COMPILE WITNESS — best instrument of the investigation, needed NO instrumentation
+Full evidence: **`gate-logs/aion-85-compile-witness.md`**; raw log preserved at
+`gate-logs/server-jit-witness-20260819-0341Z.log` (the live log was rotated on restart).
+beamr logs cranelift compiles at INFO. **17 in the entire server log.** Every FIRST death of
+a workflow type is preceded by a compile within **0.3–3.3 s**; every REPEAT death of an
+already-poisoned type has **NO compile at all** (cached broken code) — two-sided in one
+dataset, the ABSENCE carrying as much signal as the presence.
+**BASE RATE STATED (qualifies the claim): 11 of 17 compiles kill nothing.** 02:50:25 fired
+mid-run of watch_inbox and did NOT kill it; 02:57:33 did ⇒ the fatal event is compiling the
+particular MFA **on the suspend/resume path**, not compiling anything.
+Finest trace (shape3): activities every ~0.1 s → compile 03:36:44.095 → dead by .406
+(310 ms). The activity **succeeded** (`outcome=succeeded, duration_ms=2`); only *delivery*
+found no live process ⇒ **it dies on the RESUME, not on the work.**
+**The delivered value is the suspension's own token**: `<<"activity:200">>`/`<<"activity:0">>`
+(correlation id) on the activity arm, `<<"3000">>` (sleep ms) on the sleep arm — landing in
+`object/1`'s comprehension which wants a list of field pairs. Right value, wrong destination.
+⚠️ The ~1003-vs-1000 fit is **corroboration only, never leaned on** (I was fooled by 1012-vs-1000
+before). Section 3 of the witness doc is what stands.
+
+### ARTEMIS CONFIRMED THE MECHANISM INDEPENDENTLY + RULED THE REPAIR
+Their probe **reproduced BOTH of my failure faces** ⇒ the "bad argument" face is NOT a second
+defect (root: `handle_suspend` tries Waiting→Waiting, no such edge in `can_transition`,
+process/mod.rs:400-414). Discriminator arm (poison the compiled CALLER, callee still
+compiles) returns behaviour to the interpreted control ⇒ **it is the compiled caller's
+nested interpreted run**, not JIT dispatch in general.
+**Nailed at the bytes, one line past the probe:** `core.rs:687-691`/`:780-784` set the
+position to the compiled function's ENTRY before entering compiled code, so
+`runtime.rs:154` `saved_position` IS that entry, and `:183` restores it UNCONDITIONALLY
+after the nested run — clobbering the resume position — *then* `:190-192` launders Waiting
+into a deopt. Generalises: **every scheduler-level transfer out of the nested run has its
+resume position overwritten**; Waiting is worst because the process is parked as well.
+**REPAIR RULED = PROPAGATE** (not refuse-admission): `ir_control.rs:685-706`
+`require_tail_position` ⇒ the JIT tier has **no body-call model**, every external call is
+tail, so a compiled frame inside an external call has **no continuation of its own** —
+propagation costs zero state recovery. Refuse-admission would reject every non-leaf
+function. Invariant being installed: **once the nested run has begun, no outcome may leave
+through deopt.**
+⚠️ **UNMEASURED HYPOTHESIS — DO NOT PROMOTE**: Artemis suspects `Yielded` passes the same
+unconditional restore ⇒ a mid-body yield may re-enter the compiled function from the top
+(double execution, not covered by the admission guard). **They explicitly have NOT measured
+it** and named its discriminator first: one observable effect, mid-body yield, compiled
+tail-calling caller, effect asserted exactly once, interpreted-caller positive control.
+Sibling of #85 if it holds. Carry as HYPOTHESIS ONLY.
+
+### MY OWED ROW SHIPPED (code done, build blocked on the hold)
+**aion never named beamr's JIT threshold** — `SchedulerConfig { thread_count,
+nif_private_data, ..Default::default() }` ⇒ beamr's default (1000) has governed EVERY
+deployment aion has ever run. Now wired end to end:
+`--jit-threshold` → `[runtime] jit_threshold` → `EngineBuilder::scheduler_jit_threshold`
+→ `RuntimeConfig::jit_threshold` → `SchedulerConfig`. `None` passes through untouched
+(beamr's own default still governs when nobody says; boot byte-identical when unset).
+Files: aion/src/runtime/{config,handle}.rs, aion/src/engine/builder.rs,
+aion-server/src/config/{sections,runtime,load}.rs, aion-server/src/state.rs,
+aion-cli/src/server.rs, + 37 fixture sites (E0063).
+Test holds the **LINK** (`runtime_config()`), not the accessor — an accessor test stays
+green with the pass-through line deleted, and a silently-ignored threshold yields a
+proportionality run that *looks like* a measurement and measured the default.
+Green before the hold was known: check rc=0, clippy workspace rc=0, clippy per-crate rc=0,
+`the_jit_threshold_reaches_the_runtime_configuration` passes (24/24 builder tests).
+**Verified at the bytes MYSELF (both 0.18.2 and the shipped 0.19.2 floor, identical):**
+`saturating_add(1)` then `if new_count < current_threshold()` ⇒ u32::MAX **pins then
+fires** after 4.29e9 calls to ONE MFA. Artemis's correction stands: that is a real
+~859M-wait horizon, i.e. an effective **mitigation**, but **NOT an off-switch** and must
+never be documented as one. `threshold: AtomicU32` (profiler.rs:109/134/189-191);
+`tune_threshold` exists but **grep proves aion never calls it** ⇒ a set value governs.
+
+### 🔴 BRANCH TOPOLOGY TRAP — CHECKED BEFORE BUILDING, NOT AFTER
+`investigate-workflow` (HEAD 4d898cad1) is **version 0.17.0, beamr 0.18.2**. The RUNNING
+binary is **aion 0.18.1 / beamr 0.19.2**. Tags v0.18.0/v0.18.1 are **NOT in HEAD's history**
+and main is ALSO 0.17.0 — the release line is `land-0.18.1`/`land-stack`. v0.18.1 has **36
+commits HEAD lacks** (#75 upgrade adoption, #77 child-wears-parent, beamr 0.19.2 floor).
+⇒ **Building from this branch would have DOWNGRADED Tom's server.** beamr 0.19.2 is the
+RELEASED FLOOR, not the test swap I had been calling it — correct that anywhere it appears.
+**Build venue: worktree `scratchpad/wt-fix-77` at 67e0b8d9f (v0.18.1, beamr 0.19.2,
+haematite 0.9.0). Patch applied CLEAN (8 files, --3way) + 35 fixture inserts done. Cold
+target (no cache). BUILD NOT RUN — waits on the hold + file order.**
+Patch banked: `scratchpad/jit-threshold.patch`.
+**SEMVER NOT ASSUMED**: new public field on aion-rs `RuntimeConfig` + aion-server
+`RuntimeConfig`/`RuntimeSection` is **E0063-breaking for literal constructors** (37 sites
+proved it). cargo-semver-checks rules the version.
+
+### TOM'S PIPELINE — the operational truth
+Dies every ~14 min at **exactly activity 200**. Three independent confirmations on the real
+product workflow; latest wf **baaf0a3a**, Failed 03:55:35Z at 1009 events,
+`{bad_generator, <<"activity:200">>}`. Poisoning is **per module, survives runs** — the
+03:41:34Z restart died in **3.1 s at activity:0**; only a SERVER restart clears it.
+Server restarted 03:41Z (pid **97374**, repo root, versions non-empty); log rotated to
+`~/.aion/logs/server-stdout-respawn.20260819-0341Z.log`.
+Live: stocktake page :2722, counting worker pid 55151, release_ops + gate workers up.
+**Tom's words: "You should have watched."** — I had watchers on my lab instruments and none
+on his pipeline. Fixed; the watch caught this death. **Watch the PRODUCT, not just the experiment.**
+
+## ZU-47 — 2026-08-19T04:2xZ — PROPORTIONALITY CONFIRMED EXACTLY; mitigation deployed and PROVEN LIVE
+
+### 🔴 THE DECISIVE RESULT — both predicted numbers hit EXACTLY
+Predictions were banked in `ablative/docs/tracking/battery-queue-20260818.md` line 19
+**BEFORE** the runs (Waffles's GO 04:13Z made the positive control line 19's own
+acceptance leg), so they cannot be retrofitted.
+
+| arm | threshold 1000 (beamr default) | threshold 100 | predicted |
+|---|---|---|---|
+| sleep_wall (NO worker, NO activity) | ~1003 sleeps | **exactly 100 sleeps** | ~100 |
+| nosleep_wall (activity arm) | exactly activity:200 | **exactly `activity:20`**, 20 completed | ~20 |
+
+Same error faces at both thresholds: `VM execution error: bad argument` (sleep),
+`{bad_generator, <<"activity:20">>}` (activity).
+
+**⇒ THREE CONCLUSIONS:**
+1. **The compile correlation is CAUSAL, not adjacent.** The death point moves by exactly
+   the factor the threshold moves by. (I had promised Waffles and Artemis I'd report the
+   opposite result the same night if it came out that way.)
+2. **CLEAN CALIBRATION, consistent at two thresholds**: sleep = **1 counted call per
+   wait** (100→100, 1000→~1003); activity = **5 counted calls per activity** (100→20,
+   1000→200). My old "200 waits" and Artemis's "~5 calls per wait" were the same fact
+   from two ends; the sleep arm pins the unit. Two thresholds agreeing on both constants
+   is what makes this a measurement rather than a fit.
+3. **The knob is LIVE end to end** — this IS the acceptance leg for line 19. The
+   mitigation on Tom's box no longer rests on an absence argument.
+
+### ⚑ THE FAST ACCEPTANCE INSTRUMENT FOR ARTEMIS'S FIX (offered, and the key gift)
+Their PROPAGATE fix must be proven **in a world where compilation actually happens** —
+a green from an arm that never compiled is worth nothing (the trap that ate sleep_wall
+run 1). At beamr's default that costs ~1000 calls per arm; **at threshold 100 it costs
+100 and 20.**
+> **Acceptance: `--jit-threshold 100`; sleep_wall 400 rounds + nosleep_wall 200 rounds.
+> BOTH must run to COMPLETION *and* the compile witness
+> (`grep -c cranelift_jit::backend`) must be NON-ZERO.**
+Both halves required: completion alone is satisfiable by an arm that never compiled; a
+non-zero witness alone says nothing about correctness. The arms are **calibrated RED**
+at threshold 100 today, so the positive control already exists on file.
+
+### DEPLOYED AND HOLDING
+Tom's server: `aion server --jit-threshold 4294967295`, binary sha256
+**18f89a62c7a6e388d3794c2c642231b4ba2638d0020ae374efb5bb59f10c9334** (prev 81c86913 kept
+as `aion.0181.prev`), built at release base 67e0b8d9f (v0.18.1 / beamr 0.19.2).
+Tom's pipeline wf **1da202ec**: passed **1124 events with compiles=0**, against three
+prior deaths at 1009. (Target 1300 for margin.)
+Source: investigate-workflow **de32aa1ba** (pushed); deployed bytes branch
+**jit-threshold-on-0181 96b68ecba** in worktree wt-fix-77.
+Change wired through ALL THREE doors incl. `AION_RUNTIME_JIT_THRESHOLD` + docs
+(operations.md: flag table + `[runtime]` TOML block + env allowlist).
+
+### PROBE RIG (reusable — this is how to run the acceptance)
+`/Users/tom/.aion/probe100/{data,authoring}` (⚠️ store MUST live under an owner-only
+path — the path-safety gate REFUSES `/private/tmp`, mode 1777, sticky bit not accepted);
+config at `scratchpad/probe100/probe-config.toml` (ports 9099/59051/59061; **explicit
+`store.data_dir` required** — with an explicit `--config` the data root otherwise
+resolves to the HOME default, which another live writer holds).
+Worker: `probe_worker.awl`, minimal `scan_inbox` → constant empty list. ⚠️ `aion worker`
+**requires** all three `--reconnect-*` flags (no assumed defaults).
+🔴 **RUN ARMS SEQUENTIALLY ON A FRESH SERVER EACH** — both route through the shared
+`gleam_json_ffi` module, so concurrent arms cross-contaminate the counter and one would
+kill the other early, looking like a confirmed prediction while measuring cross-talk.
+
+### TOM'S LIVE WORD
+"Artemis has to get moving on it. She said fix is authored... work with them to get
+everything going. And finished." ⇒ I offered Artemis the acceptance instrument + asked
+what they need, and said that if the **publish ordering** (beamr must not hit the index
+before Athena's wave and Hermes's liminal-rs 0.6.1, both certified against 0.19.2) is
+what stands between Tom and a fixed engine, I'll put it to Waffles as a sequencing
+DECISION rather than let it sit as a background constraint.
+
+## ZU-48 — 2026-08-19T04:3xZ — 🔴 RESUME HERE: Artemis's #85 FIX IS BUILDING FOR TOM'S BOX
+
+### IMMEDIATE STATE — what is in flight RIGHT NOW
+**Release build of the FIXED engine is running** (task bj9q8jb74, detached cargo, log
+`scratchpad/relbuild-fix.log`) in worktree
+`scratchpad/wt-fix-77` (branch `jit-threshold-on-0181`, base 67e0b8d9f = v0.18.1).
+On completion: verify artifact → deploy → acceptance. FULL PLAN in
+`gate-logs/aion-85-mitigation-deploy-plan.md`. Authority = **queue line 20**.
+
+### THE FIX (Artemis's, consumed BY PATH — nothing touches crates.io)
+```
+repo   ablative-io/beamr   branch fix/aion85-nested-run-suspend
+rev    85c5f9d6bb0eee700efc9d04549eee966fa0e90d
+local  /Users/tom/Developer/ablative/beamr-aion85  (cloned, checked out at rev)
+```
+Touches `interpreter/opcodes/core.rs`, `jit/runtime.rs`, **`jit/runtime_closure.rs`**,
+`process/mod.rs`, + an 876-line probe. Crate version **0.19.2**, matching `^0.19.2` —
+checked BEFORE building because a mismatch is the silent-drop case.
+**Waffles ruled 04:23Z**: line 18's publish gate is INDEX ORDERING only (Athena's wave +
+Hermes's liminal-rs 0.6.1 certify against published 0.19.2); a path-patched local build
+cannot touch it. Publish gate stands; build proceeds. **This is DEPLOYMENT, not the
+fix's ship-claim** — Artemis's own program (closure arm, battery, ceremony, semver)
+runs to completion regardless.
+
+### BOTH PATCH WITNESSES PASSED (do not skip these on any rebuild)
+1. **Lock**: beamr entry has **NO `source` line** (= path dep) and is the ONLY beamr
+   entry. Script: `gate-logs/verify-beamr-patch.sh <tree>`.
+   ⚠️ That script's first version printed only the FIRST of three lock entries and lied
+   to me (showed 0.16.3); fixed to print all + defer to `cargo tree`.
+2. **Loud**: `crates/aion/src/runtime/patch_witness.rs` (wired in `runtime/mod.rs`)
+   references `beamr::process::Process::take_jit_transfer`, public ONLY in this rev.
+   `cargo check --tests -p aion-rs` → `Compiling beamr v0.19.2 (/Users/tom/.../beamr-aion85/crates/beamr)`, clean.
+   🔴 **REMOVE patch_witness.rs + the `[patch]` block when the fix ships published.**
+
+### 🔴 THE THREE ARMS — ALL CALIBRATED RED, they are the acceptance instrument
+Files in `scratchpad/probe100/`. Probe server: `aion server --config
+<probe100>/probe-config.toml --jit-threshold 100`, store `/Users/tom/.aion/probe100/data`.
+| arm | construct | token delivered | calls/round | death @ thr 100 | death @ default 1000 |
+|---|---|---|---|---|---|
+| sleep_wall | step-level `sleep` | `<<"3000">>` (duration ms) | 1 | **exactly 100** | ~1003 |
+| nosleep_wall | step-level activity | `<<"activity:200">>` (correlation id) | 5 | **exactly 20** | exactly 200 |
+| **fork_wall** (NEW, closure-shaped) | `fork`/`join` over children | **the child_workflow_id** — CONFIRMED against `ChildWorkflowStarted` in the parent's own history | 2 | **exactly 50** | — |
+**ALL THREE land in `gleam_json_ffi:object/1` line 63's comprehension.** Three
+structurally different waits, three different tokens, one destination — the suspension's
+own identifying token arrives where the awaited result belongs.
+
+### ACCEPTANCE (Waffles's 4 conditions + my 3rd leg) — run in THIS order
+1. `--jit-threshold 100`: sleep_wall 400 rounds, nosleep_wall 200, fork_wall 200 —
+   **ALL must COMPLETE *and* the compile witness must be NON-ZERO**
+   (`grep -c cranelift_jit::backend <server log>`). Completion alone is satisfiable by
+   an arm that never compiled — that trap ate sleep_wall run 1.
+   🔴 **RUN ARMS SEQUENTIALLY ON A FRESH SERVER EACH** — they share `gleam_json_ffi`;
+   concurrent arms cross-contaminate the counter.
+2. Deploy to Tom's box **at the DEFAULT threshold** (drop `--jit-threshold` entirely).
+   Leaving u32::MAX would be a workaround wearing a fix's clothes; Tom explicitly ruled
+   that out ("I don't want us to plan for any long-term workarounds. Let's get it fixed
+   now."). Rollback levers, both staged: `~/.cargo/bin/aion.0181.prev` (sha256 81c86913)
+   and re-adding the threshold flag.
+3. **`watch_inbox` at the DEFAULT threshold past 1009 events** — the leg that actually
+   discharges Tom's ask. Both walls are synthetic; the thing that died 4× tonight is his
+   real pipeline with a real worker, forked children and a join. A soak must run in the
+   world the death happened in.
+
+### ARTEMIS'S HANDOFF STATUS — carry VERBATIM, do not round up
+- **CallExt site PROVEN fixed**: 4 green arms; `outer/1` and `inner/1` both positively
+  witnessed in the JitCache; 2 compile successes; 1 park, 0 native re-invocations,
+  publish accepted against the first call id, exit Normal carrying the awaited value —
+  identical to the interpreted control. Two of those arms were RED before the fix.
+- **Closure site: symmetric code, NOT WITNESSED.** Their closure arm failed its own
+  witness assertion — `outer/1` never entered the cache (submissions 1, **unsupported
+  1**: the tier permanently REFUSES their closure-shaped outer — admissibility, not
+  heat). **Deploys named-unproven.** ⇒ My `fork_wall` IS admissible (it died, and death
+  requires compilation given the threshold scaling) — it may supply the witness their
+  harness cannot get. **I must NOT claim site attribution**; theirs to make.
+- **`DirtyCall`**: fixed but UNPROVEN (fixed on reasoning, not measurement).
+- **`Yielded` mid-body + `Exited`-without-exception**: deliberately LEFT ON THE OLD PATH,
+  hypotheses with named discriminators. 🔴 If `watch_inbox` survives past 1009 then dies
+  a NEW way, `Yielded` is Artemis's first suspect — **send them the FAILURE FACE, not a
+  diagnosis.**
+- Honest sentence for a green: **"the workload survives with compilation occurring"** —
+  NOT "both sites are fixed".
+
+### CURRENT LIVE STATE
+- Tom's server: `aion server --jit-threshold 4294967295`, binary sha256 18f89a62…,
+  pid varies; his pipeline wf **1da202ec Running at 1649+ events, compiles=0** (three
+  prior deaths at exactly 1009). Bridge holding.
+- Probe server on 9099/59051/59061 may still be up at threshold 100.
+- Queue: **line 19 DONE GREEN both legs**; **line 20 OPEN** (this deploy).
+- Committed: investigate-workflow `de32aa1ba` (pushed) + state commits;
+  deployed-bytes branch `jit-threshold-on-0181` `96b68ecba` in wt-fix-77.
+
+---
+
+## ZU-49 — aion#85: three faces, three walls green, deploy HELD (2026-08-19 ~05:10Z)
+
+### Binaries (identify by hash, never by version string)
+| tag | sha256/16 | beamr | contains |
+|---|---|---|---|
+| `scratchpad/aion-85c5f9d` | `43b1b573a7c8103c` | 85c5f9d6 | Waiting fix (2 faces) |
+| `scratchpad/aion-633b9c2` | `14b509c16506da90` | 633b9c22 | + Yielded fix (3 faces) |
+| `~/.cargo/bin/aion` (LIVE on Tom's box) | `18f89a62…` | 0.19.2 published | mitigation only, `--jit-threshold 4294967295` |
+
+Both patch witnesses hold on both builds: one `beamr` lock entry with **no
+`source` line** (path dep), and a compile-time reference to
+`Process::take_jit_transfer` (a symbol in no published beamr). Version checked
+against `^0.19.2` **before** building — a semver-mismatched `[patch]` drops
+silently and everything still compiles.
+
+`a18bc77..633b9c2` verified at the repo, not on Waffles's relay: two commits,
+`jit/runtime.rs`, `jit/runtime_closure.rs`, `tests/jit_yield_replay_probe.rs`.
+
+### Three walls at threshold 100 on `85c5f9d` — all PASS
+| arm | status | events | compiles | pre-fix death (same rig, same day) |
+|---|---|---|---|---|
+| sleep_wall 400 | Completed | 805 | 3 | round 100 / event 206 |
+| nosleep_wall 200 | Completed | 605 | 29 | activity 20 |
+| fork_wall 200 | Completed | 405 | 22 | round 50 / event 106 |
+
+All graded **from the durable store and the per-arm server log**, never from
+the harness's own verdict line.
+
+### The three faces (Artemis's arm statement, carried verbatim)
+| outcome | fixed | proven |
+|---|---|---|
+| `Waiting` | both helpers | yes, both — calibrated red→green each |
+| `DirtyCall` | both helpers | **no arm** — symmetry, not measurement |
+| `Yielded` | both helpers | **external-call helper only**; closure helper took the identical change with **no yield arm** |
+| `Exited`-without-exception | **not fixed** | unreached by the whole corpus at the external helper with a live control; no control at all at the closure helper |
+
+**beamr#28** (separate): the runtime JIT compile path forwards
+`ModuleCompileMetadata::EMPTY`, so **no function containing `make_fun` can ever
+be JIT-compiled in a running scheduler** — refused as `UnsupportedOperand` and
+marked permanently unsupported. Every Gleam closure-minting function is
+silently excluded from the tier. Consequence for the record: `fork_wall` never
+established anything about the CallFun site, and my header comment claiming
+otherwise is corrected in the plan doc.
+
+### DEPLOY HELD — ratified by Waffles as a ruling
+Deploying a two-face repair into the workload whose most-likely face is the
+unfixed third is shipping a blind spot with a green sticker on it. Tom stays on
+the mitigation (3,000+ events, compiles=0). **Gate:** fresh build at `633b9c2`
++ three walls on THAT build + shape lab green at DEFAULT + Artemis's arm
+statement → then conditions 3 and 4 for real, Tom told before the touch.
+
+### Lab arm — Tom's shape at the DEFAULT threshold, off his machine
+`lab-watch.sh <binary> <tag>` deploys Tom's own `watch_inbox.awl` +
+`process_photo.awl` unmodified, served by `watch_worker.awl` (constant answers;
+preserves every engine edge, removes only the vision stack). Guards: server
+image **hashed**, argv checked for the **absence** of `--jit-threshold`, worker
+proven serving by a smoke run.
+
+Leg one (`85c5f9d`): crossed 1,009 — at 1,243 events, `compiles=9`, running.
+🔴 **Survival is the weak half.** A duplicated effect completes cleanly. The
+measurement is `ActivityScheduled` vs `ActivityCompleted` vs
+`ChildWorkflowStarted` at the end.
+
+Leg two is **chained** (`chain.sh`): leg one done → walls on `633b9c2` → same
+shape at default on `633b9c2`. The pairing is the measurement; a green on the
+new sha alone is an absence argument.
+
+### Five instrument bugs caught before any verdict (3 mine, 2 Artemis's)
+1. **One-second boot** — a surviving old server would answer readiness while my
+   new process died on a bound port. Would have graded the **pre-fix binary**.
+   Fixed by hashing the serving process's executable image.
+2. **`grep -c` exits 1 on zero** — `|| echo 0` appended a second line; every
+   integer test would have errored into the failure branch. A green arm
+   reported red by its own counter.
+3. **`say()` on stdout** — captured by `$(poll …)` along with the result; every
+   status parse garbage. Annotated in the results file rather than deleted, so
+   the trap stays visible.
+4. Artemis: a counter keyed on a value the callee could clobber. Two confident
+   greens at two burn depths, both false.
+5. Artemis: a red that was the **transport** (`._*` files crashing a UTF-8
+   scanner), not the code.
+
+⭐ **The instrument and the measurement must not share a wire.**
+⭐ **An unimplemented control named in a comment is worse than no control.**
+⭐ **A red can be a transport artefact as easily as a green can be an instrument
+artefact — and the red is more dangerous, because publishing it looks like
+diligence.**
+
+### Tom's other live ask — label fields (DONE, NOT DEPLOYED)
+`prototyping/thing-finder/pocs/LABEL-FIELDS-CHANGE.md`. Brand/name/volume/ABV
+as separate fields with provenance; `count_photo` now reads each detected
+bottle's label from its crop. Measured old-vs-new on 12 real photos: 17 → 35
+usable values, 9 of 12 correct brand+name. **Not redeployed on purpose** — the
+AWL contract changed, and altering Tom's live workload mid-diagnosis would
+confound the engine measurement. Lands with the engine deploy.
+
+---
+
+## ZU-50 — RESUME POINT (2026-08-19 05:28Z). Read this first.
+
+### Where everything is
+- **Tom's box UNTOUCHED**: `~/.cargo/bin/aion` (18f89a62…) + `--jit-threshold 4294967295`, pid 86322. His `watch_inbox` **completed a full window: 6,011 events, compiles=0**, from four deaths at 1,009. Fresh window running as `9a53974f-0c12-44b5-88c2-4a8de44dc957`.
+- **Staged builds** (identify by hash):
+  - `scratchpad/aion-85c5f9d` = `43b1b573a7c8103c` — beamr 85c5f9d6, **two faces**
+  - `scratchpad/aion-633b9c2` = `14b509c16506da90` — beamr 633b9c22, **three faces** (deploy candidate)
+  - Both patch witnesses hold on both: one beamr lock entry with **no `source` line**, `take_jit_transfer` compiled, version checked vs `^0.19.2` **before** building.
+- **Running now** (`chain2.sh`, detached, PID group under `scratchpad/probe100/`): walls on `633b9c2` → leg two → leg three. Progress in `WALLS-633b9c2.txt`, `LAB-WATCH-633b9c2.txt`, `LAB-WATCH-633b9c2-wide.txt`, `CHAIN2.txt`.
+
+### LEG ONE RESULT (85c5f9d, Tom's shape, DEFAULT threshold)
+```
+Completed  events=2803  compiles=22
+ActivityScheduled=400  ActivityCompleted=400  ChildWorkflowStarted=399
+```
+No count exceeds its partner. **The third face did not fire through Tom's shape on the two-face build.** 399 is correct (the `scan` step tests the window before dispatch); my predicted 400 was a **miss, logged as a miss**.
+
+**Two limits, both belong in every citation of this result:**
+1. It sees **recorded** effects only. A replayed prefix that never reached the Recorder leaves these counts intact.
+2. `compiles=22` does **not** establish that `try_fold` compiled. The scan-~238 timing was registered in advance and is consistent, but circumstantial — and the run is over, so `keys()` cannot settle it retroactively.
+
+### 🔴 ARTEMIS'S STRUCTURAL CORRECTION — ACT ON THIS BEFORE SPENDING RERUNS
+**Leg one going green destroyed the positive control.**
+- **Leg two is now a REGRESSION check only** — "the fix didn't break Tom's workload". Old green + new green cannot be evidence the fix *works*. Bank it as the weaker claim from the start.
+- **Leg three as designed says nothing**: it runs on `633b9c2` only, so a green is an absence argument — the exact shape I refused for the mitigation. **Leg three needs an `85c5f9d` twin at 8 images/scan.** The control is not leg one; it is *an old-binary run of whatever shape is being tested*.
+
+**Artemis's prediction, registered before the rerun:** leg three will be **green on both binaries for reasons unrelated to the fix**. Mechanism: the `Yielded` face needs the nested interpreted run to burn a **full reduction slice — 4,000 charged calls — without parking**. A closure body that spawns a child and awaits parks after a handful of reductions, so it exits as `Waiting` (the already-fixed face). **Fan-out width does not change this** — eight items = eight closure calls that each park early, not one long slice.
+
+**A better leg three, if one is wanted:** a callee performing **thousands of charged calls before it suspends** — a fold over a list in the low thousands, or a compute-heavy body between the effect and the await. Any aion workflow shape that walks a big list before its first await reaches this face; more images does not.
+
+### Deploy gate (Waffles, amended and standing)
+fresh build at `633b9c2` ✅ · three walls on THAT build ⏳ · shape lab green at default ⏳ · Artemis's arm statement ✅ → then conditions 3 and 4: **deploy at DEFAULT with rollback staged** (`probe100/deploy-fixed.sh`, reads the STAGED copy and asserts sha `14b509c16506da9033b6`), **watch past 1009**, **Tom told before the touch**.
+
+Arm statement: `Waiting` both helpers proven · `DirtyCall` both fixed, **no arm** · `Yielded` both fixed, external-call helper proven + closure helper now proven red→green · `Exited`-without-exception **not fixed**, unreached with a live control.
+
+### Owed after the deploy
+- **JIT observability**: `JitCache::keys()` is pushed at `10ff54827128f46bf84592925126f9d5cd582d33` on `feat/jit-cache-enumeration` (stacked on `a6004fc`). Chain: `scheduler.jit_cache().keys()` → `key.module/function/arity/generation` → `scheduler.atom_table().resolve(atom)` gives `gleam@list$<hash>` **as a resolved string**. Build aion against it and leg three's pass condition becomes *`try_fold` present* instead of *count > 0*. **`lookup` alone is unreachable from aion** — content-hash namespacing means the module hash lives only in a stacktrace; `aion versions` exposes only the entry module's, a different value.
+- beamr#28's surviving half: the compile job discards the `JitError`, so *why* the tier refused is unavailable. (The tracing remedy is NOT one line — beamr has **no `tracing` dependency at all**.)
+- Remove `patch_witness.rs` + the `[patch]` block when beamr ships published.
+
+### Tom's other ask — label fields: DONE, NOT DEPLOYED
+`prototyping/thing-finder/pocs/LABEL-FIELDS-CHANGE.md`. Held deliberately: the AWL contract changed and altering his live workload mid-diagnosis would confound the engine measurement. **Lands with the engine deploy.**
+
+### Instrument-bug tally: 8 laws, 6 mine, none reached a verdict
+Newest and best (Waffles: "the EIGHTH law"; handed to Hermes for the preamble):
+⭐ **Verifying the identity of the thing you started is not the same as verifying the identity of the thing that answers.** A hash check passed on a corpse while the previous binary held the port. Cure: resolve the process **holding the port** (`lsof -nP -iTCP:<port> -sTCP:LISTEN`), require exactly one, hash *its* image; match kill patterns on the invariant part of the argv, never the binary name; every stage stops what it started before declaring DONE.
+Cause worth remembering: **I renamed the binaries specifically so the pairing couldn't confuse them, and the rename broke the `pgrep` teardown the isolation depended on.**
+⭐ **A guard is an instrument too, and inherits every failure mode in the catalogue.** Removals (enumeration) beat guards (positive controls).
+⭐ **A remedy's cost lives in the manifest, not in the diff.**
+
+---
+
+## ZU-51 — 2026-08-19 ~05:50Z. HOLD DISCHARGED. Leg two is the last gate condition.
+
+### The hold is gone, and why
+Artemis answered the question the hold rested on, then **retracted a second defect they had filed an hour earlier** (beamr#29, a claimed uncatchable exit from a compiled bitstring op) on their own evidence, eleven minutes after filing it. Their sentence, to be quoted with its hedges intact and never laundered into mine:
+
+> *I know of no shape — AWL-authored, stdlib, or FFI — that reaches the `Exited`-without-exception face, because I can find no way to produce the bare exception word it requires.*
+
+Two instruments converging: all five producers of `InstructionOutcome::Exit` accounted for by trace, and zero hits across beamr's whole suite beside a **live 40-hit control** on the neighbouring arm. **Traced and measured, not proven**, with one residual named rather than buried (`process_from_abi` returning `None` — no process to set an exception on, and a far larger problem if it ever fires).
+
+**Waffles RULED the hold DISCHARGED** — but the deploy still waits for leg two, *not* as a remnant of the hold: the workload-shape lab green at default on the FIXED binary was always the gate's own last input.
+
+### Results banked
+- **Walls on `633b9c2`, rerun clean with port-holder verification on every arm:** sleep_wall Completed **805 events / 3 compiles**, fork_wall Completed **405 / 22** — **exact parity with `85c5f9d`**. nosleep_wall aborted on an instrument fault (below).
+- **These are REGRESSION evidence only.** Leg one's green on the OLD binary dissolved the pairing's positive control, so no arm of mine says the fix works. Repair evidence is Artemis's, at the unit level. Mechanism from their bench, workload survival from mine — kept apart in every message.
+- **Leg three CANCELLED outright**, not run and not counted. No control, and the width was the wrong lever: both of `watch_inbox`'s closure bodies park on their first effect, so eight images gives eight SHORT closure calls, never one long one. `lab-watch-wide.sh` is now inert and says so in its own text.
+
+### 🔴 THE NINTH LAW — a correct refusal presents as a hang
+Cost me `nosleep_wall` **and leg two, twice**. Both reported "smoke run never completed", which reads as exactly the engine death the rig exists to detect. Neither was.
+
+- **`nosleep_wall`:** the probe store is shared between the walls and the lab arms; a lab arm had deployed Tom's `process_photo`, which pins `count_photo` on `thing_finder_counting` **and routes new starts so it cannot be unloaded**. Every later walls worker on that queue was refused for the pool. Fixed by a private `probe_walls` queue.
+- **Leg two:** `watch_worker.awl` advertised a `PhotoVerdict` **without `labels`/`labels_attempted`** — fields *my own label-fields work* added to Tom's deployed `count_photo` output. The server refused it correctly and precisely, naming package, action, both missing properties and the changed `required` list.
+
+⭐ (Artemis's wording, kept) **A CORRECT REFUSAL THAT PRESENTS AS A HANG IS INDISTINGUISHABLE FROM A DEAD ENGINE, AND THE QUALITY OF THE ERROR MESSAGE IS NO DEFENCE — WHAT MATTERS IS WHETHER ANYTHING READS IT.** The worker's log was **zero bytes** in the directory I was reading, so the loudest error of the night was invisible at the only place I looked. Remedy, now in both scripts: **never let a timeout be the only witness for a condition that has a specific, greppable face** — grep the refusal out of the refused component's own log, and test the dependency's liveness *at the moment of failure*, not once at startup.
+
+My cause, plainly: **I audited the arm and never audited the state it inherited.** Sibling of ZU-50's law from the other end.
+
+Also fixed: `lab-watch.sh` now tears down on **every** exit path (`trap … EXIT`) and kills workers by `worker awl .*watch_worker`, not one filename — two stale responders had survived FATAL branches and the store had already recorded one claiming a later arm's activity (*"pending activity collision: a live responder already owns this execution site"*).
+
+### 🔴 I WAS WRONG THAT AWL CANNOT AUTHOR A SLICE-BURNING CLOSURE
+I told Artemis the AWL surface structurally cannot reach the `Yielded` precondition. **Reading the emitter rather than the surface overturned it.** `emitter/flows.rs:503`, `emit_instance_fanout`, strict `sequence` arm:
+
+```gleam
+use gathered <- result.try(list.try_fold(items, [], fn(acc, var) {
+  use item <- result.try(<region instance function>(args))
+  Ok([item, ..acc]) }))
+```
+
+The closure body calls a **whole multi-step region**, so its cost is bounded by DATA, not source text — the one AWL construct where that is true (`map`/`filter`/`sort` take a field projection and cannot nest). `probe100/slice_wall.awl` is built, `aion awl check` clean, and its emit confirms the shape verbatim.
+
+**Held at its real strength:** this is a READ OF THE EMITTER establishing the shape exists in generated code. It does **not** establish the shape reaches the face. Two vacuity modes registered before any run: `list.try_fold/3` never crossing 1000 entries (VACUOUS, not green), or the region instance parking before the fat body burns its slice. Artemis initially priced it as "reachable from what a user can write", I pushed back, and they amended their own file to carry it at my strength.
+
+⭐ (Artemis) **A CLAIM CROSSING A SEAT BOUNDARY LOSES ITS HEDGES UNLESS THEY TRAVEL AS PART OF THE CLAIM.** Recorded into `a-relayed-fact-wears-the-relayers-name`.
+
+### slice_wall predictions, registered BEFORE the run
+`outer`=1500, `heavy`=5000. ~1500 `try_fold` entries, crossing 1000 near item ~1000; ~10,000 charged calls per closure invocation. **Runs on `85c5f9d`, the UNFIXED binary** — its only job is to be the positive control the pairing lost. **If red, it must turn red AFTER roughly the thousandth item; an early red means I measured something else and the arm says nothing.**
+
+### 🔴 THE ORDER, and Tom is the reason for it
+1. **leg two** — relaunched 05:49:18Z, `1aba2b49-31f6-4631-b531-aff4b261b72d`, worker proven serving, 400 scans, ETA ~06:35Z
+2. **deploy conditions 3+4** — default threshold, rollback staged, rename-swap, `watch_inbox` past 1009, **TOM TOLD BEFORE THE TOUCH**
+3. Tom's verification window on a **QUIET BOX** — a presence assertion under contention can fail for load rather than the defect, and a false red on his live surface costs more than any arm
+4. `nosleep-pair.sh` — both binaries, private queue. **The remembered `85c5f9d` figure (605/29) does NOT ride free**: it was measured before `process_photo` existed in that store, so it is a number from a different world.
+5. `slice_wall` on `85c5f9d`
+6. Then `JitCache::keys()` — the enumeration Artemis wants pointed at *which functions reachable from an AWL workflow actually tier up*
+
+### Caveat carried on leg one
+The probe store holds two `process_photo` versions (`c59921bf…` unreachable, `a2edf0c1…` routing). Leg one's worker was admitted where leg two's was refused, and I have **not** established which contract leg one ran under. Payload shape differs; the ENGINE shape (timer → activity → fork → await → loop) does not, and my counts are engine-shape counts. Stated as an open loose end rather than resolved by assumption.

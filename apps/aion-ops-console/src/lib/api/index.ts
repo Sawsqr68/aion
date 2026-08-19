@@ -22,6 +22,7 @@ export type {
   StartWorkflowParams,
   StartWorkflowResult,
   UpdateStatusResponse,
+  WorkflowHead,
   WorkflowPage,
   WorkflowPageRequest,
   WorkflowVersion,

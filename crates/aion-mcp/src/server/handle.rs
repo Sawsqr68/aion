@@ -8,7 +8,6 @@ use crate::http::{HttpRequest, HttpResponse};
 use crate::protocol::error::ProtocolError;
 use crate::protocol::jsonrpc::{IncomingMessage, JsonRpcResponse, RequestId};
 use crate::protocol::meta::RequestMeta;
-use crate::tasks::store::TaskStore;
 use crate::tools::service::ToolService;
 
 use super::config::McpServerConfig;
@@ -16,25 +15,21 @@ use super::dispatch::{route, validate_headers};
 
 /// A stateless MCP server over one host tool service.
 ///
-/// "Stateless" is literal: nothing here is keyed by connection. The only state
-/// the object holds is the task store, and a task is reachable **only** through
-/// the identifier the client was handed and passes back on each call — the
-/// explicit-handle pattern the revision requires of anything spanning requests.
+/// "Stateless" is literal, and now without qualification: this object holds a
+/// service and a configuration, and nothing else. Nothing is keyed by
+/// connection, and nothing spans requests — not even a task, which is a
+/// projection of durable work the HOST stores and is re-read on each call
+/// through the explicit handle the client was handed.
 pub struct McpServer<S: ToolService> {
     service: Arc<S>,
     config: McpServerConfig,
-    tasks: TaskStore,
 }
 
 impl<S: ToolService> McpServer<S> {
     /// Build a server over a tool service.
     #[must_use]
-    pub fn new(service: Arc<S>, config: McpServerConfig) -> Self {
-        Self {
-            service,
-            config,
-            tasks: TaskStore::new(),
-        }
+    pub const fn new(service: Arc<S>, config: McpServerConfig) -> Self {
+        Self { service, config }
     }
 
     /// The configuration this server runs under.
@@ -43,19 +38,14 @@ impl<S: ToolService> McpServer<S> {
         &self.config
     }
 
-    /// The task store, exposed for the host's own diagnostics.
-    #[must_use]
-    pub const fn tasks(&self) -> &TaskStore {
-        &self.tasks
-    }
-
     /// Handle one HTTP request to the MCP endpoint.
     ///
     /// `caller` is the identity the host already authenticated. The MCP layer
     /// authenticates nothing and authorizes nothing — it carries the host's
-    /// caller through to the tools, which apply the host's own model. That is
-    /// what "auth is inherited" means concretely: there is no second auth path
-    /// here to drift from the first.
+    /// caller through to the tools AND to the task methods, which apply the
+    /// host's own model. That is what "auth is inherited" means concretely:
+    /// there is no second auth path here to drift from the first, and no
+    /// request that reaches the host's data without carrying its caller.
     pub async fn handle_http(&self, request: &HttpRequest, caller: &S::Caller) -> HttpResponse {
         // Origin first: a DNS-rebinding attempt must be refused before its body
         // is parsed, let alone dispatched.
@@ -102,15 +92,7 @@ impl<S: ToolService> McpServer<S> {
     ) -> Result<Value, ProtocolError> {
         let meta = RequestMeta::parse(&message.params)?;
         validate_headers(&request.headers, message, &meta, self.service.catalog())?;
-        route(
-            &self.service,
-            &self.config,
-            &self.tasks,
-            caller,
-            message,
-            &meta,
-        )
-        .await
+        route(&self.service, &self.config, caller, message, &meta).await
     }
 }
 

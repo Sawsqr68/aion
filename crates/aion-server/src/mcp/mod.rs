@@ -14,6 +14,8 @@ pub(crate) mod run_scope;
 pub mod runtime;
 /// The Aion tool service.
 pub mod service;
+/// The MCP task handle and the run projection behind it.
+pub(crate) mod task_ref;
 /// The tool implementations.
 pub(crate) mod tools;
 

@@ -1,0 +1,10 @@
+//! aion#28 repro: the worker document serving queue `local` for repro28.awl.
+//! Same signatures as the workflow's declared worker; served externally with
+//! `aion worker awl repro28_worker.awl --endpoint http://127.0.0.1:15051`.
+worker local
+  action probe(name: String, tag: String) -> Probe
+    run "sh -c 'echo \"$1:$2\"' -- $name $tag"
+  action summarize(a: String, b: String, c: String) -> Probe
+    run "sh -c 'printf %s%s%s \"$1\" \"$2\" \"$3\" | wc -c' -- $a $b $c"
+
+type Probe { exit_code: Int, stdout: String, stderr: String }

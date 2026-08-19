@@ -1,8 +1,6 @@
 //! `start_run`, including the awaited (task-shaped) variant.
 
-use std::time::Duration;
-
-use aion_core::{RunId, WorkflowId, WorkflowStatus};
+use aion_core::{RunId, WorkflowId, WorkflowStatus, WorkflowSummary};
 use aion_mcp::tools::service::{ToolCall, ToolFailure, ToolOutcome};
 use aion_proto::{ProtoStartWorkflowRequest, WireError};
 use serde_json::json;
@@ -13,7 +11,13 @@ use crate::mcp::args::{
 use crate::{CallerIdentity, ServerState};
 
 use super::errors::tool_failure;
-use super::run_view::RunView;
+
+/// The one task-shaped tool this server publishes.
+///
+/// Named once so the decision ("is this call task-shaped?"), the projection
+/// ("whose result is a settled task carrying?"), and the schema the projection
+/// is validated against can never come to mean three different tools.
+pub(crate) const START_RUN: &str = "start_run";
 
 /// Whether this `start_run` call asked to be awaited.
 ///
@@ -23,22 +27,26 @@ use super::run_view::RunView;
 /// a task. A client cannot ask for a task-shaped response to work that finishes
 /// immediately, and cannot refuse one for work that does not.
 pub(crate) fn awaits_completion(call: &ToolCall) -> bool {
-    call.name == "start_run" && optional_bool(call, "await_completion")
+    call.name == START_RUN && optional_bool(call, "await_completion")
 }
 
 /// Run `start_run`.
+///
+/// The run is started and confirmed here whether or not the call is awaited:
+/// the awaited variant differs only in how the dispatcher ANSWERS it. Nothing
+/// waits server-side — the wait a caller does is its own `tasks/get` poll
+/// against durable state, which is why an awaited start costs the server no
+/// thread and survives a restart of this process.
 ///
 /// # Errors
 ///
 /// [`ToolFailure`] when the arguments are malformed, the caller does not hold
 /// the namespace, the workflow type is not deployed, the server is draining, or
-/// the engine start fails. When awaiting, also when the run's terminal status
-/// cannot be read back.
+/// the engine start fails.
 pub(crate) async fn start_run(
     state: &ServerState,
     caller: &CallerIdentity,
     call: &ToolCall,
-    await_poll_interval: Duration,
 ) -> Result<ToolOutcome, ToolFailure> {
     if state.drain_state().is_draining() {
         return Err(ToolFailure::new(
@@ -75,36 +83,62 @@ pub(crate) async fn start_run(
         .try_into()
         .map_err(|error| tool_failure(&error))?;
 
-    if !awaits_completion(call) {
-        return Ok(ToolOutcome {
-            summary: format!(
-                "started {workflow_type} as workflow {workflow_id} run {run_id}; \
-                 call describe_run with those handles to follow it"
-            ),
-            structured: json!({
-                "namespace": namespace,
-                "workflow_id": workflow_id.to_string(),
-                "run_id": run_id.to_string(),
-                "workflow_type": workflow_type,
-                "status": WorkflowStatus::Running,
-                "awaited": false,
-            }),
-        });
-    }
-
-    let status =
-        await_terminal(state, caller, &namespace, &workflow_id, await_poll_interval).await?;
+    let summary = if awaits_completion(call) {
+        format!(
+            "started {workflow_type} as workflow {workflow_id} run {run_id}; the task carries its \
+             outcome — poll tasks/get for it"
+        )
+    } else {
+        format!(
+            "started {workflow_type} as workflow {workflow_id} run {run_id}; \
+             call describe_run with those handles to follow it"
+        )
+    };
     Ok(ToolOutcome {
-        summary: format!("{workflow_type} workflow {workflow_id} finished as {status:?}"),
+        summary,
         structured: json!({
             "namespace": namespace,
             "workflow_id": workflow_id.to_string(),
             "run_id": run_id.to_string(),
             "workflow_type": workflow_type,
-            "status": status,
-            "awaited": true,
+            // The run has just been started and confirmed, so `Running` is what
+            // history says right now. An awaited call's SETTLED status comes
+            // from `awaited_outcome`, projected from the run when it is read —
+            // never asserted here about a future this has not seen.
+            "status": WorkflowStatus::Running,
+            "awaited": awaits_completion(call),
         }),
     })
+}
+
+/// The `start_run` result a settled task carries.
+///
+/// Built from the run's own projected summary, so the answer a client is handed
+/// through `tasks/get` is the same answer `describe_run` would give — one
+/// truth, read once, rather than a copy that was right when it was written.
+///
+/// The shape is `start_run`'s published `outputSchema` exactly, because this
+/// result is validated against that schema before it is answered with: a task
+/// result that did not conform would be the server breaking its own contract.
+pub(crate) fn awaited_outcome(
+    namespace: &str,
+    run_id: &RunId,
+    summary: &WorkflowSummary,
+) -> ToolOutcome {
+    ToolOutcome {
+        summary: format!(
+            "{} workflow {} run {run_id} finished as {:?}",
+            summary.workflow_type, summary.workflow_id, summary.status
+        ),
+        structured: json!({
+            "namespace": namespace,
+            "workflow_id": summary.workflow_id.to_string(),
+            "run_id": run_id.to_string(),
+            "workflow_type": summary.workflow_type,
+            "status": summary.status,
+            "awaited": true,
+        }),
+    }
 }
 
 /// Build the start request from the tool call's arguments.
@@ -142,34 +176,6 @@ fn start_request(call: &ToolCall) -> Result<ProtoStartWorkflowRequest, ToolFailu
         // the run unnamed, which is what "no name" means.
         display_name: optional_non_blank_str(call, "display_name")?,
     })
-}
-
-/// Poll a workflow until its projected status is terminal.
-///
-/// The loop has no iteration cap and no deadline of its own, deliberately: a
-/// durable run may legitimately take three months, and a cap here would be a
-/// lie about when the answer arrives. The bounds that DO apply are the task's
-/// own — the client's `tasks/cancel` and the configured task TTL — both of
-/// which drop this future from the outside. That keeps exactly one authority
-/// over how long a wait may last, and it is the operator's configuration
-/// rather than a number chosen here.
-///
-/// `ContinuedAsNew` is terminal for THIS run and is reported as such; the chain
-/// carries on under a new run, which `describe_run` will show.
-async fn await_terminal(
-    state: &ServerState,
-    caller: &CallerIdentity,
-    namespace: &str,
-    workflow_id: &WorkflowId,
-    poll_interval: Duration,
-) -> Result<WorkflowStatus, ToolFailure> {
-    loop {
-        let view = RunView::read_parts(state, caller, namespace, workflow_id, None).await?;
-        if view.summary.status.is_terminal() {
-            return Ok(view.summary.status);
-        }
-        tokio::time::sleep(poll_interval).await;
-    }
 }
 
 #[cfg(test)]

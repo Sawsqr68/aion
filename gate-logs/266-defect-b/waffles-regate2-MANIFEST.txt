@@ -1,0 +1,16 @@
+HEAD=00064c41c7c023ea86f940a06b7ace37b439596e
+started=2026-08-17T11:27:01+1000
+load_before[scoped-e2e-aion]={ 26.47 29.98 26.44 }
+exit[scoped-e2e-aion]=0
+load_before[gsp-e2e]={ 22.19 28.52 26.05 }
+exit[gsp-e2e]=0
+load_before[outbox-solo1]={ 37.67 31.87 27.44 }
+exit[outbox-solo1]=0
+load_before[outbox-solo2]={ 37.17 32.27 27.71 }
+exit[outbox-solo2]=0
+load_before[outbox-solo3]={ 35.99 32.20 27.76 }
+exit[outbox-solo3]=0
+load_before[test-aion-server-rerun]={ 35.95 32.37 27.90 }
+exit[test-aion-server-rerun]=0
+finished=2026-08-17T11:36:00+1000
+OVERALL=0

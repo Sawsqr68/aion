@@ -768,6 +768,16 @@ compatible_workers: number,
  */
 dispatch_parked: boolean, };
 
+export type RunGeneration = {
+/**
+ * Workflow sequence of the `WorkflowStarted` that opened this run.
+ */
+seq: number,
+/**
+ * The run that sequence opened.
+ */
+run_id: RunId, };
+
 export type DescribeWorkflowResponse = {
 /**
  * Workflow summary projected from authoritative history, when the workflow
@@ -788,7 +798,26 @@ history: Array<Event>,
  * "it is parked with nobody to take it", which the projected
  * [`crate::WorkflowStatus`] alone cannot express — `Running` covers both.
  */
-unserved: Array<UnservedActivity>, };
+unserved: Array<UnservedActivity>,
+/**
+ * Every generation boundary in this workflow's WHOLE history, ascending —
+ * one entry per `WorkflowStarted`.
+ *
+ * This is the answer to "which run does the event at sequence `n` belong
+ * to": the last boundary at or before `n`. It is stated by the server
+ * because only the server holds the whole history, and a reader that
+ * derives it from a window can only be right when the window happens to
+ * contain the boundary.
+ *
+ * 🔴 THIS EXISTS BECAUSE DERIVING IT CLIENT-SIDE FAILS SILENTLY AND
+ * TOTALLY. The ops console scanned its loaded window (500 events) for
+ * `WorkflowStarted`; on any workflow longer than one window the boundary is
+ * never in it, so every attempt row rendered "run unknown" — an accurate
+ * admission of ignorance on every row, which trains an operator to ignore
+ * the column. Computed from the same history the summary is projected
+ * from, so it costs no additional read and cannot disagree with it.
+ */
+generations: Array<RunGeneration>, };
 
 export type ClusterEventMeta = {
 /**

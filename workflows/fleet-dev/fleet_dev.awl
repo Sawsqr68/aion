@@ -1,176 +1,201 @@
 //! fleet_dev — one brief, planned into legs by a planning counsel, built by
-//! parallel delegated builders in isolated worktrees, merged by the server,
-//! judged by a judging counsel, and gated by the server — on the engine's own
-//! durability, with every seam proven against a known answer before anything
-//! real is spent.
+//! parallel delegated builders in isolated worktrees, merged mechanically,
+//! gated in code, fix-rounds routed back to the dev seat deterministically,
+//! judged by a judging counsel, and pushed home with a receipt — on the
+//! engine's own durability, resident on a fleet box, with every seam proven
+//! against a known answer before anything real is spent.
 //!
-//! This is the fleet-shaped sibling of `norn_dev`: same agent seam (the tree
-//! to work in, the prompt to work on, the canonical agent-outcome record
-//! back), same control-first discipline, same server-run gates. What it adds
-//! is the division of labour the single-lane pilot performed by hand at the
-//! dispatcher's desk: the PLANNER grounds the brief in the tree before any
-//! builder runs, and the JUDGE reads the delivery before it is reported done.
+//! This is the box edition. The original was authored for home use, where the
+//! server and the working tree share one machine and `run` bodies execute on
+//! the server against a tree it can reach. On a fleet box the tree lives with
+//! the workers, so every mechanical action here is BODILESS and served by the
+//! `fleet_ops` worker document (`aion worker awl`) on the box — and because a
+//! worker `run json` action treats a nonzero exit as an activity failure and
+//! DISCARDS its stdout, every sealed script exits zero on its anticipated
+//! faces and carries the INNER command's exit code back as typed data. The
+//! workflow routes on that typed field; a red gate is a routed finding, never
+//! a retried-then-terminal failure with its evidence thrown away.
 //!
-//! THE TREE IS THE BLACKBOARD. AWL composes no strings at runtime — constant
-//! concatenation exists, runtime concatenation deliberately does not — so no
-//! step can wrap one leg's reply inside another leg's prompt. Instead every
-//! prompt in this document is an ADDRESS and every payload lives in a working
-//! tree named by the dispatch:
-//!   - the planner is instructed (by `plan_prompt`) to write the whole leg
-//!     plan to `.fleet/plan.md` and one complete brief per leg to
-//!     `.fleet/legs/<id>.md`, each anchored file:line to the requirement it
-//!     fans out — in the PRIMARY tree (`repo`);
-//!   - each builder's prompt (built by the dispatcher, carried in `legs`)
-//!     names its own `.fleet/legs/<id>.md` as the brief to read and
-//!     `.fleet/reports/<id>.md` as the report to write — in the leg's OWN
-//!     tree (`leg.repo`);
-//!   - the judge's prompt names the plan, the briefs, the reports, and the
-//!     diff of the MERGED primary tree, and carries the judging charter
-//!     itself.
-//! Every agent's deliverable is CHECKED MECHANICALLY, because every reply is
-//! a claim and the tree is the fact: `plan_check` verifies every promised
-//! leg brief exists and is non-empty, so a planner that answered eloquently
-//! and wrote nothing routes to `unplanned` instead of starving every builder
-//! downstream — and `report_check` holds the builders to the same law, so a
-//! builder whose reply claimed work the tree does not carry routes to
-//! `unreported` before the gates can pass a tree left in its prior state.
+//! THE TREE IS THE BLACKBOARD, AND THE BLACKBOARD IS COMMITTED. AWL composes
+//! no strings at runtime — so every prompt in this document is an ADDRESS
+//! into the working tree, and every deliverable travels IN COMMITS (design
+//! law, Tom's row): the planner commits `.fleet/plan.md` and one brief per
+//! leg under `.fleet/legs/`; builders commit their work and their report
+//! under `.fleet/reports/`; the gate script commits its red findings whole
+//! to `.fleet/gates/` with a stable `RED-LATEST.md` address for the fix
+//! round. A committed plan has a hash: it can be cited, diffed, and audited.
+//! The law also pays mechanically — `git worktree add` carries only
+//! committed state, so fan-out needs no copying, and fan-in is ordered
+//! merges, because the reports ride the leg branches home.
 //!
-//! BUILDERS FAN OUT; THE SERVER FANS IN. The legs run in parallel
-//! (`distribute`), one isolated worktree per builder, because concurrent
-//! writers in one tree destroy each other's work — isolation is the ruled
-//! answer, not a nicety. The `fanout` action cuts one worktree and one branch
-//! per leg from the planned tree and carries the planner's `.fleet/` briefs
-//! into each; the `fanin` action merges the leg branches back into the
-//! primary tree and carries each leg's report back with it. Both are sealed
-//! server-run scripts routed on exit codes: a tree that cannot be cut routes
-//! `unforked` before any builder is spent, and branches that cannot be
-//! merged route `unmerged` with the conflict named — a merge conflict is a
-//! finding about the plan's leg boundaries, never something an agent talks
-//! its way past.
+//! CHECKS RUN IN CODE; EXACT FEEDBACK ROUTES BACK; DECISIONS THAT CAN BE
+//! RULES ARE RULES (Tom's three clauses, binding). `plan_check` and
+//! `report_check` verify deliverables against HEAD, not eloquence.
+//! The gate step is a BOUNDED LOOP: a red gate's findings — the failing
+//! tests, the clippy output, verbatim — are committed to the tree by the
+//! gate script and the fix round routes the dev seat at that address with
+//! no human relay; three gate visits exhaust to `gates_red` with the
+//! evidence in the payload. The visit bound is structural (a literal, by
+//! AWL's grammar); making it a dispatch input is named on the row as a
+//! candidate engine extension. The dispatcher's `repo` address is checked
+//! against the provisioner's own derivation — an addressing disagreement
+//! refuses before any agent is spent.
 //!
-//! THE JUDGE IS NOT A GATE AND THE GATES ARE NOT A JUDGE. The gate script's
-//! exit code routes green/red mechanically, before the judge runs — a red
-//! tree is refused without spending judgement on it. The judge then rules on
-//! the delivery that gated green, with exactly two duties written in its
-//! charter: FIRST, the permitted-choice points — every "stated-not-done" the
-//! builders claimed under the brief's own permissions, verified as genuinely
-//! permitted, genuinely stated, and genuinely the better call; SECOND, the
-//! hard-wall audit against the brief's forbidden list. The judge never
-//! re-runs gates: a judge re-running them is a colleague pretending to be a
-//! mechanism. Its admission token is exact: a reply of precisely `judge_pass`
-//! routes done; ANY other reply — including a hedged pass — routes
-//! `judge_flagged` carrying the verdict text whole. The mismatch direction is
-//! deliberate: this document can produce a false flag, never a false clear.
+//! FAILURE KEEPS THE TREE; SUCCESS PUSHES THEN CLEANS. Every failure route
+//! carries `kept_root`: the run tree is the evidence and the salvage, and
+//! deletion inherits every adjective of its justification — a failed fleet's
+//! branches are work, and work is never destroyed in passing. The success
+//! route pushes the merged branch home with a typed receipt first, and only
+//! then tears down; a teardown refusal rides the report as data rather than
+//! failing a run whose work is already home.
 //!
-//! WHAT THIS DOES NOT PROVE: a green gate proves what the script measures; a
-//! judge's CLEAR is one model's read of the tree, priced by its charter but
-//! unverified. The landing re-gate and the landing itself stay at the
-//! operator's desk, after this workflow returns.
+//! WHAT THIS DOES NOT PROVE: a green gate proves what the gate entry
+//! measures; a judge's CLEAR is one model's read of the tree, priced by its
+//! charter but unverified. The landing re-gate and the landing itself stay
+//! at the operator's desk, after the pushed branch arrives.
 workflow fleet_dev
-  timeout 12h
+  input workspace_root: String
+  input run_name: String
+  input repo_url: String
+  input base_ref: String
+  input result_branch: String
   input repo: String
+  input leg_ids_csv: String
+  input gate_entry: String
   input counsel_control_prompt: String
   input counsel_control_expect: String
   input control_prompt: String
   input control_expect: String
   input plan_prompt: String
-  input plan_check_script: String
-  input fanout_script: String
+  input fix_prompt: String
   input legs: [Leg]
-  input fanin_script: String
-  input report_check_script: String
   input judge_prompt: String
   input judge_pass: String
-  input gate_script: String
   outcome done:          type FleetDevReport, route success
+  outcome unprovisioned: type Unprovisioned,  route failure
+  outcome unmeasured:    type Refused,        route failure
   outcome unplanned:     type PlanRefused,    route failure
   outcome unforked:      type Unforked,       route failure
   outcome unmerged:      type Unmerged,       route failure
   outcome unreported:    type Unreported,     route failure
   outcome gates_red:     type GatesRed,       route failure
   outcome judge_flagged: type JudgeFlagged,   route failure
-  outcome unmeasured:    type Refused,        route failure
+  outcome unpushed:      type Unpushed,       route failure
 
 /// One unit of fleet work. `prompt` is complete and self-contained AS AN
-/// ADDRESS: it names the leg's brief file the planner wrote and the report
-/// file the builder must write, plus the standing register (floors not
-/// ceilings, hard walls restated). `repo` is the leg's OWN isolated
-/// worktree, cut by `fanout` — the dispatcher fixes both. The brief's
-/// CONTENT lives in the tree.
+/// ADDRESS: it names the leg's brief file the planner committed and the
+/// report file the builder must commit, plus the standing register (floors
+/// not ceilings, hard walls restated). `repo` is the leg's OWN isolated
+/// worktree at the deterministic address `<root>/legs/<id>` — the
+/// dispatcher composes it, and `fanout` cuts it there or refuses.
 type Leg { id: String, prompt: String, repo: String }
 
-/// The canonical agent-outcome record every dispatch of an agent seam returns: the leg's whole
-/// accumulated `text`, its last answer alone as `final_message`, the canonical `stop_reason`, and
-/// the `session_id` handle of the conversation that produced it.
+/// The canonical agent-outcome record every dispatch of an agent seam
+/// returns: the whole accumulated `text`, the last answer alone as
+/// `final_message`, the canonical `stop_reason`, and the `session_id`
+/// handle of the conversation that produced it.
 type Reply { text: String, final_message: String, stop_reason: String, session_id: String }
 
-/// What actually ran: the sealed command's exit status and both streams,
-/// filled by the server for every `run`-bodied action.
-type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+/// A sealed mechanical command's result, carried as DATA: `exit_code` is the
+/// INNER command's status (the script itself exits zero on every anticipated
+/// face), and the streams are bounded tails with the full log at a named
+/// path in the run tree. The workflow routes on `exit_code`.
+type OpProbe { exit_code: Int, stdout: String, stderr: String }
 
-/// A fleet that planned, built in parallel, merged clean, gated green, and
-/// was judged clear. The builders' own accounts travel with the machine's
-/// gate evidence and the judge's admission, plus both controls' replies —
-/// an assertion that the method worked is not a demonstration.
+/// The provisioner's receipt: the run root and repo path it derived (checked
+/// against the dispatcher's own addressing), and the HEAD it checked out.
+type CloneProbe { ok: Bool, refusal: String, root: String, repo_path: String, head_commit: String }
+
+/// The delivery receipt: which commit landed on which branch of which
+/// remote. A refusal names its face — non-fast-forward, auth, unreachable —
+/// and the run tree is kept.
+type PushProbe { ok: Bool, refusal: String, branch: String, pushed_commit: String, remote: String }
+
+/// The cleanup receipt. Refusal is data on the success report, never a run
+/// failure: the work is already home when this runs.
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
+
+/// A fleet that planned, built in parallel, merged clean, gated green
+/// (possibly through fix rounds), was judged clear, and pushed home. The
+/// builders' own accounts travel with the machine's receipts and the
+/// judge's admission — an assertion that the method worked is not a
+/// demonstration.
 type FleetDevReport {
   plan: String,
   leg_ids: [String],
   reports: [String],
   verdict: String,
+  base_commit: String,
+  pushed_commit: String,
+  result_branch: String,
   gate_exit: Int,
-  gate_stderr: String,
   control_reply: String,
   counsel_control_reply: String,
+  teardown_ok: Bool,
+  teardown_refusal: String,
+  sessions_exit: Int,
+  sessions_note: String,
 }
 
-/// The planner answered but its promised deliverable is not in the tree.
-/// Carries the planner's account beside the check's own streams.
-type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String }
+/// The tree could not be provisioned — or the dispatcher's `repo` address
+/// and the provisioner's derivation disagree, which refuses before any
+/// agent is spent.
+type Unprovisioned { refusal: String, kept_root: String }
+
+/// A fleet that did not build, said out loud rather than reported as a
+/// pass: a control seat answered something other than the known answer.
+type Refused { control_expect: String, control_reply: String, reason: String, kept_root: String }
+
+/// The planner answered but its promised deliverable is not committed at
+/// HEAD. Carries the planner's account beside the check's own streams.
+type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String, kept_root: String }
 
 /// The leg worktrees could not be cut, so no builder was spent. The fanout
 /// script refuses loudly — including when a leftover tree or branch from a
-/// prior attempt is in the way, which is the dispatcher's to inspect, never
-/// a script's to delete.
-type Unforked { plan: String, fork_exit: Int, stdout: String, stderr: String }
+/// prior attempt is in the way, which is the dispatcher's to inspect,
+/// never a script's to delete.
+type Unforked { plan: String, fork_exit: Int, stdout: String, stderr: String, kept_root: String }
 
 /// The legs built but their branches could not be merged back. A conflict
 /// here is a finding about the plan's leg boundaries — two briefs claimed
 /// the same ground. The script names the conflicting files on stdout and
 /// aborts the merge, leaving the primary tree clean and every leg branch
-/// intact for the dispatcher to read.
-type Unmerged { plan: String, reports: [String], merge_exit: Int, stdout: String, stderr: String }
+/// intact in the kept tree.
+type Unmerged { plan: String, reports: [String], merge_exit: Int, stdout: String, stderr: String, kept_root: String }
 
-/// The builders answered but at least one promised report is not in the
-/// tree. A builder's reply is a claim exactly as the planner's is; a tree
-/// left in its prior state can gate GREEN, so this is caught by a script
-/// before the gates, never left for the judge as a mechanism of last
-/// resort. The check script names each missing leg on stdout, which
-/// travels here beside the builders' own accounts.
-type Unreported { plan: String, reports: [String], check_exit: Int, stdout: String, stderr: String }
+/// The builders answered but at least one promised report is not committed
+/// in the merged tree. Caught by a script before the gates, never left for
+/// the judge as a mechanism of last resort.
+type Unreported { plan: String, reports: [String], check_exit: Int, stdout: String, stderr: String, kept_root: String }
 
-/// The legs built and merged but the gates are red. Everything needed to
-/// read the failure travels with the refusal-to-report.
-type GatesRed { plan: String, reports: [String], gate_exit: Int, stdout: String, stderr: String }
+/// The legs built and merged but the gates stayed red through every fix
+/// round. The final round's findings travel here, and the full history
+/// of every round is committed in the kept tree under `.fleet/gates/`.
+type GatesRed { plan: String, reports: [String], gate_exit: Int, stdout: String, stderr: String, kept_root: String }
 
-/// The delivery gated green and the judge refused it anyway — or answered
-/// anything other than the exact admission token. The whole verdict text
-/// travels with the refusal.
-type JudgeFlagged { plan: String, reports: [String], verdict: String }
+/// The delivery gated green and the judge refused it anyway — its final
+/// answer was anything other than the exact admission token. The whole
+/// verdict text travels with the refusal; the mismatch direction is
+/// deliberate: this document can produce a false flag, never a false clear.
+type JudgeFlagged { plan: String, reports: [String], verdict: String, kept_root: String }
 
-/// A fleet that did not build, said out loud rather than reported as a pass.
-type Refused { control_expect: String, control_reply: String, reason: String }
+/// Judged clear but the push home was refused. The verdict and the named
+/// refusal travel together; the tree is kept — the work exists only there.
+type Unpushed { verdict: String, push_refusal: String, kept_root: String }
 
 worker counsel
-  /// The planning and judging seats, both served by one Claude-backed ACP
-  /// worker on queue `counsel`. Prompts go to the session verbatim; replies
-  /// come back verbatim; the working tree arrives with each dispatch.
+  /// The planning and judging seats, one Claude-backed ACP worker on queue
+  /// `counsel`, RESIDENT on the fleet box under its standing auth (Tom's
+  /// word, verified at the bytes: ~/.claude + ~/.claude.json present).
+  /// Prompts go to the session verbatim; replies come back verbatim; the
+  /// working tree arrives with each dispatch.
   ///
-  /// HARNESS VALUES ARE PROPOSALS for the document review, not defaults:
-  /// `command` is this box's absolute npx path (the `{workspace_root}` form
-  /// is the portable alternative once a per-box binding exists), `permission
-  /// allow-once` because the planner and judge WRITE their deliverables into
-  /// the tree, `exit_grace 30s` and the reconnect ladder copied from the
-  /// proven norn register.
+  /// `command` is the box's bun runner — the box has no node/npx, and bunx
+  /// resolves and runs the adapter (0.69.0 preflight, rc=0). The seated
+  /// handshake is proven by `counsel_control` before anything is spent.
+  /// `permission "allow-once"` because the planner WRITES AND COMMITS its
+  /// deliverables into the tree; the reconnect ladder is the proven norn
+  /// register's.
   harness
     kind acp
     concurrency 1
@@ -178,33 +203,32 @@ worker counsel
     reconnect_max_backoff 30s
     reconnect_max_attempts 100
     env_pass "PATH", "HOME", "USER", "LOGNAME", "TMPDIR"
-    command "/opt/homebrew/bin/npx"
+    command "/home/aion/.bun/bin/bunx"
     args "@agentclientprotocol/claude-agent-acp"
     cwd from repo
     permission "allow-once"
     exit_grace 30s
   /// The planner. Reads the dispatcher's brief (carried whole in the
-  /// prompt), grounds every requirement file:line in the tree, and writes
-  /// `.fleet/plan.md` plus one complete builder brief per leg.
+  /// prompt), grounds every requirement file:line in the tree, writes
+  /// `.fleet/plan.md` plus one complete builder brief per leg, and COMMITS
+  /// them — an uncommitted plan fails `plan_check` by law.
   action plan(repo: String, prompt: String) -> Reply
-    agent, timeout 30m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
   /// The judge. Two duties, in its charter, carried in the prompt: the
   /// permitted-choice points first, the hard-wall audit second. Never the
   /// gates. Replies with exactly the admission token, or with its findings.
   action judge(repo: String, prompt: String) -> Reply
-    agent, timeout 30m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
 
 worker dev
   /// The builders' seat: queue `dev`, the same action seam as `norn_dev`'s
-  /// declaration (`delegate(repo, prompt) -> Reply`) so a seated norn
-  /// worker serves both documents. `concurrency 3` is the parallel-legs
-  /// value — one lane per leg of this dispatch — and diverges from
-  /// `norn_dev`'s single lane, so a fleet run wanting true parallelism
-  /// seats a worker FROM THIS DOCUMENT; the trade-off is recorded in this
-  /// folder's README. Same register as the pilot otherwise: the brief
-  /// address goes to the session verbatim, the report comes back verbatim,
-  /// retries absorb provider-overload bursts — a failed build is a reply,
-  /// not an error.
+  /// declaration so a seated norn worker serves both documents.
+  /// `concurrency 3` is the parallel-legs value — one lane per leg — and
+  /// the fix round rides the same seat at concurrency 1 by construction
+  /// (one primary tree, one fix prompt). Same register as the pilot: the
+  /// brief address goes to the session verbatim, the report comes back
+  /// verbatim, retries absorb provider-overload bursts — a failed build is
+  /// a reply, not an error.
   harness
     kind norn
     concurrency 3
@@ -215,130 +239,175 @@ worker dev
     args "--account", "default"
     cwd from repo
   action delegate(repo: String, prompt: String) -> Reply
-    agent, timeout 90m, retry 3 backoff 30s..5m
+    agent, retry 3 backoff 30s..5m
 
-  /// The planner's deliverable, verified by the machine: the sealed script
-  /// checks every promised `.fleet/legs/<id>.md` exists and is non-empty.
-  action plan_check(script: String) -> RunOutcome
-    run "zsh $script"
+worker fleet_ops
+  /// The mechanical half, served by `aion worker awl` on the box from
+  /// `fleet_ops_worker.awl` — bodiless here, because the commands must run
+  /// where the tree lives. Every action's script is sealed at
+  /// `/home/aion/fleet/bin/` with its sha256 in the runbook, exits zero on
+  /// anticipated faces, and carries the inner exit code as typed data.
+  action clone(repo_url: String, base_ref: String, workspace_root: String, run_name: String) -> CloneProbe
+  action plan_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+  action fanout(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+  action fanin(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+  action report_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
+  action gates(workspace_root: String, run_name: String, gate_entry: String) -> OpProbe
+  action push(workspace_root: String, run_name: String, result_branch: String) -> PushProbe
+  action teardown(workspace_root: String, run_name: String) -> TeardownProbe
+  action sessions(workspace_root: String, run_name: String, counsel_control_session: String, dev_control_session: String, plan_session: String, judge_session: String) -> OpProbe
+  action session(workspace_root: String, run_name: String, tree: String, step_label: String, session_id: String) -> OpProbe
 
-  /// The fan-out, run by the server: one isolated worktree and one branch
-  /// per leg, cut from the planned tree, each carrying the planner's
-  /// `.fleet/` briefs. Refuses loudly rather than deleting anything in its
-  /// way.
-  action fanout(script: String) -> RunOutcome
-    run "zsh $script"
-
-  /// The fan-in, run by the server: each leg's report carried back to the
-  /// primary tree, then each leg branch merged in dispatch order. A
-  /// conflict aborts clean and exits non-zero with the files named.
-  action fanin(script: String) -> RunOutcome
-    run "zsh $script"
-
-  /// The builders' deliverables, verified the same way as the planner's:
-  /// the sealed script checks every promised `.fleet/reports/<id>.md`
-  /// exists and is non-empty in the merged tree, naming each missing leg
-  /// on stdout.
-  action report_check(script: String) -> RunOutcome
-    run "zsh $script"
-
-  /// The gates, run by the server. The command is sealed into the package
-  /// identity at deploy; the script path arrives as one whole argument and
-  /// never passes through a shell expansion.
-  action gates(script: String) -> RunOutcome
-    run "zsh $script"
+/// Provision the run tree: clone at the named ref under the confined run
+/// root. The dispatcher's `repo` address must equal the provisioner's own
+/// derivation — a rule, not a judgment, so it routes in code.
+step provision
+  clone(repo_url: repo_url, base_ref: base_ref, workspace_root: workspace_root, run_name: run_name) -> cloned
+  outcome ready: when cloned.ok and cloned.repo_path == repo, route counsel_control
+  outcome misaddressed: when cloned.ok,
+    route unprovisioned(refusal: "the dispatcher's repo input does not equal the provisioned repo path — the addressing must agree before any agent is spent",
+      kept_root: cloned.root)
+  outcome refused: otherwise,
+    route unprovisioned(refusal: cloned.refusal, kept_root: cloned.root)
 
 /// Prove the counsel seam before spending it: ask the planning seat a
-/// question whose answer the dispatcher already knows. A broken pipeline and
-/// a working one both return well-formed strings; only a known answer tells
-/// them apart.
+/// question whose answer the dispatcher already knows. A broken pipeline
+/// and a working one both return well-formed strings; only a known answer
+/// tells them apart. This is also the seated-handshake proof for the
+/// resident ACP worker.
 step counsel_control
   plan(repo: repo, prompt: counsel_control_prompt) -> counsel_control
-  outcome proven: when counsel_control.text == counsel_control_expect, route dev_control
+  outcome proven: when counsel_control.final_message == counsel_control_expect, route dev_control
   outcome broken: otherwise,
     route unmeasured(control_expect: counsel_control_expect, control_reply: counsel_control.text,
-      reason: "the counsel control did not return the expected reply, so the planning and judging pipeline cannot be shown to read the tree or follow instructions — nothing was planned")
+      reason: "the counsel control did not return the expected reply, so the planning and judging pipeline cannot be shown to read the tree or follow instructions — nothing was planned",
+      kept_root: cloned.root)
 
 /// Prove the builder seam the same way, before the planner writes a single
 /// brief for it.
 step dev_control
   delegate(repo: repo, prompt: control_prompt) -> control
-  outcome proven: when control.text == control_expect, route plan_legs
+  outcome proven: when control.final_message == control_expect, route plan_legs
   outcome broken: otherwise,
     route unmeasured(control_expect: control_expect, control_reply: control.text,
-      reason: "the builder control did not return the expected reply, so the delegation pipeline cannot be shown to read the tree or follow instructions — nothing was planned or built")
+      reason: "the builder control did not return the expected reply, so the delegation pipeline cannot be shown to read the tree or follow instructions — nothing was planned or built",
+      kept_root: cloned.root)
 
 step plan_legs
   plan(repo: repo, prompt: plan_prompt) -> planned
 
-/// The planner's answer is a claim; the tree is the fact. Route on the
-/// check's exit code, never on the eloquence of the reply.
+/// The planner's answer is a claim; HEAD is the fact. The check verifies
+/// the plan and every leg brief exist, are non-empty, and are COMMITTED —
+/// a loose working-tree plan is a red, by the blackboard-is-committed law.
 step check_plan
-  plan_check(script: plan_check_script) -> plan_checked
+  plan_check(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv) -> plan_checked
   outcome written: when plan_checked.exit_code == 0, route cut_trees
   outcome missing: otherwise,
     route unplanned(plan: planned.text, check_exit: plan_checked.exit_code,
-      stdout: plan_checked.stdout, stderr: plan_checked.stderr)
+      stdout: plan_checked.stdout, stderr: plan_checked.stderr, kept_root: cloned.root)
 
 /// Cut the leg worktrees from the planned tree before any builder is
-/// spent: a fleet that cannot be isolated does not build.
+/// spent: a fleet that cannot be isolated does not build. Committed state
+/// rides into every worktree for free — that is the law paying.
 step cut_trees
-  fanout(script: fanout_script) -> forked
+  fanout(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv) -> forked
   outcome cut: when forked.exit_code == 0, route open
   outcome uncut: otherwise,
     route unforked(plan: planned.text, fork_exit: forked.exit_code, stdout: forked.stdout,
-      stderr: forked.stderr)
+      stderr: forked.stderr, kept_root: cloned.root)
 
 step open
   distribute leg in legs
 
 step build_one
   delegate(repo: leg.repo, prompt: leg.prompt) -> built
+  session(workspace_root: workspace_root, run_name: run_name, tree: leg.repo,
+    step_label: leg.id, session_id: built.session_id) -> leg_captured
   built.text -> report
 
 step close
   collect report -> reports
   legs |> map(.id) -> leg_ids
 
-/// The server joins what the builders made: reports carried back, branches
-/// merged in dispatch order. A conflict is a finding about the plan's leg
-/// boundaries and routes with the conflicting files named — it is never an
-/// agent's to resolve in passing.
+/// The machine joins what the builders made: leg branches merged in
+/// dispatch order, reports riding their commits home. A conflict is a
+/// finding about the plan's leg boundaries and routes with the conflicting
+/// files named — it is never an agent's to resolve in passing.
 step merge
-  fanin(script: fanin_script) -> merged
+  fanin(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv) -> merged
   outcome joined: when merged.exit_code == 0, route check_reports
   outcome conflicted: otherwise,
     route unmerged(plan: planned.text, reports: reports, merge_exit: merged.exit_code,
-      stdout: merged.stdout, stderr: merged.stderr)
+      stdout: merged.stdout, stderr: merged.stderr, kept_root: cloned.root)
 
-/// A builder's answer is a claim; the tree is the fact — the same law
-/// `check_plan` enforces on the planner, enforced here on every builder
-/// against the merged tree, so the judge is never the first thing to
-/// notice an eloquent reply that wrote nothing.
+/// A builder's answer is a claim; the merged HEAD is the fact — the same
+/// law `check_plan` enforces on the planner, enforced on every builder, so
+/// the judge is never the first to notice an eloquent reply that wrote
+/// nothing.
 step check_reports
-  report_check(script: report_check_script) -> reports_checked
+  report_check(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv) -> reports_checked
   outcome written: when reports_checked.exit_code == 0, route gate
   outcome missing: otherwise,
     route unreported(plan: planned.text, reports: reports, check_exit: reports_checked.exit_code,
-      stdout: reports_checked.stdout, stderr: reports_checked.stderr)
+      stdout: reports_checked.stdout, stderr: reports_checked.stderr, kept_root: cloned.root)
 
-/// Mechanical measurement before judgement: a red tree is refused without
-/// spending the judge on it.
+/// Mechanical measurement before judgement — and Tom's clause 2 in motion:
+/// on red, the gate script has already COMMITTED the findings whole to
+/// `.fleet/gates/` (stable address `RED-LATEST.md`, numbered history), so
+/// the fix round routes the dev seat at that address with the verbatim
+/// evidence and no human relay. Three visits exhaust to `gates_red`.
 step gate
-  gates(script: gate_script) -> gate_result
+  gates(workspace_root: workspace_root, run_name: run_name, gate_entry: gate_entry) -> gate_result
   outcome green: when gate_result.exit_code == 0, route judgement
+  outcome fixable: when visits < 3, route fix_round
   outcome red: otherwise,
     route gates_red(plan: planned.text, reports: reports, gate_exit: gate_result.exit_code,
-      stdout: gate_result.stdout, stderr: gate_result.stderr)
+      stdout: gate_result.stdout, stderr: gate_result.stderr, kept_root: cloned.root)
+  max 3 visits
+
+/// The fix round: the dev seat, in the PRIMARY tree, at the committed
+/// findings' address. Its reply is recorded like any other; the gate
+/// re-measures regardless of what it claims — a fix that wrote nothing
+/// meets the same red and exhausts the loop mechanically.
+step fix_round
+  delegate(repo: repo, prompt: fix_prompt) -> fixed
+  session(workspace_root: workspace_root, run_name: run_name, tree: repo,
+    step_label: "fix_round", session_id: fixed.session_id) -> fix_captured
+  route gate
 
 /// The judge rules on the delivery that gated green. Exact admission only:
-/// anything other than the dispatcher's `judge_pass` token — a hedge, a
-/// preamble, a finding — routes to `judge_flagged` with the verdict whole.
+/// the FINAL answer must be the dispatcher's `judge_pass` token, nothing
+/// else — a hedge, a qualification, a finding in the last message routes to
+/// `judge_flagged` with the verdict whole. The stream (`text`) may narrate;
+/// the admission is `final_message`, the canonical last completed answer —
+/// flight one was flagged on its own passing verdict by a `text` compare.
 step judgement
   judge(repo: repo, prompt: judge_prompt) -> judged
-  outcome clear: when judged.text == judge_pass,
-    route done(plan: planned.text, leg_ids: leg_ids, reports: reports, verdict: judged.text,
-      gate_exit: gate_result.exit_code, gate_stderr: gate_result.stderr,
-      control_reply: control.text, counsel_control_reply: counsel_control.text)
+  outcome clear: when judged.final_message == judge_pass, route capture_sessions
   outcome flagged: otherwise,
-    route judge_flagged(plan: planned.text, reports: reports, verdict: judged.text)
+    route judge_flagged(plan: planned.text, reports: reports, verdict: judged.text,
+      kept_root: cloned.root)
+
+step capture_sessions
+  sessions(workspace_root: workspace_root, run_name: run_name,
+    counsel_control_session: counsel_control.session_id, dev_control_session: control.session_id,
+    plan_session: planned.session_id, judge_session: judged.session_id) -> captured
+
+/// Deliver home with a receipt. A refusal keeps the tree — the work exists
+/// only there until the remote holds it.
+step push_result
+  push(workspace_root: workspace_root, run_name: run_name, result_branch: result_branch) -> pushed
+  outcome delivered: when pushed.ok, route clean_up
+  outcome refused: otherwise,
+    route unpushed(verdict: judged.text, push_refusal: pushed.refusal, kept_root: cloned.root)
+
+/// The work is home; now the tree may go. A teardown refusal is data on
+/// the report, never a failure of a run whose branch is already pushed.
+step clean_up
+  teardown(workspace_root: workspace_root, run_name: run_name) -> td
+  route done(plan: planned.text, leg_ids: leg_ids, reports: reports, verdict: judged.text,
+    base_commit: cloned.head_commit, pushed_commit: pushed.pushed_commit,
+    result_branch: pushed.branch, gate_exit: gate_result.exit_code,
+    control_reply: control.text, counsel_control_reply: counsel_control.text,
+    teardown_ok: td.ok, teardown_refusal: td.refusal,
+    sessions_exit: captured.exit_code, sessions_note: captured.stdout)

@@ -1,0 +1,80 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.55s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.54s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.16s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.78s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.19s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.19s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.93s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.18s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.84s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.21s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.86s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.29s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.62s
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 1 test
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 20.61s
+

@@ -1,0 +1,14 @@
+--- LINE-LIMIT GATE — limit 500 lines of code (see this script's header for the ruling) ---
+[1/4] the instrument, against its own fixtures
+  ok  composition.rs measures 19, as claimed by hand
+  ok  composition.ts measures 11, as claimed by hand
+  ok  hazards.rs measures 24, as claimed by hand
+  ok  test-mods.rs measures 10, as claimed by hand
+  ok  format-a.rs (11) and format-b.rs (13) differ by 2, within the instrument tolerance of 2
+[2/4] the census
+  479 files in scope, 64255 lines of code, 4 over 500
+[3/4] the debt file: docs/line-limit-debt.md
+  4 entries, measured 2026-08-11 against main 108aef1
+[4/4] the arms
+PASS: 479 files measured, 4 named debts, none grown, none stale, nothing new over 500.
+EXIT=0

@@ -1,0 +1,167 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.63s
+     Running unittests src/lib.rs (target/debug/deps/aion_worker-b76fa40bc50a4a03)
+
+running 142 tests
+test build_coverage::liminal_transport_absent_from_this_build_so_none_of_it_was_tested ... ok
+test activity::tests::retryable_and_terminal_failures_map_to_distinct_wire_classifications ... ok
+test config::tests::worker_config_new_uses_auth_metadata_defaults ... ok
+test config::tests::worker_config_builder_round_trips_fields ... ok
+test config::tests::worker_config_builder_carries_namespace_set_and_node ... ok
+test activity::tests::duplicate_activity_registration_is_rejected ... ok
+test context::tests::live_task_context_exposes_the_server_idempotency_key ... ok
+test error::tests::display_messages_name_failed_condition ... ok
+test command_transcript::tests::a_context_without_a_seam_publishes_nothing ... ok
+test context::tests::emit_event_is_a_no_op_without_an_installed_seam ... ok
+test context::tests::emit_event_forwards_to_installed_seam ... ok
+test command_transcript::tests::a_closed_seam_does_not_fail_the_command ... ok
+test context::tests::context_exposes_identity_attempt_and_cancellation_signal ... ok
+test command_transcript::tests::both_streams_are_labelled_and_share_one_monotonic_sequence ... ok
+test command_transcript::tests::an_observed_line_becomes_a_transcript_message_keyed_to_the_activity ... ok
+test error::tests::registration_error_exposes_boxed_grpc_status ... ok
+test error::tests::permission_denied_and_unauthenticated_are_not_retryable ... ok
+test error::tests::transient_and_non_grpc_failures_stay_retryable ... ok
+test error::tests::worker_error_is_send_sync_static ... ok
+test activity::tests::typed_activity_round_trips_through_registry ... ok
+test process::cancellable::tests::an_empty_stream_observes_nothing ... ok
+test process::cancellable::tests::every_line_shape_is_delivered_and_the_bytes_are_returned_verbatim ... ok
+test protocol::heartbeat::tests::sends_explicit_heartbeats_and_preserves_detail ... ok
+test protocol::heartbeat::tests::colliding_sequence_positions_track_per_workflow ... ok
+test protocol::reconnect::tests::tracker_keeps_reports_for_distinct_workflows_at_the_same_sequence_position ... ok
+test protocol::reconnect::tests::re_reports_unacked_reports_without_removing_them ... ok
+test protocol::reconnect::tests::tracker_records_reports_and_acknowledges_by_workflow_and_activity_id ... ok
+test protocol::reconnect::tests::tracker_replaces_existing_activity_report ... ok
+test protocol::reconnect::tests::unauthenticated_handshake_stops_after_one_attempt ... ok
+test protocol::reconnect::tests::reconnect_fails_once_then_handshakes_and_registers ... ok
+test protocol::session::tests::apply_auth_metadata_sets_worker_authorization_headers ... ok
+test protocol::reconnect::tests::permission_denied_registration_stops_after_one_attempt ... ok
+test protocol::reconnect::tests::unavailable_transport_retries_until_attempts_exhausted ... ok
+test protocol::session::tests::cancel_carrying_an_unparseable_workflow_id_is_refused ... ok
+test protocol::session::tests::cancel_without_a_workflow_id_is_refused ... ok
+test protocol::session::tests::cancel_frame_decodes_to_the_pair_it_names ... ok
+test protocol::session::tests::cancel_without_an_activity_id_is_refused ... ok
+test protocol::session::tests::fake_session_records_handshake_and_registration ... ok
+test protocol::session::tests::registration_rejects_activity_without_handler ... ok
+test protocol::session::tests::grpc_reports_echo_the_dispatched_completion_token ... ok
+test protocol::task::tests::decodes_proto_activity_task_preserving_payload_content_type ... ok
+test protocol::session::tests::report_send_times_out_retryably_at_max_backoff ... ok
+test protocol::task::tests::missing_fencing_fields_are_incompatible_tasks ... ok
+test protocol::task::tests::missing_required_field_maps_to_decode_error ... ok
+test protocol::task::tests::zero_attempt_is_a_malformed_task ... ok
+test protocol::heartbeat::tests::last_heartbeat_timestamp_advances_on_each_send ... ok
+test runtime::agent::tests::a_capability_gated_command_is_not_fatal ... ok
+test runtime::agent::tests::a_closed_event_sink_still_reaches_the_result ... ok
+test runtime::agent::tests::a_command_with_an_ack_channel_replies_the_neutral_outcome ... ok
+test runtime::agent::tests::a_contract_refusal_is_terminal_and_every_transient_class_stays_retryable ... ok
+test runtime::agent::tests::a_harness_reported_failure_surfaces_and_maps_to_failed ... ok
+test runtime::agent::tests::feeds_control_commands_into_intervene ... ok
+test runtime::agent::tests::observability_only_session_runs_with_no_control_channel ... ok
+test runtime::agent::tests::drives_events_to_sink_and_captures_the_terminal_result ... ok
+test runtime::intervention::tests::a_command_to_an_empty_registry_is_a_stale_target_no_op ... ok
+test runtime::intervention::tests::a_command_for_an_unknown_attempt_is_a_stale_target_no_op ... ok
+test runtime::intervention::tests::gates_an_unadvertised_primitive_at_the_worker ... ok
+test runtime::intervention::tests::delivers_an_advertised_command_to_the_live_session ... ok
+test process::contained::tests::the_exit_status_is_recorded_by_whichever_call_reaped ... ok
+test runtime::intervention::tests::a_deregistered_session_no_longer_receives_commands ... ok
+test process::contained::tests::a_reaped_child_is_never_signalled_again ... ok
+test runtime::intervention::tests::a_command_for_another_generation_is_a_stale_target_no_op ... ok
+test runtime::loop_::tests::liveness_pump_interval_is_quarter_window_floored_at_one_millisecond ... ok
+test runtime::loop_::tests::drain_frame_ends_serve_as_drained_and_latches_health ... ok
+test runtime::loop_::tests::dispatches_two_tasks_and_reports_corresponding_outcomes ... ok
+test runtime::loop_::tests::cancellation_event_flips_context_without_suppressing_result ... ok
+test runtime::loop_::tests::zero_attempt_task_fails_serve_with_decode_error ... ok
+test runtime::loop_::tests::wire_attempt_is_exposed_on_the_activity_context ... ok
+test process::cancellable::tests::the_completion_capture_is_unchanged_by_streaming ... ok
+test process::cancellable::tests::output_lines_are_observed_before_the_command_exits ... ok
+test shell::action::tests::a_command_reading_stdin_gets_end_of_file_rather_than_the_hosts ... ok
+test shell::action::tests::a_missing_parameter_fails_terminally_before_anything_runs ... ok
+test shell::action::tests::a_command_runs_in_its_declared_working_directory ... ok
+test runtime::loop_::tests::max_concurrency_caps_dispatches_at_two ... ok
+test process::contained::tests::terminate_takes_the_whole_group ... ok
+test shell::action::tests::a_parameter_value_reaches_the_program_as_one_argument ... ok
+test shell::action::tests::a_hostile_value_is_inert_because_no_shell_ever_sees_it ... ok
+test shell::action::tests::a_succeeding_command_returns_its_output ... ok
+test shell::action::tests::a_nonzero_exit_is_retryable_by_default_and_carries_stderr ... ok
+test shell::action::tests::a_nonzero_exit_is_terminal_when_the_action_says_so ... ok
+test shell::action::tests::an_absent_program_fails_terminally ... ok
+test shell::action::tests::only_one_trailing_newline_is_trimmed ... ok
+test shell::action::tests::an_operator_supplied_variable_does_reach_the_command ... ok
+test shell::registry::tests::a_declared_command_cannot_displace_a_registered_activity ... ok
+test shell::action::tests::the_hosts_environment_does_not_cross_into_a_declared_command ... ok
+test shell::action::tests::a_value_that_looks_like_a_flag_is_still_passed_as_a_value ... ok
+test shell::registry::tests::a_declared_command_is_served_through_the_normal_dispatch_path ... ok
+test shell::template::tests::a_dollar_naming_nothing_is_refused ... ok
+test shell::template::tests::a_doubled_dollar_is_a_literal_dollar ... ok
+test shell::template::tests::a_missing_parameter_is_refused_by_name ... ok
+test shell::template::tests::a_parameterized_program_is_refused ... ok
+test shell::template::tests::a_substituted_value_is_never_rescanned_for_parameters ... ok
+test shell::template::tests::a_value_containing_spaces_stays_one_argument ... ok
+test shell::template::tests::an_empty_command_is_refused ... ok
+test shell::template::tests::an_empty_quoted_word_survives_as_an_empty_argument ... ok
+test shell::template::tests::an_interior_nul_is_refused_rather_than_truncating_the_argument ... ok
+test shell::template::tests::an_unterminated_brace_is_refused ... ok
+test shell::template::tests::an_unterminated_quote_is_refused ... ok
+test shell::template::tests::collapses_runs_of_whitespace_between_words ... ok
+test shell::template::tests::double_quotes_group_text_and_still_substitute ... ok
+test shell::template::tests::numbers_and_booleans_render_without_quotes ... ok
+test shell::template::tests::referenced_parameters_are_reported_sorted_and_deduplicated ... ok
+test shell::template::tests::shell_metacharacters_in_a_value_are_inert_literal_text ... ok
+test shell::template::tests::single_quotes_are_literal_including_dollar_signs ... ok
+test shell::template::tests::splits_a_plain_command_into_program_and_arguments ... ok
+test shell::template::tests::structured_and_null_values_are_refused_rather_than_guessed ... ok
+test shell::registry::tests::a_failing_declared_command_reports_its_classification ... ok
+test shell::template::tests::substitutes_a_bare_parameter_as_one_argument ... ok
+test shell::registry::tests::an_unnamed_argument_is_ignored_rather_than_smuggled_into_the_command ... ok
+test shell::template::tests::substitutes_a_braced_parameter ... ok
+test worker::tests::acked_results_decay_out_of_the_reconnect_replay ... ok
+test worker::tests::clean_close_loop_exhausts_drop_budget_with_classified_error ... ok
+test worker::tests::drain_cycles_reconnect_without_consuming_drop_budget ... ok
+test worker::tests::empty_worker_is_rejected ... ok
+test worker::tests::drain_latch_keeps_abrupt_post_drain_failures_unbudgeted ... ok
+test worker::tests::establishment_denial_surfaces_after_one_attempt ... ok
+test worker::tests::mid_run_denial_surfaces_without_reconnect ... ok
+test worker::tests::mid_run_drop_budget_exhaustion_surfaces_last_drop_error ... ok
+test runtime::loop_::tests::no_window_means_no_automatic_heartbeats ... ok
+test worker::tests::clean_close_reconnects_re_registers_and_keeps_serving ... ok
+test worker::tests::post_drop_drain_time_does_not_reset_drop_budget ... ok
+test worker::tests::result_ack_clears_exactly_its_tracker_entry ... ok
+test shell::action::tests::awkward_values_survive_as_exactly_one_argument_each ... ok
+test worker::tests::session_outliving_max_backoff_resets_drop_budget ... ok
+test worker::tests::establishment_retries_transient_failures_until_attempts_exhausted ... ok
+test worker::tests::shutdown_during_establishment_backoff_returns_promptly ... ok
+test worker::tests::mid_run_drop_re_reports_unacked_results_for_all_workflows ... ok
+test worker::tests::served_tasks_reset_drop_budget_across_cycles ... ok
+test worker::tests::mid_run_drop_reconnects_re_registers_and_re_reports_unacked ... ok
+test worker::tests::shutdown_interrupts_hung_unacked_replay_promptly ... ok
+test worker::tests::shutdown_during_recovery_establishment_returns_original_drop_error ... ok
+test worker::tests::worker_collects_two_activity_registration_names ... ok
+test worker::tests::worker_registers_names_with_session ... ok
+test worker::tests::shutdown_waits_for_slow_in_flight_activity ... ok
+test worker::tests::shutdown_during_clean_close_backoff_returns_ok_promptly ... ok
+test worker::tests::shutdown_during_mid_run_drop_backoff_returns_promptly ... ok
+test worker::tests::shutdown_during_post_drain_backoff_returns_ok_promptly ... ok
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs ... ok
+test runtime::loop_::tests::runtime_auto_heartbeats_long_activity_within_the_window ... ok
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit ... ok
+test shell::action::tests::a_declared_command_streams_both_streams_before_it_exits ... ok
+test shell::action::tests::cancellation_stops_the_command_and_fails_terminally ... ok
+
+test result: ok. 142 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.27s
+
+     Running tests/grpc_registration.rs (target/debug/deps/grpc_registration-63dd5d314ed181bb)
+
+running 4 tests
+test non_ack_first_frame_is_a_typed_protocol_violation ... ok
+test register_completes_on_register_ack_and_captures_ack_payload ... ok
+test register_surfaces_server_permission_denial_as_non_retryable ... ok
+test register_times_out_retryably_when_server_never_acks ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+   Doc-tests aion_worker
+
+running 1 test
+test crates/aion-worker/src/lib.rs - (line 9) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 3.57s; merged doctests compilation took 3.15s

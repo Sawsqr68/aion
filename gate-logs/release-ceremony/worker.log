@@ -1,0 +1,4 @@
+error: these worker settings have no value; supply each as a flag or an environment variable:
+  --reconnect-initial-backoff or $AION_RECONNECT_INITIAL_BACKOFF_SECONDS
+  --reconnect-max-attempts or $AION_RECONNECT_MAX_ATTEMPTS
+  --reconnect-max-backoff or $AION_RECONNECT_MAX_BACKOFF_SECONDS

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import type { Event, Payload } from '@/types';
+import type { Event, Payload, RunGeneration, RunId } from '@/types';
 
 import { deriveAttemptNavigator } from '../lib/attemptNavigator';
 import { projectTimeline } from '../lib/timeline';
@@ -19,9 +19,19 @@ const RUN_A = '00000000-0000-0000-0000-0000000000a1';
 const RUN_B = '00000000-0000-0000-0000-0000000000a2';
 
 /**
- * The generation boundary. Every timeline below opens with one, because a real
- * history does: a workflow cannot have an attempt before it has started. The
- * windowed case (a tail with no start inside it) is exercised on its own.
+ * The SERVER's statement of where each generation opens, over the whole history.
+ * It is an input to the derivation, never something the console recomputes from
+ * the loaded window — see the module note on `deriveAttemptNavigator`.
+ */
+function generations(...boundaries: readonly (readonly [number, string])[]): RunGeneration[] {
+  return boundaries.map(([seq, runId]) => ({ seq, run_id: runId as RunId }));
+}
+
+/**
+ * The generation boundary as it appears IN HISTORY. Most timelines below open
+ * with one because a real history does — a workflow cannot have an attempt
+ * before it has started — but the derivation reads the boundaries from the
+ * server list above, not from these events; the windowed case proves it.
  */
 function workflowStarted(seq: number, runId: string): Event {
   return {
@@ -94,7 +104,7 @@ test('a terminal failed run with N failed attempts and no success keeps every at
     },
   ]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A]));
 
   expect(rows.map((row) => row.key)).toEqual([`${RUN_A}:7:1`, `${RUN_A}:7:2`, `${RUN_A}:7:3`]);
   expect(rows.every((row) => row.status === 'failed')).toBe(true);
@@ -111,7 +121,7 @@ test('a completed run after retries surfaces the failed attempts plus the succes
     completed(5, 7, 2),
   ]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A]));
 
   expect(rows).toHaveLength(2);
   expect(rows.map((row) => [row.key, row.status])).toEqual([
@@ -123,7 +133,7 @@ test('a completed run after retries surfaces the failed attempts plus the succes
 test('a running run shows the in-flight attempt as started (no terminal yet)', () => {
   const timeline = projectTimeline([workflowStarted(0, RUN_A), scheduled(1, 7), started(2, 7, 1)]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A]));
 
   expect(rows).toEqual([
     {
@@ -154,7 +164,7 @@ test('two generations of one chain are two rows under the SAME coordinate', () =
     completed(7, 0, 1),
   ]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A], [4, RUN_B]));
 
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((row) => row.key)).size).toBe(2);
@@ -163,17 +173,39 @@ test('two generations of one chain are two rows under the SAME coordinate', () =
   expect(rows.every((row) => row.activityId === '0' && row.attempt === 1)).toBe(true);
 });
 
-test('a tail window with no WorkflowStarted names no generation, and never guesses one', () => {
-  // The loaded history is a window; a long run's tail can begin mid-generation.
-  // The honest answer is `null` — NOT the nearest run, which would label one
-  // generation's attempt with another's identity.
+test('a tail window with no WorkflowStarted still names each row its own generation', () => {
+  // THE DEFECT THIS FIX EXISTS FOR. The loaded history is a TAIL window, so on
+  // any workflow longer than one window the start events are not in it — which
+  // is the ordinary case, not an edge one. The old derivation scanned the window
+  // for `WorkflowStarted`, found none, and rendered "run unknown" on EVERY row.
+  //
+  // The window below is a mid-chain tail: no start event anywhere in it, and its
+  // events straddle a boundary the window cannot see. The server states both
+  // boundaries, so each row resolves to the generation it actually ran in — and
+  // the two sides of the boundary resolve DIFFERENTLY, which is what proves the
+  // boundary is being applied rather than one run being pinned to every row.
+  const timeline = projectTimeline([
+    scheduled(11, 7),
+    started(12, 7, 1),
+    completed(13, 7, 1),
+    scheduled(21, 7),
+    started(22, 7, 1),
+    completed(23, 7, 1),
+  ]);
+
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A], [20, RUN_B]));
+
+  expect(rows.map((row) => row.runId)).toEqual([RUN_A, RUN_B]);
+  expect(rows.map((row) => row.key)).toEqual([`${RUN_A}:7:1`, `${RUN_B}:7:1`]);
+});
+
+test('an empty generation list places no rows rather than guessing a run', () => {
+  // The only way `generationAt` can answer nothing. It means the server reported
+  // a workflow with no history at all, so there is no attempt to place; a row
+  // under a guessed run would be the papering-over the module refuses.
   const timeline = projectTimeline([scheduled(1, 7), started(2, 7, 1), completed(3, 7, 1)]);
 
-  const rows = deriveAttemptNavigator(timeline);
-
-  expect(rows).toHaveLength(1);
-  expect(rows[0]?.runId).toBeNull();
-  expect(rows[0]?.key).toBe('-:7:1');
+  expect(deriveAttemptNavigator(timeline, [])).toEqual([]);
 });
 
 test('the legacy attempt:0 sentinel is labelled distinctly and still selectable', () => {
@@ -184,7 +216,7 @@ test('the legacy attempt:0 sentinel is labelled distinctly and still selectable'
     failed(3, 7, 0),
   ]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A]));
 
   expect(rows).toHaveLength(1);
   expect(rows[0]?.key).toBe(`${RUN_A}:7:0`);
@@ -203,7 +235,7 @@ test('a cancelled attempt reads as cancelled and rows sort by activity then atte
     completed(6, 2, 1),
   ]);
 
-  const rows = deriveAttemptNavigator(timeline);
+  const rows = deriveAttemptNavigator(timeline, generations([0, RUN_A]));
 
   // Numeric activity ordering: activity 2 before activity 9 despite event order.
   expect(rows.map((row) => row.key)).toEqual([`${RUN_A}:2:1`, `${RUN_A}:9:1`]);
@@ -212,7 +244,8 @@ test('a cancelled attempt reads as cancelled and rows sort by activity then atte
 
 test('a scheduled-only activity with no started attempt yields no navigator rows', () => {
   const rows = deriveAttemptNavigator(
-    projectTimeline([workflowStarted(0, RUN_A), scheduled(1, 7)])
+    projectTimeline([workflowStarted(0, RUN_A), scheduled(1, 7)]),
+    generations([0, RUN_A])
   );
   expect(rows).toEqual([]);
 });

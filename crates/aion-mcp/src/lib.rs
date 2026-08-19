@@ -43,8 +43,8 @@ pub mod protocol;
 /// The dispatcher: method routing, `server/discover`, `tools/call`, and the
 /// tasks methods.
 pub mod server;
-/// The tasks extension (`io.modelcontextprotocol/tasks`): task model, store,
-/// and the cooperative execution driver.
+/// The tasks extension (`io.modelcontextprotocol/tasks`): the task model, and
+/// the projection that resolves a handle onto the durable work it names.
 pub mod tasks;
 /// Tool descriptors, annotations, catalog, and the host-implemented service
 /// trait.
@@ -61,7 +61,7 @@ pub use protocol::version::{
 pub use server::McpServer;
 pub use server::config::McpServerConfig;
 pub use tasks::model::{DetailedTask, Task, TaskStatus};
-pub use tasks::store::TaskStore;
+pub use tasks::resolve::{TaskProjection, TaskResolveError, TaskState};
 pub use tools::descriptor::{Tool, ToolAnnotations};
 pub use tools::service::{
     ToolCall, ToolCatalog, ToolFailure, ToolOutcome, ToolService, ToolTaskDecision,

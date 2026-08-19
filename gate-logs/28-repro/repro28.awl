@@ -1,0 +1,42 @@
+//! aion#28 repro arm: custom struct types + fork/join + when/otherwise +
+//! chained dispatching steps, run-body actions (server-run, no worker).
+//! The issue's failing document also carried filter/count; this arm carries
+//! the rest of its named features. Run >6 times on a fresh engine; the
+//! defect's signature is run 6 failing instantly with
+//! "await_activity_result: invalid correlation id".
+workflow repro28
+  input tag: String
+
+  outcome high: type Verdict, route success
+  outcome low: type Verdict, route success
+
+type Probe { exit_code: Int, stdout: String, stderr: String }
+type Verdict { label: String, size: Int }
+
+worker local
+  /// Emit a small payload naming the leg.
+  action probe(name: String, tag: String) -> Probe
+    run "sh -c 'echo \"$1:$2\"' -- $name $tag"
+  /// Second dispatching step after the join.
+  action summarize(a: String, b: String, c: String) -> Probe
+    run "sh -c 'printf %s%s%s \"$1\" \"$2\" \"$3\" | wc -c' -- $a $b $c"
+
+step scatter
+  fork
+    probe(name: "alpha", tag: tag) -> pa
+    probe(name: "beta", tag: tag) -> pb
+    probe(name: "gamma", tag: tag) -> pc
+  join
+
+step weigh after scatter
+  summarize(a: pa.stdout, b: pb.stdout, c: pc.stdout) -> total
+
+  outcome big: when total.exit_code == 0 and pa.exit_code == 0,
+    route done_high
+  outcome small: otherwise, route done_low
+
+step done_high
+  route high(label: "high:" + tag, size: total.exit_code)
+
+step done_low
+  route low(label: "low:" + tag, size: total.exit_code)

@@ -6,7 +6,7 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { Badge, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { displayNameFromEvents, normalizeDisplayName } from '@/lib/workflowIdentity';
-import type { Event, WorkflowId } from '@/types';
+import type { Event, RunGeneration, WorkflowId } from '@/types';
 
 import { EventTimeline } from '../components/EventTimeline';
 import { RenameControl } from '../components/RenameControl';
@@ -20,6 +20,9 @@ import { Swimlane, type SwimlaneSelection } from './Swimlane';
 import { resolveSelectionSurface } from './selectionSurface';
 
 type ViewMode = 'swimlane' | 'list';
+
+/** Stable empty default: a fresh `[]` per render would churn every memo below. */
+const NO_GENERATIONS: readonly RunGeneration[] = [];
 
 export type ContentProps = WorkflowDetailProps & {
   timeline: ReturnType<typeof projectTimeline>;
@@ -59,6 +62,16 @@ export type ContentProps = WorkflowDetailProps & {
    * mistaken for a run that has no name.
    */
   summaryUnavailable?: boolean;
+  /**
+   * The ROOT workflow's generation boundaries, server-stated over its whole
+   * history (see `useWorkflowHead`). Child lanes carry their own, loaded beside
+   * their timelines; {@link resolveSelectionSurface} picks whichever belongs to
+   * the current selection scope. Defaults to empty so this presentational
+   * component still renders with no reader attached (the SSR unit tests), in
+   * which case the attempt navigator honestly shows no rows rather than rows
+   * labelled with a guessed run.
+   */
+  generations?: readonly RunGeneration[];
   /**
    * Selection + view mode are optionally CONTROLLED by the router-connected
    * wrapper (URL state, PART 3). When a setter is omitted the field falls back to
@@ -143,6 +156,7 @@ function WorkflowDetailViewContent({
   renameClient,
   summaryDisplayName = null,
   summaryUnavailable = false,
+  generations = NO_GENERATIONS,
   selectedSequence: selectedSequenceProp,
   onSelectSequence,
   mode: modeProp,
@@ -186,8 +200,9 @@ function WorkflowDetailViewContent({
   const historyDisplayName = useMemo(() => displayNameFromEvents(history), [history]);
   const displayName = historyDisplayName ?? normalizeDisplayName(summaryDisplayName);
   const selectionSurface = useMemo(
-    () => resolveSelectionSurface(workflowId, timeline, selectedSequence, scopedSelection),
-    [scopedSelection, selectedSequence, timeline, workflowId]
+    () =>
+      resolveSelectionSurface(workflowId, timeline, generations, selectedSequence, scopedSelection),
+    [generations, scopedSelection, selectedSequence, timeline, workflowId]
   );
   const selectedTimeline = selectionSurface.timeline;
   const selectedWorkflowId = selectionSurface.workflowId;
@@ -316,6 +331,7 @@ function WorkflowDetailViewContent({
           {mode === 'swimlane' ? (
             <Swimlane
               entries={timeline}
+              generations={generations}
               isRunning={!isTerminal}
               loadChildren
               onScrubChange={setScrubPosition}
@@ -342,6 +358,7 @@ function WorkflowDetailViewContent({
             originX={sheetOriginX}
           />
           <AttemptNavigator
+            generations={selectionSurface.generations}
             key={selectedWorkflowId}
             namespace={namespace}
             timeline={selectedTimeline}

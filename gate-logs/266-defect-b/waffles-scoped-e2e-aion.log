@@ -1,0 +1,99 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.02s
+     Running tests/nested_workflows_e2e.rs (target/debug/deps/nested_workflows_e2e-04de286649e465d9)
+
+running 14 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test three_level_chain_completes_and_propagates_results_bottom_up ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test cancelling_level_two_orphans_level_three_and_fails_level_one_await ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test queries_at_top_and_leaf_answered_while_leaf_activity_parked ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test recovery_mid_leaf_activity_redispatches_without_respawning_children ... ok
+test recovery_at_depth_replays_all_three_histories_byte_identical ... ok
+test self_spawning_recursion_stops_at_depth_three_and_recovers ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.93s
+
+     Running tests/recovery_supersession_e2e.rs (target/debug/deps/recovery_supersession_e2e-363d5198f57a5ad9)
+
+running 11 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+test recovery_records_the_superseded_attempt_before_redispatch ... ok
+test the_supersession_record_is_budget_inert ... ok
+test an_already_failed_attempt_is_not_recorded_twice ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.42s
+
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-b6c64508af7242f6)
+
+running 10 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_failure_never_cancels_outstanding_siblings ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.53s
+

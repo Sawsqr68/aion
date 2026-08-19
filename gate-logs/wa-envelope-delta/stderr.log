@@ -1,0 +1,4 @@
+[2m2026-08-17T10:17:04.936080Z[0m [33m WARN[0m [2mdiagnostics::conventions::config[0m[2m:[0m CONVENTIONS.toml contains an unrecognized top-level table; skipping [3mkey[0m[2m=[0m"gleam"
+[2m2026-08-17T10:22:11.680022Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"clippy"
+[2m2026-08-17T10:22:11.689175Z[0m [33m WARN[0m [2mnorn::tools::diagnostics_check::post_check[0m[2m:[0m activated tool was not found in language definition; skipping [3mrule[0m[2m=[0m"rust-general" [3mlanguage[0m[2m=[0m"rust" [3mtool[0m[2m=[0m"rustfmt"
+norn: SIGTERM received; cancelling the run — signal again to exit immediately

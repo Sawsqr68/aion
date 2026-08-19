@@ -1,0 +1,32 @@
+$ biome check .
+src/features/update/components/UpdateStatusPanel.tsx:59:17 lint/complexity/noExcessiveCognitiveComplexity ━━━━━━━━━━
+
+  ! Excessive complexity of 18 detected (max: 15).
+  
+    57 │  * version exists and becoming it are different acts.
+    58 │  */
+  > 59 │ export function UpdateStatusPanel({
+       │                 ^^^^^^^^^^^^^^^^^
+    60 │   defaultOpen = false,
+    61 │   fetchUpdateStatus,
+  
+  i Please refactor this function to reduce its complexity score from 18 to the max allowed complexity 15.
+  
+
+src/features/update/doc-adjacency.test.ts:77:10 lint/complexity/noExcessiveCognitiveComplexity ━━━━━━━━━━
+
+  ! Excessive complexity of 34 detected (max: 15).
+  
+    75 │  * doc block starts and ends.
+    76 │  */
+  > 77 │ function scan(path: string): Violation[] {
+       │          ^^^^
+    78 │   const lines = readFileSync(path, 'utf8').split('\n');
+    79 │   const violations: Violation[] = [];
+  
+  i Please refactor this function to reduce its complexity score from 34 to the max allowed complexity 15.
+  
+
+Checked 438 files in 272ms. No fixes applied.
+Found 2 warnings.
+EXIT=0

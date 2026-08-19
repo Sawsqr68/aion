@@ -1,0 +1,878 @@
+<title>Aion Dev Loop Readiness</title>
+<style>
+  :root {
+    --page: #E9ECEF;
+    --card: #F7F9FB;
+    --ink: #121922;
+    --ink-strong: #05090E;
+    --muted: #5B6774;
+    --rule: #C7D0D9;
+    --rule-soft: #DDE3E9;
+    --accent: #1F4E79;
+    --accent-soft: #E1EAF2;
+    --ready: #1B6247;
+    --ready-bg: #DCEDE5;
+    --build: #8A5410;
+    --build-bg: #F4E7D2;
+    --decide: #6D3B8A;
+    --decide-bg: #ECDFF4;
+    --blocked: #992B2B;
+    --blocked-bg: #F5DEDE;
+    --shadow: 0 1px 2px rgba(10, 25, 40, .07), 0 6px 18px rgba(10, 25, 40, .05);
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :root:not([data-theme="light"]) {
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0D1218;
+      --card: #151D26;
+      --ink: #DFE6EC;
+      --ink-strong: #F4F8FB;
+      --muted: #92A0AE;
+      --rule: #2A3644;
+      --rule-soft: #202B37;
+      --accent: #83B4DE;
+      --accent-soft: #1A2733;
+      --ready: #63C79B;
+      --ready-bg: #14291F;
+      --build: #E0A75C;
+      --build-bg: #2C2113;
+      --decide: #C193DF;
+      --decide-bg: #241A2D;
+      --blocked: #E67C74;
+      --blocked-bg: #2E1817;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .22);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0D1218;
+    --card: #151D26;
+    --ink: #DFE6EC;
+    --ink-strong: #F4F8FB;
+    --muted: #92A0AE;
+    --rule: #2A3644;
+    --rule-soft: #202B37;
+    --accent: #83B4DE;
+    --accent-soft: #1A2733;
+    --ready: #63C79B;
+    --ready-bg: #14291F;
+    --build: #E0A75C;
+    --build-bg: #2C2113;
+    --decide: #C193DF;
+    --decide-bg: #241A2D;
+    --blocked: #E67C74;
+    --blocked-bg: #2E1817;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .22);
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 20px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+  .masthead { padding: 56px 0 28px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(2rem, 5.2vw, 3rem);
+    line-height: 1.08;
+    letter-spacing: -.022em;
+    font-weight: 680;
+    color: var(--ink-strong);
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.1rem;
+    color: var(--muted);
+    margin: 0 0 26px;
+    max-width: 44rem;
+  }
+  .tally { display: flex; flex-wrap: wrap; gap: 10px; }
+  .tally-item {
+    font-family: var(--mono);
+    font-size: .78rem;
+    padding: 7px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--rule);
+    background: var(--card);
+  }
+  .tally-item b { font-weight: 700; }
+
+  /* ---------- sections ---------- */
+  section { padding-top: 46px; }
+  h2 {
+    font-size: 1.5rem;
+    letter-spacing: -.015em;
+    font-weight: 660;
+    color: var(--ink-strong);
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .section-note { color: var(--muted); margin: 0 0 22px; max-width: 46rem; }
+  h3 {
+    font-size: 1.06rem;
+    font-weight: 640;
+    color: var(--ink-strong);
+    margin: 0;
+    letter-spacing: -.008em;
+  }
+  p { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ---------- item cards ---------- */
+  .items { display: flex; flex-direction: column; gap: 14px; }
+  .item {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .item-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 4px 9px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .chip.ready { color: var(--ready); background: var(--ready-bg); }
+  .chip.build { color: var(--build); background: var(--build-bg); }
+  .chip.decide { color: var(--decide); background: var(--decide-bg); }
+  .chip.blocked { color: var(--blocked); background: var(--blocked-bg); }
+
+  .evidence {
+    font-family: var(--mono);
+    font-size: .78rem;
+    line-height: 1.55;
+    color: var(--muted);
+    background: var(--accent-soft);
+    border-left: 2px solid var(--accent);
+    padding: 9px 12px;
+    margin-top: 12px;
+    border-radius: 0 3px 3px 0;
+    overflow-x: auto;
+  }
+  .evidence b { color: var(--ink); font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--rule-soft);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+  .evidence code { background: none; padding: 0; }
+
+  .need {
+    margin-top: 12px;
+    padding-top: 11px;
+    border-top: 1px dashed var(--rule);
+    font-size: .94rem;
+  }
+  .need strong { color: var(--ink-strong); }
+
+  /* ---------- decisions ---------- */
+  .decision {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--decide);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .decision h3 { margin-bottom: 8px; }
+  .rec {
+    margin-top: 11px;
+    padding: 10px 13px;
+    background: var(--accent-soft);
+    border-radius: 3px;
+    font-size: .94rem;
+  }
+  .rec b { color: var(--accent); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--blocked);
+    border-radius: 4px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .callout.neutral { border-left-color: var(--accent); }
+
+  ul { margin: 0 0 12px; padding-left: 1.2rem; }
+  li { margin-bottom: 6px; }
+  li:last-child { margin-bottom: 0; }
+
+  .foot {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    font-size: .88rem;
+    color: var(--muted);
+  }
+  .sig { font-family: var(--mono); font-size: .82rem; margin-top: 14px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Readiness map · 14 Aug 2026 · Vesper</p>
+    <h1>Everything between today and dev work running through Aion</h1>
+    <p class="standfirst">
+      Honest state of the engine, the Norn worker path, gates, templates, seat-side dispatch,
+      and multi-node — measured against the tree at <code>400c670bd</code>, not against memory.
+      Written to become the execution list.
+    </p>
+    <div class="tally">
+      <span class="tally-item"><b>9</b> work today</span>
+      <span class="tally-item"><b>12</b> need building</span>
+      <span class="tally-item"><b>5</b> need Tom</span>
+      <span class="tally-item"><b>1</b> proving job, never run</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>The bottom line</h2>
+    <p class="section-note">Read this if you read nothing else.</p>
+    <div class="callout neutral">
+      <p>
+        <strong>The shape of the dev loop already exists and has run for real.</strong> A workflow that
+        takes a brief, hands it to a Norn builder, runs the gates mechanically, and refuses to accept the
+        builder's own word for whether the gates passed — that document is written, deployed, and has done
+        real work. Several lanes this month were executed through it.
+      </p>
+      <p>
+        <strong>Multi-node is built too — that claim in the first version of this map was wrong.</strong> The
+        cross-node transport carries redial candidates, migrates a worker when its server dies, and advertises
+        locality; and the multi-host config generator and remote-worker path have existed since June. What is
+        missing is not the capability but a current run to point at, and the two admission gates being
+        switched on before boxes join. Both are small.
+      </p>
+      <p>
+        <strong>The thing I would not ship a heavy week on is #82.</strong> Engine state going missing
+        mid-run already killed a 55-minute fleet run. A week of long dev legs is precisely the load that
+        finds it again. It is the one open item whose failure mode is the deliverable's failure mode.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Decisions — answered</h2>
+    <p class="section-note">
+      All five went to Tom and came back the same day. His answers are recorded against each below, in his
+      framing rather than mine, because on two of them his framing is better than what I asked.
+    </p>
+    <div class="callout neutral" style="margin-bottom:22px">
+      <p>
+        <strong>1. CI — settled: no GitHub Actions, ever.</strong> "Aside from the fact that they're
+        expensive, they're also stupid." Aion runs its own gates. My recommendation stood; his reasoning is
+        cost and quality.
+      </p>
+      <p>
+        <strong>2. Trust boundary — de-escalated, and reframed better than I had it.</strong> Everyone here
+        is trusted and he handles box access. What he actually cares about is <em>work-pool pollution</em> —
+        the wrong worker picking up work — not attackers. Sequence: keep workers on this server, widen when
+        ready. See the corrected two-gate item below; the second gate is precisely his pollution vector.
+      </p>
+      <p>
+        <strong>3. Per-node credentials — moot.</strong> He handles box access.
+      </p>
+      <p>
+        <strong>4 and 5 — handed to me.</strong> "Most of this stuff sounds like this is a you decision to
+        make." That covers the idle cost, the intermittent failures and the long-running deaths.
+      </p>
+      <p>
+        <strong>And the frame for the whole week:</strong> "part of this work is identifying all those things
+        that cause those issues." Finding the causes is the deliverable, not a detour from it.
+      </p>
+    </div>
+    <p class="section-note">
+      The original five, kept below with their recommendations, because the reasoning is what made the answers
+      cheap to give.
+    </p>
+
+    <div class="decision">
+      <h3>1. Is Aion its own CI, or do we turn GitHub Actions on?</h3>
+      <p>
+        There is no CI at all. Not "disabled" — absent. The repo has no workflow files whatsoever, only a
+        stray <code>.DS_Store</code> in <code>.github/</code>. So the older note that Actions are switched off
+        while the tool reports them "active" understates it: there is nothing to switch on.
+      </p>
+      <p>
+        This lands at an interesting moment, because we already have a gates workflow that runs the repo's
+        checks and returns typed findings. The question is whether the repo about to become the dev loop's
+        spine should be tested by someone else's CI or by the thing it is.
+      </p>
+      <div class="rec">
+        <b>Recommendation:</b> Aion runs its own gates, with the new worker nodes as the runner pool. It is
+        the honest dogfood, it needs no external service, and it turns "we have more machines now" directly
+        into "checks finish sooner". Caveat worth saying out loud: a system that tests itself cannot catch a
+        fault that takes itself down, so the first green needs a hand-check beside it.
+      </div>
+      <div class="evidence"><b>measured today:</b> <code>find .github -type f</code> → <code>.github/.DS_Store</code> only. No workflow files exist.</div>
+    </div>
+
+    <div class="decision">
+      <h3>2. What is the trust boundary on the household network?</h3>
+      <p>
+        To use another box as a worker, the server's worker port has to be reachable from it. Today the
+        shipped config binds that port to the local machine only. Opening it to the house is a one-line
+        change and a real decision: that port is how work gets handed to a worker.
+      </p>
+      <div class="rec">
+        <b>Recommendation:</b> bind to the LAN interface rather than everything, and treat the house network
+        as the boundary for now — but I want to say plainly that I have not audited what authenticates a
+        worker when it connects in, and I will not recommend exposing the port until I have. That check is on
+        my list below and does not need Tom.
+      </div>
+      <div class="evidence"><b>measured today:</b> scaffolded config binds <code>liminal_listen_address = "127.0.0.1:50061"</code> — loopback. Transport is TCP and documented as the cross-node bus.</div>
+    </div>
+
+    <div class="decision">
+      <h3>3. How does each new box get model access?</h3>
+      <p>
+        A worker node is only useful if the agent on it can reach its model. Every node therefore needs
+        credentials. That is a choice between one shared credential copied to each machine, or a credential
+        per machine — which differ in what happens when one is lost, and in whether we can tell which box
+        spent what.
+      </p>
+      <div class="rec">
+        <b>Recommendation:</b> per-node credentials. The cost is a few minutes per box at setup; the benefit
+        is that a node can be cut off on its own and that spend is attributable per machine, which matters
+        once several are running work unattended.
+      </div>
+    </div>
+
+    <div class="decision">
+      <h3>4. Does #82 get priority over feature work this week?</h3>
+      <p>
+        Engine state going missing part-way through a run is the failure that already destroyed a 55-minute
+        fleet run. Everything else on this map degrades gracefully; this one throws away work that has
+        already been done, which is the specific pain the whole durable-workflow idea exists to remove.
+      </p>
+      <div class="rec">
+        <b>Recommendation:</b> yes — it goes first, ahead of new capability. A seamless heavy week is not
+        reachable while a long run can lose its footing mid-flight.
+      </div>
+    </div>
+
+    <div class="decision">
+      <h3>5. Idle cost per node, before we add nodes</h3>
+      <p>
+        An idle server currently runs six virtual machines internally and burns roughly half a core doing
+        nothing. On one box that is a curiosity. Multiplied across every machine we onboard, it is a standing
+        tax on the resource pool Tom is expanding — and his own constraint is that machine usage stays under
+        control.
+      </p>
+      <div class="rec">
+        <b>Recommendation:</b> worth one measured look before the node count grows, not a build. If the six
+        are reducible the saving multiplies by every box; if they are load-bearing we should know that number
+        before we plan capacity.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Engine</h2>
+    <p class="section-note">Where 0.15.0 actually stands, and whether the libsql retirement gates anything.</p>
+    <div class="items">
+
+      <div class="item">
+        <div class="item-head"><h3>0.15.0 is published; the tag is held</h3><span class="chip ready">Works today</span></div>
+        <p>
+          All crates are on the registry and the publish returned clean. The version tag is deliberately not
+          stamped, because the release battery's test leg was red and one of the two failures is still
+          unidentified — a tag is a claim of a known-good point, and stamping it over an unread failure would
+          be a tick against an absence.
+        </p>
+        <div class="evidence"><b>measured today:</b> <code>gate-logs/publish-0150.exit</code> = 0; log shows every crate published. <code>git tag v0.15*</code> → empty.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>The server library red: identified, and not a defect</h3><span class="chip ready">Settled</span></div>
+        <p>
+          The release battery's test leg named two failing targets. One is the known libsql defect. The other
+          was the server's own library tests — and it turned out to be a changelog file that had drifted from
+          its embedded copy inside the server. The test's own message said so and named the one-line remedy.
+        </p>
+        <p>
+          <strong>It was self-inflicted.</strong> The changelog was edited to add the libsql known-issue entry
+          and the embedded copy was not synced; the battery then measured that tree. The gate caught a genuine
+          drift and behaved correctly. The release commit synced the two, which is why a clean re-run passes
+          — the files are byte-identical at the current commit and that exact test is in the passing set.
+        </p>
+        <p>
+          <strong>Both failures are therefore accounted for and neither is an engine defect.</strong>
+        </p>
+        <div class="evidence"><b>measured today:</b> <code>changelog::tests::changelog_embed_matches_the_authored_document</code> — "changelog-embed/CHANGELOG.md has drifted from the authored CHANGELOG.md". Re-run: <code>1106 passed; 0 failed</code>, that test <code>ok</code>. <code>diff CHANGELOG.md crates/aion-server/changelog-embed/CHANGELOG.md</code> → identical.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Correction: three claims in the first version of this map were wrong</h3><span class="chip decide">Method note</span></div>
+        <p>
+          Recorded rather than quietly edited away, because the way each one failed is worth more than the
+          finding was.
+        </p>
+        <p>
+          <strong>"The evidence was destroyed."</strong> It was not. Full per-gate logs persist on the machine;
+          the run in question is 608KB and had been on disk the whole time. Only the battery's own output
+          directory lacks them, and that is where I looked — then concluded from absence <em>there</em> that
+          the text was gone <em>everywhere</em>. A diagnostic build was spent recovering an answer already
+          sitting on the box.
+        </p>
+        <p>
+          <strong>"The failure is intermittent."</strong> It was deterministic. The control was sound as far as
+          it went — the target passed under heavier load and failed under lighter, so contention was genuinely
+          excluded — but excluding one explanation is not establishing another. I compared load, script and
+          ordering between the two runs and never compared the <em>tree</em>, which was the thing that had
+          changed, by my own edit, between them.
+        </p>
+        <p>
+          <strong>"It matches a known crash signature."</strong> Withdrawn. There was no crash; there was a
+          plain assertion with a clear message. The hypothesis was built on the absence of failure text, and
+          that absence was an artefact of where I searched.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>The libsql retirement gates nothing</h3><span class="chip ready">Works today</span></div>
+        <p>
+          Worth stating plainly so it doesn't sit on the critical path in anyone's head: retiring the
+          alternative storage backend is cleanup, not a dependency. The default backend already implements
+          everything the retirement would need to move, and the engine crate's dependency on the old backend
+          is a phantom — it appears nowhere in the engine's actual source, only in one test file.
+        </p>
+        <p>
+          The defect itself is real and now proven unconditional — every connection that backend closes is
+          closed twice, always — but it only reaches an operator who has chosen that backend, and it is on
+          its way out by Tom's ruling, with the slim build dying alongside it.
+        </p>
+        <div class="need"><strong>Needs:</strong> nothing this week. Next cut.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>State lost mid-run (#82)</h3><span class="chip blocked">Needs building — first</span></div>
+        <p>
+          Engine state going missing part-way through a run, already responsible for killing a 55-minute
+          fleet run. This is the single open item whose failure mode is identical to the week's deliverable
+          failing: a long, heavy, multi-step run that dies having already done the work.
+        </p>
+        <div class="need"><strong>Needs:</strong> Tom's priority call (decision 4), then the fix lane.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>The transport drags a whole older stack</h3><span class="chip build">Needs building</span></div>
+        <p>
+          A finding from today that simplifies an older one. We knew a second, older copy of the bytecode VM
+          was being pulled into the build. It turns out that is not a lone stale pin: the cross-node transport
+          library is itself pinned to an older generation, and it pulls in both the old VM <em>and</em> a second,
+          older copy of the default storage engine.
+        </p>
+        <p>
+          That matters more this week than it did last week, because the transport in question is exactly the
+          thing multi-node runs on. Two copies of the storage engine inside one binary is not a state I want
+          under a distributed proving run.
+        </p>
+        <p>
+          Fortunate crossing: Hermes is working that library right now. If his lane moves it forward, both
+          duplicates resolve at once and neither is ours to fix.
+        </p>
+        <div class="evidence"><b>measured today:</b> lockfile carries <code>haematite 0.7.0</code> + <code>0.8.1</code> and <code>beamr 0.16.3</code> + <code>0.18.2</code>. Both old copies are pulled by <code>liminal-rs 0.5.0</code> / <code>liminal-server 0.5.0</code>.</div>
+        <div class="need"><strong>Needs:</strong> coordinate with Hermes before anything is built here.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Long-run durability under the VM (#196)</h3><span class="chip build">Needs building</span></div>
+        <p>
+          A soak died at three hours eighteen on the current VM, with the same signature as an earlier death,
+          and the fix that was expected to explain it does not. For a week of long-running dev legs this is
+          directly in the path — it is owned upstream by Artemis, not by us, but it should be visible in any
+          plan that assumes runs live for hours.
+        </p>
+        <div class="need"><strong>Needs:</strong> upstream. Ours is to plan around it, not fix it.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>The Norn worker path</h2>
+    <p class="section-note">Launch, working directory, model pin, result return — end to end.</p>
+    <div class="items">
+
+      <div class="item">
+        <div class="item-head"><h3>The seam is whole and proven on real work</h3><span class="chip ready">Works today</span></div>
+        <p>
+          One prompt in, a canonical outcome record out, served from the installed binary with no crate and
+          no rebuild. Every harness returns the same shape, and the checker demands that shape structurally
+          rather than trusting it. The per-attempt timeout is a genuinely armed deadline, not a documented
+          intention. Several lanes this month were executed through this seam.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Work arrives with its own tree</h3><span class="chip ready">Works today</span></div>
+        <p>
+          A builder's working directory now travels with the job rather than being fixed when the worker was
+          registered — which is what makes it possible for one worker to serve two pieces of work in two
+          different trees and give two different answers. That was landed and proven live with a control.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Per-box differences are not yet expressible</h3><span class="chip build">Needs building</span></div>
+        <p>
+          The model and the harness settings are passed as declared arguments, which works cleanly when every
+          machine is identical. The moment nodes differ — different paths, different credentials, different
+          capabilities — we need per-box binding, and that gap is already filed from an earlier review.
+        </p>
+        <p>
+          It has not mattered until now because there has only ever been one box. It becomes load-bearing the
+          day a second one joins.
+        </p>
+        <div class="need"><strong>Needs:</strong> per-node harness binding. Small, and it is the first thing a second node will demand.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Off-machine was built in June — corrected</h3><span class="chip ready">Built, needs a current run</span></div>
+        <p>
+          <strong>This item said the opposite in the first version of this map, and it was wrong.</strong> I
+          wrote that every agent round had ever run on this one box, called it an absence of measurement, and
+          made proving it the largest job of the week. Tom said remote workers were among the earliest things
+          built. He is right, and the evidence is in this repo.
+        </p>
+        <p>
+          The multi-host document landed on 29 June. The config generator has a true multi-host mode — hand it
+          one routable address per node and the whole mesh wires across machines. A remote worker has two ways
+          in, and on the primary one it takes a list of candidate servers so that when the one it is connected
+          to dies, it migrates to the next and re-registers. There is a plain summary of which port a remote
+          machine has to reach. That is a built path, not a sketch.
+        </p>
+        <p>
+          <strong>What I could not find is a current run record</strong> — no saved logs, no non-loopback
+          addresses in the evidence directories. But a missing log is not a missing run, and the document
+          describes what the code does, written by whoever built it.
+        </p>
+        <p>
+          <strong>And there is now a reason for the gap.</strong> Tom's account is that those runs date from
+          the period when the databases were ballooning — one grew to around twenty-two gigabytes — and the
+          old data was cleared out to reclaim the space. So the records were deleted on purpose, along with
+          everything else in there. That is a much better explanation than the one I was reaching for. I have
+          not gone and confirmed the deletion myself, and I do not think it needs confirming: it accounts for
+          the absence, and the question of whether the capability exists is already answered by the June
+          document and the code it describes.
+        </p>
+        <p>
+          His summary of the shape is worth keeping in his own words: put a worker on another machine, point
+          it back over the network, deploy through the CLI. It was never the tricky part.
+        </p>
+        <div class="need"><strong>Needs:</strong> one run so there is a current record. An afternoon, not the week's headline.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Gates and dev-leg templates</h2>
+    <p class="section-note">Brief → build → gate → report, and what the fleet shapes still can't do.</p>
+    <div class="items">
+
+      <div class="item">
+        <div class="item-head"><h3>The single-lane dev leg exists</h3><span class="chip ready">Works today</span></div>
+        <p>
+          The brief-to-report workflow is written and carries the right discipline in its bones: the gates are
+          not the builder's to claim. The gate command is run by the server itself, its real exit code comes
+          back as data, and the pass/fail fork is computed from that code — so a build report that says
+          "all green" cannot route itself to done on its own say-so.
+        </p>
+        <p>
+          Alongside it: a fan-out fleet shape, an issue re-check shape, and a generic repo-gates workflow that
+          returns typed findings.
+        </p>
+        <div class="evidence"><b>on disk:</b> <code>norn_dev.awl</code>, <code>norn_fleet.awl</code>, <code>issue_recheck.awl</code>, <code>gates.awl</code>, <code>repo_gates.awl</code>, <code>repo_gates_worker.awl</code>, <code>update_watch.awl</code></div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>A red gate cannot say why it is red</h3><span class="chip build">Needs building — near top</span></div>
+        <p>
+          Found today, and I would rank it just behind #82. The gate keeps only the last forty lines of output.
+          That is enough when one target fails and the failure is the last thing printed. When several targets
+          fail, the summary at the end survives and every actual failure message is thrown away.
+        </p>
+        <p>
+          This is exactly the cost profile Tom is buying his way out of: under a fleet, every finding you want
+          to read costs a full re-run to recover the text that already existed and was discarded. It cost me
+          one this morning.
+        </p>
+        <div class="need"><strong>Needs:</strong> per-target failure text preserved in full, and the failing-target list kept separately from any tail.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>The fleet shapes have two known structural limits</h3><span class="chip build">Needs building</span></div>
+        <p>
+          Two filed items sit directly under fan-out work. The language has no way to share a worker
+          declaration between documents, so two fleet documents each carry their own duplicate copy and the
+          duplication cannot be subtracted. And the swarm shape's rounds are expressed as a backwards jump
+          rather than a loop, which leaves it unable to reconcile its own gate counts across rounds.
+        </p>
+        <p>
+          Both are the kind of thing that is tolerable at one lane and painful at ten.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Isolated trees for concurrent builders</h3><span class="chip build">Needs building</span></div>
+        <p>
+          Tom has already ruled on this one — concurrent writers getting real isolation is a solved problem
+          and we should be using it. With the working directory now travelling with the job, the mechanism it
+          needs is in place; the fleet shape has not yet been rewritten to use it.
+        </p>
+        <div class="need"><strong>Needs:</strong> the swarm document rewritten onto per-builder isolated trees. Authoring work — no build, can start immediately.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Watching a run from a seat</h2>
+    <p class="section-note">Starting, watching, and verifying without babysitting.</p>
+    <div class="items">
+
+      <div class="item">
+        <div class="item-head"><h3>Start and verify are solid</h3><span class="chip ready">Works today</span></div>
+        <p>
+          A run can be started from the console with a form derived from its declared inputs, or from the
+          command line in one motion from a file. Runs carry human display names with full history of renames,
+          timestamps render in the viewer's own zone, and workers can be deployed and managed from the console.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>A parent cannot list its children</h3><span class="chip build">Needs building</span></div>
+        <p>
+          There is no parent-to-children relation anywhere in the engine — verified by census, not impression.
+          The system cannot answer "what work did this fan-out spawn". For a single lane that is invisible.
+          For a fleet, it is the main question a seat wants answered, and the whole point of watching without
+          babysitting.
+        </p>
+        <div class="need"><strong>Needs:</strong> the relation, or an honest interim: fan-out documents record their own children as data.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Cancelling doesn't stop the work</h3><span class="chip build">Needs building</span></div>
+        <p>
+          A cancelled run reports itself cancelled while the command it launched keeps running and keeps
+          consuming the machine. This one is squarely inside Tom's resource constraint: the operator's only
+          brake does not actually stop the thing eating the box, and it says it did.
+        </p>
+        <div class="need"><strong>Needs:</strong> cancellation that reaches the child process. Sharper once several nodes are running work unattended.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Progress is coarse while a leg runs</h3><span class="chip build">Needs building</span></div>
+        <p>
+          Output from a running command is not streamed through to the watcher, so a long leg is opaque until
+          it finishes. Filed twice — once as live progress detail, once as Tom's own ask to stream command
+          output into the attempts panel.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Multiple nodes</h2>
+    <p class="section-note">
+      What is genuinely built, what stops a second box today, and what it takes to stand one up.
+    </p>
+    <div class="items">
+
+      <div class="item">
+        <div class="item-head"><h3>The transport is built for this</h3><span class="chip ready">Works today</span></div>
+        <p>
+          Better than I expected before checking. The worker transport is TCP and documented as the cross-node
+          bus. A worker takes an ordered list of servers to dial and, when the connected server dies, migrates
+          to the next and re-registers there. Workers advertise a locality that defaults to their own hostname.
+          The server hosts the listener and pushes work out on the connection it already owns, and different
+          worker pools are fanned out from one listener by selection.
+        </p>
+        <p>
+          In other words the distributed shape is designed, not aspirational. What is missing is configuration
+          and proof, which is a much better place to be starting a compressed week.
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Two gates, both off — and the second one is the pollution vector</h3><span class="chip build">Needs building — small</span></div>
+        <p>
+          The shipped config binds the worker port to the local machine, so nothing off-box reaches it as
+          delivered. Opening that is one line. What must land <em>with</em> it is two separate gates, and my
+          first version of this map named only one of them.
+        </p>
+        <p>
+          <strong>Admission — who may connect.</strong> The transport has carried a shared-token connect gate
+          since well before us; we construct it switched off. Confirmed by the transport's owner: with no
+          token configured the check is skipped entirely and connect does nothing but negotiate versions.
+          Everything deeper is authority inside an already-admitted session, so nothing substitutes for it.
+        </p>
+        <p>
+          <strong>Authorization — whose work is whose.</strong> Separately, bearer validation exists and is
+          disabled by default, and in that state <em>the server takes the worker's word for which pools it
+          belongs to</em>. This is the one that matters most here: it is exactly the work-pool pollution Tom
+          named, and it needs no adversary — a misconfigured box joining the pool claims work that isn't its
+          own and nothing contradicts it.
+        </p>
+        <p>
+          Both gates already exist; both are simply off. The June multi-host document already carries the
+          hardening list, so this is switching on what's there rather than designing anything.
+        </p>
+        <div class="evidence"><b>measured today:</b> scaffold writes <code>liminal_listen_address = "127.0.0.1:50061"</code>; <code>auth: None</code> constructed at <code>run.rs:836</code>; registration validates the declared action contract, not identity.</div>
+        <div class="need"><strong>Needs:</strong> bind + admission token + authorization, as one change. Server and worker ends must land together or reader-first — a server refusing tokens before workers can present them locks every worker out.</div>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Second correction: this posture was documented in June</h3><span class="chip decide">Method note</span></div>
+        <p>
+          I reported the open-network state as a finding. The multi-host document has had a "Security posture"
+          section since 29 June saying it plainly — no TLS across hosts, auth disabled, and a remote worker
+          effectively self-declaring its own authorization — along with the remedy list.
+        </p>
+        <p>
+          What I actually contributed was the mechanism and its location in the code, and prompting the
+          transport owner's confirmation that admission has no second check. That has value, but it is not a
+          discovery, and I should have asked the docs before calling it one. It is the same failure as the
+          gate-log mistake earlier the same morning, one layer up: <strong>I measured the artefact without
+          asking whether we had already written the answer down.</strong>
+        </p>
+      </div>
+
+      <div class="item">
+        <div class="item-head"><h3>Standing up a new box</h3><span class="chip build">Needs writing</span></div>
+        <p>
+          Assembled from what exists, not invented — but written down in one place for the first time, and
+          unproven end to end until a box is actually done:
+        </p>
+        <ul>
+          <li><strong>Install</strong> — the tools are published to the registry; a node installs the same released version the server runs.</li>
+          <li><strong>Home and config</strong> — first run creates its own home and config with tight permissions; there is a documented setup script and the first-run path has been proven on a genuinely fresh machine.</li>
+          <li><strong>Reachability</strong> — the node needs the server's worker address, and the server needs to be listening somewhere the node can reach. This is the blocker above.</li>
+          <li><strong>Model access</strong> — credentials on the box for the agent to reach its model. Decision 3.</li>
+          <li><strong>Launch</strong> — start the worker against the server's address, with more than one address if we want it to survive a server dying. Tom has ruled out the operating system's own service manager, so the durable answer is Aion supervising its own workers; for this week, started by hand is honest.</li>
+        </ul>
+        <div class="need"><strong>Needs:</strong> writing now (no build, no contention), then proving on a real second box.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Balancing the load — design only</h2>
+    <p class="section-note">
+      Tom's frame: we need a load to balance first. Nothing built this week. This is the thinking so the
+      shape we build later isn't shaped by accident.
+    </p>
+    <div class="callout neutral">
+      <p>
+        <strong>What already decides where work goes.</strong> Selection is by namespace and task queue, with
+        locality as an advertised preference — so today's routing is really placement by declaration, not
+        balancing. Several worker pools already fan out from one listener. That is the right substrate: a
+        balancer would choose <em>within</em> a pool, and would not need to touch how pools are selected.
+      </p>
+      <p>
+        <strong>The obvious first policy is the right one.</strong> Fewest outstanding dispatches wins,
+        preferring a worker that already advertises the locality the work wants. It needs no new measurement
+        beyond what dispatch already knows, and it degrades to today's behaviour when there is one worker.
+      </p>
+      <p>
+        <strong>The trap worth writing down now.</strong> There is a filed observation that a saturated worker
+        stops reading its incoming messages while it waits for capacity. That means the natural signal for
+        "is this worker healthy" goes quiet exactly when the worker is busiest. Any balancer built on
+        responsiveness would read a fully-loaded node as a dead one and route work away from it — or worse,
+        declare it gone. Whatever we build must take its load signal from dispatch accounting, which the
+        server already owns, and never from whether the worker answered promptly.
+      </p>
+      <p>
+        <strong>And the honest prerequisite.</strong> Balancing across nodes is meaningless until cancelling a
+        run actually stops the work. Otherwise the balancer's picture of who is busy is wrong in the one
+        direction that compounds: it keeps sending work to machines it believes are free.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What can start today without touching the box</h2>
+    <p class="section-note">
+      Hermes keeps the machine. These need no compile and contend with nothing, so they can run in parallel
+      with his lane — on your word.
+    </p>
+    <div class="items">
+      <div class="item">
+        <div class="item-head"><h3>Pure authoring, zero contention</h3><span class="chip ready">Ready to dispatch</span></div>
+        <ul>
+          <li>The node onboarding runbook, written out properly from the section above.</li>
+          <li>The swarm document rewritten onto isolated trees per builder — language work, no build.</li>
+          <li>The gate evidence fix — it is a change to a shell script; authoring it costs nothing, only proving it needs a run.</li>
+          <li>Reading what authenticates an inbound worker connection, so decision 2 can be answered with evidence rather than an assumption.</li>
+        </ul>
+      </div>
+      <div class="item">
+        <div class="item-head"><h3>Needs the box, so needs sequencing</h3><span class="chip build">Queued behind Hermes</span></div>
+        <ul>
+          <li>Identifying the server library failure — one capped diagnostic is already running with your word.</li>
+          <li>The second-box proof: config change, a worker started off-machine, one real round end to end.</li>
+          <li>Re-gating anything the above changes.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>
+      <strong>How to read this.</strong> Everything marked "measured today" was checked against the tree at
+      <code>400c670bd</code> while writing, and the command is named so it can be re-run. Everything else is
+      drawn from the filed record and is marked as such rather than presented as fresh measurement. Where I
+      have no evidence I have said so — the off-machine Norn path in particular is an absence of measurement,
+      not a judgement that it works or fails.
+    </p>
+    <p>
+      One thing this map does not do: certify the release. The test leg is red with one failure unread, and
+      until it is read this is a map of a tree whose state is partly unknown.
+    </p>
+    <p class="sig">— Vesper · 14 Aug 2026</p>
+  </footer>
+
+</div>

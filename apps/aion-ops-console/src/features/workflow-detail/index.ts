@@ -12,6 +12,8 @@ export type { LiveWorkflowEvents, LiveWorkflowEventsOptions } from './hooks/useL
 export { useLiveWorkflowEvents } from './hooks/useLiveWorkflowEvents';
 export type { RenameClient, RenameWorkflowVariables } from './hooks/useRename';
 export { RENAME_INVALIDATED_QUERY_PREFIXES, submitRename, useRename } from './hooks/useRename';
+export type { WorkflowHeadClient, WorkflowHeadOptions } from './hooks/useWorkflowHead';
+export { useWorkflowHead, workflowHeadQueryKey } from './hooks/useWorkflowHead';
 export type { WorkflowHistoryOptions } from './hooks/useWorkflowHistory';
 export {
   requireWorkflowHistoryNamespace,
@@ -19,8 +21,6 @@ export {
   workflowHistoryQueryKey,
   workflowHistoryRequestOptions,
 } from './hooks/useWorkflowHistory';
-export type { WorkflowSummaryClient, WorkflowSummaryOptions } from './hooks/useWorkflowSummary';
-export { useWorkflowSummary, workflowSummaryQueryKey } from './hooks/useWorkflowSummary';
 export { mergeEventsBySequence, projectTimeline, terminalOutcomeForEvents } from './lib/timeline';
 export {
   assertAllVariantsHandled,

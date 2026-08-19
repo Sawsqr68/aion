@@ -39,9 +39,16 @@ impl TaskStatus {
 /// detailed variant.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Task {
-    /// Stable identifier. Generated with cryptographic entropy: it doubles as a
-    /// bearer token for the stored state behind it, so it must be neither
-    /// enumerable nor guessable.
+    /// Stable identifier: the host's handle for the durable work this task
+    /// reports on.
+    ///
+    /// It is explicitly NOT a bearer token. A handle derived from identifiers
+    /// the caller already holds is constructible by anyone who holds them, so
+    /// unguessability is not available as a security property and must never be
+    /// leaned on as one. Every task method re-authorizes the caller against the
+    /// work itself — see [`ToolService::resolve_task`].
+    ///
+    /// [`ToolService::resolve_task`]: crate::tools::service::ToolService::resolve_task
     pub task_id: String,
     /// Current status.
     pub status: TaskStatus,

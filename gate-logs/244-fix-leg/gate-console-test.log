@@ -1,0 +1,1294 @@
+$ bun test
+bun test v1.3.14 (0d9b296a)
+
+src/no-raw-colors.test.ts:
+(pass) token discipline > no raw color literals outside index.css [19.64ms]
+
+src/app/App.test.tsx:
+(pass) renders the provider-backed list route in the app shell [34.77ms]
+(pass) renders the detail route and can create a list router again for back navigation [19.53ms]
+(pass) normalizes Vite base paths for the router basename [0.11ms]
+
+src/app/AppShell.test.tsx:
+(pass) mounts every Phase-1 route inside the persistent shell without crashing [39.70ms]
+(pass) marks exactly the active route in the nav with aria-current [20.70ms]
+(pass) keeps the Workflows tab active on a workflow detail route [5.71ms]
+(pass) WS lifecycle connects once and closes once across its lifetime [0.15ms]
+(pass) route table does not own the WS lifecycle (provider sits above the router) [0.10ms]
+
+src/components/shared-presentational.test.tsx:
+(pass) StatusBadge > renders a distinct badge for every generated workflow status [0.99ms]
+(pass) EventIcon > renders a distinct icon and colour affordance for every event category kind [1.02ms]
+(pass) shared async state panels > EmptyState renders a configurable message and optional icon [0.15ms]
+(pass) shared async state panels > ErrorState renders a cause and exposes a retry button callback [0.32ms]
+(pass) shared async state panels > LoadingSkeleton renders distinct layout-reserving list and timeline variants [0.67ms]
+(pass) InstantText > a parseable instant renders a <time> whose dateTime and title carry the raw UTC value [0.14ms]
+(pass) InstantText > className lands on the <time> element [0.06ms]
+(pass) InstantText > an absent value renders a bare em-dash with NO <time> wrapper [0.07ms]
+(pass) InstantText > an absent value with a className renders the em-dash in a plain span [0.03ms]
+(pass) InstantText > a non-RFC3339 value renders plain labelled text with no dateTime attribute [0.07ms]
+
+src/__tests__/token-discipline.test.ts:
+(pass) token discipline > no raw color literals or stock-palette classes outside index.css [131.22ms]
+(pass) token discipline > the scanner catches each violation class [0.24ms]
+(pass) token discipline > comments, exemptions, and token wrappers stay legal [0.05ms]
+
+src/lib/workflowIdentity.test.ts:
+(pass) normalizeDisplayName > a surviving name is returned trimmed ("  Nightly settlement  ") [0.03ms]
+(pass) normalizeDisplayName > a surviving name is returned trimmed ("\tNightly settlement\n")
+(pass) normalizeDisplayName > a surviving name is returned trimmed ("Nightly settlement")
+(pass) normalizeDisplayName > a blank name is unnamed ("") [0.02ms]
+(pass) normalizeDisplayName > a blank name is unnamed ("   ")
+(pass) normalizeDisplayName > a blank name is unnamed ("\t")
+(pass) normalizeDisplayName > a blank name is unnamed ("\n ")
+(pass) normalizeDisplayName > absent and null are unnamed [0.01ms]
+(pass) isBlankDisplayName > "" is blank [0.02ms]
+(pass) isBlankDisplayName > " " is blank
+(pass) isBlankDisplayName > "   " is blank
+(pass) isBlankDisplayName > "\t" is blank
+(pass) isBlankDisplayName > "\n" is blank
+(pass) isBlankDisplayName > "\r\n " is blank
+(pass) isBlankDisplayName > "x" is not blank [0.01ms]
+(pass) isBlankDisplayName > " x " is not blank
+(pass) isBlankDisplayName > "Nightly settlement" is not blank
+
+src/lib/display-name-attribute-parity.test.ts:
+(pass) display-name attribute key > only the generated bindings spell the key [19.57ms]
+
+src/lib/time.test.ts:
+(pass) formatInstant acceptance gate > absent instants render as an em-dash [0.07ms]
+(pass) formatInstant acceptance gate > unparseable input is returned raw and named, never "Invalid Date" [0.05ms]
+(pass) formatInstant acceptance gate > anything short of an RFC 3339 date-time WITH offset refuses [0.12ms]
+(pass) formatInstant acceptance gate > a well-shaped but calendar-invalid date-time refuses [0.03ms]
+(pass) formatInstant acceptance gate > an explicit numeric offset is accepted and renders the same instant as Z [0.83ms]
+(pass) viewer-local rendering > a known instant renders exactly under an explicit timeZone option [0.44ms]
+(pass) viewer-local rendering > the pinned system zone (Australia/Sydney) IS the default rendering zone [0.11ms]
+(pass) viewer-local rendering > every rendering carries a visible timezone label, never the word "local" [0.19ms]
+(pass) formatInstantMs > renders a known epoch and refuses non-finite input [0.11ms]
+(pass) formatInstantMs > out-of-range epoch milliseconds refuse instead of throwing [0.01ms]
+(pass) formatInstantMs > the 'time-ms' style distinguishes adjacent milliseconds (scrubber steps in ms) [0.08ms]
+(pass) parseInstantMs > separates instants from garbage and yields the exact epoch [0.05ms]
+
+src/features/update/doc-adjacency.test.ts:
+(pass) doc-block adjacency (the r5-M1 species, mechanized) > every doc block in this feature sits immediately on its declaration [4.76ms]
+
+src/features/kit-lookbook/contrast.test.ts:
+(pass) parseCssColor > parses 6-digit hex [1.62ms]
+(pass) parseCssColor > parses 3-digit hex [0.05ms]
+(pass) parseCssColor > parses rgba() with alpha [0.09ms]
+(pass) parseCssColor > parses rgb() [0.02ms]
+(pass) parseCssColor > returns null for oklch and junk [0.02ms]
+(pass) contrastRatio > black on white is 21:1 [0.07ms]
+(pass) contrastRatio > same color is 1:1 [0.01ms]
+(pass) contrastRatio > action blue #6b96d1 clears AA on the dark canvas [0.02ms]
+(pass) contrastRatio > primary foreground #0b0f14 clears AA on the action blue [0.02ms]
+(pass) contrastRatio > translucent color composites over the backdrop first [0.04ms]
+(pass) formatRatio renders one decimal [0.03ms]
+
+src/components/kit/entity.test.tsx:
+(pass) entity form-factor helpers > expand walks pill → card → window and stops at the ceiling [0.03ms]
+(pass) entity form-factor helpers > collapse walks window → card → pill and stops at the floor [0.02ms]
+(pass) entity form-factor helpers > keyboard actions fire onFormChange only when the form actually changes [0.08ms]
+(pass) entity render states > every form renders a distinct surface tagged with its form factor [14.48ms]
+(pass) entity render states > pill form streams a headline and keeps the identity visible [0.25ms]
+(pass) entity render states > card form renders header, children and the quick-input slot [0.34ms]
+(pass) entity render states > window form hands the full surface to children without the quick input [0.27ms]
+(pass) entity render states > status is communicated through the shared dot, never per-component [4.58ms]
+
+src/components/kit/springs.test.ts:
+(pass) house physics constants > the signature spring carries the ratified constants [0.04ms]
+(pass) house physics constants > micro-transitions stay on the CSS timescale (150-200ms ease-out) [0.06ms]
+(pass) reduced-motion degradation > springs degrade to the opacity-fade timing under reduced motion [0.03ms]
+(pass) reduced-motion degradation > springs pass through untouched when motion is allowed [0.01ms]
+(pass) reduced-motion degradation > micro tweens are already motionless and pass through under reduced motion
+
+src/components/kit/sliding-number.test.tsx:
+(pass) splitSlidingNumber > splits an integer into per-place digit columns [0.10ms]
+(pass) splitSlidingNumber > splits fractional values around the separator [0.05ms]
+(pass) splitSlidingNumber > carries the sign separately so only digits slide [0.01ms]
+(pass) splitSlidingNumber > pads the integer side for clock-style displays [0.02ms]
+(pass) splitSlidingNumber > zero renders a single column [0.02ms]
+(pass) SlidingNumber rendering > renders one odometer column per digit plus the separator [0.77ms]
+(pass) SlidingNumber rendering > each animated column is keyed to its digit [0.19ms]
+
+src/components/kit/chat-input.test.tsx:
+(pass) chat draft persistence > drafts survive by key and clear when emptied [0.17ms]
+(pass) chat draft persistence > a persisted draft is restored into a remounted expanded input [1.04ms]
+(pass) chat draft persistence > a persisted draft previews on the collapsed pill instead of the placeholder [0.34ms]
+(pass) chat input render states > collapsed pill shows status dot, placeholder and capability badges [0.27ms]
+(pass) chat input render states > expanded form renders textarea, priority toggle and the send button [0.55ms]
+(pass) chat input render states > while streaming the send button is the interrupt control [0.43ms]
+(pass) escalation state machine > pure steps: escalate climbs to kill, decay steps back to interrupt [0.05ms]
+(pass) escalation state machine > rapid presses fire interrupt → shutdown → kill [0.14ms]
+(pass) escalation state machine > an armed level decays one step per idle window until rest [0.08ms]
+(pass) escalation state machine > a press inside the window re-arms the decay clock [0.03ms]
+(pass) escalation state machine > reset snaps to rest and dispose stops the decay clock [0.03ms]
+
+src/components/kit/expandable-row.test.tsx:
+(pass) resolveExpanded > the controlled prop wins over internal state whenever present [0.03ms]
+(pass) resolveExpanded > uncontrolled rows fall back to internal state [0.01ms]
+(pass) ExpandableRow render states > uncontrolled: defaultExpanded drives the initial state [1.33ms]
+(pass) ExpandableRow render states > controlled: the expanded prop overrides defaultExpanded [0.44ms]
+(pass) ExpandableRow render states > collapsed summary keeps the one-line anatomy: text, status dot, pips [0.21ms]
+(pass) ExpandableRow render states > detail region is always mounted for measurement but hidden when collapsed [0.17ms]
+
+src/lib/config/env.test.ts:
+(pass) parseOpsConsoleConfig defaults to same origin (empty bases) when env is empty [0.10ms]
+(pass) parseOpsConsoleConfig reads explicit bases, namespaces, subject and token [0.09ms]
+(pass) parseOpsConsoleConfig derives the WS base from the API base when WS is unset [0.02ms]
+(pass) parseOpsConsoleConfig treats blank values as unset (no silent empty credentials) [0.03ms]
+(pass) parseOpsConsoleConfig bakes no deploy grant (authorization is discovered at runtime) [0.01ms]
+(pass) buildCredentials returns undefined when nothing is configured [0.01ms]
+(pass) buildCredentials carries the full grant when no namespace is selected [0.06ms]
+(pass) buildCredentials scopes namespaces to the selected namespace when provided [0.02ms]
+(pass) buildCredentials includes a selected namespace not present in the grant [0.03ms]
+(pass) buildCredentials carries bearer token without namespaces when only token is set [0.02ms]
+(pass) buildCredentials never bakes a deploy grant into the credentials [0.03ms]
+
+src/lib/config/clients.test.ts:
+(pass) configured client sends x-aion-namespaces scoped to the selected namespace [0.63ms]
+(pass) configured client sends the full grant on listNamespaces (no selected namespace) [0.19ms]
+(pass) configured client sends a bearer token when configured [0.08ms]
+(pass) baseUrl override repoints the client at a survivor node (failover own-read) [0.07ms]
+(pass) an unconfigured client sends no x-aion-namespaces (no fabricated credentials) [0.06ms]
+
+src/lib/api/transcript-read.test.ts:
+(pass) fetchTranscript posts the stream identity with scoped headers and returns the retained events [0.65ms]
+(pass) fetchTranscript carries from_seq when resuming [0.09ms]
+(pass) fetchTranscript carries limit and tail fields and decodes a truncated cursor [0.08ms]
+(pass) fetchTranscript surfaces a malformed envelope as an ApiError [0.13ms]
+(pass) listStreams normalizes retained stream heads [0.15ms]
+(pass) listStreams throws on a malformed stream row (truth-first, never skipped) [0.05ms]
+(pass) listStreams throws on a stream row with no run (the row is not addressable) [0.05ms]
+(pass) a non-OK transcript read throws the server wire error [0.13ms]
+(pass) the default fetch is invoked without a client-bound `this` (browser "Illegal invocation" regression) [0.10ms]
+
+src/lib/api/renameClient.test.ts:
+(pass) rename posts the id-addressed target + the new label and reads back the recorded name [0.39ms]
+(pass) rename forwards an explicit run_id when targeting one generation [0.09ms]
+(pass) the rename body addresses the run by id only — the name is never a lookup key [0.08ms]
+(pass) the response name is read back verbatim, not echoed from the request [0.05ms]
+(pass) a malformed rename response is a typed error, never a silent success [0.13ms]
+(pass) a server refusal surfaces as a typed ApiError with its code [0.14ms]
+(pass) a present-but-blank display name is refused by the client, never forwarded [0.27ms]
+(pass) the client sends the trimmed name on both surfaces [0.12ms]
+
+src/lib/api/workflow-window-client.test.ts:
+(pass) getHistoryWindow posts fixed window fields and decodes elision metadata [0.37ms]
+(pass) getHistoryWindow omits optional fields so server defaults remain authoritative [0.09ms]
+(pass) getEvent posts a sequence and unwraps the full event response [0.47ms]
+(pass) history windows reject malformed cursor metadata instead of hiding contract drift [0.14ms]
+
+src/lib/api/websocket.test.ts:
+(pass) subscribe sends a per-workflow request and dispatches streamed typed events [0.85ms]
+(pass) streamed wire-envelope payload bytes are decoded before dispatch [1.49ms]
+(pass) malformed frames are logged instead of thrown into subscribers [0.24ms]
+(pass) frames without namespace are logged instead of guessed from workflow id [0.08ms]
+(pass) unexpected close reconnects with bounded backoff, re-sends subscriptions, and resyncs [0.36ms]
+(pass) malformed frame emits a typed decode error to listeners (no silent failure) [0.09ms]
+(pass) reconnect exhaustion emits a typed error then a healthy reconnect clears it [0.14ms]
+(pass) a single subscription sends exactly one subscribe frame (no double-subscribe) [0.04ms]
+(pass) socket error schedules a single reconnect attempt [0.07ms]
+(pass) manual connect after bounded reconnect exhaustion starts a fresh attempt [0.07ms]
+(pass) concurrent subscriptions use distinct sockets and both reconnect independently [0.19ms]
+(pass) live-only filtered and firehose subscriptions never send a cursor [0.08ms]
+(pass) closing a still-connecting socket defers the close until it opens (no premature close) [0.07ms]
+
+src/lib/api/client-normalize.test.ts:
+(pass) workflow status normalization accepts paused workflows [0.05ms]
+
+src/lib/api/websocket-protocol.test.ts:
+(pass) buildWebSocketUrl appends no query when no credentials are given [0.14ms]
+(pass) buildWebSocketUrl converts http(s) bases to ws(s) [0.04ms]
+(pass) buildWebSocketUrl carries namespaces as a query param (browser cannot send headers) [0.15ms]
+(pass) buildWebSocketUrl carries subject and bearer token (as access_token) [0.09ms]
+(pass) buildWebSocketUrl omits empty credential fields rather than sending blanks [0.04ms]
+(pass) buildWebSocketUrl carries the deploy grant as x-aion-deploy for the cluster stream [0.05ms]
+(pass) buildWebSocketUrl never sends x-aion-deploy unless explicitly granted [0.06ms]
+
+src/lib/api/reopenClient.test.ts:
+(pass) reopen posts the workflow+namespace and normalizes the reopened run + status [0.38ms]
+(pass) reopen forwards an explicit run_id when targeting a specific run [0.08ms]
+(pass) a malformed reopen response is a typed error, never a silent success [0.10ms]
+(pass) a non-2xx reopen response propagates a typed ApiError (e.g. invalid_state) [0.07ms]
+
+src/lib/api/client-abort.test.ts:
+(pass) namespaced requests pass the recovery AbortSignal to fetch [3.49ms]
+
+src/lib/api/cluster-stream.test.ts:
+(pass) deployment baselines, worker associations, and lifecycle events pass strict decoding [1.27ms]
+(pass) accepts the known deployment association [0.03ms]
+(pass) accepts the absent deployment association [0.01ms]
+(pass) accepts the unchecked deployment association
+(pass) reconnect stays visibly possibly gapped with stale topology until a fresh snapshot applies [0.43ms]
+(pass) repeated recovery opens without a snapshot exhaust the bounded budget [0.11ms]
+(pass) a missing priming snapshot times out and fails visibly at the recovery bound [0.13ms]
+(pass) malformed priming failure fail-stops instead of declaring connected [0.09ms]
+(pass) malformed snapshot priming failure fail-stops instead of declaring connected [0.02ms]
+(pass) malformed nested peer priming failure fail-stops instead of declaring connected [0.03ms]
+(pass) terminal priming failure fail-stops instead of declaring connected [0.03ms]
+(pass) pre-snapshot event priming failure fail-stops instead of declaring connected [0.02ms]
+(pass) unknown post-prime event fail-stops without advancing topology [0.09ms]
+(pass) missing-field post-prime event fail-stops without advancing topology [0.02ms]
+(pass) a restarted cluster publisher rebases to its fresh snapshot epoch [0.13ms]
+(pass) snapshot listener failure does not complete cluster recovery [0.08ms]
+
+src/lib/api/signalClient.test.ts:
+(pass) sendSignal posts the server SignalWorkflowRequest shape with a plain-JSON payload [0.28ms]
+(pass) sendSignal omits the payload key entirely for a payload-less signal [0.07ms]
+(pass) sendSignal forwards an explicit run_id when targeting a specific run [0.06ms]
+(pass) a non-2xx signal response propagates a typed ApiError (e.g. not_found) [0.09ms]
+
+src/lib/api/websocket-buffering.test.ts:
+(pass) decode errors flush queued subscription delivery before publishing the error [0.24ms]
+(pass) socket close flushes queued subscription delivery before disconnect state [0.12ms]
+
+src/lib/api/websocket-generation-recovery.test.ts:
+(pass) dirty list refetch repeats before clearing the gap after the inverse cache race [2.27ms]
+(pass) projection-neutral activity frames do not dirty an authoritative list refetch [0.21ms]
+(pass) a timed-out recovery generation cannot commit after a newer refetch succeeds [0.27ms]
+(pass) a continuously dirty refetch exhausts the shared recovery budget [0.23ms]
+
+src/lib/api/client.test.ts:
+(pass) queryWorkflows posts a namespaced typed request and parses a workflow page [1.17ms]
+(pass) getHistory parses ordered typed events [0.16ms]
+(pass) listNamespaces parses a typed namespace list [0.06ms]
+(pass) listNamespaceRecords parses the placement projection (P2-I2 column source) [0.23ms]
+(pass) setNamespacePlacement PUTs the target namespace path with the {kind, nodes} body [0.17ms]
+(pass) setNamespacePlacement surfaces a server rejection as a typed ApiError [0.09ms]
+(pass) createNamespace POSTs /namespaces with the {name} body and reports created [0.15ms]
+(pass) createNamespace reports the idempotent already-existed path honestly [0.05ms]
+(pass) createNamespace surfaces an empty-name 400 as a typed ApiError [0.05ms]
+(pass) createNamespace surfaces a denied grant (403) as a typed ApiError [0.04ms]
+(pass) getCapabilities normalizes the /whoami operator-mode response [0.13ms]
+(pass) getCapabilities collapses a malformed /whoami response to least privilege [0.04ms]
+(pass) non-success responses throw ApiError with status, code, and message [0.12ms]
+(pass) malformed failure bodies still throw typed ApiError [0.09ms]
+(pass) default fetch path invokes the global fetch with correct receiver (no illegal invocation) [0.10ms]
+(pass) startWorkflow posts the server-shaped body and normalizes the run ids [0.13ms]
+(pass) startWorkflow omits routing_key when not provided [0.07ms]
+(pass) startWorkflow forwards the selected task_queue to the server body [0.08ms]
+(pass) startWorkflow omits task_queue when not provided [0.08ms]
+(pass) getWorkflowSummary describes the run WITHOUT history and returns the projection [0.19ms]
+(pass) getWorkflowSummary answers null for a workflow the server does not know [0.05ms]
+(pass) a malformed describe response is a typed error, never a phantom summary [0.09ms]
+(pass) a wrong-typed field in a describe summary is an error, never a silent unnamed render [0.26ms]
+(pass) startWorkflow forwards an optional display_name to the server body [0.08ms]
+(pass) startWorkflow omits display_name when not provided [0.06ms]
+(pass) startWorkflow throws a typed ApiError on WorkflowTypeNotFound [0.09ms]
+(pass) deployPackage sends the raw archive as octet-stream with no baked deploy header [0.33ms]
+(pass) listVersions normalizes the deploy versions listing [0.17ms]
+(pass) listVersions surfaces a 404 (deploy disabled) as a typed ApiError [0.09ms]
+
+src/lib/api/websocket-recovery.test.ts:
+(pass) throwing durable subscriber reconnects from the last successfully applied sequence [0.35ms]
+(pass) malformed durable frame fail-stops the socket and clears only after replay applies [0.17ms]
+(pass) deterministically malformed durable replay exhausts the same bounded budget [0.09ms]
+(pass) always-throwing durable subscriber exhausts its application recovery budget [0.11ms]
+(pass) recovering one subscription cannot clear another subscription error [5.15ms]
+(pass) adding a subscription does not resurrect an exhausted subscription [7.33ms]
+
+src/lib/api/transcript-stream.test.ts:
+(pass) subscribe sends a transcript frame WITHOUT after_seq for a fresh subscriber [6.38ms]
+(pass) a manager seeded with initialAfterSeq subscribes with after_seq immediately [0.13ms]
+(pass) reconnect resumes from the highest applied store_seq (no gap/dup) [1.26ms]
+(pass) a transcript_lagged terminal is surfaced as a typed error and keeps the cursor [0.37ms]
+(pass) an unrecognized frame is surfaced as a decode error, never silently dropped [0.16ms]
+
+src/lib/api/websocket-live-recovery.test.ts:
+(pass) throwing live-only subscriber reconnects and requests a full refetch [0.30ms]
+(pass) Running projection keeps a post-completion HTTP snapshot authoritative [0.31ms]
+(pass) rejected live-only refetch stays visible and exhausts the bounded recovery [0.22ms]
+(pass) live-only reconnect without a refetch callback remains visibly possibly gapped [0.07ms]
+(pass) a never-settling refetch has no frame buffer and times out into visible exhaustion [29.46ms]
+
+src/lib/api/children-read.test.ts:
+(pass) children request emits the strict wire body and forwards cancellation [1.66ms]
+(pass) children decoder preserves typed status and explicit not-started state [0.27ms]
+(pass) children decoder accepts an empty display name for caller fallback [0.05ms]
+(pass) children decoder rejects present wrong-typed nullable strings [0.17ms]
+(pass) children decoder rejects unknown or run-incoherent status [0.10ms]
+
+src/features/assistant/__tests__/assistant.contract.test.ts:
+(pass) the assistant signal payloads match the workflow that receives them > the workflow document is the source of the field list [5.21ms]
+(pass) the assistant signal payloads match the workflow that receives them > continuing carries every required field [0.10ms]
+(pass) the assistant signal payloads match the workflow that receives them > ending carries every required field [0.02ms]
+(pass) the assistant signal payloads match the workflow that receives them > the two payloads differ only in the discriminator and the prompt [0.01ms]
+(pass) the assistant signal payloads match the workflow that receives them > a payload missing a required field is what the server refused [0.02ms]
+
+src/features/assistant/__tests__/assistant.test.tsx:
+(pass) deriveAssistantMode > a live attempt means send = intervene inject [0.05ms]
+(pass) deriveAssistantMode > an open workflow with no live attempt awaits continuation (send = signal) [0.01ms]
+(pass) deriveAssistantMode > a terminal workflow is ended regardless of the attempt enumeration [0.01ms]
+(pass) deriveAssistantMode > an unanswered attempt enumeration is connecting — never a guessed verb [0.01ms]
+(pass) the chat targets the NEWEST live attempt (rounds are sequential) [0.04ms]
+(pass) the session list filters to exactly the assistant workflow type [0.02ms]
+(pass) sessions order newest first [0.32ms]
+(pass) session rows deep-link to /assistant/:id with a status chip [0.98ms]
+(pass) the contract start input carries objective + repo_path (blank travels as empty string) [0.03ms]
+(pass) ending a session rides the ONE continue signal with the end discriminator [0.02ms]
+(pass) SessionDock > live mode: interrupt placeholder + live dot + streaming send [0.54ms]
+(pass) SessionDock > awaiting mode: continue placeholder, not streaming [0.23ms]
+(pass) SessionDock > ended mode offers no input at all [0.05ms]
+(pass) SessionDock > mode chip labels the session state [0.11ms]
+(pass) the assistant routes are registered under the shell [0.08ms]
+(pass) assistant keybindings live in the central registry inventory (mod = ⌘/Super) [0.05ms]
+
+src/features/whats-new/components/WhatsNewPanel.test.tsx:
+(pass) WhatsNewPanel > closed by default: renders only the launcher and fetches nothing [0.49ms]
+(pass) WhatsNewPanel > open with the changelog cached: renders the markdown as elements [10.19ms]
+(pass) WhatsNewPanel > open before the fetch resolves: says it is fetching, not broken [0.41ms]
+(pass) WhatsNewPanel > a failed fetch is shown, never swallowed [0.06ms]
+
+src/features/workflow-list/components/WorkflowList.test.tsx:
+(pass) WorkflowListBody > renders rows for a returned workflow page [1.00ms]
+(pass) WorkflowListBody > renders loading skeleton rows while initially loading [0.27ms]
+(pass) WorkflowListBody > renders an empty state when no workflows match [0.05ms]
+(pass) WorkflowListBody > renders an error state with a retry affordance [0.09ms]
+(pass) WorkflowRow > links workflow rows to the detail route [0.35ms]
+(pass) WorkflowRow > a named row shows the name AND the short id, still linked by id [0.45ms]
+(pass) WorkflowRow > an unnamed row falls back to the bare id, unchanged [0.64ms]
+(pass) WorkflowRow > a blank name is treated as unnamed, never as an empty label [0.43ms]
+(pass) live workflow list updates > patches status transitions and inserts newly matching started workflows [0.19ms]
+(pass) live workflow list updates > patches an existing row status without inserting or reordering [0.04ms]
+(pass) live workflow list updates > projects every summary-changing lifecycle status and clears a reopened terminal [0.10ms]
+(pass) live workflow list updates > a rename arriving live patches the row name in place [0.13ms]
+(pass) live workflow list updates > a rename for a workflow not on the page leaves the page untouched [0.03ms]
+(pass) live workflow list updates > a rename on a completed run updates a terminal-filtered row and inserts into no other list [0.06ms]
+(pass) live workflow list updates > a non-naming attribute update, and a no-op rename, change nothing [0.04ms]
+(pass) live workflow list updates > off page 1, a newly-started workflow is NOT inserted into the cursor view [0.02ms]
+(pass) NewAboveBanner > is hidden when there are no new workflows above [0.05ms]
+(pass) NewAboveBanner > surfaces a count and a jump-to-top action when rows arrive above [0.09ms]
+(pass) NewAboveBanner > uses singular phrasing for a single new workflow [0.05ms]
+(pass) workflow list query path > query helper requests namespaced summary pages with generated filter and pagination [0.22ms]
+(pass) workflow list query path > query key includes namespace, filter, and pagination [0.02ms]
+(pass) workflow list filter and pagination state > filter changes produce a new WorkflowFilter and reset pagination [0.04ms]
+
+src/features/capabilities/__tests__/capabilities.test.tsx:
+(pass) CapabilitiesProvider > treats the caller as unprivileged before /whoami resolves [0.46ms]
+(pass) CapabilitiesProvider > useCapabilities throws outside a provider [0.24ms]
+
+src/features/update/components/UpdateStatusPanel.test.tsx:
+(pass) UpdateStatusPanel > no pill before any check has ever run — absence is honest, not zero [0.85ms]
+(pass) UpdateStatusPanel > the pill appears ONLY when latest_known is semver-greater than installed [2.06ms]
+(pass) UpdateStatusPanel > a prerelease latest never raises the pill (r1 Major 1) [0.26ms]
+(pass) UpdateStatusPanel > a malformed version is a LOUD state on the launcher, never a silent hide [0.22ms]
+(pass) UpdateStatusPanel > open, never checked: says so and renders installed from /build [0.44ms]
+(pass) UpdateStatusPanel > open with a recorded check: renders latest, checked time, and up-to-date note [0.37ms]
+(pass) UpdateStatusPanel > an unparseable checked_at is shown raw and NAMED, never "Invalid Date" (r1 m12) [1.41ms]
+(pass) UpdateStatusPanel > open with malformed versions: the refusal is rendered with its reason [0.70ms]
+(pass) UpdateStatusPanel > a disabled check-now states its reason instead of guessing a namespace [0.30ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > not yet visible: a STATED pending state with the give-up pointer (r2 Major 1, r3-m3) [0.17ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > pending CONCLUDES once a check is recorded after the floor (r3-m3) [0.06ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > a running run says it is following, naming the status [0.04ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > ContinuedAsNew is terminal for the follow and loud (r2-m3) [0.05ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > a completed run says so and points at the recorded result [0.03ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > a failed run is LOUD, names the run, and says nothing was recorded [0.09ms]
+(pass) CheckRunLine (the r1 m6 follow: started never stands forever) > a follow error is its own loud line, never a silent stall [0.05ms]
+
+src/features/update/lib/semver.test.ts:
+(pass) parseSemver > parses a plain release and a full form [0.78ms]
+(pass) parseSemver > refuses every named malformation instead of guessing [0.12ms]
+(pass) compareSemver > the spec's own precedence chain ranks strictly ascending [0.28ms]
+(pass) compareSemver > numeric version parts compare numerically, not lexically [0.03ms]
+(pass) compareSemver > build metadata never separates precedence [0.02ms]
+(pass) compareForUpdate > a strictly greater latest is newer; equal or lesser is not [0.03ms]
+(pass) compareForUpdate > a prerelease latest is NEVER announced — both arms (r1 Major 1) [0.03ms]
+(pass) compareForUpdate > malformation on EITHER side is its own loud outcome, naming the side [0.03ms]
+
+src/features/update/lib/contract.test.ts:
+(pass) the update-check contract literal > names the workflow type the embedded document compiles to [0.02ms]
+(pass) the update-check contract literal > the start parameters carry the explicit empty input object [0.02ms]
+
+src/features/update/lib/followCheck.test.ts:
+(pass) fetchCheckRunStatus (the floor, on the wire that exists) > the request carries the floor, the page stays one row, the run resolves [0.49ms]
+(pass) fetchCheckRunStatus (the floor, on the wire that exists) > control: a type-only query on this wire returns the whole history [0.14ms]
+(pass) fetchCheckRunStatus (the floor, on the wire that exists) > a run not yet projected into visibility is null — the stated pending state [0.05ms]
+(pass) fetchCheckRunStatus (the floor, on the wire that exists) > a terminal failed status comes back as itself [0.05ms]
+(pass) hasRecordedSince (the concluded exit, r4 Major 2) > recorded strictly after the floor concludes [0.03ms]
+(pass) hasRecordedSince (the concluded exit, r4 Major 2) > recorded strictly before the floor does NOT conclude — a stale answer is never declared current [0.01ms]
+(pass) hasRecordedSince (the concluded exit, r4 Major 2) > recorded exactly at the floor concludes — the >= boundary the wire itself uses
+(pass) hasRecordedSince (the concluded exit, r4 Major 2) > unparseable on either side never concludes — fail-safe, the follow keeps waiting [0.02ms]
+
+src/features/transcript/__tests__/ToolCards.test.tsx:
+(pass) tool event pairing > pairs call and result by correlation id and removes the raw result row [0.44ms]
+(pass) tool event pairing > pairs an out-of-order result when its call arrives later [0.06ms]
+(pass) tool event pairing > coalesces streamed tool arguments into one pending row until the call finalizes [0.15ms]
+(pass) tool event pairing > leaves an unpaired call pending [1.01ms]
+(pass) tool cards > detects the cross-tool error envelope before read dispatch [0.45ms]
+(pass) tool cards > renders representative read text payload fields [0.96ms]
+(pass) tool cards > renders bash command, stdout, stderr, and exit code [0.42ms]
+(pass) tool cards > unknown tools use the indent-2 generic JSON fallback [0.25ms]
+(pass) tool cards > uses description as subtitle and excludes both envelope keys from the parameter table [0.22ms]
+
+src/features/transcript/__tests__/transcriptSession.test.ts:
+(pass) startTranscriptSession > backfill lands BEFORE the WS attaches, and the tail resumes at lastSeq [0.74ms]
+(pass) startTranscriptSession > an empty retained transcript attaches with NO cursor (full WS replay) [0.09ms]
+(pass) startTranscriptSession > live events fold onto the backfill with keys past the consumed ids [0.26ms]
+(pass) startTranscriptSession > a backfill failure is visible and never starts an unbounded cursorless replay [0.10ms]
+(pass) startTranscriptSession > stop() before the fetch settles cancels: no state, no attach [0.06ms]
+(pass) startTranscriptSession > stop() before a fetch FAILURE settles suppresses the error path too [0.05ms]
+(pass) startTranscriptSession > stop() after attach unsubscribes stream, status, AND error listeners [0.08ms]
+
+src/features/transcript/__tests__/TranscriptList.test.tsx:
+(pass) TranscriptList — bounded paged scroller > the scroll element is self-bounding and keeps its test id [0.78ms]
+(pass) TranscriptList — bounded paged scroller > every entry renders — there is no windowing that could hide rows [3.97ms]
+(pass) TranscriptList — bounded paged scroller > large transcripts render only the fixed tail DOM page with an earlier affordance [11.01ms]
+(pass) TranscriptList — bounded paged scroller > the first commit follows the tail: no "Jump to latest", nothing animates [0.37ms]
+(pass) body clamp — oversized payloads collapse without dropping content > isBodyClamped triggers only past the 4000-char threshold [0.03ms]
+(pass) body clamp — oversized payloads collapse without dropping content > bodySizeLabel reports the honest line count and byte size [0.11ms]
+(pass) body clamp — oversized payloads collapse without dropping content > a short body renders as a plain pre with no toggle [0.20ms]
+(pass) body clamp — oversized payloads collapse without dropping content > a long body collapsed shows the full text (clipped by CSS) behind a "Show all" toggle [0.60ms]
+(pass) body clamp — oversized payloads collapse without dropping content > a long body expanded shows everything with a "Collapse" toggle and no clamp [0.16ms]
+(pass) body clamp — oversized payloads collapse without dropping content > the row wires an oversized event body straight into the clamp affordance [0.25ms]
+
+src/features/transcript/__tests__/targetKey.test.ts:
+(pass) transcript target key round-trip > round-trips a normal target [5.63ms]
+(pass) transcript target key round-trip > round-trips fields containing a space (NUL-delimiter robustness) [0.20ms]
+(pass) transcript target key round-trip > two generations of one chain produce DIFFERENT keys [0.09ms]
+
+src/features/transcript/__tests__/transcriptFoldBuffer.test.ts:
+(pass) TranscriptFoldBuffer > keeps a simulated multi-stream delta flood inside its entry cap [18.34ms]
+(pass) TranscriptFoldBuffer > coalesces one token flood into one immutable snapshot row [1.06ms]
+
+src/features/transcript/__tests__/InterventionControls.test.tsx:
+(pass) intervention slots — capability gating > renders ONLY the advertised primitives; an unadvertised one is NEVER rendered [2.07ms]
+(pass) intervention slots — capability gating > the destructive actions render in the HEADER slot, away from the composer [0.89ms]
+(pass) intervention slots — capability gating > inject-only: the composer renders and the actions slot renders nothing [0.60ms]
+(pass) intervention slots — capability gating > an empty capability set renders the observability-only note where the composer would be [0.11ms]
+(pass) intervention slots — capability gating > actions-only: the advertised buttons light up; no composer, but the outcome surface stays [0.53ms]
+(pass) intervention slots — capability gating > no live attempt → the controller is null and neither slot renders [7.88ms]
+(pass) intervention outcome/error — reported in the composer slot, verbatim > an Applied ack renders as a distinct visible outcome next to the composer [0.78ms]
+(pass) intervention outcome/error — reported in the composer slot, verbatim > a gated ack is shown honestly, never conflated with success [0.13ms]
+(pass) intervention outcome/error — reported in the composer slot, verbatim > a stale-target ack is shown honestly with its detail [0.06ms]
+(pass) intervention outcome/error — reported in the composer slot, verbatim > a transport error surfaces as visible alert state, not swallowed [1.55ms]
+(pass) intervention outcome/error — reported in the composer slot, verbatim > while submitting, the header action buttons are disabled [0.15ms]
+(pass) injectKindFor — composer priority maps onto the wire InjectPriority union > the interrupt toggle acts now (Interrupt) [0.07ms]
+(pass) injectKindFor — composer priority maps onto the wire InjectPriority union > the queued toggle queues the turn (Normal — the wire’s queue variant) [0.02ms]
+(pass) useInterventionController — per-target draft key > the draft key is scoped to (workflow, run, activity, attempt) so drafts never leak [0.10ms]
+
+src/features/transcript/__tests__/TranscriptPanel.test.tsx:
+(pass) TranscriptPanelContent > with no target it prompts to select an attempt [0.16ms]
+(pass) TranscriptPanelContent > surfaces a socket error as visible state, never swallowed [0.23ms]
+(pass) TranscriptPanelContent > renders the ordered transcript entries inside the bounded scroll region [0.39ms]
+(pass) TranscriptEntryRow > a coalesced delta stream renders as ONE live streaming row with the accumulated text [0.17ms]
+(pass) TranscriptEntryRow > a thinking delta stream is one visually muted flowing block [0.14ms]
+(pass) TranscriptEntryRow > a note run renders as ONE counted progress row, not a row per chunk [0.07ms]
+(pass) TranscriptEntryRow > a reasoning_item raw renders its summary text, never the encrypted blob [0.25ms]
+(pass) TranscriptEntryRow > a genuinely unknown raw value keeps the generic JSON fallback [0.08ms]
+(pass) TranscriptEventRow > flags an ephemeral delta distinctly from a persisted message [0.15ms]
+(pass) TranscriptEventRow > marks an errored tool result distinctly [0.06ms]
+(pass) sortAttempts > sorts ascending by activity then attempt [0.07ms]
+(pass) TranscriptPanelContent retained backfill > surfaces a retained-backfill failure as visible state [0.12ms]
+
+src/features/transcript/__tests__/foldTranscriptEvent.test.ts:
+(pass) foldTranscriptEvent > orders persisted events by store_seq regardless of arrival order [1.52ms]
+(pass) foldTranscriptEvent > deduplicates a persisted event re-delivered on a reconnect race [0.03ms]
+(pass) foldTranscriptEvent > coalesces deltas for one message into a single entry whose text grows in place [0.09ms]
+(pass) foldTranscriptEvent > deltas for different messages or agents stay separate streams [0.04ms]
+(pass) foldTranscriptEvent > a complete Message replaces its own delta stream — never rendered twice [0.05ms]
+(pass) foldTranscriptEvent > a Message finalizes only the producing agent's streams [0.04ms]
+(pass) foldTranscriptEvent > a reasoning_item raw finalizes the thinking stream with the same item id [0.08ms]
+(pass) foldTranscriptEvent > coalesces consecutive identical progress notes into one counted run [0.10ms]
+(pass) foldTranscriptEvent > a replayed note store_seq inside a run is dropped as a duplicate [0.02ms]
+(pass) foldTranscriptEvent > a different note text or agent starts a new run [0.02ms]
+(pass) foldTranscriptEvent > a usage-estimate progress event is never absorbed into a note run [0.03ms]
+(pass) backfillEntries > folds a retained transcript in order and reports the resume cursor [0.07ms]
+(pass) backfillEntries > an empty retained transcript reports no cursor (pre-retention run) [0.01ms]
+
+src/features/transcript/__tests__/interveneClient.test.ts:
+(pass) listAttempts posts the workflow+namespace and normalizes attempts with capabilities [0.46ms]
+(pass) listAttempts drops a row missing addressable target fields, never a phantom control [0.09ms]
+(pass) intervene surfaces each neutral outcome VERBATIM (applied/gated/stale) [0.22ms]
+(pass) intervene posts only the target + primitive (issued_by/at are server-stamped) [0.10ms]
+(pass) a malformed intervene response is a typed error, never a silent success [0.08ms]
+(pass) a non-2xx intervene response propagates a typed ApiError [0.09ms]
+
+src/features/namespace/context/namespaceScoping.test.ts:
+(pass) workflow list and history query keys include the selected namespace [0.11ms]
+(pass) query request helpers reject missing namespaces instead of issuing unscoped calls [0.06ms]
+(pass) switching namespace produces re-scoped query keys and subscription filters [0.05ms]
+(pass) subscription scoping preserves filters while carrying namespace [0.02ms]
+(pass) subscription scoping rejects an empty namespace before subscribing [0.02ms]
+(pass) switching namespace re-establishes the subscription with the new namespace [0.07ms]
+
+src/features/namespace/context/NamespaceContext.test.tsx:
+(pass) selecting a namespace updates the context value used by the provider [0.07ms]
+(pass) selecting a namespace rejects empty or unavailable values [0.04ms]
+
+src/features/namespace/components/NamespaceRegistryPanel.test.tsx:
+(pass) NamespaceRegistryPanel — Phase 2 placement + quota > renders each namespace placement honestly (pinned = hard/isolated) [1.95ms]
+(pass) NamespaceRegistryPanel — Phase 2 placement + quota > folds a NamespacePlacementChanged delta, then renders the new placement live [0.57ms]
+(pass) NamespaceRegistryPanel — Phase 2 placement + quota > folds a quota-state delta into a live in-flight/ceiling badge [0.51ms]
+(pass) NamespaceRegistryPanel — Phase 2 placement + quota > an at-ceiling quota snapshot renders the throttled state [0.41ms]
+(pass) NamespaceRegistryPanel — Phase 2 placement + quota > a namespace with no quota snapshot yet shows an honest placeholder, not a fake zero [0.34ms]
+(pass) NamespaceRegistryPanel — create affordance > renders a create-namespace affordance even when the registry is empty [0.26ms]
+
+src/features/namespace/hooks/useNamespaceRegistry.test.ts:
+(pass) isNamespaceCreated > narrows only the NamespaceCreated variant [0.06ms]
+(pass) recordFromDelta > maps a delta to a row with last_seen equal to created_at on first appearance [0.03ms]
+(pass) applyDelta > appends a genuinely-new namespace and keeps the list sorted by createdAt [0.09ms]
+(pass) applyDelta > is idempotent: a delta for an already-present name returns the SAME array (no duplicate) [0.03ms]
+(pass) mergeFetched > keeps a delta-only row that arrived during the fetch, sorted, no duplicate [0.07ms]
+(pass) mergeFetched > fetched record wins on a name collision (authoritative created_at) [0.03ms]
+(pass) sortRecords > orders by createdAt then name, breaking ties deterministically [0.03ms]
+(pass) cluster-event narrowing (Phase 2 folds) > narrows placement-changed and quota-state variants distinctly [0.05ms]
+(pass) applyPlacementDelta (P2-I2) > folds a placement change into the matching row in place, live [0.03ms]
+(pass) applyPlacementDelta (P2-I2) > is a no-op (same reference) when the placement is already equal by value [0.03ms]
+(pass) applyPlacementDelta (P2-I2) > drops a delta for a namespace not yet in the rows (no phantom row) [0.01ms]
+(pass) applyQuotaDelta (P2-Q3) > folds the latest snapshot per namespace, superseding the prior value [0.02ms]
+(pass) applyQuotaDelta (P2-Q3) > at-ceiling snapshot is folded verbatim (the badge derives throttled state) [0.01ms]
+(pass) applyQuotaDelta (P2-Q3) > is a no-op (same reference) when the snapshot is unchanged by value [0.01ms]
+(pass) applyQuotaDelta (P2-Q3) > keeps independent snapshots for distinct namespaces [0.02ms]
+(pass) placementEquals > compares kind and ordered node set [0.02ms]
+
+src/features/live-feed/components/FirehoseFeed.test.tsx:
+(pass) FirehoseFeedContent renders explicit empty and disconnected states [0.67ms]
+(pass) FirehoseFeedContent warns when a reconnected live tail may have a gap [0.15ms]
+(pass) FirehoseFeedContent surfaces a socket error message as visible state [0.16ms]
+(pass) FirehoseFeedContent renders streamed events in newest-first order [0.31ms]
+(pass) appendFirehoseEvents inserts a frame by sequence, deduplicates, and caps the window [0.06ms]
+(pass) appendFirehoseEvents preserves window identity when a delivered frame is all duplicates [0.02ms]
+
+src/features/live-feed/components/ConnectionIndicator.test.tsx:
+(pass) ConnectionIndicator > renders healthy, possible-gap, reconnecting, and disconnected states [0.88ms]
+(pass) ConnectionIndicator > ConnectionIndicatorContent surfaces a socket error message as visible state [0.09ms]
+(pass) ConnectionIndicator > ConnectionIndicatorContent omits the error region when healthy [0.06ms]
+(pass) ConnectionIndicator > an idle stream with no error renders nothing — quiet is not a fault [0.08ms]
+(pass) ConnectionIndicator > an idle stream still shows a held error rather than hiding it [0.21ms]
+
+src/features/live-feed/hooks/useEventSubscription.test.ts:
+(pass) adapter preserves absent firehose refetch and cannot clear a malformed-frame boundary [0.39ms]
+(pass) adapter rejects recovery if a previously supplied refetch callback disappears [0.08ms]
+
+src/features/live-feed/hooks/useConnectionStatus.test.ts:
+(pass) useConnectionStatus is exported as a hook function [0.08ms]
+(pass) manager status store reports connect, drop, and reconnect sequence consumed by the hook [0.31ms]
+
+src/features/live-feed/hooks/animationFrameBatch.test.ts:
+(pass) frame coalescing preserves arrival order in one batch [0.20ms]
+(pass) a terminal frame synchronously flushes earlier frames before terminal handling continues [0.11ms]
+(pass) unsubscribe cancellation discards queued frames and invalidates scheduled callbacks [0.04ms]
+(pass) the timeout fallback flushes when animation frames are paused [0.03ms]
+
+src/features/triage/lib/incidents.test.ts:
+(pass) deriveWorkflowIncidents > emits a failure incident for a Failed workflow that deep-links to its detail [0.15ms]
+(pass) deriveWorkflowIncidents > emits a timeout incident for a TimedOut workflow [0.17ms]
+(pass) deriveWorkflowIncidents > a long-running workflow becomes a stuck incident; a fresh one does not [0.18ms]
+(pass) deriveWorkflowIncidents > failures outrank stuck-running workflows [0.18ms]
+(pass) deriveWorkflowIncidents > Completed and Cancelled workflows produce no incidents (no fabrication) [0.02ms]
+(pass) deriveWorkflowIncidents > an unparseable started_at never throws and never invents a stuck incident [0.02ms]
+(pass) sortIncidents > is stable and descending by rank then recency [0.26ms]
+(pass) gated-feed degradation > all server-gated incident classes are reported as awaiting-support feeds, not emitted as incidents [0.12ms]
+
+src/features/workflow-detail/swimlane/childTimelineWindow.test.ts:
+(pass) child timeline retention keeps visible paths and only the newest inactive window [0.18ms]
+(pass) child timeline updates preserve identity for unchanged state references [0.13ms]
+(pass) collapsing a child removes its retained descendants and is a no-op for absent branches [0.10ms]
+
+src/features/workflow-detail/swimlane/Scrubber.test.tsx:
+(pass) prefix reconstruction remains sequence-exact and re-derives status [0.59ms]
+(pass) continuous shared time maps to an independent cut for every visible workflow [0.19ms]
+(pass) stepped scrub snaps and includes the exact global-order prefix [0.10ms]
+(pass) scrubber renders continuous time and stepped global-rank readouts [0.67ms]
+(pass) Swimlane applies the shared time cut to its workflow prefix [1.17ms]
+(pass) axis bounds labels render viewer-local time-style strings, not raw ISO [0.70ms]
+(pass) empty axis yields no scrubber [0.05ms]
+
+src/features/workflow-detail/swimlane/laneTree.test.tsx:
+(pass) expanded child and grandchild lanes splice directly below their parent lane with depth [0.23ms]
+(pass) child loading is lazy: only an expanded path requests history and collapse drops rows [0.11ms]
+(pass) timer expansion is scoped to each workflow row, including child workflows [0.40ms]
+(pass) late expansion consumes the complete durable child history [0.06ms]
+(pass) cycle guard catches a grandparent reference without requesting it [0.07ms]
+(pass) SSR shape renders child lanes inside the one chart on the shared track origin [1.27ms]
+(pass) depth bar selection carries the child workflow id and child timeline [0.21ms]
+
+src/features/workflow-detail/swimlane/timeLayout.test.ts:
+(pass) time axis maps recorded_at spans fractionally across the shared parent/child extent [0.28ms]
+(pass) sub-threshold bars get the minimum marker floor and overlapping neighbors cluster [0.19ms]
+(pass) running shared extent uses now while a terminal extent stops at its last event [0.05ms]
+(pass) a running span keeps extending to the growing live axis edge [0.09ms]
+(pass) stepped mode orders the union by recorded_at then seq across workflows [0.08ms]
+(pass) a span straddling the time cursor stays visible, clipped to the cursor [0.17ms]
+(pass) a span entirely before the cursor stays fully drawn and fit-to-view is unaffected [0.11ms]
+(pass) a straddling event disappears only once the cursor precedes its start [0.04ms]
+(pass) stepped clipping extends a straddling bar to the cursor rank [0.13ms]
+
+src/features/workflow-detail/swimlane/Swimlane.test.tsx:
+(pass) buildRankIndex assigns dense ranks over all carried sequences [0.15ms]
+(pass) lane assignment yields one lane per correlation key plus lifecycle [0.13ms]
+(pass) attempt segmentation records one rank per ActivityFailed attempt [0.13ms]
+(pass) concurrent activity + timer overlap on the same rank span [0.08ms]
+(pass) child bar carries a drill-link target and the swimlane renders it [0.93ms]
+(pass) live-append extends an activity bar in place (endRank grows) [0.12ms]
+(pass) WorkflowDetailViewContent renders swimlane mode by default with no fabricated data [1.20ms]
+(pass) a NAMED run reads as its name over the full id [1.06ms]
+(pass) an UNNAMED run reads as the fallback heading over the full id [0.66ms]
+(pass) the server-projected summary supplies a name the loaded window cannot reach [0.56ms]
+(pass) a rename in view supersedes a stale summary name [0.82ms]
+(pass) an unreadable summary is stated, and only when it actually costs a name [1.42ms]
+(pass) the header projects the last recorded name, not the first [0.76ms]
+(pass) WorkflowDetailViewContent surfaces error state (no silent failure) [0.07ms]
+(pass) WorkflowDetailViewContent renders the loading skeleton while history is pending [0.16ms]
+(pass) WorkflowDetailViewContent renders the empty state for a history with no events [0.04ms]
+(pass) WorkflowDetailViewContent renders the no-namespace state without an unscoped query [0.04ms]
+(pass) the reopen affordance appears for a terminal Failed run, not a fresh reopen event [1.83ms]
+(pass) opening the reopen panel mounts ReopenDiff from the live history with an enabled commit [1.81ms]
+
+src/features/workflow-detail/swimlane/timerLanes.test.ts:
+(pass) timer entries default to one counted aggregate and expand to one lane per timer [0.22ms]
+(pass) every grouped timer bar keeps its individual sequence selection and URL round-trip [0.20ms]
+(pass) a scrub-cut timer aggregate is the union of the scrub-cut individual timer lanes [0.20ms]
+
+src/features/workflow-detail/swimlane/swimlaneClock.test.ts:
+(pass) swimlane clock samples preserve frame identity within one elapsed-time bucket [0.92ms]
+(pass) swimlane clock advances once the display bucket changes [0.05ms]
+
+src/features/workflow-detail/__tests__/rename.test.tsx:
+(pass) shortWorkflowId > shortens a canonical UUID to its first group and returns anything else whole [0.03ms]
+(pass) displayNameFromEvents > an unnamed run projects no name [0.07ms]
+(pass) displayNameFromEvents > the last recorded write wins, by sequence rather than array order [0.03ms]
+(pass) displayNameFromEvents > a later update that does not touch the name leaves it standing [0.02ms]
+(pass) submitRename > success posts an id-addressed rename and resolves with the recorded name [0.12ms]
+(pass) submitRename > an explicit run id pins the rename to one generation [0.05ms]
+(pass) submitRename > a blank name is refused before any request is made [0.08ms]
+(pass) submitRename > a server refusal propagates verbatim [0.10ms]
+(pass) RenameControl > an unnamed run is offered a naming affordance, a named one a rename [0.29ms]
+(pass) RenameControl > the open editor is seeded with the name the run currently wears [0.23ms]
+(pass) RenameControl > an unscoped rename is disabled and says why [0.08ms]
+
+src/features/workflow-detail/__tests__/timelineVariants.test.ts:
+(pass) KNOWN_EVENT_TYPES enumerates exactly the 32 generated variants [0.04ms]
+(pass) classifyKnownEvent maps every known variant to a family + sub-kind [0.08ms]
+(pass) classifyKnownEvent assigns the expected families [0.09ms]
+(pass) a display-name update reads as the naming it is [0.03ms]
+(pass) other attributes recorded alongside the name are still reported [0.07ms]
+(pass) an update with no display name keeps the generic key-count label [0.05ms]
+(pass) a non-String value under the name attribute is not a name [0.02ms]
+(pass) classifyKnownEvent returns null for a genuinely-unknown future variant [0.01ms]
+
+src/features/workflow-detail/__tests__/attemptRowList.test.tsx:
+(pass) attempt rows badge retained transcripts from the enumeration [0.34ms]
+(pass) a row whose generation the window cannot name says so, and is not badged [0.09ms]
+
+src/features/workflow-detail/__tests__/failureContext.test.ts:
+(pass) a failed run yields its failed step and reason [0.09ms]
+(pass) a reopen SUPERSEDES the failure it re-drives — no failure context while live [0.03ms]
+(pass) a run that fails ANEW after reopen blames only the post-reopen failure [0.02ms]
+(pass) a running or completed history yields no failure context [0.01ms]
+
+src/features/workflow-detail/__tests__/payload-on-demand.test.tsx:
+(pass) elided payload renders a compact size-only load affordance without decoding [1.22ms]
+(pass) on-demand full event fetch is cached by workflow id and sequence [0.21ms]
+
+src/features/workflow-detail/__tests__/legs.test.tsx:
+(pass) shipped leg container renders an explicit history error instead of a false empty transcript [0.78ms]
+(pass) shipped leg container keeps loading distinct from a recorded empty transcript [0.18ms]
+
+src/features/workflow-detail/__tests__/attemptNavigator.test.ts:
+(pass) a terminal failed run with N failed attempts and no success keeps every attempt selectable [0.31ms]
+(pass) a completed run after retries surfaces the failed attempts plus the successful one [0.08ms]
+(pass) a running run shows the in-flight attempt as started (no terminal yet) [0.04ms]
+(pass) two generations of one chain are two rows under the SAME coordinate [0.08ms]
+(pass) a tail window with no WorkflowStarted names no generation, and never guesses one [0.03ms]
+(pass) the legacy attempt:0 sentinel is labelled distinctly and still selectable [0.09ms]
+(pass) a cancelled attempt reads as cancelled and rows sort by activity then attempt [0.11ms]
+(pass) a scheduled-only activity with no started attempt yields no navigator rows [0.04ms]
+
+src/features/workflow-detail/__tests__/components.test.tsx:
+(pass) PayloadView renders collapsed payload summary by default [0.62ms]
+(pass) PayloadView formats generated JSON payload bytes as decoded data [0.05ms]
+(pass) static timeline renders child workflow links and sequence metadata [1.16ms]
+(pass) static timeline sorts projected entries passed directly by sequence [0.68ms]
+
+src/features/workflow-detail/__tests__/timeline.test.ts:
+(pass) projectTimeline orders by sequence and groups logical lifecycle families [0.10ms]
+(pass) payloadSummary decodes generated JSON payload bytes [0.02ms]
+(pass) mergeEventsBySequence de-duplicates history/live overlap and exposes terminal outcome [0.11ms]
+(pass) a WorkflowReopened later than the failure supersedes it — the run is live again [0.03ms]
+(pass) a NEW terminal event after the reopen reports terminal again [0.02ms]
+(pass) projectTimeline records activity retry history and child workflow links [0.09ms]
+(pass) every one of the 32 variants is covered by a fixture [0.03ms]
+(pass) each of the 32 variants projects to a real typed row (no silent drop) [0.15ms]
+(pass) a recorded display-name update projects a naming row, not a bare marker [0.03ms]
+(pass) SignalSent carries direction + target; WithTimeoutCompleted closes the timer lane [0.03ms]
+(pass) a genuinely-unknown future variant renders a generic row, never throwing [0.03ms]
+(pass) a WorkflowIntent timer cancel stands as a real cancel [0.04ms]
+(pass) a missing timer cancel cause defaults to WorkflowIntent (serde-default parity) [0.03ms]
+(pass) a CancelTeardown cancel is muted, and a reopen re-arms the SAME timer lane [0.06ms]
+(pass) a standalone CancelTeardown (never re-armed) folds to the pre-cancel state, not cancelled [0.02ms]
+(pass) payload decode failure falls back to the raw envelope, no throw [0.06ms]
+
+src/features/workflow-detail/__tests__/timeline-terminal.test.ts:
+(pass) terminal outcome from pre-merged events matches the public unordered-event contract [0.09ms]
+
+src/features/workflow-detail/__tests__/eventWindow.test.ts:
+(pass) live event window never exceeds its cap and retains the newest sequences [3.98ms]
+(pass) incremental projection preserves unchanged timeline node identity [0.26ms]
+
+src/features/workflow-detail/__tests__/virtualized-timeline.test.tsx:
+(pass) list timeline renders only the virtual window for a large event history [4.50ms]
+
+src/features/workflow-detail/hooks/useChildren.test.ts:
+(pass) pending child discovery keeps polling until the child run is visible [0.05ms]
+
+src/features/workflow-detail/hooks/useWorkflowHistory.test.ts:
+(pass) history discovery loads the terminal tail first with the fixed 500-event window [0.29ms]
+(pass) backward paging requests the preceding bounded range and merges by sequence [0.12ms]
+(pass) forward paging fills a tail-read gap and preserves the original backward boundary [0.20ms]
+
+src/features/workflow-detail/reopen/computeReopen.test.ts:
+(pass) computeReopen > completed activity is reused (preserved), not reopened [0.15ms]
+(pass) computeReopen > terminal-failed activity with no later success re-dispatches and is superseded [0.08ms]
+(pass) computeReopen > a later success supersedes an earlier failure: reused, not reopened [0.03ms]
+(pass) computeReopen > retryable-only failure (no terminal, no success) is left to replay, not reopened [0.02ms]
+(pass) computeReopen > cursor reset is the earliest superseded failure across multiple reopened activities [0.03ms]
+(pass) computeReopen > attempt count reflects the highest observed one-based attempt [0.03ms]
+(pass) computeReopen > empty history yields an empty, non-reopenable plan [0.01ms]
+
+src/features/authoring/editor-seam/read-only.test.ts:
+(pass) a read-only editor state refuses a dispatched change, and an editable one takes it [1.41ms]
+
+src/features/authoring/editor-seam/tab-indent.test.ts:
+(pass) Tab inserts two spaces at the cursor, never a tab character [0.82ms]
+(pass) Tab indents every line of a selection by one two-space unit [0.10ms]
+(pass) Shift-Tab dedents by one two-space unit [0.37ms]
+(pass) the Tab binding cannot introduce a tab character into an AWL document [0.36ms]
+
+src/features/authoring/editor-seam/diagnostic-prose.test.ts:
+(pass) diagnostic prose segmentation > splits headline and remedy at the first em-dash separator [0.13ms]
+(pass) diagnostic prose segmentation > a message without the separator degrades to headline only [0.02ms]
+(pass) diagnostic prose segmentation > later separators stay in the remedy, split happens once [0.02ms]
+(pass) diagnostic prose segmentation > an unpaired backtick is literal text, never a parse failure [0.02ms]
+(pass) diagnostic prose segmentation > adjacent code segments keep their order and surrounding text [0.01ms]
+
+src/features/authoring/editor-seam/diagnostic-tooltips.test.ts:
+(pass) diagnostic tooltip targeting (headless seam) > a position inside the range answers the message, outside answers nothing [1.80ms]
+(pass) diagnostic tooltip targeting (headless seam) > overlapping diagnostics all answer, in document order [0.20ms]
+(pass) diagnostic tooltip targeting (headless seam) > both tooltip halves ride the production extension list [0.31ms]
+(pass) diagnostic tooltip targeting (headless seam) > a pointer selection into the range is suppressed, a keyboard one is not [1.06ms]
+(pass) diagnostic tooltip targeting (headless seam) > a document edit hides the cursor tooltip until the next check [0.32ms]
+(pass) diagnostic tooltip targeting (headless seam) > an edit before the range maps the tooltip target through the change [0.41ms]
+
+src/features/authoring/editor-seam/seam-guard.test.ts:
+(pass) only the CodeMirror implementation imports @codemirror packages [7.96ms]
+
+src/features/authoring/components/DeployedList.test.tsx:
+(pass) a deployed row names the workflow type, the content hash, and its archived document [0.72ms]
+(pass) an available row with schemas counts them [0.20ms]
+(pass) each absence state states its own reason and opens nothing [0.29ms]
+(pass) a version carrying archived source is selectable [0.10ms]
+(pass) the selected version carries the current marker [0.13ms]
+(pass) an unavailable deployed surface says exactly that, and lists nothing [0.08ms]
+(pass) an empty deployment set says so rather than showing an error [0.03ms]
+(pass) the deployed list claims no check state it has not measured [0.08ms]
+(pass) an empty list caused by withheld sourceless versions says that, not "nothing deployed" [0.04ms]
+(pass) a single withheld sourceless version is counted in the singular [0.03ms]
+
+src/features/authoring/components/GuideOverlay.test.tsx:
+(pass) the overlay opens from a launcher toggle [1.28ms]
+(pass) the overlay markup carries no dialog, modal, autofocus, or scrim semantics [5.91ms]
+(pass) search narrows the word list [0.45ms]
+(pass) an unmatched search says no word matches [0.18ms]
+(pass) selecting a word shows its summary, examples, and citation [2.05ms]
+(pass) the selected word’s examples start collapsed and are highlighted [1.93ms]
+(pass) the selected word’s examples each offer Try it [1.62ms]
+(pass) open with no selection, every word is offered [0.74ms]
+
+src/features/authoring/components/DeployWorkerPanel.test.tsx:
+(pass) DeployWorkerPanel > a worker document renders the deployment form with the queue it declares [1.13ms]
+(pass) DeployWorkerPanel > a workflow document is refused up front [0.18ms]
+
+src/features/authoring/components/CanvasEdge.test.tsx:
+(pass) back-edge and self-loop clearance > embedded self-loop controls and label stay right of the node rectangle [7.48ms]
+(pass) back-edge and self-loop clearance > embedded parallel self-loop label bounds stay outside the node and inside the SVG [1.40ms]
+(pass) back-edge and self-loop clearance > embedded later-to-earlier controls and label stay left of every node [4.82ms]
+(pass) back-edge and self-loop clearance > root self-loop controls and label stay right of the node rectangle [0.26ms]
+(pass) back-edge and self-loop clearance > root later-to-earlier controls and label stay left of the graph bounds [0.08ms]
+
+src/features/authoring/components/WordCard.test.tsx:
+(pass) each example is a separate disclosure that starts collapsed [1.76ms]
+(pass) a single example is labelled without a number [0.48ms]
+(pass) the card names the word’s form and every position it stands in [1.88ms]
+(pass) the summary and citation stay outside the collapsed examples [1.15ms]
+(pass) an expanded example is syntax-highlighted with the editor’s classes [0.84ms]
+(pass) an unavailable highlighter shows plain examples and says why [1.05ms]
+(pass) a still-loading highlighter renders plain examples without a warning [0.28ms]
+(pass) every example carries a Try it footer inside its disclosure, below the code [0.80ms]
+(pass) the Try it button claims no focus and starts enabled [0.89ms]
+(pass) a try-it refusal is announced in the console’s failure vocabulary [0.11ms]
+(pass) a pending try-it disables the button and names the state [0.05ms]
+
+src/features/authoring/components/EditorHeader.test.tsx:
+(pass) EditorHeader > a green granted workflow document offers Format, Save, Deploy, and Run [1.65ms]
+(pass) EditorHeader > a worker document hides both Deploy and Run [0.32ms]
+(pass) EditorHeader > no deploy grant hides Deploy but keeps Run — running needs no grant [0.51ms]
+(pass) EditorHeader > a red check aria-disables Deploy with the reason reachable three ways [0.68ms]
+(pass) EditorHeader > a still-running check aria-disables Deploy with its own reason [0.36ms]
+(pass) EditorHeader > an in-flight deploy reports itself and blocks re-entry [0.49ms]
+(pass) EditorHeader > the run panel starts closed — a launcher, no panel [0.37ms]
+
+src/features/authoring/components/LanguagePanel.test.tsx:
+(pass) the panel shows every word of the language with its meaning [76.90ms]
+(pass) every word carries the reference section that explains it [54.27ms]
+(pass) the per-word citation carries no repository path [52.70ms]
+(pass) every word renders its complete example documents [55.56ms]
+(pass) every example document starts collapsed [45.52ms]
+(pass) the panel groups by grammatical form by default [42.38ms]
+(pass) the section axis stays available behind the grouping toggle [81.57ms]
+(pass) every word carries its form and the positions it stands in [43.67ms]
+(pass) the full reference is carried, first section to last, tables and all [40.17ms]
+(pass) every example document offers Try it [39.54ms]
+(pass) the panel names the documents an author needs, including the one about sandboxing [43.28ms]
+(pass) the rendered text is the asset text, not a paraphrase of it [42.70ms]
+(pass) the panel says how many words it is showing [44.01ms]
+
+src/features/authoring/components/WorkspacePanel.test.tsx:
+(pass) the ?doc= path from the URL is the selected document [2.06ms]
+(pass) the refreshed document list shows every document with its count [0.62ms]
+
+src/features/authoring/components/DeployOutcomeLine.test.tsx:
+(pass) DeployOutcomeLine > no outcome renders nothing [2.02ms]
+(pass) DeployOutcomeLine > a success renders as its own success-styled status line [0.16ms]
+(pass) DeployOutcomeLine > a refusal renders danger-styled, wrapping, never truncating [0.06ms]
+
+src/features/authoring/components/AuthoringView.test.tsx:
+(pass) the studio offers every source and starts on the workspace [0.91ms]
+(pass) `?source=language` opens the glossary with the words in it [38.73ms]
+(pass) `?source=deployed` selects the deployed side and says what it is showing [1.12ms]
+(pass) an unknown source falls back to the workspace [0.31ms]
+(pass) the guide overlay launcher is mounted on the workspace and deployed surfaces [0.50ms]
+(pass) the language tab carries no guide overlay [40.17ms]
+(pass) the language tab’s example documents arrive collapsed [42.84ms]
+
+src/features/authoring/components/DiagnosticsPanel.test.tsx:
+(pass) DiagnosticsPanel > lists every diagnostic with its position, as buttons that navigate [0.68ms]
+(pass) DiagnosticsPanel > renders backticked identifiers as code and the remedy as its own line [0.15ms]
+(pass) DiagnosticsPanel > is a non-modal complementary region: no dialog, no aria-modal [0.14ms]
+
+src/features/authoring/components/DeployedDocumentPane.test.tsx:
+(pass) the pane is labelled as the deployed artifact and identifies it by type and hash [1.16ms]
+(pass) the deployed pane exposes no save, format, studio, deploy, or run control [0.29ms]
+(pass) archived schemas are named in the footer [0.24ms]
+(pass) a projection with errors is reported, not smoothed over [0.25ms]
+(pass) the contract strip states committed schema and signals, absence as absence [0.62ms]
+
+src/features/authoring/components/RunPanel.test.tsx:
+(pass) nextOpenState (the launcher toggle, pure) > toggle flips both ways; close only ever closes [0.03ms]
+(pass) RunPanel > closed by default: the launcher renders, the panel does not [0.31ms]
+(pass) RunPanel > open, it is an aside hosting the real start form [1.24ms]
+(pass) RunPanel > the launcher aria-controls the id the open aside carries [0.35ms]
+(pass) RunPanel > the form reads the document-scoped authoring draft, not the Actions draft [0.28ms]
+(pass) RunPanel > a different document does not see this document’s draft [0.26ms]
+(pass) RunPanel > no deploy this session, no availability line [0.20ms]
+(pass) RunPanel > a deploy this session asks about its queue (in-flight on first paint) [0.48ms]
+(pass) RunPanel > a deploy without a selected namespace says why it cannot check [0.55ms]
+(pass) AvailabilityLine > a served queue reports the worker count [0.09ms]
+(pass) AvailabilityLine > one worker is singular [0.05ms]
+(pass) AvailabilityLine > an unserved queue renders the scaffold hint verbatim [0.03ms]
+(pass) AvailabilityLine > an unserved queue without a hint still says nothing serves it [0.03ms]
+(pass) AvailabilityLine > a failed check renders the error text, never silence [0.06ms]
+(pass) AvailabilityLine > a non-Error thrown value renders as JSON, not "[object Object]" [0.04ms]
+(pass) AvailabilityLine > a value JSON cannot express is named unrenderable, never blank [1.37ms]
+(pass) AvailabilityLine > no namespace explains itself instead of pretending to check [0.09ms]
+
+src/features/authoring/components/DocumentList.test.tsx:
+(pass) document list renders the empty state [0.15ms]
+(pass) document list renders the exact unconfigured workspace state [0.18ms]
+(pass) document list exposes the New Workflow form when creation is configured [0.11ms]
+(pass) document rows expose name, path, and selected semantics — and claim no deploy state [0.15ms]
+
+src/features/authoring/components/StepNodeBody.test.tsx:
+(pass) flow-vocabulary node rendering > distribute nodes carry the split glyph and the item-in-collection label [0.29ms]
+(pass) flow-vocabulary node rendering > sequence nodes stay visually distinct from distribute [0.10ms]
+(pass) flow-vocabulary node rendering > region members are marked ×N with their opening step [0.10ms]
+(pass) flow-vocabulary node rendering > collect nodes carry the merge glyph and the binding-to-result label with ? [0.07ms]
+(pass) flow-vocabulary node rendering > strict collect renders without the tolerant marker [0.07ms]
+(pass) flow-vocabulary node rendering > pure decision steps draw as diamonds [0.19ms]
+(pass) flow-vocabulary node rendering > mixed steps keep the node with a trailing diamond for their arms [0.07ms]
+(pass) flow-vocabulary node rendering > subflow-call nodes collapse by default behind an expand toggle [0.14ms]
+(pass) flow-vocabulary node rendering > expanding a subflow call draws its own graph in place [1.84ms]
+(pass) flow-vocabulary node rendering > parses and expands a parent-owned sibling substep graph [1.97ms]
+(pass) flow-vocabulary node rendering > an unexpandable subflow call (invocation cycle guard) offers no toggle [0.11ms]
+(pass) flow-vocabulary node rendering > the recursive canvas labels back edges with their visits bound [1.17ms]
+(pass) flow-vocabulary node rendering > embedded outcome and failure siblings render distinct paths and labels [1.00ms]
+(pass) flow-vocabulary node rendering > root outcome and failure siblings render distinct paths and labels [0.17ms]
+
+src/features/authoring/components/StatementTopology.test.tsx:
+(pass) positional statement topology > renders fork branch members and waits as wired nodes [0.55ms]
+(pass) positional statement topology > distinguishes sequential collection fan-out [0.14ms]
+
+src/features/authoring/components/WorkerScaffold.test.tsx:
+(pass) WorkerScaffold > wires the per-worker runtime picker and generation affordance [1.48ms]
+
+src/features/authoring/components/CanvasNode.test.tsx:
+(pass) canvas node mutating affordances follow the canvas mode > the edit canvas offers prose editing and the callbacks that perform it [1.02ms]
+(pass) canvas node mutating affordances follow the canvas mode > deployed mode renders the step and NO mutating affordance [0.15ms]
+(pass) canvas node mutating affordances follow the canvas mode > the prose form renders only for a node that was given the edit callbacks [0.15ms]
+
+src/features/authoring/lib/deploy-eligibility.test.ts:
+(pass) deployEligibility > a worker document never sees the button, whatever else holds [0.03ms]
+(pass) deployEligibility > no deploy grant hides the button even on a green check [0.01ms]
+(pass) deployEligibility > a missing check disables with a reason, never enables [0.01ms]
+(pass) deployEligibility > a red check disables with the first diagnostic message [0.01ms]
+(pass) deployEligibility > a red check with no diagnostics still names why it is disabled [0.02ms]
+(pass) deployEligibility > a green check on a granted workflow document is ready [0.01ms]
+(pass) deployEligibility > workflow-document sweep: no grant hides; a grant is ready only on green [0.05ms]
+
+src/features/authoring/lib/worker-deploy.test.ts:
+(pass) worker document detection > a worker document is recognised through doc comments and blank lines [0.05ms]
+(pass) worker document detection > a workflow document is not a worker document [0.02ms]
+(pass) worker document detection > an empty or comment-only buffer declares nothing [0.02ms]
+(pass) worker document detection > the declaration is the whole first token, not a prefix
+(pass) worker document detection > a workflow document names its workflow type; nothing else does [0.03ms]
+(pass) buildWorkerAwlVerb > a bare deployment carries only the verb and document [0.05ms]
+(pass) buildWorkerAwlVerb > every supplied setting becomes its CLI flag, verbatim and in order [0.03ms]
+(pass) buildWorkerAwlVerb > whitespace-only settings are omitted like blanks [0.02ms]
+(pass) parseNamespacesEntry > splits on commas and whitespace, dedupes, sorts [0.10ms]
+(pass) buildWorkerDeploymentSubmission (the panel submit, pure) > the task queue is the document-declared queue, verbatim [0.05ms]
+(pass) buildWorkerDeploymentSubmission (the panel submit, pure) > name and document path are trimmed; the trimmed name keys the PUT [0.03ms]
+(pass) buildWorkerDeploymentSubmission (the panel submit, pure) > operator settings compose into the verb under their own flags [0.04ms]
+(pass) buildWorkerDeploymentSubmission (the panel submit, pure) > a blank node is null and namespaces are parsed from the entry [0.04ms]
+(pass) buildWorkerDeploymentSubmission (the panel submit, pure) > missing queue, name, or path refuse with the reason [0.02ms]
+(pass) the worker-deployments client > PUTs the exact request shape the server deserializes [0.27ms]
+(pass) the worker-deployments client > the deployment name is URL-encoded [0.16ms]
+(pass) the worker-deployments client > a replaced outcome is carried; an unknown outcome is reported [0.09ms]
+(pass) the worker-deployments client > a deploy refusal keeps the server message and code verbatim [0.07ms]
+
+src/features/authoring/lib/reference-markdown.test.ts:
+(pass) segmentation accounts for every line of the real reference [0.39ms]
+(pass) the real reference’s tables are parsed with their cells intact [0.27ms]
+(pass) cells split on pipes outside code spans only [0.02ms]
+(pass) an escaped pipe is cell text, not a separator [0.06ms]
+(pass) an unterminated code span in a row is refused, never guessed [0.03ms]
+(pass) an escaped backtick neither opens a span nor trips the refusal [0.01ms]
+(pass) pipe rows inside code fences stay markdown [0.02ms]
+(pass) a lone pipe line without a delimiter row stays markdown [0.01ms]
+(pass) a well-formed table parses into header and rows [0.04ms]
+
+src/features/authoring/lib/awl-static-highlight.test.ts:
+(pass) the static AWL highlighter > is a shared singleton, synchronously visible once loaded [0.04ms]
+(pass) the static AWL highlighter > tokens reassemble every guide example exactly [12.85ms]
+(pass) the static AWL highlighter > colours a keyword and leaves an author’s own binding plain [0.15ms]
+(pass) the static AWL highlighter > an empty document tokenizes to nothing rather than failing [0.02ms]
+(pass) fetchAsset > refuses a non-OK response with the URL and status named [0.16ms]
+(pass) fetchAsset > a missing asset fails loudly by the time its body is read [1.31ms]
+
+src/features/authoring/lib/deploy-action.test.ts:
+(pass) saveThenDeploy > saves first and deploys under the returned hash [0.15ms]
+(pass) saveThenDeploy > onSaved fires even when the deploy is refused afterwards [0.07ms]
+(pass) saveThenDeploy > a refused save deploys nothing and marks nothing saved [0.06ms]
+(pass) deploySuccessMessage > names the workflow type, task queue, and package identity [0.02ms]
+(pass) nextDeployOutcome > a starting deploy clears whatever outcome stood [0.03ms]
+(pass) nextDeployOutcome > a landed deploy is a success outcome carrying the receipt [0.01ms]
+(pass) nextDeployOutcome > a refused deploy carries the server text verbatim [0.01ms]
+(pass) nextDeployOutcome > a completed check changes nothing, whatever stands [0.01ms]
+
+src/features/authoring/lib/awl-guide.test.ts:
+(pass) the glossary carries the whole language and the documents behind it [0.26ms]
+(pass) sections are ordered and appear once each [0.13ms]
+(pass) grouping preserves the order the words arrived in [0.07ms]
+(pass) search reads the meaning, not only the word [0.07ms]
+(pass) an empty search is every word, and an unmatched search is none [0.06ms]
+(pass) search ignores case [0.03ms]
+(pass) the grammar axis is closed over the taxonomy and the inventory [0.29ms]
+(pass) grouping by form partitions the words in taxonomy order [0.09ms]
+(pass) grouping by form omits forms a search leaves empty [0.05ms]
+(pass) form and position lookups answer, and refuse an entry pointing nowhere [0.16ms]
+(pass) the reference text carries every section the words cite [0.52ms]
+
+src/features/authoring/lib/deployed-facade.test.ts:
+(pass) the deployed facade parses every source state distinctly > available [0.22ms]
+(pass) the deployed facade parses every source state distinctly > absent [0.02ms]
+(pass) the deployed facade parses every source state distinctly > not_persisted [0.01ms]
+(pass) the deployed facade parses every source state distinctly > unreadable [0.02ms]
+(pass) an unrecognised source state is reported, never treated as absence [0.07ms]
+(pass) the deployed document round-trips verbatim and every request is a bodyless GET [0.29ms]
+(pass) the deployed document start-input contract > a primary entry carries its schema and signal set verbatim [0.10ms]
+(pass) the deployed document start-input contract > a primary entry with an empty committed signal set parses as the empty list [0.05ms]
+(pass) the deployed document start-input contract > an additional entry (schema present, signals null) parses with signals null [0.05ms]
+(pass) the deployed document start-input contract > a pre-contract archive (both fields null) parses as no schema, signals null [0.05ms]
+(pass) the deployed document start-input contract > an older server that omits both fields parses as null schema and null signals [0.04ms]
+(pass) the deployed document start-input contract > a present non-object input_schema is reported, never read as absence [0.05ms]
+(pass) the deployed document start-input contract > a signal missing its payload schema is reported [0.05ms]
+(pass) the document URL encodes both segments [0.09ms]
+(pass) a bodyless 404 is the unavailable surface; a refusal 404 keeps its own code [0.12ms]
+(pass) a refused read surfaces the server message [0.04ms]
+(pass) versionsWithSource keeps only versions whose archive carries readable source [0.04ms]
+
+src/features/authoring/lib/guided-flow.test.ts:
+(pass) guided deploy boundary > wires save, deploy, and the worker-availability read [0.40ms]
+(pass) guided deploy boundary > preserves a typed server refusal instead of advancing [0.17ms]
+
+src/features/authoring/lib/highlight-assets.test.ts:
+(pass) the vendored highlighting artefacts > colour every word the grammar declares [1.10ms]
+(pass) the vendored highlighting artefacts > colour a known keyword and leave an ordinary name alone [0.03ms]
+(pass) the vendored highlighting artefacts > colour the action markers that were missing until 973b3d58 [0.12ms]
+(pass) the vendored highlighting artefacts > leave an author's own binding plain [0.03ms]
+
+src/features/authoring/lib/run-seed.test.ts:
+(pass) runSeedWorkflowType > a deploy this session wins over the buffer declaration [1.20ms]
+(pass) runSeedWorkflowType > no deploy falls back to the document declaration [0.05ms]
+(pass) runSeedWorkflowType > nothing derivable is undefined, never null [0.02ms]
+
+src/features/authoring/lib/projection.test.ts:
+(pass) canvas projection span lookup > maps UTF-8 semantic bytes to editor UTF-16 positions [0.10ms]
+(pass) canvas projection span lookup > selects the containing step from ordered semantic spans [0.06ms]
+(pass) canvas projection span lookup > distinguishes primary diagnostics from unreachable cascades [0.08ms]
+
+src/features/authoring/lib/facade.test.ts:
+(pass) authoring facade parsing > parses diagnostic state 1 [0.21ms]
+(pass) authoring facade parsing > parses diagnostic state 2 [0.08ms]
+(pass) authoring facade parsing > parses diagnostic state 3 [0.01ms]
+(pass) authoring facade parsing > a diagnostic without its range is refused [0.08ms]
+(pass) authoring facade parsing > a fractional or negative position is refused [0.14ms]
+(pass) authoring facade parsing > an unknown diagnostic class is refused [0.07ms]
+(pass) authoring facade parsing > parses the flow-shape graph vocabulary across the wire [0.45ms]
+(pass) authoring facade parsing > sends the documented check shape [0.09ms]
+(pass) authoring facade parsing > surfaces typed gesture refusals without applying source [0.19ms]
+(pass) authoring facade parsing > requests and parses a worker scaffold file map [0.16ms]
+(pass) authoring facade parsing > creates a workflow with the documented name body [0.11ms]
+(pass) authoring facade parsing > creates a document carrying its verbatim source when one is given [0.08ms]
+(pass) authoring facade parsing > a document collision surfaces the server refusal with its error_type [0.09ms]
+
+src/features/authoring/lib/gestures.test.ts:
+(pass) gesture travels through facade boundary and one editor-seam delta [0.34ms]
+(pass) gesture refuses to apply when the document changed mid-flight [0.15ms]
+
+src/features/authoring/lib/try-example.test.ts:
+(pass) deriveExampleName > takes the name of the top-level workflow declaration [0.10ms]
+(pass) deriveExampleName > takes the name of a top-level worker declaration [0.01ms]
+(pass) deriveExampleName > the FIRST declaration wins in a document carrying both [0.01ms]
+(pass) deriveExampleName > an indented or mid-line mention of the keywords is not a declaration [0.01ms]
+(pass) deriveExampleName > a source with no declaration derives no name
+(pass) createExampleDocument > creates under the derived name on the first attempt [0.16ms]
+(pass) createExampleDocument > a collision retries `_2`, `_3`, … until a create succeeds [0.10ms]
+(pass) createExampleDocument > a non-collision refusal stops the loop and propagates verbatim [0.08ms]
+(pass) createExampleDocument > a source with no declaration is refused without calling the server [0.07ms]
+(pass) paramsForCreatedDocument > one update selects the workspace tab and the created document [0.11ms]
+(pass) paramsForCreatedDocument > navigating from the deployed tab replaces the open document too [0.02ms]
+(pass) runTryExample > navigate waits for the document-list refresh to resolve [2.38ms]
+(pass) runTryExample > a create refusal propagates and neither refresh nor navigate ever runs [0.16ms]
+(pass) runTryExample > a refresh failure propagates and navigate never runs [0.10ms]
+(pass) the try-it flow end to end > two clicks on the same example create two documents, verbatim, and navigate to each [0.19ms]
+
+src/features/authoring/lib/diagnostics.test.ts:
+(pass) authoring diagnostic mapping > underlines the full wire range, not one code point [0.18ms]
+(pass) authoring diagnostic mapping > a diagnostic after a multibyte character lands on the right code units [0.04ms]
+(pass) authoring diagnostic mapping > a point range still gets a visible one-unit squiggle [0.02ms]
+(pass) authoring diagnostic mapping > a stale range clamps to its line instead of bleeding across the newline [0.02ms]
+(pass) authoring diagnostic mapping > rangeToOffsets answers the offsets navigation jumps to [0.02ms]
+(pass) authoring diagnostic mapping > rolls up both honest states [0.03ms]
+(pass) authoring diagnostic mapping > an emptied diagnostics list closes the panel and a later red does not reopen it [0.02ms]
+(pass) authoring diagnostic mapping > format computes one minimal replacement [0.01ms]
+
+src/features/actions/components/StartInputEditor.test.tsx:
+(pass) StartInputEditor > with no schema it renders exactly the raw JSON editor, no toggle [0.21ms]
+(pass) StartInputEditor > while the schema is loading it holds a placeholder, never the raw editor [0.11ms]
+(pass) StartInputEditor > a resolved model renders the form even if a refetch is in flight [1.15ms]
+(pass) StartInputEditor > form mode names the surface with a fieldset legend [0.24ms]
+(pass) StartInputEditor > with a schema both Form and JSON are offered and the form is shown [0.21ms]
+(pass) StartInputEditor > JSON mode keeps the raw textarea with the shared input text [0.09ms]
+(pass) StartInputEditor > unparseable input forces the JSON view and says why [0.14ms]
+(pass) StartInputEditor > the form pre-populates from the current JSON text [0.21ms]
+(pass) SchemaFormFields > renders required markers and descriptions [0.21ms]
+(pass) SchemaFormFields > an enum renders a select carrying every option plus the absent choice [0.22ms]
+(pass) SchemaFormFields > a boolean renders the three-way select [0.18ms]
+(pass) SchemaFormFields > nested objects render as fieldsets and arrays render rows with add/remove [0.30ms]
+(pass) SchemaFormFields > an un-typable property renders as a JSON field carrying its value [0.14ms]
+(pass) SchemaFormFields > out-of-domain enum and boolean values are named, not shown as unset [0.19ms]
+(pass) SchemaFormFields > an object field whose current value is not an object warns before replacing it [0.16ms]
+(pass) serializeInput > round-trips through JSON.parse [0.04ms]
+
+src/features/actions/__tests__/actions.test.tsx:
+(pass) parseJsonInput > blank input is the empty object (engine requires a payload) [0.02ms]
+(pass) parseJsonInput > a JSON object parses [0.02ms]
+(pass) parseJsonInput > a non-object (array) is rejected with a visible message [0.02ms]
+(pass) parseJsonInput > malformed JSON is rejected [0.02ms]
+(pass) StartWorkflowForm > offers a free-form namespace entry when none is selected (no dead-end) [0.70ms]
+(pass) StartWorkflowForm > renders the form fields (no namespace entry) when a namespace is selected [0.22ms]
+(pass) StartWorkflowForm > offers an optional display name, described as a label over the id [0.22ms]
+(pass) StartWorkflowForm drafts > a half-filled form is restored on return (draft survives unmount) [0.23ms]
+(pass) StartWorkflowForm drafts > the display name is drafted like every other field [0.20ms]
+(pass) StartWorkflowForm drafts > the free-form namespace entry is drafted too [0.18ms]
+(pass) StartWorkflowForm drafts > a cleared draft renders a pristine form (the confirmed-start path) [0.17ms]
+(pass) StartOutcome > shows confirmed run ids only after the server returns them [0.27ms]
+(pass) StartOutcome > renders nothing before a confirmed start (no premature success) [0.11ms]
+(pass) StartOutcome > surfaces a server error [0.10ms]
+(pass) DeployOutcome > shows the deployed content hash on a confirmed upload [0.18ms]
+(pass) DeployOutcome > reports an idempotent re-upload distinctly [0.09ms]
+(pass) DeployOutcome > renders a deploy_denied message for a 403 [0.09ms]
+(pass) VersionsBody > renders the explicit deploy-disabled state on a 404 [0.17ms]
+(pass) VersionsBody > renders loaded versions [0.15ms]
+(pass) VersionsBody > renders the empty state with no versions [0.08ms]
+(pass) ActionsView > renders the deploy section only when the runtime deploy grant is present [1.22ms]
+(pass) ActionsView > hides the deploy affordance when the caller is not deploy-granted [0.33ms]
+(pass) ActionsView > the managed-workers section sits inside the deploy-granted gate [0.85ms]
+
+src/features/actions/hooks/useStartInputSchema.test.ts:
+(pass) routeActiveVersion > picks the route-active version of the requested type only [1.90ms]
+(pass) routeActiveVersion > answers null when no version of the type is route-active [0.02ms]
+(pass) startSchemaEnabled > an ungranted caller never enables the lookup [0.02ms]
+(pass) startSchemaEnabled > a granted caller with a typed workflow type enables it, and only then [0.01ms]
+(pass) resolveStartSchema > disabled is idle: no schema, not loading [0.05ms]
+(pass) resolveStartSchema > a failed versions list degrades to no schema, not to loading forever [0.01ms]
+(pass) resolveStartSchema > a pending versions list is loading (the caller must hold a placeholder) [0.01ms]
+(pass) resolveStartSchema > no route-active version means no schema [0.01ms]
+(pass) resolveStartSchema > a failed document read degrades to no schema [0.01ms]
+(pass) resolveStartSchema > a pending document read is loading [0.01ms]
+(pass) resolveStartSchema > a loaded document yields its schema — including a pre-contract null [0.02ms]
+
+src/features/actions/lib/startWorkflowDraft.test.ts:
+(pass) startWorkflowDraftStoreFor > no scope is the original Actions store, identically [0.02ms]
+(pass) startWorkflowDraftStoreFor > the same scope always resolves the same store [0.07ms]
+(pass) startWorkflowDraftStoreFor > two scopes hold independent drafts, and the default store is untouched [0.11ms]
+(pass) startWorkflowParamsFromDraft > an empty display name field is omitted entirely, never sent as an empty string [0.08ms]
+(pass) startWorkflowParamsFromDraft > a whitespace-only display name is refused, not quietly dropped ("   ") [0.03ms]
+(pass) startWorkflowParamsFromDraft > a whitespace-only display name is refused, not quietly dropped ("\t")
+(pass) startWorkflowParamsFromDraft > a whitespace-only display name is refused, not quietly dropped ("\n ")
+(pass) startWorkflowParamsFromDraft > a whitespace-only display name is refused, not quietly dropped (" ")
+(pass) startWorkflowParamsFromDraft > a typed display name travels trimmed [0.02ms]
+(pass) startWorkflowParamsFromDraft > routing fields trim-or-omit; the display name refuses a blank instead [0.04ms]
+
+src/features/actions/lib/schemaForm.test.ts:
+(pass) deriveSchemaForm > derives one typed field per property with required, defaults, and descriptions [0.10ms]
+(pass) deriveSchemaForm > nested objects derive nested fields with their own required markers and full paths [0.08ms]
+(pass) deriveSchemaForm > an unsupported property becomes a json field, never disappears [0.04ms]
+(pass) deriveSchemaForm > non-object and property-less schemas yield no form [0.02ms]
+(pass) deriveSchemaForm > an enum with non-scalar members falls back to a json field [0.02ms]
+(pass) value plumbing > withValueAtPath writes immutably and keeps siblings [0.05ms]
+(pass) value plumbing > withValueAtPath creates intermediate objects for absent parents [0.01ms]
+(pass) value plumbing > writing undefined removes the key [0.03ms]
+(pass) value plumbing > valueAtPath reads nested values and answers undefined off the map [0.02ms]
+(pass) value plumbing > a form-built value survives JSON serialization unchanged [0.04ms]
+(pass) applySchemaDefaults > fills declared defaults only where the input carries no value [0.07ms]
+(pass) applySchemaDefaults > returns the same reference when nothing needed seeding [0.02ms]
+(pass) missingRequiredPaths > names every absent required field as a dotted path [0.06ms]
+(pass) missingRequiredPaths > nested required fields apply exactly when their parent object exists [0.03ms]
+(pass) missingRequiredPaths > empty-string, zero, and null count as present [0.01ms]
+(pass) scalarEditOutcome (the emptied-optional and numeric write decisions) > an emptied field writes undefined (the key is removed), never "" [0.02ms]
+(pass) scalarEditOutcome (the emptied-optional and numeric write decisions) > string text writes through verbatim [0.01ms]
+(pass) scalarEditOutcome (the emptied-optional and numeric write decisions) > numeric text writes a NUMBER, not its string [0.02ms]
+(pass) scalarEditOutcome (the emptied-optional and numeric write decisions) > unparseable numeric text is rejected with a visible reason [0.02ms]
+(pass) scalarEditOutcome (the emptied-optional and numeric write decisions) > a non-integer in an integer field writes with a visible caveat [0.01ms]
+(pass) booleanFromToken / booleanToken (the three-way boolean) > the empty token is ABSENT (undefined), not false [0.02ms]
+(pass) booleanFromToken / booleanToken (the three-way boolean) > rendering round-trips all three states, and out-of-domain shows unselected [0.01ms]
+(pass) enumValueFromToken / enumToken (by-index, JSON type preserved) > selection by index preserves the option value JSON type [0.03ms]
+(pass) enumValueFromToken / enumToken (by-index, JSON type preserved) > the empty token and out-of-range tokens write ABSENT [0.01ms]
+(pass) enumValueFromToken / enumToken (by-index, JSON type preserved) > rendering finds the current value by identity, out-of-domain unselected [0.02ms]
+(pass) domainNote / nonObjectPresenceWarning (the visible truths) > an out-of-domain value is named by its raw JSON [0.02ms]
+(pass) domainNote / nonObjectPresenceWarning (the visible truths) > a present non-object under an object field is warned about, with its value [0.02ms]
+
+src/features/workers/__tests__/managedWorkers.test.tsx:
+(pass) the managed-workers client > parses the full report shape the server serializes [0.43ms]
+(pass) the managed-workers client > parses an uncommissioned report with its remedy [0.06ms]
+(pass) the managed-workers client > an unknown worker state is reported, never coerced [0.07ms]
+(pass) the managed-workers client > an action POSTs to the verb route and returns the response worker [0.11ms]
+(pass) the managed-workers client > the action route encodes the deployment name [0.14ms]
+(pass) the managed-workers client > a 409 invalid_state refusal carries the remedy verbatim [0.09ms]
+(pass) the managed-workers client > not-found and deploy-denied refusals keep the server message and code [0.08ms]
+(pass) the managed-workers client > a refusal with no wire-error body still reports the status [0.04ms]
+(pass) the managed-workers client > a bare bodyless 404 is the unmounted lifecycle surface, in those words [0.05ms]
+(pass) ManagedWorkersBody > renders the uncommissioned remedy verbatim [0.43ms]
+(pass) ManagedWorkersBody > renders each worker with state, queue, and Start/Stop/Restart [0.43ms]
+(pass) ManagedWorkersBody > an action refusal renders the server message verbatim [0.15ms]
+(pass) ManagedWorkersBody > undecodable rows are reported by name [0.09ms]
+(pass) ManagedWorkersBody > a spawned binary differing from the deployed identity is called out [0.15ms]
+(pass) applyWorker > replaces the matching row and keeps the rest [0.06ms]
+(pass) applyWorker > appends (in name order) a worker the report has not seen [0.03ms]
+(pass) shouldRefreshOnClusterEvent > WorkerConnected warrants a refresh [0.05ms]
+(pass) shouldRefreshOnClusterEvent > WorkerDisconnected warrants a refresh
+(pass) shouldRefreshOnClusterEvent > WorkerDeploymentPut warrants a refresh
+(pass) shouldRefreshOnClusterEvent > WorkerDeploymentDesiredStateChanged warrants a refresh
+(pass) shouldRefreshOnClusterEvent > WorkerDeploymentDeleted warrants a refresh
+(pass) shouldRefreshOnClusterEvent > SupervisorStarted warrants a refresh
+(pass) shouldRefreshOnClusterEvent > SupervisorStopped warrants a refresh
+(pass) shouldRefreshOnClusterEvent > PeerAdded does not
+(pass) shouldRefreshOnClusterEvent > PeerConnected does not
+(pass) wireManagedWorkersLiveRefresh > an echoing delta invalidates the report query [0.34ms]
+(pass) wireManagedWorkersLiveRefresh > a non-echoing delta leaves the report alone [0.05ms]
+(pass) wireManagedWorkersLiveRefresh > a (re-)priming snapshot invalidates the report query [0.05ms]
+(pass) wireManagedWorkersLiveRefresh > the returned unsubscribe is the subscription teardown [0.04ms]
+(pass) the refresh affordance (follow-up #182 bridge) > the body always offers Refresh with the honest live-coverage caption [0.26ms]
+(pass) the refresh affordance (follow-up #182 bridge) > the unmounted-surface refusal renders as the structural condition [0.17ms]
+
+src/features/failover/hooks/useFanOutProgress.test.ts:
+(pass) firehose + describe merge > history back-fill and live firehose frames merge by seq [0.21ms]
+(pass) firehose + describe merge > correct arity (distinct scheduled ordinals) and done status [0.06ms]
+(pass) firehose + describe merge > arity falls back to seed when no ActivityScheduled present yet [0.02ms]
+(pass) firehose + describe merge > status is Running until a terminal lifecycle event arrives [0.02ms]
+(pass) firehose + describe merge > only target-workflow firehose frames affect the fan-out history projection [0.10ms]
+(pass) reconnect produces NO double-count > describe back-fill overlapping live frames never shows 5/4 [0.08ms]
+(pass) reconnect produces NO double-count > a duplicate live frame for an already-counted completion is ignored [0.03ms]
+(pass) reconnect produces NO double-count > worst case: every event delivered twice still counts each once [0.06ms]
+(pass) firehose transport wiring (real manager) > subscribe emits a firehose request and counts ActivityCompleted frames [0.40ms]
+
+src/features/failover/hooks/useClusterStream.test.ts:
+(pass) deployment put, desired-state, and delete deltas reduce onto the snapshot [0.30ms]
+
+src/features/failover/lib/historyTail.test.ts:
+(pass) fallback history polling requests only a bounded payload-elided tail [1.11ms]
+
+src/features/failover/lib/clusterConfig.test.ts:
+(pass) buildClusterConfig uses the explicit namespace when provided [0.06ms]
+(pass) buildClusterConfig falls back to the injected fallbackNamespace, not a hardcoded demo [0.02ms]
+(pass) defaultClusterNamespace resolves to a configured/default namespace, never demo [0.03ms]
+(pass) buildClusterConfig seeds the node topology and owner index [0.03ms]
+
+src/features/failover/lib/exactlyOnce.test.ts:
+(pass) isActivityCompleted > discriminates the ActivityCompleted variant [0.06ms]
+(pass) tallyExactlyOnce — empty and partial inputs > empty input yields a zero tally [0.03ms]
+(pass) tallyExactlyOnce — empty and partial inputs > ignores non-completion events entirely [0.01ms]
+(pass) tallyExactlyOnce — empty and partial inputs > counts a partial set (work still in progress) [0.02ms]
+(pass) tallyExactlyOnce — dedup by seq > the same completion delivered twice counts once [0.01ms]
+(pass) tallyExactlyOnce — dedup by seq > distinct seqs for distinct activities all count [0.02ms]
+(pass) tallyExactlyOnce — dedup by seq > out-of-order delivery does not affect the count [0.01ms]
+(pass) the reconnect scenario — overlapping history + live, NO double-count > overlapping describe back-fill + live firehose never double-counts (4, never 5) [0.08ms]
+(pass) the reconnect scenario — overlapping history + live, NO double-count > full overlap (describe and live carry the identical four) still counts 4 [0.02ms]
+(pass) the reconnect scenario — overlapping history + live, NO double-count > live-only fragment before back-fill, then back-fill arrives — still 4 [0.02ms]
+(pass) completedCount + hasOverCount — arity clamp and honest overflow > clamps the surfaced count to arity [0.02ms]
+(pass) completedCount + hasOverCount — arity clamp and honest overflow > a partial set reports below arity [0.01ms]
+(pass) completedCount + hasOverCount — arity clamp and honest overflow > distinct seqs beyond arity are reported as an honest overcount [0.03ms]
+
+src/features/palette/__tests__/palette.test.ts:
+(pass) Tab cycles everything → workflows → actions → everything [0.06ms]
+(pass) fetches every entity kind from its real endpoint shape and deep-links each [0.73ms]
+(pass) deploy-scoped sources are not fetched without the runtime grant [0.10ms]
+(pass) a failing source surfaces as an error while the others still return [0.10ms]
+(pass) everything mode groups by kind with headers in stable order [0.18ms]
+(pass) recents appear only on the empty prompt [0.13ms]
+(pass) workflows mode narrows to workflow entities; actions mode to verbs [0.13ms]
+(pass) the deploy verb is offered only with the runtime deploy grant [0.03ms]
+(pass) the assistant verbs are always offered and land on the assistant panel [0.03ms]
+(pass) recent selections persist, dedupe by id, and cap at eight [0.24ms]
+(pass) corrupt persisted recents degrade to an empty list [0.03ms]
+
+src/lib/keybindings/__tests__/registry.test.ts:
+(pass) a view-scoped handler wins over a global handler on the same binding [0.37ms]
+(pass) an action with no registered handler is inert [0.09ms]
+(pass) overrides persist to storage and rebind matching [0.25ms]
+(pass) an unparseable persisted override falls back to the default on BOTH paths [0.16ms]
+(pass) a valid persisted override still wins on the display path [0.04ms]
+(pass) formats mod as ⌘ on macOS and Sup+ on Linux — never Control [0.02ms]
+(pass) rejects Control as a modifier at definition time [0.04ms]
+(pass) a control-modified event never matches a mod binding [0.08ms]
+(pass) plain-key bindings never fire from an editable target; opt-in bindings do [0.08ms]
+(pass) two-step chords dispatch on the second key and expire after the timeout [0.12ms]
+(pass) chord prefixes are suppressed in editable targets too [0.04ms]
+
+src/lib/state/__tests__/draftStore.test.tsx:
+(pass) createDraftStore > a draft written through one store hydrates into a fresh store (reload) [0.16ms]
+(pass) createDraftStore > clearDraft resets the state and the persisted blob [0.22ms]
+(pass) createDraftStore > a corrupt sessionStorage blob degrades to the empty draft, never a crash [0.10ms]
+(pass) createDraftStore > a wrong-shaped blob is sanitized per field (bad types dropped, good kept) [0.05ms]
+(pass) createDraftStore > a foreign envelope (non-object state, unknown version) hydrates as empty [0.04ms]
+(pass) createDraftStore > without sessionStorage (this test env) the store degrades to in-memory [0.03ms]
+(pass) useDraft > a draft survives unmount/remount: the second mount seeds from the store [0.23ms]
+(pass) useDraft > after clearDraft a remount is pristine again [0.05ms]
+
+ 1014 pass
+ 0 fail
+ 19350 expect() calls
+Ran 1014 tests across 136 files. [2.51s]
+EXIT=0

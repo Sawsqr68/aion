@@ -1,0 +1,6 @@
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Checking aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion)
+    Checking aion-cli v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.84s
+   Compiling aion-server v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.63s

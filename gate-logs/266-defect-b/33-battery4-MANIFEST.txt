@@ -1,0 +1,20 @@
+HEAD=00064c41c7c023ea86f940a06b7ace37b439596e
+started=2026-08-17T10:52:50+1000
+load_before[scoped-test]={ 29.37 28.31 26.73 }
+exit[scoped-test]=0
+load_before[test-aion-server]={ 24.52 27.27 26.39 }
+exit[test-aion-server]=0
+load_before[test-aion-rs]={ 20.51 25.79 27.73 }
+exit[test-aion-rs]=0
+load_before[test-integrations]={ 15.36 15.47 20.17 }
+exit[test-integrations]=0
+load_before[test-integration-norn]={ 19.81 16.49 20.42 }
+exit[test-integration-norn]=0
+load_before[test-aion-worker]={ 18.00 16.21 20.28 }
+exit[test-aion-worker]=0
+load_before[clippy-workspace]={ 12.43 15.03 19.63 }
+exit[clippy-workspace]=0
+load_before[clippy-aion-server]={ 11.38 14.41 19.19 }
+exit[clippy-aion-server]=0
+finished=2026-08-17T11:18:33+1000
+BATTERY-COMPLETE

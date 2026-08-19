@@ -1,0 +1,55 @@
+   Compiling aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.71s
+     Running tests/activity_retry_e2e.rs (target/debug/deps/activity_retry_e2e-4660f913cc31e40d)
+
+running 11 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+test in_process_dispatch_miss_is_typed_recorded_and_fails_the_run ... ok
+test exhausted_retries_fail_the_run_and_reopen_continues_the_trail ... ok
+test retryable_flakes_cost_retries_not_the_run ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/recovery_supersession_e2e.rs (target/debug/deps/recovery_supersession_e2e-363d5198f57a5ad9)
+
+running 11 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+test an_already_failed_attempt_is_not_recorded_twice ... ok
+test recovery_records_the_superseded_attempt_before_redispatch ... ok
+test the_supersession_record_is_budget_inert ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+   Compiling aion-rs v0.16.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/supersession-record/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.46s
+     Running unittests src/lib.rs (target/debug/deps/aion-bdaab527a73600c3)
+
+running 1 test
+test runtime::nif_activity_retry::tests::supersession_names_only_a_started_and_unsettled_attempt ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 687 filtered out; finished in 0.00s
+
+EXIT=0

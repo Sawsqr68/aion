@@ -1,0 +1,17 @@
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-server)
+   Compiling aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 21s
+     Running tests/tail_follow_e2e.rs (target/debug/deps/tail_follow_e2e-8fabf3f5ad93102e)
+
+running 2 tests
+test tail_no_follow_does_not_append_json_null_to_its_transcript_output ... ok
+test tail_follow_attributes_replay_only_after_the_selected_generation_starts ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.95s
+
+EXIT=0

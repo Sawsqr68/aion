@@ -61,6 +61,7 @@ export function projectTimeline(events: readonly Event[]): TimelineEntry[] {
       case 'ActivityCompleted':
       case 'ActivityFailed':
       case 'ActivityAdvisoryExhausted':
+      case 'ActivityAdoptionOffered':
       case 'ActivityCancelled':
         patchActivity(entries, activities, event);
         break;
@@ -136,6 +137,12 @@ function patchActivity(
     entry.failures.push(activityAttempt(event));
   } else if (event.type === 'ActivityAdvisoryExhausted') {
     entry.advisoryExhausted = event;
+  } else if (event.type === 'ActivityAdoptionOffered') {
+    // Recorded on the activity's own lane (it names an `activity_id` and an
+    // `attempt`), but it sets NO role field: an offer to re-adopt a dangling
+    // attempt after recovery is not an outcome, and letting it fall through to
+    // the `cancelled` arm below would report a live activity as cancelled.
+    // Its presence in `entry.events` is what the lane needs.
   } else {
     entry.cancelled = event;
   }
@@ -458,6 +465,7 @@ function stringifyTimerId(timerId: TimerId): string {
 
 type ActivityType =
   | `Activity${'Scheduled' | 'Started' | 'Completed' | 'Failed' | 'Cancelled'}`
-  | 'ActivityAdvisoryExhausted';
+  | 'ActivityAdvisoryExhausted'
+  | 'ActivityAdoptionOffered';
 type TimerType = 'TimerStarted' | 'TimerFired' | 'TimerCancelled' | 'WithTimeoutCompleted';
 type ChildType = `ChildWorkflow${'Started' | 'Completed' | 'Failed' | 'Cancelled'}`;

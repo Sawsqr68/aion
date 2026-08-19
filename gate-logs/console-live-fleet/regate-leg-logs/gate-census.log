@@ -1,0 +1,12 @@
+index.html references: assets/index-CIN_Uzqr.js
+primary bundle path: /Users/tom/Developer/ablative/stack/aion/.worktrees/console-live/crates/aion-server/ops-console-embed/assets/index-CIN_Uzqr.js
+primary bundle bytes: 1044817
+chunks in denominator: 11
+CANARY workflow=715 (across all chunks)
+workflows/describe-live=2
+workflows/children=7
+control workflows/list=1
+control workflows/describe=5
+control workflows/history=6
+control workflows/transcripts=5
+EXIT=0

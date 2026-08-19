@@ -24,8 +24,10 @@ pub(crate) fn start_run() -> Tool {
              await_completion to have the server hand you a task instead: the call returns a \
              taskId at once, the run proceeds, and tasks/get carries the outcome when it \
              lands. await_completion requires the tasks extension — without it the call is \
-             refused rather than silently turned into a plain start. Cancelling that task \
-             stops the WAITING, not the run; use the cancel tool to stop the run."
+             refused rather than silently turned into a plain start. That task never expires \
+             and survives a server restart, because it is the run itself read through the \
+             task model. Cancelling the task does nothing to the run; use the cancel tool to \
+             stop the run."
                 .to_owned(),
         ),
         input_schema: object_schema(

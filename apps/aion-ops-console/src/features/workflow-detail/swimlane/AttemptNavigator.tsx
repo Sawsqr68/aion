@@ -15,14 +15,13 @@ import {
 import type { AttemptCapabilities } from '@/lib/api';
 import type { TranscriptTarget } from '@/lib/api/transcript-stream';
 import { cn } from '@/lib/utils';
-import type { Namespace, WorkflowId } from '@/types';
+import type { Namespace, RunGeneration, WorkflowId } from '@/types';
 
 import {
   type AttemptNavigatorRow,
   type AttemptStatus,
   attemptRowKey,
   deriveAttemptNavigator,
-  deriveGenerations,
 } from '../lib/attemptNavigator';
 import type { TimelineEntry } from '../types';
 
@@ -31,6 +30,14 @@ export type AttemptNavigatorProps = {
   namespace: Namespace | null;
   /** Durable timeline (history + live) the attempt rows are derived from. */
   timeline: readonly TimelineEntry[];
+  /**
+   * `workflowId`'s OWN generation boundaries, server-stated over its whole
+   * history. Supplied by the caller alongside {@link timeline} and read from
+   * the same source, because this component is rendered against the swimlane's
+   * SELECTION SCOPE — which may be a child workflow, not the page's root. The
+   * two must describe the same workflow or every row is mislabelled.
+   */
+  generations: readonly RunGeneration[];
 };
 
 /**
@@ -54,19 +61,24 @@ export type AttemptNavigatorProps = {
  * hand away. Both pieces share ONE {@link useInterventionController} instance —
  * one honest submit/outcome/error stream, reported next to the composer.
  */
-export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNavigatorProps) {
-  const rows = useMemo(() => deriveAttemptNavigator(timeline), [timeline]);
+export function AttemptNavigator({
+  workflowId,
+  namespace,
+  timeline,
+  generations,
+}: AttemptNavigatorProps) {
+  const rows = useMemo(
+    () => deriveAttemptNavigator(timeline, generations),
+    [timeline, generations]
+  );
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const { attempts: liveAttempts, refresh } = useActivityAttempts({ workflowId, namespace });
   // Which rows have a RETAINED durable transcript (lane #229 enumeration). Rows
   // stay timeline-derived; this is a badge source only, never a row source.
-  // Enumerate EVERY generation the loaded window names, not just the newest:
-  // the rows span the whole window, so badging only one generation would leave
-  // the others' retained transcripts unbadged and read as "nothing retained".
-  const runIds = useMemo(
-    () => deriveGenerations(timeline).map((generation) => generation.runId),
-    [timeline]
-  );
+  // Enumerate EVERY generation of the chain, not just the newest: the rows span
+  // the whole window, so badging only one generation would leave the others'
+  // retained transcripts unbadged and read as "nothing retained".
+  const runIds = useMemo(() => generations.map((generation) => generation.run_id), [generations]);
   const retained = useRetainedStreams({ workflowId, runIds, namespace });
   const retainedKeys = useMemo(
     () =>
@@ -80,11 +92,7 @@ export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNav
 
   const selectedRow = resolveSelectedRow(rows, pickedKey);
   const target: TranscriptTarget | null = useMemo(() => {
-    // A row whose generation the loaded window cannot name is NOT addressable:
-    // the transcript keyspace is `(workflow, run, activity, attempt)` and the
-    // server refuses a run-less read. Falling back to another generation's run
-    // would show one attempt's transcript under another's label.
-    if (selectedRow === null || selectedRow.runId === null || namespace === null) {
+    if (selectedRow === null || namespace === null) {
       return null;
     }
     return {
@@ -141,14 +149,7 @@ export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNav
         rows={rows}
         selectedKey={selectedRow?.key ?? null}
       />
-      {selectedRow !== null && selectedRow.runId === null ? (
-        <EmptyState
-          description="No WorkflowStarted for this attempt is inside the loaded history window, so its generation cannot be named — and a transcript stream is addressed by (workflow, run, activity, attempt). Load earlier history to reach it."
-          title="Generation unknown for this attempt"
-        />
-      ) : (
-        <TranscriptPanel target={target} />
-      )}
+      <TranscriptPanel target={target} />
       {intervention === null ? null : <InterventionComposer controller={intervention} />}
     </section>
   );
@@ -206,15 +207,6 @@ export function AttemptRowList({ rows, selectedKey, onSelect, retainedKeys }: At
             {row.isLegacy
               ? `activity ${row.activityId} · legacy attempt`
               : `activity ${row.activityId} · attempt ${row.attempt}`}
-            {row.runId === null ? (
-              <span
-                className="text-[10px] text-warning"
-                data-testid={`unresolved-run:${row.key}`}
-                title="No WorkflowStarted for this attempt is inside the loaded history window, so its generation cannot be named — load earlier history to address its transcript."
-              >
-                · run unknown
-              </span>
-            ) : null}
             {retainedKeys.has(row.key) ? (
               <span
                 className="text-[10px] text-muted-foreground"

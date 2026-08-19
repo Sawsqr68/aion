@@ -77,7 +77,6 @@ mod tests {
             Implementation::new("aion", "0.12.0"),
             60_000,
             300_000,
-            None,
             1_000,
             Vec::new(),
         )

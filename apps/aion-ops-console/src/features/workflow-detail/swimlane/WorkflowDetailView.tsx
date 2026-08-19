@@ -7,9 +7,9 @@ import { LiveLegsSection } from '../components/LegsSection';
 import { LiveStepCard } from '../components/LiveStepCard';
 import { useChildren } from '../hooks/useChildren';
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
+import { useWorkflowHead } from '../hooks/useWorkflowHead';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { useWorkflowSelectionParams } from '../hooks/useWorkflowSelectionParams';
-import { useWorkflowSummary } from '../hooks/useWorkflowSummary';
 import type { WorkflowDetailProps } from '../types';
 import { WorkflowDetailViewContent } from './WorkflowDetailViewContent';
 
@@ -36,9 +36,12 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
   // wrapper owns them and hands the resolved values + setters to the presentational
   // content, which stays renderable without a router (SSR tests).
   const selection = useWorkflowSelectionParams();
-  // The server-projected name (#211). Read here rather than inside the
-  // presentational content so the content stays a pure function of its props.
-  const summary = useWorkflowSummary({ workflowId });
+  // The server-projected name AND the run's generation boundaries (#211,
+  // "run unknown"). Read here rather than inside the presentational content so
+  // the content stays a pure function of its props. These are the ROOT
+  // workflow's; an expanded child lane loads its own beside its timeline, and
+  // the selection surface picks whichever belongs to the current scope.
+  const head = useWorkflowHead({ workflowId });
   const runId = latestRunId(live.events);
   const children = useChildren({
     namespace,
@@ -51,6 +54,7 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
     <>
       <WorkflowDetailViewContent
         error={historyQuery.error}
+        generations={head.data?.generations ?? []}
         hasEarlier={historyQuery.hasEarlier}
         history={live.events}
         isError={historyQuery.isError}
@@ -67,8 +71,8 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
         onSelectSequence={selection.setSelectedSequence}
         scrubPosition={selection.scrubPosition}
         selectedSequence={selection.selectedSequence}
-        summaryDisplayName={summary.data?.display_name ?? null}
-        summaryUnavailable={summary.isError}
+        summaryDisplayName={head.data?.summary?.display_name ?? null}
+        summaryUnavailable={head.isError}
         terminalOutcome={live.terminalOutcome}
         timeline={live.timeline}
         workflowId={workflowId}

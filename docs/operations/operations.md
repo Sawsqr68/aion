@@ -39,6 +39,7 @@ naming a missing file still refuses rather than inventing one
 | `--listen-address <addr>` | Override `server.listen_address` (HTTP/JSON + ops console). |
 | `--grpc-address <addr>` | Override `server.grpc_address` — the server's **own bind address**. The global `--endpoint` is a *client* dial address; `aion server` refuses to start if it is passed rather than silently binding the default port. |
 | `--scheduler-threads <n>` | Override `runtime.scheduler_threads`; must be non-zero. |
+| `--jit-threshold <n>` | Override `runtime.jit_threshold`; must be non-zero. Recorded calls to one `(module, function, arity)` before the embedded VM JIT-compiles it. Omitted, the VM applies its own default. **Moves the moment of compilation; it does not switch compilation off** — the call counter saturates rather than stopping, so a very large value defers compilation past any realistic workload but it still occurs beyond that horizon. |
 | `--drain-timeout <seconds>` | Override `drain.timeout_seconds`; must be non-zero. |
 | `--workflow-package <path>` | Extra `.aion` archive loaded at startup; repeatable (see "Boot-time loads"). |
 | `--gleam-path <path>` | Set `authoring.gleam_path`: commissions the server-side Gleam authoring loop and mounts `/authoring/*`; requires `--authoring-project-root`. |
@@ -168,6 +169,11 @@ owned_shards = []                       # default: empty = this node owns ALL
 
 [runtime]
 scheduler_threads = 1                   # default; must be > 0
+# jit_threshold = 1000                  # ABSENT by default: the embedded VM's
+                                        # own default governs. Set only to move
+                                        # when hot code is compiled; a large
+                                        # value defers compilation, it does not
+                                        # disable it
 query_timeout_ms = 10000                # default; reply deadline for
                                         # /workflows/query. Explicit 0 rejected
 
@@ -323,16 +329,18 @@ allowed_origins = []                    # default; EMPTY means no browser
                                         # requires)
 # discover_ttl_ms = 60000               # default; ttlMs on server/discover
 # tools_list_ttl_ms = 300000            # default; ttlMs on tools/list
-# task_ttl_ms = 3600000                 # default (1h); how long a created task
-                                        # lives before the server may fail and
-                                        # delete it. 0 = unlimited. The task is
-                                        # only the WAIT: the run it started
-                                        # stays reachable through the handles
-                                        # the task creation returned
 # task_poll_interval_ms = 1000          # default; pollIntervalMs advertised to
-                                        # a task's client
-# await_poll_interval_ms = 500          # default; how often an awaited
-                                        # start_run re-reads the run's status
+                                        # a task's client. A hint only —
+                                        # nothing on the server depends on it
+#
+# There is NO task lifetime setting, and none is coming. An MCP task here is
+# the run itself read through the task model: nothing is stored, nothing is
+# held, so nothing expires. `ttlMs` is always null (the extension's spelling of
+# unlimited), a task survives a server restart because the run does, and a task
+# nobody ever polls costs the server nothing at all. If you are upgrading and
+# your file still sets `task_ttl_ms` or `await_poll_interval_ms`, the server
+# refuses to boot and names the key — silently ignoring it would leave you
+# believing a lifetime was in force when nothing enforces one.
 
 # Managed-worker supervision. NO DEFAULTS and no partial section: write every
 # key below to commission it, or omit the section entirely and the server
@@ -475,7 +483,8 @@ supported variables are:
 - `AION_SERVER_LISTEN_ADDRESS`, `AION_SERVER_GRPC_ADDRESS`,
   `AION_SERVER_CORS_ALLOWED_ORIGINS` (comma-separated; empty clears the list)
 - `AION_STORE_BACKEND`, `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
-- `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`
+- `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`,
+  `AION_RUNTIME_JIT_THRESHOLD`
 - `AION_DRAIN_TIMEOUT_SECONDS`
 - `AION_AUTH_ENABLED`, `AION_AUTH_JWKS_URL`, `AION_AUTH_JWKS_REFRESH_SECONDS`
 - `AION_METRICS_ENABLED`

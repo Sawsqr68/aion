@@ -1,0 +1,4 @@
+   Compiling aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-server)
+    Checking aion-cli v0.15.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/244-child-visibility/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.88s
+EXIT=0

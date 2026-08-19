@@ -1,0 +1,5 @@
+=== attempt-watch armed 2026-08-15T01:35:47Z pid=59219 baseline_events=10 ===
+02:55:52Z HISTORY-ADVANCED 10->11
+=== 59219 exit-watch armed 2026-08-15T02:58:23Z (run already terminal) ===
+=== 59219 exit-watch armed 2026-08-15T03:23:21Z (run already terminal) ===
+04:14:24Z PID-59219-EXITED (post-terminal)

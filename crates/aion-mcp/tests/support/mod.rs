@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use aion_mcp::protocol::headers::HeaderView;
 use aion_mcp::protocol::meta::Implementation;
+use aion_mcp::tasks::resolve::{TaskProjection, TaskResolveError, TaskState};
 use aion_mcp::tools::descriptor::{
     Destructiveness, Idempotence, Tool, ToolAnnotations, WorldScope,
 };
@@ -11,6 +12,7 @@ use aion_mcp::tools::service::{
     ToolCall, ToolCatalog, ToolFailure, ToolOutcome, ToolService, ToolTaskDecision,
 };
 use aion_mcp::{HttpRequest, McpServer, McpServerConfig};
+use chrono::TimeZone;
 use serde_json::{Value, json};
 
 /// A caller identity: the host's, carried through untouched.
@@ -55,11 +57,24 @@ impl FakeService {
                 WorldScope::Closed,
             ),
         };
+        // Task-shaped, and shaped like a REAL host's task-shaped tool: it names
+        // an owner (the fake's stand-in for a namespace) and starts work that
+        // outlives the call. `finished` decides what the work is doing when it
+        // is read back, which is how a `working` task and a settled one are
+        // both reachable without anything having to be stored between requests.
         let slow = Tool {
             name: "await_thing".to_owned(),
             title: None,
             description: Some("Runs as a task.".to_owned()),
-            input_schema: json!({ "type": "object", "additionalProperties": false }),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "owner": { "type": "string" },
+                    "finished": { "type": "boolean" },
+                },
+                "required": ["owner"],
+                "additionalProperties": false,
+            }),
             output_schema: Some(json!({
                 "type": "object",
                 "properties": { "done": { "type": "boolean" } },
@@ -150,10 +165,18 @@ impl ToolService for FakeService {
                 summary: "routed".to_owned(),
             }),
             "await_thing" => {
-                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                // The host's own authorization, applied to the CALL. The task
+                // methods below apply the same rule again on every read, which
+                // is the point: the handle is not a capability.
+                if owner_of(&call) != Some(caller.subject.as_str()) {
+                    return Err(ToolFailure::new(
+                        "the caller does not hold that owner",
+                        json!({ "code": "denied" }),
+                    ));
+                }
                 Ok(ToolOutcome {
                     structured: json!({ "done": true }),
-                    summary: "done".to_owned(),
+                    summary: "started".to_owned(),
                 })
             }
             other => Err(ToolFailure::new(
@@ -162,6 +185,66 @@ impl ToolService for FakeService {
             )),
         }
     }
+
+    fn task_handle(&self, call: &ToolCall, _outcome: &ToolOutcome) -> Option<String> {
+        Some(format!(
+            "fake.v1:{}:{}",
+            owner_of(call)?,
+            call.arguments
+                .get("finished")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        ))
+    }
+
+    async fn resolve_task(
+        &self,
+        caller: &Self::Caller,
+        task_id: &str,
+    ) -> Result<TaskProjection, TaskResolveError> {
+        let mut parts = task_id.splitn(3, ':');
+        let (Some("fake.v1"), Some(owner), Some(finished)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            return Err(TaskResolveError::Malformed {
+                detail: format!("`{task_id}` is not a task id this server issued"),
+            });
+        };
+        // Authorization on EVERY read, against a handle anyone could have
+        // written down. Refusing here is what makes the handle safe to derive.
+        if owner != caller.subject {
+            return Err(TaskResolveError::Unknown {
+                task_id: task_id.to_owned(),
+            });
+        }
+        let at = |offset: i64| {
+            chrono::Utc
+                .timestamp_opt(1_700_000_000 + offset, 0)
+                .single()
+                .unwrap_or_default()
+        };
+        Ok(TaskProjection {
+            state: if finished == "true" {
+                TaskState::Finished {
+                    tool_name: "await_thing".to_owned(),
+                    outcome: ToolOutcome {
+                        structured: json!({ "done": true }),
+                        summary: "done".to_owned(),
+                    },
+                }
+            } else {
+                TaskState::Working
+            },
+            status_message: Some("the work carries on without this connection".to_owned()),
+            created_at: at(0),
+            last_updated_at: at(if finished == "true" { 100 } else { 0 }),
+        })
+    }
+}
+
+/// The owner named by a call, if it named one.
+fn owner_of(call: &ToolCall) -> Option<&str> {
+    call.arguments.get("owner").and_then(Value::as_str)
 }
 
 pub fn server() -> Result<McpServer<FakeService>, Box<dyn std::error::Error>> {
@@ -171,7 +254,6 @@ pub fn server() -> Result<McpServer<FakeService>, Box<dyn std::error::Error>> {
             Implementation::new("aion-test", "0.12.0"),
             60_000,
             300_000,
-            Some(3_600_000),
             250,
             vec!["http://localhost:8080".to_owned()],
         ),
@@ -179,8 +261,14 @@ pub fn server() -> Result<McpServer<FakeService>, Box<dyn std::error::Error>> {
 }
 
 pub fn caller() -> FakeCaller {
+    caller_named("operator")
+}
+
+/// A second identity, for proving that a handle one caller holds does not let
+/// another caller read the work behind it.
+pub fn caller_named(subject: &str) -> FakeCaller {
     FakeCaller {
-        subject: "operator".to_owned(),
+        subject: subject.to_owned(),
     }
 }
 

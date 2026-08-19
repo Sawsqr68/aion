@@ -6,6 +6,9 @@ import { ApiClient, ApiError } from './client';
 
 const namespace = 'default';
 const workflowId = '00000000-0000-0000-0000-000000000001';
+/** Two generations of one continue-as-new chain under `workflowId`. */
+const RUN_A = '00000000-0000-0000-0000-0000000000a1';
+const RUN_B = '00000000-0000-0000-0000-0000000000a2';
 
 const filter: WorkflowFilter = {
   workflow_type: null,
@@ -420,10 +423,10 @@ test('startWorkflow omits task_queue when not provided', async () => {
   expect('task_queue' in body).toBe(false);
 });
 
-// #211. Catches: the summary read dragging the whole run's history over the
-// wire to read one field, or asking the windowed endpoint (which cannot
+// #211. Catches: the head read dragging the whole run's history over the
+// wire to read two fields, or asking the windowed endpoint (which cannot
 // answer for a name recorded outside the window).
-test('getWorkflowSummary describes the run WITHOUT history and returns the projection', async () => {
+test('getWorkflowHead describes the run WITHOUT history and returns both projections', async () => {
   const calls: Request[] = [];
   const client = new ApiClient({
     baseUrl: 'https://aion.example',
@@ -433,11 +436,15 @@ test('getWorkflowSummary describes the run WITHOUT history and returns the proje
         summary: { ...summary, display_name: 'nightly digest' },
         history: [],
         unserved: [],
+        generations: [
+          { seq: 0, run_id: RUN_A },
+          { seq: 40, run_id: RUN_B },
+        ],
       });
     },
   });
 
-  const result = await client.getWorkflowSummary(workflowId, { namespace });
+  const result = await client.getWorkflowHead(workflowId, { namespace });
 
   expect(calls[0]?.url).toBe('https://aion.example/workflows/describe');
   await expect(calls[0]?.json()).resolves.toEqual({
@@ -446,29 +453,68 @@ test('getWorkflowSummary describes the run WITHOUT history and returns the proje
     run_id: null,
     include_history: false,
   });
-  expect(result?.display_name).toBe('nightly digest');
+  expect(result.summary?.display_name).toBe('nightly digest');
+  // The whole chain, in the order the runs ran, each with the sequence its
+  // `WorkflowStarted` sits at — the axis a reader holding any window resolves
+  // an event's generation by.
+  expect(result.generations).toEqual([
+    { seq: 0, run_id: RUN_A },
+    { seq: 40, run_id: RUN_B },
+  ]);
 });
 
-test('getWorkflowSummary answers null for a workflow the server does not know', async () => {
+test('getWorkflowHead answers a null summary for a workflow the server does not know', async () => {
   const client = new ApiClient({
-    fetchImpl: async () => jsonResponse({ summary: null, history: [], unserved: [] }),
+    fetchImpl: async () =>
+      jsonResponse({ summary: null, history: [], unserved: [], generations: [] }),
   });
 
-  expect(await client.getWorkflowSummary(workflowId, { namespace })).toBeNull();
+  expect((await client.getWorkflowHead(workflowId, { namespace })).summary).toBeNull();
+});
+
+// Catches the defect this read exists to close: a describe response whose
+// `generations` is absent or malformed being read as "this workflow has no
+// generations". An empty list is a real answer (a workflow with no history) and
+// the attempt navigator places NO rows for it — so a missing field silently
+// becoming `[]` would blank the navigator of every workflow on the page and
+// present a contract violation as a fact about the run.
+test('a describe response with no generations array is a typed error, never an empty chain', async () => {
+  const noField = new ApiClient({
+    fetchImpl: async () => jsonResponse({ summary, history: [], unserved: [] }),
+  });
+  await expect(noField.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(ApiError);
+
+  for (const badEntry of [{ seq: 0 }, { run_id: RUN_A }, { seq: '0', run_id: RUN_A }, 'nope']) {
+    const client = new ApiClient({
+      fetchImpl: async () =>
+        jsonResponse({ summary, history: [], unserved: [], generations: [badEntry] }),
+    });
+    await expect(client.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(
+      ApiError
+    );
+  }
+
+  // CONTROL: the empty list is a LEGITIMATE answer and must not be rejected —
+  // without this the assertions above would pass if the normalizer rejected
+  // every generations value it was given.
+  const empty = new ApiClient({
+    fetchImpl: async () => jsonResponse({ summary, history: [], unserved: [], generations: [] }),
+  });
+  expect((await empty.getWorkflowHead(workflowId, { namespace })).generations).toEqual([]);
 });
 
 // Catches: a malformed describe response being read as "this run is unnamed",
 // which would present a read failure as a fact about the workflow.
 test('a malformed describe response is a typed error, never a phantom summary', async () => {
   const notAnObject = new ApiClient({ fetchImpl: async () => jsonResponse(['nope']) });
-  await expect(notAnObject.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+  await expect(notAnObject.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(
     ApiError
   );
 
   const badSummary = new ApiClient({
     fetchImpl: async () => jsonResponse({ summary: { workflow_id: 7 } }),
   });
-  await expect(badSummary.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+  await expect(badSummary.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(
     ApiError
   );
 });
@@ -481,9 +527,14 @@ test('a malformed describe response is a typed error, never a phantom summary', 
 test('a wrong-typed field in a describe summary is an error, never a silent unnamed render', async () => {
   const wrongTypedName = new ApiClient({
     fetchImpl: async () =>
-      jsonResponse({ summary: { ...summary, display_name: 42 }, history: [], unserved: [] }),
+      jsonResponse({
+        summary: { ...summary, display_name: 42 },
+        history: [],
+        unserved: [],
+        generations: [],
+      }),
   });
-  await expect(wrongTypedName.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+  await expect(wrongTypedName.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(
     ApiError
   );
 
@@ -498,9 +549,14 @@ test('a wrong-typed field in a describe summary is an error, never a silent unna
   ]) {
     const client = new ApiClient({
       fetchImpl: async () =>
-        jsonResponse({ summary: { ...summary, ...badField }, history: [], unserved: [] }),
+        jsonResponse({
+          summary: { ...summary, ...badField },
+          history: [],
+          unserved: [],
+          generations: [],
+        }),
     });
-    await expect(client.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+    await expect(client.getWorkflowHead(workflowId, { namespace })).rejects.toBeInstanceOf(
       ApiError
     );
   }
@@ -514,9 +570,10 @@ test('a wrong-typed field in a describe summary is an error, never a silent unna
         summary: { ...summary, display_name: null, ended_at: null, parent: null },
         history: [],
         unserved: [],
+        generations: [],
       }),
   });
-  expect((await good.getWorkflowSummary(workflowId, { namespace }))?.display_name).toBeNull();
+  expect((await good.getWorkflowHead(workflowId, { namespace })).summary?.display_name).toBeNull();
 });
 
 test('startWorkflow forwards an optional display_name to the server body', async () => {

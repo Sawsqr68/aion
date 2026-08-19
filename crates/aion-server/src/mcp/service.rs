@@ -5,8 +5,7 @@
 //! be a second authorization path, a second serialization, and a second place
 //! for the answer to differ from the one the console shows.
 
-use std::time::Duration;
-
+use aion_mcp::tasks::resolve::{TaskProjection, TaskResolveError};
 use aion_mcp::tools::service::{
     ToolCall, ToolCatalog, ToolFailure, ToolOutcome, ToolService, ToolTaskDecision,
 };
@@ -16,6 +15,7 @@ use crate::{CallerIdentity, ServerState};
 
 use super::catalog::aion_tool_catalog;
 use super::instructions::instructions;
+use super::task_ref;
 use super::tools::{authoring, control, describe, history, list, start, transcript};
 
 /// The Aion tool implementation.
@@ -23,7 +23,6 @@ pub struct AionToolService {
     state: ServerState,
     catalog: ToolCatalog,
     instructions: String,
-    await_poll_interval: Duration,
 }
 
 impl AionToolService {
@@ -34,10 +33,7 @@ impl AionToolService {
     /// [`ServerError::Config`](crate::ServerError::Config) when a published
     /// tool schema fails to compile — a server defect, surfaced at startup
     /// rather than on a caller's first `tools/call`.
-    pub fn new(
-        state: ServerState,
-        await_poll_interval: Duration,
-    ) -> Result<Self, crate::ServerError> {
+    pub fn new(state: ServerState) -> Result<Self, crate::ServerError> {
         let catalog = aion_tool_catalog().map_err(|error| crate::ServerError::Config {
             message: format!("the MCP tool catalog is invalid: {error}"),
         })?;
@@ -45,7 +41,6 @@ impl AionToolService {
             state,
             catalog,
             instructions: instructions(),
-            await_poll_interval,
         })
     }
 }
@@ -81,9 +76,7 @@ impl ToolService for AionToolService {
             "read_history" => history::read_history(&self.state, caller, &call).await,
             "list_runs" => list::list_runs(&self.state, caller, &call).await,
             "query" => control::query(&self.state, caller, &call).await,
-            "start_run" => {
-                start::start_run(&self.state, caller, &call, self.await_poll_interval).await
-            }
+            "start_run" => start::start_run(&self.state, caller, &call).await,
             "signal" => control::signal(&self.state, caller, &call).await,
             "cancel" => control::cancel(&self.state, caller, &call).await,
             "list_documents" => authoring::list_documents(&self.state, caller, &call).await,
@@ -101,5 +94,17 @@ impl ToolService for AionToolService {
                 json!({ "code": "unknown_tool", "tool": other }),
             )),
         }
+    }
+
+    fn task_handle(&self, call: &ToolCall, outcome: &ToolOutcome) -> Option<String> {
+        task_ref::task_handle(call, outcome)
+    }
+
+    async fn resolve_task(
+        &self,
+        caller: &Self::Caller,
+        task_id: &str,
+    ) -> Result<TaskProjection, TaskResolveError> {
+        task_ref::resolve_task(&self.state, caller, task_id).await
     }
 }

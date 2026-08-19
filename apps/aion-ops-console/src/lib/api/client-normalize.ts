@@ -2,6 +2,7 @@ import type {
   Event,
   Namespace,
   NamespacePlacementWire,
+  RunGeneration,
   RunId,
   WorkflowId,
   WorkflowStatus,
@@ -267,6 +268,34 @@ export function normalizeWorkflowPage(
  * `normalizeDisplayName`, come back `null`, and render the run UNNAMED —
  * reporting a contract violation as a fact about the workflow.
  */
+/**
+ * The generation boundaries the describe read states for the WHOLE history.
+ *
+ * The server is the only party that holds the whole history, so it is the only
+ * party that can answer "which run does the event at sequence n belong to". A
+ * reader deriving this from its loaded window is right only when the window
+ * happens to contain the boundary — which, for a tail window, is exactly when
+ * the workflow is short.
+ */
+export function normalizeDescribeGenerations(response: unknown): RunGeneration[] {
+  if (!isRecord(response)) {
+    throw new ApiError(200, 'workflows/describe response was not an object');
+  }
+
+  const generations = response.generations;
+
+  if (!Array.isArray(generations)) {
+    throw new ApiError(200, 'workflows/describe response carried no generations array');
+  }
+
+  return generations.map((entry) => {
+    if (!isRecord(entry) || typeof entry.seq !== 'number' || typeof entry.run_id !== 'string') {
+      throw new ApiError(200, 'workflows/describe generation entry was malformed');
+    }
+    return { seq: entry.seq, run_id: entry.run_id };
+  });
+}
+
 export function normalizeDescribeSummary(response: unknown): WorkflowSummary | null {
   if (!isRecord(response)) {
     throw new ApiError(200, 'workflows/describe response was not an object');

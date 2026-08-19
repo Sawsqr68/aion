@@ -9,9 +9,14 @@ import {
   searchAttributesSummary,
 } from '../lib/timelineVariants';
 
-test('KNOWN_EVENT_TYPES enumerates exactly the 32 generated variants', () => {
-  expect(KNOWN_EVENT_TYPES).toHaveLength(32);
-  expect(new Set(KNOWN_EVENT_TYPES).size).toBe(32);
+// The COUNT is deliberately not asserted. A hardcoded number is a second copy
+// of a fact the generated union already states, and it goes stale the moment a
+// variant lands — which is how it read as a failure about arithmetic rather
+// than about a missing handler. What matters is that the list has no duplicate
+// and no gap; the gap is proved at compile time by `ListIsExhaustive`, which
+// only bites now that the list is `as const`.
+test('KNOWN_EVENT_TYPES lists every generated variant exactly once', () => {
+  expect(new Set(KNOWN_EVENT_TYPES).size).toBe(KNOWN_EVENT_TYPES.length);
 });
 
 test('classifyKnownEvent maps every known variant to a family + sub-kind', () => {
@@ -39,6 +44,7 @@ test('classifyKnownEvent assigns the expected families', () => {
     ActivityCompleted: 'activity',
     ActivityFailed: 'activity',
     ActivityAdvisoryExhausted: 'activity',
+    ActivityAdoptionOffered: 'activity',
     ActivityCancelled: 'activity',
     TimerStarted: 'timer',
     TimerFired: 'timer',

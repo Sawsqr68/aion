@@ -262,6 +262,21 @@ pub(crate) async fn describe_workflow(
     }
     .unserved(&outcome.namespace, &outcome.workflow_id, &outcome.history)
     .map_err(|error| HttpWireError(error.to_wire_error()))?;
+    // Generation boundaries for the WHOLE history, so a reader holding any
+    // window can name the run an event belongs to. Projected from
+    // `outcome.history` — the same history the summary was built from, already
+    // read in full regardless of `include_history` — so it costs no additional
+    // store read and cannot disagree with the summary. Reusing the store's own
+    // run-chain projection rather than re-scanning for `WorkflowStarted` here
+    // keeps one implementation of what a generation is.
+    described.generations = aion_store::run_chain::run_chain_from_history(&outcome.history)
+        .map_err(|error| HttpWireError(ServerError::from(error).to_wire_error()))?
+        .into_iter()
+        .map(|run| aion_core::RunGeneration {
+            seq: run.started_seq,
+            run_id: run.run_id,
+        })
+        .collect();
     Ok(Json(described))
 }
 

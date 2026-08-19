@@ -1,11 +1,40 @@
+import type { RunGeneration } from '@/types';
+
 import type { TimelineEntry } from '../types';
 import { layoutSwimlane, type SwimlaneLane } from './laneLayout';
 import type { VisibleWorkflow } from './timeLayout';
 
+/**
+ * A child lane's loaded timeline, and the generation boundaries that name the
+ * runs its events belong to.
+ *
+ * `generations` travels WITH `entries` because the two are facts about the same
+ * workflow, read by the same loader, and a reader holding one without the other
+ * cannot say which run any event is in. Threading the parent's boundaries down
+ * to a child lane would label a child's attempts with the parent's runs; making
+ * them one state makes that unrepresentable. It is empty while loading and on
+ * error — the honest answer when nothing has been read.
+ */
 export type ChildTimelineState =
-  | { status: 'loading'; entries: readonly TimelineEntry[]; isRunning: true }
-  | { status: 'error'; entries: readonly TimelineEntry[]; isRunning: false; message: string }
-  | { status: 'ready'; entries: readonly TimelineEntry[]; isRunning: boolean };
+  | {
+      status: 'loading';
+      entries: readonly TimelineEntry[];
+      generations: readonly RunGeneration[];
+      isRunning: true;
+    }
+  | {
+      status: 'error';
+      entries: readonly TimelineEntry[];
+      generations: readonly RunGeneration[];
+      isRunning: false;
+      message: string;
+    }
+  | {
+      status: 'ready';
+      entries: readonly TimelineEntry[];
+      generations: readonly RunGeneration[];
+      isRunning: boolean;
+    };
 
 export type WorkflowTreeNode = {
   path: string;

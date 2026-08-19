@@ -1,0 +1,10 @@
+measured: 2026-08-16T14:45:32Z by Waffles, on branch console-live at aion main cf4510f2e
+index.html references: assets/index-CMn6AElm.js
+bundle bytes: 1024025
+CANARY workflow=373
+workflows/list=1
+workflows/describe=3
+workflows/describe-live=0
+workflows/children=0
+workflows/history=6
+workflows/transcripts=5

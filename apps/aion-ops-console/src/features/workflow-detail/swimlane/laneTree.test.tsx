@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import type { Event, Payload, WorkflowId } from '@/types';
+import type { Event, Payload, RunGeneration, RunId, WorkflowId } from '@/types';
 
 import { projectTimeline } from '../lib/timeline';
 import {
@@ -103,6 +103,14 @@ function activityCompleted(seq: number, workflowId: string, second: number): Eve
   };
 }
 
+/** Each workflow states its OWN boundaries; the two must never be interchanged. */
+const ROOT_GENERATIONS: readonly RunGeneration[] = [
+  { seq: 0, run_id: '00000000-0000-0000-0000-00000000r001' as RunId },
+];
+const CHILD_GENERATIONS: readonly RunGeneration[] = [
+  { seq: 0, run_id: '00000000-0000-0000-0000-00000000c001' as RunId },
+];
+
 const rootEntries = projectTimeline([childStarted(1, ROOT, CHILD, 1)]);
 const childEntries = projectTimeline([
   workflowStarted(1, CHILD, 2),
@@ -119,8 +127,11 @@ const grandchildPath = childNodePath(childPath, GRANDCHILD);
 
 function readyChildren(): ReadonlyMap<string, ChildTimelineState> {
   return new Map<string, ChildTimelineState>([
-    [childPath, { status: 'ready', entries: childEntries, isRunning: false }],
-    [grandchildPath, { status: 'ready', entries: grandchildEntries, isRunning: false }],
+    [childPath, { status: 'ready', entries: childEntries, generations: [], isRunning: false }],
+    [
+      grandchildPath,
+      { status: 'ready', entries: grandchildEntries, generations: [], isRunning: false },
+    ],
   ]);
 }
 
@@ -177,7 +188,7 @@ test('timer expansion is scoped to each workflow row, including child workflows'
     timerFired(3, CHILD, 'child-retry', 6),
   ]);
   const children = new Map<string, ChildTimelineState>([
-    [childPath, { status: 'ready', entries: childWithTimers, isRunning: true }],
+    [childPath, { status: 'ready', entries: childWithTimers, generations: [], isRunning: true }],
   ]);
 
   const grouped = flattenLaneTree(
@@ -234,7 +245,10 @@ test('cycle guard catches a grandparent reference without requesting it', () => 
   expect(isWorkflowCycle(ROOT, [ROOT, CHILD])).toBe(true);
   const cyclingChildEntries = projectTimeline([childStarted(1, CHILD, ROOT, 2)]);
   const cyclingChildren = new Map<string, ChildTimelineState>([
-    [childPath, { status: 'ready', entries: cyclingChildEntries, isRunning: true }],
+    [
+      childPath,
+      { status: 'ready', entries: cyclingChildEntries, generations: [], isRunning: true },
+    ],
   ]);
   const cyclePath = childNodePath(childPath, ROOT);
   const tree = flattenLaneTree(
@@ -284,19 +298,30 @@ test('depth bar selection carries the child workflow id and child timeline', () 
     throw new Error('expected a child activity bar');
   }
 
-  const selection = selectionForBar(CHILD as WorkflowId, childEntries, activityBar.lane.bars[0], [
-    activityBar.lane.bars[0].sequence,
-  ]);
+  const selection = selectionForBar(
+    CHILD as WorkflowId,
+    childEntries,
+    CHILD_GENERATIONS,
+    activityBar.lane.bars[0],
+    [activityBar.lane.bars[0].sequence]
+  );
   expect(selection.workflowId).toBe(CHILD);
   expect(selection.timeline).toBe(childEntries);
 
   const surface = resolveSelectionSurface(
     ROOT as WorkflowId,
     rootEntries,
+    ROOT_GENERATIONS,
     selection.sequence,
     selection
   );
   expect(surface.workflowId).toBe(CHILD);
   expect(surface.timeline).toBe(childEntries);
   expect(surface.entry?.summary).toContain('charge-card');
+  // The generation boundaries follow the SCOPE, exactly as the timeline does.
+  // Handing the root's down to a child scope would label the child's attempts
+  // with runs from a different workflow's chain — the fusion the run axis
+  // exists to stop, one layer up from where it was first caught.
+  expect(surface.generations).toBe(CHILD_GENERATIONS);
+  expect(surface.generations).not.toBe(ROOT_GENERATIONS);
 });
