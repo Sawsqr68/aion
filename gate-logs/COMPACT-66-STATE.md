@@ -5576,3 +5576,46 @@ Tom's first scale image processed: 28 detected on ONE bottle — tiled detector'
 edge (grid over a close-up over-counts). Named to him honestly + it's the exact case the
 truth book exists for. NEXT BUILD: scale-display weight reading (his images are for that,
 not for counting). Also open: #84 (awl checker gap), console-overwhelm design talk.
+
+## ZU-40 — 2026-08-19T03:2xZ — ⚠️ MY JIT DIAGNOSIS WAS WRONG; #85 IS LIVE ON 0.19.2
+
+**REFUTED BY MY OWN SOAK** (the reason to soak): watcher cf164116 on aion 0.18.1 /
+beamr 0.19.2 FAILED at **seq 1013** — byte-identical error+stack to the 0.18.2 one
+(`{bad_generator, <<"3000">>}` at gleam_json_ffi:object/1 ← aion@workflow@timer
+:-sleep/1-anonymous-0-/1 ← pump:run). So the JIT native-services defect is NOT the
+mechanism. WHY I WAS WRONG (named, it's the lesson): arithmetic fit (1012 vs threshold
+1000) + stack shape matched an ALREADY-DIAGNOSED defect + a real fix had shipped in the
+pinned version — three agreeing signals, and the agreement is what stopped me measuring.
+Corrected to Tom IMMEDIATELY (I had claimed the restart was the cure) and posted the
+correction on #85 (comment 5337078814).
+**WHAT THE EVIDENCE SUPPORTS**: `<<"3000">>` is timer.duration_to_boundary's legitimate
+output (ms as String) — the ONLY arg the suspending call carries. sleep's thunk is
+`pump.run(fn(){ pump.shield(ffi.sleep(boundary)) })` and its OWN comment says a wake
+RE-EXECUTES the call instruction that invoked the suspending NIF. So: a resumed call
+instruction resolving to the WRONG TARGET, right argument to wrong callee. Beamr-owned
+(→ Artemis per estate rule). OPEN, not guessed: is JIT involved at all; import-table vs
+resume-path mis-resolution; do non-sleeping long workflows hit it. NEXT INSTRUMENT:
+minimal repro (workflow = sleep loop only) + a JIT-disabled run to settle the threshold.
+**OPERATOR IMPACT (current releases)**: any single long-lived sleeping-loop workflow dies
+~1000 events. AWL has NO continue-as-new. CURE FOR THE DEMO (in progress, must be built
++ labelled as defect-driven so it's removed when #85 closes): supervisor workflow spawns
+bounded-shift watch_inbox children (parent accrues ~4 events/child → ~250 shifts).
+
+## ZU-41 — bottle reading WORKS (Tom's real product)
+`read_bottle` activity wired to pocs/bar/stocktake.py (Tom had ALREADY built the whole
+reader — OCR, read_weight, match_product, compute_volume; my error was pointing the
+inbox at the bottle COUNTER). VERIFIED AGAINST THE IMAGE BY EYE: his scale photo reads
+OLD RIVER · BLENDED WHISKY · 700mL · 40%ALC/VOL · **1127 g** and the display genuinely
+says 1127 — EXACT. OCR read every token; only the catalogue MATCH failed (invented brand
+vs 12 real entries — expected, I warned him). Added label-declared fallback: parses
+declared_ml/declared_abv from the label (a spirits label states size+strength by law) +
+`basis` field naming what the answer rests on; remaining volume NOT computed without a
+real tare (no label states its own empty-glass weight) — reported as the honest gap, never
+an assumed tare. Deployed read_bottle.awl (f5d4f500). Worker b4s037xhc (+rapidocr
++rapidfuzz). counter.py display REBUILT: bottle records get a stocktake card (label text
+big, weight/size/strength, remaining-or-why-not) + bottles table; count records keep the
+verified/unverified view. marimo check rc=0. PAGE NOT YET RESERVED — was mid-restart when
+context ceiling hit: serve `uvx marimo run --sandbox --headless --host 127.0.0.1 --port
+2722 counter.py` from pocs/counting (kill old: lsof -ti :2721).
+TOM'S LIVE ASK: "front end to reflect that properly, really clearly" — card is built,
+needs serving + a drop to prove it.
