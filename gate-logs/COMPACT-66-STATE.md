@@ -6029,3 +6029,101 @@ own identifying token arrives where the awaited result belongs.
 - Queue: **line 19 DONE GREEN both legs**; **line 20 OPEN** (this deploy).
 - Committed: investigate-workflow `de32aa1ba` (pushed) + state commits;
   deployed-bytes branch `jit-threshold-on-0181` `96b68ecba` in wt-fix-77.
+
+---
+
+## ZU-49 — aion#85: three faces, three walls green, deploy HELD (2026-08-19 ~05:10Z)
+
+### Binaries (identify by hash, never by version string)
+| tag | sha256/16 | beamr | contains |
+|---|---|---|---|
+| `scratchpad/aion-85c5f9d` | `43b1b573a7c8103c` | 85c5f9d6 | Waiting fix (2 faces) |
+| `scratchpad/aion-633b9c2` | `14b509c16506da90` | 633b9c22 | + Yielded fix (3 faces) |
+| `~/.cargo/bin/aion` (LIVE on Tom's box) | `18f89a62…` | 0.19.2 published | mitigation only, `--jit-threshold 4294967295` |
+
+Both patch witnesses hold on both builds: one `beamr` lock entry with **no
+`source` line** (path dep), and a compile-time reference to
+`Process::take_jit_transfer` (a symbol in no published beamr). Version checked
+against `^0.19.2` **before** building — a semver-mismatched `[patch]` drops
+silently and everything still compiles.
+
+`a18bc77..633b9c2` verified at the repo, not on Waffles's relay: two commits,
+`jit/runtime.rs`, `jit/runtime_closure.rs`, `tests/jit_yield_replay_probe.rs`.
+
+### Three walls at threshold 100 on `85c5f9d` — all PASS
+| arm | status | events | compiles | pre-fix death (same rig, same day) |
+|---|---|---|---|---|
+| sleep_wall 400 | Completed | 805 | 3 | round 100 / event 206 |
+| nosleep_wall 200 | Completed | 605 | 29 | activity 20 |
+| fork_wall 200 | Completed | 405 | 22 | round 50 / event 106 |
+
+All graded **from the durable store and the per-arm server log**, never from
+the harness's own verdict line.
+
+### The three faces (Artemis's arm statement, carried verbatim)
+| outcome | fixed | proven |
+|---|---|---|
+| `Waiting` | both helpers | yes, both — calibrated red→green each |
+| `DirtyCall` | both helpers | **no arm** — symmetry, not measurement |
+| `Yielded` | both helpers | **external-call helper only**; closure helper took the identical change with **no yield arm** |
+| `Exited`-without-exception | **not fixed** | unreached by the whole corpus at the external helper with a live control; no control at all at the closure helper |
+
+**beamr#28** (separate): the runtime JIT compile path forwards
+`ModuleCompileMetadata::EMPTY`, so **no function containing `make_fun` can ever
+be JIT-compiled in a running scheduler** — refused as `UnsupportedOperand` and
+marked permanently unsupported. Every Gleam closure-minting function is
+silently excluded from the tier. Consequence for the record: `fork_wall` never
+established anything about the CallFun site, and my header comment claiming
+otherwise is corrected in the plan doc.
+
+### DEPLOY HELD — ratified by Waffles as a ruling
+Deploying a two-face repair into the workload whose most-likely face is the
+unfixed third is shipping a blind spot with a green sticker on it. Tom stays on
+the mitigation (3,000+ events, compiles=0). **Gate:** fresh build at `633b9c2`
++ three walls on THAT build + shape lab green at DEFAULT + Artemis's arm
+statement → then conditions 3 and 4 for real, Tom told before the touch.
+
+### Lab arm — Tom's shape at the DEFAULT threshold, off his machine
+`lab-watch.sh <binary> <tag>` deploys Tom's own `watch_inbox.awl` +
+`process_photo.awl` unmodified, served by `watch_worker.awl` (constant answers;
+preserves every engine edge, removes only the vision stack). Guards: server
+image **hashed**, argv checked for the **absence** of `--jit-threshold`, worker
+proven serving by a smoke run.
+
+Leg one (`85c5f9d`): crossed 1,009 — at 1,243 events, `compiles=9`, running.
+🔴 **Survival is the weak half.** A duplicated effect completes cleanly. The
+measurement is `ActivityScheduled` vs `ActivityCompleted` vs
+`ChildWorkflowStarted` at the end.
+
+Leg two is **chained** (`chain.sh`): leg one done → walls on `633b9c2` → same
+shape at default on `633b9c2`. The pairing is the measurement; a green on the
+new sha alone is an absence argument.
+
+### Five instrument bugs caught before any verdict (3 mine, 2 Artemis's)
+1. **One-second boot** — a surviving old server would answer readiness while my
+   new process died on a bound port. Would have graded the **pre-fix binary**.
+   Fixed by hashing the serving process's executable image.
+2. **`grep -c` exits 1 on zero** — `|| echo 0` appended a second line; every
+   integer test would have errored into the failure branch. A green arm
+   reported red by its own counter.
+3. **`say()` on stdout** — captured by `$(poll …)` along with the result; every
+   status parse garbage. Annotated in the results file rather than deleted, so
+   the trap stays visible.
+4. Artemis: a counter keyed on a value the callee could clobber. Two confident
+   greens at two burn depths, both false.
+5. Artemis: a red that was the **transport** (`._*` files crashing a UTF-8
+   scanner), not the code.
+
+⭐ **The instrument and the measurement must not share a wire.**
+⭐ **An unimplemented control named in a comment is worse than no control.**
+⭐ **A red can be a transport artefact as easily as a green can be an instrument
+artefact — and the red is more dangerous, because publishing it looks like
+diligence.**
+
+### Tom's other live ask — label fields (DONE, NOT DEPLOYED)
+`prototyping/thing-finder/pocs/LABEL-FIELDS-CHANGE.md`. Brand/name/volume/ABV
+as separate fields with provenance; `count_photo` now reads each detected
+bottle's label from its crop. Measured old-vs-new on 12 real photos: 17 → 35
+usable values, 9 of 12 correct brand+name. **Not redeployed on purpose** — the
+AWL contract changed, and altering Tom's live workload mid-diagnosis would
+confound the engine measurement. Lands with the engine deploy.

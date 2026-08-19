@@ -122,3 +122,104 @@ The activity arm is served by `probe_worker.awl` — a minimal `scan_inbox` retu
 constant empty list (`aion awl check` clean). The counting notebook serves the same
 contract but drags in the vision stack; this arm measures how many activity round-trips
 a workflow survives, not what the activity says.
+
+---
+
+## The REAL fix — deploy of Artemis's beamr repair (2026-08-19, ~04:40Z)
+
+The threshold knob above is a **mitigation and stays one**. This section is the
+repair, and it deploys at the **DEFAULT** threshold with the flag dropped
+entirely: running the fixed engine behind `u32::MAX` would leave the repair
+permanently untested in production, which is the same mistake as shipping a
+guard nobody audits.
+
+**Artifact:** aion 0.18.1, sha256 `43b1b573a7c8103c…`, built in
+`scratchpad/wt-fix-77` (branch `jit-threshold-on-0181`, base 67e0b8d9f = the
+release line) against beamr `fix/aion85-nested-run-suspend` @ `85c5f9d6`.
+
+**Patch witnesses — both required, because a version-mismatched `[patch]` drops
+SILENTLY and everything still compiles:**
+- **Lock:** exactly one `beamr` entry, 0.19.2, carrying **no `source` line** —
+  which is how a path dependency appears, and how a registry copy would have
+  given itself away.
+- **Loud:** a compile-time reference to `Process::take_jit_transfer`, a symbol
+  present in no published beamr. It compiled.
+- **Version checked BEFORE building** against the `^0.19.2` requirement, since
+  a mismatch is exactly the silent-drop case.
+
+`a18bc77` (the tip Waffles relayed) verified **at the repo, not on his name**:
+one commit touching `compiler_tests.rs` and the probe test only. Nothing outside
+probe/test, so the build at `85c5f9d6` carries the identical fix.
+
+### Two instrument bugs caught before they wrote a verdict
+
+Both were mine, both in the acceptance harness, both would have produced a
+confident wrong answer:
+
+1. **The one-second boot.** The first run reported "server up" 1 s after killing
+   the previous server. If the old (pre-fix) server had outlived the kill, it
+   would have answered the readiness probe identically while the new process
+   died on a bound port — grading the **pre-fix binary** and calling it the fix.
+   Now the harness asserts the launched pid is still alive, that exactly one
+   probe server exists, and that its executable image **hashes** to the fixed
+   binary, printing `pid N, image <sha16>` before any arm starts.
+   *Identify by hash, never by version string.*
+2. **`grep -c` exits 1 on zero matches**, so the `|| echo 0` fallback appended a
+   second line; every later integer test on the compile count would have errored
+   into the failure branch — **a green arm reported red by its own counter.**
+
+### Acceptance protocol
+
+Three arms, **sequentially, on a fresh server each** (they share
+`gleam_json_ffi`; run concurrently, one arm's calls push the shared module past
+the threshold and kill another early — a confirmed prediction that actually
+measured cross-talk). Threshold 100.
+
+An arm PASSES only on **Completed AND a non-zero compile witness**. Completed
+with `compiles=0` is graded **VACUOUS**, not green: it tested a JIT that never
+fired. The witness channel is proven live on this exact rig and config (6 events
+on the pre-fix probe server), so its silence would be meaningful.
+
+| arm | rounds | calibrated red today (pre-fix) |
+|---|---|---|
+| `sleep_wall` | 400 | died at 100 |
+| `nosleep_wall` | 200 | died at 20 |
+| `fork_wall` | 200 | died at 50 |
+
+Then: deploy at DEFAULT with rollback staged (`aion.jitmitigation.prev`), and
+run Tom's real `watch_inbox` past **1009** events.
+
+### 🔴 Correction to the record: what `fork_wall` does NOT show
+
+`fork_wall.awl`'s header claims the arm "plausibly drives
+`jit_dispatch_closure`". **That inference is dead**, per beamr#28: the runtime
+JIT compile path forwards `ModuleCompileMetadata::EMPTY`, whose `lambdas` table
+is empty, so **no function containing `make_fun` can ever be JIT-compiled in a
+running scheduler** — it is refused as `UnsupportedOperand` and marked
+permanently unsupported, so it never re-heats. Every Gleam closure-*minting*
+function is therefore silently excluded from the JIT tier.
+
+Consequences:
+- The compiled frame in `fork_wall` is some **other** function. The arm never
+  established anything about the CallFun site. The threshold-scaling evidence
+  for "something compiled" stands; the attribution never existed.
+- The nearest cause is a green from a door the tests don't use: beamr's unit
+  tests call `compile_module_function` with a real lambda table and pass;
+  production calls `compile`, which passes `EMPTY`. **The suite reports the
+  passing door as coverage of the failing one.**
+- Silver lining for the deploy record: `jit_dispatch_closure` is reachable only
+  by a compiled function calling a closure it **received**, never one it mints.
+  That bounds the exposure by mechanism rather than by hope.
+
+Artemis subsequently **proved** the closure site with a reworked arm (driver
+mints, `outer/2` receives, no `make_fun` in the compiled function), calibrated
+red first against unfixed code. Both nested-run sites are now proven at the unit
+level. Still owed and named: `DirtyCall` fixed-but-unproven; `Yielded` and
+`Exited`-without-exception as untouched hypotheses.
+
+### The honest sentence
+
+A green here means **"the workload survives with compilation occurring"** — not
+"both sites are fixed". Artemis's probe proves the mechanism in two constructed
+functions; these arms prove a real workload survives. Those are different claims
+and the deployment record keeps them apart.
