@@ -71,6 +71,26 @@ this table comes from a run that shared a cargo lock with another.
 Worth naming because the check that misled me was a *race*, not a wrong answer:
 `launched, therefore the artifact exists` is only true after the write.
 
+## Re-gate at the tip
+
+The table above ran at `a1d91f4cb`. The branch then took four more commits.
+Three are markdown; one is a doc-comment fix in
+`crates/aion-store/src/namespace.rs` — a `.rs` file, and a doc comment reaches
+the build through intra-doc links and `missing_docs`. **"Docs-only" is a claim
+about the build graph, not about file extensions**, so the whole gate ran again
+rather than being reasoned about:
+
+| Leg | Result |
+|---|---|
+| `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** |
+| `cargo clippy -p aion-server -p aion-store -p aion-rs -p aion-mcp --all-targets -- -D warnings` | **exit 0** |
+| `cargo test -p aion-store --lib` | **74 passed, 0 failed** |
+| `cargo doc -p aion-store --no-deps` | **exit 0** — the leg that exists specifically for the comment that was edited |
+
+Commits added after this re-gate are `.md` files under `gate-logs/` and
+`docs/design/` only — no `.rs`, no manifest, no build script — which is a
+verdict against those commits' own inputs, not against their extensions.
+
 ## Status
 
 **Not merged to main.** Main is where the release line cuts from, and this branch
