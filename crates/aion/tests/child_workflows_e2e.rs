@@ -495,12 +495,15 @@ async fn signal_between_spawns_preserves_child_identities_across_restart() -> Te
 }
 
 /// aion#77: THE CHILD WEARS ITS PARENT. A spawned child's own
-/// `WorkflowStarted` must record the parent's workflow id and the parent's
-/// current run id, and the summary projected from the child's own history
-/// must name the parent — so a handoff chain is traversable backward from
-/// any run and the console can group an arc without scanning every parent
-/// history. Before the fix this recorded `parent_workflow_id: None` /
-/// `parent_run_id: None` (live exhibit 2026-08-18, `handoff_b` showing
+/// `WorkflowStarted` must record the parent's workflow id — and ONLY that:
+/// `parent_run_id` is the continue-as-new predecessor link, whose single
+/// meaning the store's run-chain root rule depends on (overloading it with
+/// the spawn parent left a child's chain rootless — caught by
+/// `namespace_restart` in the 0.18.1 landing flush). The summary projected
+/// from the child's own history must name the parent, so a handoff chain is
+/// traversable backward from any run and the console can group an arc
+/// without scanning every parent history. Before the fix the start recorded
+/// `parent_workflow_id: None` (live exhibit 2026-08-18, `handoff_b` showing
 /// `parent: None`), which is exactly the assertion below red.
 #[tokio::test]
 async fn spawned_child_records_its_parent_and_the_summary_names_it() -> TestResult {
@@ -546,9 +549,9 @@ async fn spawned_child_records_its_parent_and_the_summary_names_it() -> TestResu
         "the child's own start must wear the parent workflow id: {child_history:#?}"
     );
     assert_eq!(
-        child_start.1.as_ref(),
-        Some(handle.run_id()),
-        "the child's own start must wear the parent's current run id"
+        child_start.1, None,
+        "parent_run_id is the continue-as-new predecessor link and must stay \
+         None on spawn — the run-chain root rule depends on its single meaning"
     );
 
     let summary = aion_core::WorkflowSummary::from_history(&child_history)

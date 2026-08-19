@@ -5,17 +5,55 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
+## 0.18.1 — 2026-08-19
+
+- **The beamr >=0.19.2 floor lands across the workspace** (closes #70, the
+  migration that closes #64 for real), proven at the resolved lock by the
+  landing gate's lock-witness leg.
+- **haematite `^0.8.3` -> `^0.9`.** The 0.18.0 pin was deliberate emergency
+  isolation (see below); the beamr floor forces the pair — haematite 0.8.x
+  pins beamr ^0.18. Fresh resolutions from the index take haematite 0.9.1.
+- **Spawned children record their parent** (closes #77):
+  `Event::WorkflowStarted` carries `parent_workflow_id` (serde-defaulted, old
+  histories decode unchanged), the spawn path threads the parent's workflow
+  and run ids, and `WorkflowSummary` projects the parent from history —
+  handoff chains read backward as well as forward.
+- The embedded AWL SDK closure was re-harvested on the landing venue and its
+  checksum pins moved with it; the freshness oracle's venue-dependence (BEAM
+  bytes follow the host toolchain) is tracked as #78.
+
+## 0.18.0 — 2026-08-19
+
+- **Upgrade adoption for pre-budget stores** (closes #75): a haematite store
+  written before `node_cache_budget` existed now adopts the caller's ruling
+  on open instead of refusing to boot. A present ruling wins untouched;
+  corrupt configs are refused with a typed error naming the path. An upgrade
+  must never present as data loss.
+- haematite pinned at `^0.8.3` — deliberate emergency isolation for the
+  same-night ship, superseded by 0.18.1's `^0.9`.
 - **Haematite is Aion's durable store.** The libsql backend, the
   `libsql-backend` and `haematite-backend` cargo features, and the
-  `aion-store-libsql` crate are retired; the next cut publishes 19 crates, not
-  20. Configurations that name `backend = "libsql"`, `store.url`,
-  `AION_STORE_BACKEND=libsql`, `AION_STORE_URL`, or `--store-url` are refused at
+  `aion-store-libsql` crate are retired; the cut ships without the
+  `aion-store-libsql` crate. Configurations that name `backend = "libsql"`,
+  `store.url`, `AION_STORE_BACKEND=libsql`, `AION_STORE_URL`, or
+  `--store-url` are refused at
   startup with the haematite remedy — named, never ignored, never silently
   migrated. This build does not read libsql database files. **0.17.0 is the last
   release that can read them**: if you ran libsql on any release up to and
   including 0.17.0, keep a 0.17.0 binary to reach that data before upgrading.
   This subtraction closes the retired backend's #85 and #229 defect surfaces; it
   does not claim to fix the separate haematite memory defect tracked in #32.
+- First release of the whole 21-crate graph published and checksum-verified
+  at the index. The 0.16.0/0.17.0 tagged-never-published drift is #76; the
+  ceremony now gates the tag on publish-and-verify-at-index.
+
+## 0.17.0 — 2026-08-17
+
+- Recovery adoption (#246), retryable occupancy (#33), recovery ordering
+  (#266), the death-note breadcrumb, and the aion-authoring skill —
+  43 commits since v0.16.0.
+- **Tagged but never published to the index** (#76). Superseded by 0.18.0,
+  the first cut published under the tag-gated-on-index ceremony.
 
 ## 0.16.0 — 2026-08-16
 

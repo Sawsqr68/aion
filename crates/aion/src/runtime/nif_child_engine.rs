@@ -182,13 +182,6 @@ impl ChildNifBridge {
         // its CURRENT run id (the latest recorded start in the history this
         // spawn already reads) travel into the child's own WorkflowStarted,
         // so a handoff chain is traversable backward from any run.
-        let parent_run_id = parent_history.iter().rev().find_map(|event| {
-            if let aion_core::Event::WorkflowStarted { run_id, .. } = event {
-                Some(run_id.clone())
-            } else {
-                None
-            }
-        });
         let loaded_version =
             crate::loader::parse_package_version(&request.workflow_type, &request.package_version)?;
         start_workflow_with_options(
@@ -216,7 +209,10 @@ impl ChildNifBridge {
                 loaded_version: Some(loaded_version),
                 search_attributes: inherited,
                 namespace: Some(parent_namespace.to_owned()),
-                parent_run_id,
+                // The spawn parent is carried by `parent_workflow_id` ALONE.
+                // `parent_run_id` is the continue-as-new predecessor link and
+                // stays None on spawn — the store's run-chain root rule
+                // (aion-store run_chain.rs) depends on that single meaning.
                 parent_workflow_id: Some(request.parent_workflow_id.clone()),
                 ..StartWorkflowOptions::default()
             },
