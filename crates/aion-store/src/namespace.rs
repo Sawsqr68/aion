@@ -133,9 +133,24 @@ pub struct NamespaceConfig {
 ///
 /// `nodes` are **free-form node labels** matched against a worker's advertised
 /// `node` (a locality, not a process). [`BTreeSet`] gives deterministic ordering
-/// so the encoded form is stable. This slice (P2-P1) is **storage only** —
-/// nothing reads `Prefer`/`Pinned` yet; the dispatch-time two-tier spill (P2-P3)
-/// and admission gate (P2-I1) consult them in later slices.
+/// so the encoded form is stable.
+///
+/// This directive is **enforced, not merely recorded**, and it is enforced in
+/// two places that must be read together:
+///
+/// * **At registration** (P2-I1) — `enforce_pinned_placement` in the worker
+///   registry rejects the WHOLE registration of a worker whose advertised
+///   `node` is absent from a `Pinned` namespace's label set. So a hard-pinned
+///   namespace's pool cannot contain an inadmissible worker in the first place.
+/// * **At dispatch** (P2-P3) — `worker_selection_for` resolves `Pinned` to a
+///   required label set (stall until an admissible worker is live: isolation
+///   over availability) and everything else to preference tiers with a spill to
+///   any live worker.
+///
+/// Stating it here because the enforcement lives in `aion-server` while the
+/// type lives in `aion-store`: a reader of this file alone would otherwise have
+/// to guess whether the field means anything, and for one slice of its life it
+/// genuinely did not.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum NamespacePlacement {
     /// No placement directive — the namespace's records scatter across shards
