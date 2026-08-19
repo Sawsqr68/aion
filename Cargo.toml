@@ -84,11 +84,11 @@ fs4 = "1.1"
 notify = "8.2"
 saffron = { version = "0.1", features = ["std"] }
 hostname = "0.4"
-# 0.19.2 is the estate-wide runtime floor. Keep the direct runtime and every
+# 0.19.3 is the estate-wide runtime floor. Keep the direct runtime and every
 # storage/messaging wrapper on releases whose beamr requirements can unify at
 # that floor; older 0.x requirements are disjoint and would retain unsafe
 # runtimes in the resolved graph.
-beamr = { version = "0.19.2", features = ["json", "encode"] }
+beamr = { version = "0.19.3", features = ["json", "encode"] }
 haematite = "0.9.0"
 # The crates.io 0.7.0 SDK manifest still selects liminal-rs 0.5.5 (and therefore
 # beamr 0.16.3). Pin the complete liminal family to its immutable 0.9.0 release
