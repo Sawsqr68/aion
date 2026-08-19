@@ -62,6 +62,7 @@ import type {
   StartWorkflowParams,
   UpdateStatusResponse,
   WhoAmIResponse,
+  WorkflowHead,
   WorkflowPageRequest,
 } from './client-types';
 import { requestHistoryWindow, requestWorkflowEvent } from './workflow-history-client';
@@ -92,6 +93,7 @@ export type {
   RequestOptions,
   StartWorkflowParams,
   UpdateStatusResponse,
+  WorkflowHead,
   WorkflowPageRequest,
 } from './client-types';
 export type { HistoryWindow, HistoryWindowRequest } from './workflow-history-contract';
@@ -141,26 +143,24 @@ export class ApiClient {
   }
 
   /**
-   * Fetch ONE workflow's server-projected summary (`POST /workflows/describe`
-   * with `include_history: false`).
+   * Fetch ONE workflow's HEAD (`POST /workflows/describe` with
+   * `include_history: false`): the whole-history facts, without the history.
    *
-   * The summary is projected from the run's FULL recorded history server-side,
-   * so it is the authority for fields a client-side fold over a loaded history
-   * WINDOW cannot establish — notably `display_name` (#211), whose start-time
-   * naming event sits at the head of history and can therefore fall outside the
-   * detail view's tail window. History is deliberately excluded from the
-   * response: the detail view already loads history through the windowed
-   * endpoint, and asking for it twice would ship the whole run over the wire to
-   * read one field.
+   * Both members are projected server-side from the run's FULL recorded
+   * history, so both answer questions a client-side fold over a loaded history
+   * WINDOW cannot — and both questions are the same question. `display_name`
+   * (#211) is recorded by a start-time naming event at the head of history, and
+   * a generation boundary is a `WorkflowStarted`, likewise at the head of the
+   * run it opens; a tail window reaches neither. History is deliberately
+   * excluded from the response: the detail view already loads it through the
+   * windowed endpoint, and asking for it twice would ship the whole run over
+   * the wire to read two fields.
    *
-   * `null` is the honest answer for an unknown workflow, not an error; an
-   * authorization failure or malformed response propagates as an
+   * A `null` summary is the honest answer for an unknown workflow, not an
+   * error; an authorization failure or malformed response propagates as an
    * {@link ApiError}.
    */
-  async getWorkflowHead(
-    workflowId: WorkflowId,
-    options: RequestOptions
-  ): Promise<WorkflowHead> {
+  async getWorkflowHead(workflowId: WorkflowId, options: RequestOptions): Promise<WorkflowHead> {
     const response = await this.transport.request<unknown>(
       AW_REST_CONTRACT.endpoints.history,
       AW_REST_CONTRACT.methods.history,

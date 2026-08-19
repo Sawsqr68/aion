@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
-import type { WorkflowId } from '@/types';
+import type { RunGeneration, WorkflowId } from '@/types';
 
 import type { TimelineEntry } from '../types';
 import { ChildTimelineLoader } from './ChildTimelineLoader';
@@ -28,11 +28,18 @@ import { useVirtualizedLaneRows } from './useVirtualizedLaneRows';
 
 export const LANE_LABEL_WIDTH = 168;
 const NO_EXPANDED_CHILDREN: readonly string[] = [];
+const NO_GENERATIONS: readonly RunGeneration[] = [];
 
 export type SwimlaneSelection = {
   workflowId: WorkflowId;
   sequence: number;
   timeline: readonly TimelineEntry[];
+  /**
+   * The generation boundaries of THIS selection's workflow — the root's for a
+   * root bar, the child's own for a depth-N bar. Carried with the timeline so a
+   * consumer scoped to a child never labels its attempts with the root's runs.
+   */
+  generations: readonly RunGeneration[];
   clusterSequences: readonly number[];
 };
 
@@ -40,15 +47,18 @@ export type SwimlaneSelection = {
 export function selectionForBar(
   workflowId: WorkflowId,
   timeline: readonly TimelineEntry[],
+  generations: readonly RunGeneration[],
   bar: SwimlaneBar,
   clusterSequences: readonly number[]
 ): SwimlaneSelection {
-  return { workflowId, sequence: bar.sequence, timeline, clusterSequences };
+  return { workflowId, sequence: bar.sequence, timeline, generations, clusterSequences };
 }
 
 export type SwimlaneProps = {
   workflowId: WorkflowId;
   entries: readonly TimelineEntry[];
+  /** The ROOT workflow's generation boundaries; child lanes carry their own. */
+  generations?: readonly RunGeneration[];
   isRunning: boolean;
   selectedSequence: number | null;
   selectedWorkflowId?: WorkflowId | null;
@@ -79,6 +89,7 @@ type LaneRowHandlers = {
 function Swimlane({
   workflowId,
   entries,
+  generations = NO_GENERATIONS,
   isRunning,
   selectedSequence,
   selectedWorkflowId = workflowId,
@@ -169,6 +180,25 @@ function Swimlane({
     }
     return timelines;
   }, [childTimelines, entries, tree.rows, workflowId]);
+  // The boundaries for each lane path, resolved exactly like its timeline: the
+  // root path answers the root's, an expanded child path answers the ones its
+  // own loader read. A path with no loaded child state answers empty rather
+  // than falling back to the root's, which would be another workflow's runs.
+  const generationsByPath = useMemo(() => {
+    const byPath = new Map<string, readonly RunGeneration[]>();
+    for (const row of tree.rows) {
+      if (byPath.has(row.path)) {
+        continue;
+      }
+      byPath.set(
+        row.path,
+        row.path === workflowId
+          ? generations
+          : (childTimelines.get(row.path)?.generations ?? NO_GENERATIONS)
+      );
+    }
+    return byPath;
+  }, [childTimelines, generations, tree.rows, workflowId]);
   const fullEntriesByPath = useMemo(() => {
     const entriesByPath = new Map<string, ReadonlyMap<string, TimelineEntry>>();
     if (cuts === null) {
@@ -261,12 +291,20 @@ function Swimlane({
         continue;
       }
       const timeline = timelinesByPath.get(row.path) ?? [];
+      const pathGenerations = generationsByPath.get(row.path) ?? NO_GENERATIONS;
       const childId = row.lane.childWorkflowId;
       handlers.set(row.id, {
         onSelect: (bar, originX, clusterSequences) =>
-          onSelect(selectionForBar(row.workflowId as WorkflowId, timeline, bar, clusterSequences), {
-            x: originX,
-          }),
+          onSelect(
+            selectionForBar(
+              row.workflowId as WorkflowId,
+              timeline,
+              pathGenerations,
+              bar,
+              clusterSequences
+            ),
+            { x: originX }
+          ),
         onToggle: () => toggleRow(row.id),
         onToggleChild: childId === null ? null : () => toggleChild(row.path, childId),
         onToggleTimerGroup:
@@ -274,7 +312,15 @@ function Swimlane({
       });
     }
     return handlers;
-  }, [onSelect, timelinesByPath, toggleChild, toggleRow, toggleTimerGroup, tree.rows]);
+  }, [
+    generationsByPath,
+    onSelect,
+    timelinesByPath,
+    toggleChild,
+    toggleRow,
+    toggleTimerGroup,
+    tree.rows,
+  ]);
   const { rowScrollRef, rowVirtualizer } = useVirtualizedLaneRows(
     tree.rows,
     selectedWorkflowId,

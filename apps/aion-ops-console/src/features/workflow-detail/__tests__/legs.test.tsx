@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { ChildLeg } from '@/lib/api';
-import type { ActivityId, Namespace, RunId, WorkflowId } from '@/types';
+import type { ActivityId, Namespace, RunGeneration, RunId, WorkflowId } from '@/types';
 
 import { type LiveLegReaders, LiveLegsSection } from '../components/LegsSection';
 
@@ -17,6 +17,9 @@ const startedLeg: ChildLeg = {
   currentAttempt: 2,
 };
 
+/** The leg's OWN generation boundary, as the server states it for its history. */
+const legGenerations: readonly RunGeneration[] = [{ seq: 0, run_id: startedLeg.runId as RunId }];
+
 const emptyLive = {
   events: [],
   isTerminal: false,
@@ -29,6 +32,7 @@ test('shipped leg container renders an explicit history error instead of a false
   const readers: LiveLegReaders = {
     useHistory: () => ({ data: [], error: new Error('history unavailable'), state: 'error' }),
     useLiveEvents: () => emptyLive,
+    useGenerations: () => legGenerations,
   };
 
   const markup = renderToStaticMarkup(
@@ -44,6 +48,7 @@ test('shipped leg container keeps loading distinct from a recorded empty transcr
   const readers: LiveLegReaders = {
     useHistory: () => ({ data: [], error: null, state: 'loading' }),
     useLiveEvents: () => emptyLive,
+    useGenerations: () => legGenerations,
   };
 
   const markup = renderToStaticMarkup(

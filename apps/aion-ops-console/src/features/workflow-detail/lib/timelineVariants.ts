@@ -52,9 +52,10 @@ export function assertAllVariantsHandled(variant: never): never {
 
 /**
  * Maps a known event type to its family + sub-kind. The exhaustive `switch`
- * over `KnownEventType` is the build guard: every one of the 29 generated
- * variants must appear, or `assertAllVariantsHandled` receives a non-`never`
- * value and `tsc` fails. Returns `null` for a type that is NOT in the known set
+ * over `KnownEventType` is the build guard: every generated variant must
+ * appear, or `assertAllVariantsHandled` receives a non-`never` value and `tsc`
+ * fails. (The count is not stated here — it was "29" while the union held 33,
+ * which is what a second copy of a generated fact always becomes.) Returns `null` for a type that is NOT in the known set
  * (a future-unknown variant decoded at runtime), letting the caller render a
  * safe generic row without throwing.
  */
@@ -83,6 +84,7 @@ export function classifyKnownEvent(eventType: string): KnownVariantDescriptor | 
     case 'ActivityCompleted':
     case 'ActivityFailed':
     case 'ActivityAdvisoryExhausted':
+    case 'ActivityAdoptionOffered':
     case 'ActivityCancelled':
       return { family: 'activity', subKind };
     case 'TimerStarted':
@@ -179,7 +181,7 @@ export function humanizeEventType(eventType: string): string {
 }
 
 /** The full closed set, as a runtime value for membership checks + tests. */
-export const KNOWN_EVENT_TYPES: readonly KnownEventType[] = [
+export const KNOWN_EVENT_TYPES = [
   'WorkflowStarted',
   'WorkflowCompleted',
   'WorkflowFailed',
@@ -195,6 +197,7 @@ export const KNOWN_EVENT_TYPES: readonly KnownEventType[] = [
   'ActivityCompleted',
   'ActivityFailed',
   'ActivityAdvisoryExhausted',
+  'ActivityAdoptionOffered',
   'ActivityCancelled',
   'TimerStarted',
   'TimerFired',
@@ -212,7 +215,7 @@ export const KNOWN_EVENT_TYPES: readonly KnownEventType[] = [
   'ScheduleResumed',
   'ScheduleDeleted',
   'ScheduleTriggered',
-];
+] as const satisfies readonly KnownEventType[];
 
 const KNOWN_EVENT_TYPE_SET = new Set<string>(KNOWN_EVENT_TYPES);
 
@@ -226,6 +229,14 @@ function isKnownEventType(eventType: string): eventType is KnownEventType {
  * stops being `never`, the conditional below resolves to `false`, and the `true`
  * literal assignment fails `tsc` — so the value-level list cannot silently drift
  * from the type-level guard.
+ *
+ * 🔴 THE LIST MUST BE `as const`. It was previously annotated
+ * `: readonly KnownEventType[]`, which widened `(typeof KNOWN_EVENT_TYPES)[number]`
+ * straight back to `KnownEventType` — making `MissingFromList` unconditionally
+ * `never` and this whole proof VACUOUS. It duly passed while the list was
+ * missing `ActivityAdoptionOffered`, and a runtime test caught the drift
+ * instead. A guard that cannot fail reads exactly like a guard that keeps
+ * passing; the annotation is what took its teeth out, so it stays off.
  */
 type MissingFromList = Exclude<KnownEventType, (typeof KNOWN_EVENT_TYPES)[number]>;
 type ExtraInList = Exclude<(typeof KNOWN_EVENT_TYPES)[number], KnownEventType>;

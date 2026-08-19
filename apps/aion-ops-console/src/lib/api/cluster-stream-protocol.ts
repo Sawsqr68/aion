@@ -85,6 +85,20 @@ const CLUSTER_EVENT_VALIDATORS = {
   WorkerDeploymentDesiredStateChanged: (event) =>
     hasStringFields(event, ['name']) && isDesiredState(event.desired_state),
   WorkerDeploymentDeleted: (event) => hasStringFields(event, ['name']),
+  DispatchParked: (event) =>
+    hasStringFields(event, [
+      'namespace',
+      'task_queue',
+      'activity_type',
+      'reason',
+      'policy',
+      'workflow_id',
+    ]) &&
+    isNullableString(event.node) &&
+    isSafeUnsignedInteger(event.activity_id) &&
+    isSafeUnsignedInteger(event.waited_ms) &&
+    isSafeUnsignedInteger(event.workers_in_pool) &&
+    isSafeUnsignedInteger(event.workers_serving_activity),
 } satisfies { [Type in ClusterEvent['type']]: ClusterEventValidator };
 
 type ClusterEventType = keyof typeof CLUSTER_EVENT_VALIDATORS;

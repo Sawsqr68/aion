@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import type { Event } from '@/types';
+import type { Event, RunGeneration, RunId } from '@/types';
 
 import { projectTimeline } from '../lib/timeline';
 import { layoutSwimlane } from './laneLayout';
@@ -9,6 +9,10 @@ import { prefixUpTo } from './scrub';
 import { resolveSelectionSurface } from './selectionSurface';
 
 const WORKFLOW_ID = 'workflow-1';
+/** The workflow's single generation; this suite never crosses a chain boundary. */
+const GENERATIONS: readonly RunGeneration[] = [
+  { seq: 0, run_id: '00000000-0000-0000-0000-000000000w01' as RunId },
+];
 
 function envelope(seq: number) {
   return {
@@ -72,11 +76,17 @@ test('every grouped timer bar keeps its individual sequence selection and URL ro
   }
 
   for (const bar of timerLane.bars) {
-    const selection = selectionForBar(WORKFLOW_ID, entries, bar, [bar.sequence]);
+    const selection = selectionForBar(WORKFLOW_ID, entries, GENERATIONS, bar, [bar.sequence]);
     const params = new URLSearchParams();
     params.set('seq', String(selection.sequence));
     const restoredSequence = Number(params.get('seq'));
-    const surface = resolveSelectionSurface(WORKFLOW_ID, entries, restoredSequence, selection);
+    const surface = resolveSelectionSurface(
+      WORKFLOW_ID,
+      entries,
+      GENERATIONS,
+      restoredSequence,
+      selection
+    );
 
     expect(restoredSequence).toBe(bar.sequence);
     expect(surface.entry?.id).toBe(bar.entry.id);

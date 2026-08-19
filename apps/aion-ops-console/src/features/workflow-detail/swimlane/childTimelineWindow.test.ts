@@ -8,7 +8,12 @@ import {
 } from './childTimelineWindow';
 import type { ChildTimelineState } from './laneTree';
 
-const READY: ChildTimelineState = { status: 'ready', entries: [], isRunning: false };
+const READY: ChildTimelineState = {
+  status: 'ready',
+  entries: [],
+  generations: [],
+  isRunning: false,
+};
 
 test('child timeline retention keeps visible paths and only the newest inactive window', () => {
   const visiblePath = 'root>visible';

@@ -28,6 +28,7 @@ export type {
   Payload,
   PayloadElision,
   ProgressDetail,
+  RunGeneration,
   RunId,
   StopKind,
   TimerCancelCause,

@@ -2,10 +2,19 @@ import type { ReactNode } from 'react';
 
 import type { ChildLeg } from '@/lib/api';
 import { shortWorkflowId } from '@/lib/workflowIdentity';
-import type { ActivityId, Event, Namespace, RunId, WorkflowId, WorkflowStatus } from '@/types';
+import type {
+  ActivityId,
+  Event,
+  Namespace,
+  RunGeneration,
+  RunId,
+  WorkflowId,
+  WorkflowStatus,
+} from '@/types';
 
 import { TranscriptPanel } from '../../transcript/components/TranscriptPanel';
 import { type LiveWorkflowEvents, useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
+import { useWorkflowHead } from '../hooks/useWorkflowHead';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { type AttemptNavigatorRow, deriveAttemptNavigator } from '../lib/attemptNavigator';
 import type { LifecycleOutcome } from '../types';
@@ -101,6 +110,16 @@ export type LiveLegReaders = {
     history: readonly Event[];
     workflowId: WorkflowId;
   }): LiveWorkflowEvents;
+  /**
+   * The LEG's own generation boundaries, server-stated over its whole history.
+   *
+   * A leg is a child workflow with a history of its own, so its boundaries must
+   * be read for ITS workflow id — the parent's would name the parent's runs and
+   * the leg's attempts would then be filtered against identities they can never
+   * carry. Absent/loading answers an empty list, which yields no rows rather
+   * than rows attributed to a guessed run.
+   */
+  useGenerations(options: { enabled: boolean; workflowId: WorkflowId }): readonly RunGeneration[];
 };
 
 const defaultReaders: LiveLegReaders = {
@@ -114,6 +133,8 @@ const defaultReaders: LiveLegReaders = {
     return { data: history.data ?? [], error: history.error, state };
   },
   useLiveEvents: useLiveWorkflowEvents,
+  useGenerations: ({ enabled, workflowId }) =>
+    useWorkflowHead({ enabled, workflowId }).data?.generations ?? [],
 };
 
 /** Live container: discovery is REST once; histories and transcripts are socket-first. */
@@ -161,7 +182,13 @@ function LiveLeg({
     history: history.data,
     workflowId: leg.workflowId,
   });
-  const rows = deriveAttemptNavigator(live.timeline).filter((row) => row.runId === leg.runId);
+  const generations = readers.useGenerations({
+    enabled: leg.runId !== null,
+    workflowId: leg.workflowId,
+  });
+  const rows = deriveAttemptNavigator(live.timeline, generations).filter(
+    (row) => row.runId === leg.runId
+  );
   const { attempts, invalidActivityId } = attemptsFromRows(rows);
   const current = attempts.findLast((attempt) => attempt.state === 'current');
   const fallback =

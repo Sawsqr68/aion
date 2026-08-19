@@ -69,11 +69,7 @@ export type AttemptNavigatorRow = {
  * leads the identity: two generations of a chain otherwise produce the same
  * string for two different attempts.
  */
-export function attemptRowKey(
-  runId: RunId,
-  activityId: string | number,
-  attempt: number
-): string {
+export function attemptRowKey(runId: RunId, activityId: string | number, attempt: number): string {
   return `${runId}:${activityId}:${attempt}`;
 }
 
@@ -172,10 +168,7 @@ export function deriveAttemptNavigator(
  * run chain whose slices do not begin with `WorkflowStarted`, so a list that
  * failed to cover its own events never reaches us.
  */
-function generationAt(
-  generations: readonly RunGeneration[],
-  seq: number
-): RunId | undefined {
+function generationAt(generations: readonly RunGeneration[], seq: number): RunId | undefined {
   let resolved = generations[0]?.run_id;
   for (const generation of generations) {
     if (generation.seq > seq) {
