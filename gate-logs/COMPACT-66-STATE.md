@@ -5938,3 +5938,94 @@ what they need, and said that if the **publish ordering** (beamr must not hit th
 before Athena's wave and Hermes's liminal-rs 0.6.1, both certified against 0.19.2) is
 what stands between Tom and a fixed engine, I'll put it to Waffles as a sequencing
 DECISION rather than let it sit as a background constraint.
+
+## ZU-48 — 2026-08-19T04:3xZ — 🔴 RESUME HERE: Artemis's #85 FIX IS BUILDING FOR TOM'S BOX
+
+### IMMEDIATE STATE — what is in flight RIGHT NOW
+**Release build of the FIXED engine is running** (task bj9q8jb74, detached cargo, log
+`scratchpad/relbuild-fix.log`) in worktree
+`scratchpad/wt-fix-77` (branch `jit-threshold-on-0181`, base 67e0b8d9f = v0.18.1).
+On completion: verify artifact → deploy → acceptance. FULL PLAN in
+`gate-logs/aion-85-mitigation-deploy-plan.md`. Authority = **queue line 20**.
+
+### THE FIX (Artemis's, consumed BY PATH — nothing touches crates.io)
+```
+repo   ablative-io/beamr   branch fix/aion85-nested-run-suspend
+rev    85c5f9d6bb0eee700efc9d04549eee966fa0e90d
+local  /Users/tom/Developer/ablative/beamr-aion85  (cloned, checked out at rev)
+```
+Touches `interpreter/opcodes/core.rs`, `jit/runtime.rs`, **`jit/runtime_closure.rs`**,
+`process/mod.rs`, + an 876-line probe. Crate version **0.19.2**, matching `^0.19.2` —
+checked BEFORE building because a mismatch is the silent-drop case.
+**Waffles ruled 04:23Z**: line 18's publish gate is INDEX ORDERING only (Athena's wave +
+Hermes's liminal-rs 0.6.1 certify against published 0.19.2); a path-patched local build
+cannot touch it. Publish gate stands; build proceeds. **This is DEPLOYMENT, not the
+fix's ship-claim** — Artemis's own program (closure arm, battery, ceremony, semver)
+runs to completion regardless.
+
+### BOTH PATCH WITNESSES PASSED (do not skip these on any rebuild)
+1. **Lock**: beamr entry has **NO `source` line** (= path dep) and is the ONLY beamr
+   entry. Script: `gate-logs/verify-beamr-patch.sh <tree>`.
+   ⚠️ That script's first version printed only the FIRST of three lock entries and lied
+   to me (showed 0.16.3); fixed to print all + defer to `cargo tree`.
+2. **Loud**: `crates/aion/src/runtime/patch_witness.rs` (wired in `runtime/mod.rs`)
+   references `beamr::process::Process::take_jit_transfer`, public ONLY in this rev.
+   `cargo check --tests -p aion-rs` → `Compiling beamr v0.19.2 (/Users/tom/.../beamr-aion85/crates/beamr)`, clean.
+   🔴 **REMOVE patch_witness.rs + the `[patch]` block when the fix ships published.**
+
+### 🔴 THE THREE ARMS — ALL CALIBRATED RED, they are the acceptance instrument
+Files in `scratchpad/probe100/`. Probe server: `aion server --config
+<probe100>/probe-config.toml --jit-threshold 100`, store `/Users/tom/.aion/probe100/data`.
+| arm | construct | token delivered | calls/round | death @ thr 100 | death @ default 1000 |
+|---|---|---|---|---|---|
+| sleep_wall | step-level `sleep` | `<<"3000">>` (duration ms) | 1 | **exactly 100** | ~1003 |
+| nosleep_wall | step-level activity | `<<"activity:200">>` (correlation id) | 5 | **exactly 20** | exactly 200 |
+| **fork_wall** (NEW, closure-shaped) | `fork`/`join` over children | **the child_workflow_id** — CONFIRMED against `ChildWorkflowStarted` in the parent's own history | 2 | **exactly 50** | — |
+**ALL THREE land in `gleam_json_ffi:object/1` line 63's comprehension.** Three
+structurally different waits, three different tokens, one destination — the suspension's
+own identifying token arrives where the awaited result belongs.
+
+### ACCEPTANCE (Waffles's 4 conditions + my 3rd leg) — run in THIS order
+1. `--jit-threshold 100`: sleep_wall 400 rounds, nosleep_wall 200, fork_wall 200 —
+   **ALL must COMPLETE *and* the compile witness must be NON-ZERO**
+   (`grep -c cranelift_jit::backend <server log>`). Completion alone is satisfiable by
+   an arm that never compiled — that trap ate sleep_wall run 1.
+   🔴 **RUN ARMS SEQUENTIALLY ON A FRESH SERVER EACH** — they share `gleam_json_ffi`;
+   concurrent arms cross-contaminate the counter.
+2. Deploy to Tom's box **at the DEFAULT threshold** (drop `--jit-threshold` entirely).
+   Leaving u32::MAX would be a workaround wearing a fix's clothes; Tom explicitly ruled
+   that out ("I don't want us to plan for any long-term workarounds. Let's get it fixed
+   now."). Rollback levers, both staged: `~/.cargo/bin/aion.0181.prev` (sha256 81c86913)
+   and re-adding the threshold flag.
+3. **`watch_inbox` at the DEFAULT threshold past 1009 events** — the leg that actually
+   discharges Tom's ask. Both walls are synthetic; the thing that died 4× tonight is his
+   real pipeline with a real worker, forked children and a join. A soak must run in the
+   world the death happened in.
+
+### ARTEMIS'S HANDOFF STATUS — carry VERBATIM, do not round up
+- **CallExt site PROVEN fixed**: 4 green arms; `outer/1` and `inner/1` both positively
+  witnessed in the JitCache; 2 compile successes; 1 park, 0 native re-invocations,
+  publish accepted against the first call id, exit Normal carrying the awaited value —
+  identical to the interpreted control. Two of those arms were RED before the fix.
+- **Closure site: symmetric code, NOT WITNESSED.** Their closure arm failed its own
+  witness assertion — `outer/1` never entered the cache (submissions 1, **unsupported
+  1**: the tier permanently REFUSES their closure-shaped outer — admissibility, not
+  heat). **Deploys named-unproven.** ⇒ My `fork_wall` IS admissible (it died, and death
+  requires compilation given the threshold scaling) — it may supply the witness their
+  harness cannot get. **I must NOT claim site attribution**; theirs to make.
+- **`DirtyCall`**: fixed but UNPROVEN (fixed on reasoning, not measurement).
+- **`Yielded` mid-body + `Exited`-without-exception**: deliberately LEFT ON THE OLD PATH,
+  hypotheses with named discriminators. 🔴 If `watch_inbox` survives past 1009 then dies
+  a NEW way, `Yielded` is Artemis's first suspect — **send them the FAILURE FACE, not a
+  diagnosis.**
+- Honest sentence for a green: **"the workload survives with compilation occurring"** —
+  NOT "both sites are fixed".
+
+### CURRENT LIVE STATE
+- Tom's server: `aion server --jit-threshold 4294967295`, binary sha256 18f89a62…,
+  pid varies; his pipeline wf **1da202ec Running at 1649+ events, compiles=0** (three
+  prior deaths at exactly 1009). Bridge holding.
+- Probe server on 9099/59051/59061 may still be up at threshold 100.
+- Queue: **line 19 DONE GREEN both legs**; **line 20 OPEN** (this deploy).
+- Committed: investigate-workflow `de32aa1ba` (pushed) + state commits;
+  deployed-bytes branch `jit-threshold-on-0181` `96b68ecba` in wt-fix-77.
