@@ -42,6 +42,7 @@ function workflowStarted(seq: number, runId: string): Event {
       input: jsonPayload,
       run_id: runId,
       parent_run_id: null,
+      parent_workflow_id: null,
       package_version: 'charge$abc',
     },
   };

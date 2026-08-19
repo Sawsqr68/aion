@@ -32,6 +32,7 @@ const event: AionEvent = {
     },
     run_id: '00000000-0000-0000-0000-0000000000a1',
     parent_run_id: null,
+    parent_workflow_id: null,
     package_version: '1.0.0',
   },
 };

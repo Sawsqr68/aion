@@ -66,6 +66,7 @@ function workflowStarted(bytes: EventBytes): Extract<Event, { type: 'WorkflowSta
       input: { content_type: 'Json', bytes },
       run_id: '00000000-0000-0000-0000-0000000000aa',
       parent_run_id: null,
+      parent_workflow_id: null,
       package_version: '1.0.0',
     },
   };
