@@ -137,11 +137,17 @@ stayed GREEN under that mutation — it measures a different property (the run
 does not live in the namespace the handle claims), and its doc comment now
 says so rather than letting it read as a second authorization proof.
 
+## The live drive — DONE, and it was killed
+
+`gate-logs/mcp-task-durability-LIVE-DRIVE.md`. A real server on its own port and
+data dir, identified by SHA-256 through `lsof` rather than by version string,
+`SIGKILL`ed twice and restarted each time. One task id, three pids, one
+unchanged answer — `working` across the first death, `completed` carrying
+`Cancelled` across the second. The status was watched CHANGE (via the `cancel`
+tool) so that "always working" was excluded, and three malformed/forged/unknown
+handles were each refused `-32602`.
+
 ## Still owed before this can land
 
-- A live drive against a running binary repeating
-  `gate-logs/mcp-awaited-start-verified.md`'s sequence, with a REAL process
-  restart between the awaited start and the `tasks/get`. The e2e restart is a
-  fast regression guard; the process restart is the decisive one.
 - 🔴 **Not to be deployed to Tom's engine** on its own. A rebuilt binary rides
   the release line with a battery, same standing rule as the console fix.

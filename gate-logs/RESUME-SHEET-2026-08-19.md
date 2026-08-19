@@ -10,16 +10,16 @@ Gates all green (clippy both `--workspace` and `-p`; aion-mcp 93; aion-server
 lib 1162; mcp_surface_e2e 45). The authorization proof was watched go red under
 a mutation and restored.
 
-## 🔴 The one thing still OWED on it
+## The live drive — DONE 2026-08-19 08:31Z
 
-**A live drive against a running binary with a REAL process kill and restart.**
-Everything else is done. The e2e restart test is a fast regression guard; a
-real process death is the decisive witness.
+`gate-logs/mcp-task-durability-LIVE-DRIVE.md`. Two `SIGKILL`s, three pids, one
+task id, one unchanged answer; the status was watched change working →
+completed; three bad handles each refused `-32602`. Scratch server stopped and
+its data dir removed; Tom's box untouched. **Nothing further is owed on the MCP
+change except the merge.**
 
-Binary is already built and ready: `target/debug/aion` (built 2026-08-19 18:19,
-exit 0, from this branch at 0.17.0).
-
-Recipe, not yet run:
+Recipe as it was actually run (kept for the next drive — note the two
+required-no-default knobs and the `/private/tmp` path-safety refusal):
 
 1. Scratch dir (NOT the repo root, so Tom's `./aion-data` is untouched), own
    port, own data dir. Config needs `[mcp] enabled = true`.
