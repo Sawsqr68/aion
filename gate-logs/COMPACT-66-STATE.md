@@ -5419,3 +5419,23 @@ cargo install, needs quiet Mac + the freed disk).
 worker) AND serve as workers. Answered yes (Marimo files are plain .py; dual-role via
 Python SDK decorators; notebook IS the worker). Asked where notebooks live; wire first
 one as proof when he answers.
+
+## ZU-34 — 2026-08-19T01:5xZ — disk crisis cleared; line-13 red carried a REAL defect
+
+Mac hit 363Mi free mid-battery (Tom's word: "disk"). Freed: wt-fix-77/target 64G (mine,
+occupancy-checked) + Waffles cleaned beamr 46G + liminal 12G on Tom's word → 128Gi free.
+wt-59 target untouched (warm). Battery bxp9y5c3o died ENOSPC — but the log ALSO held a
+real E0063: 0.18.1's parent_workflow_id field missing from land-stack's OWN reopen
+fixture (crates/aion/src/lifecycle/reopen_tests.rs:553 — file main's sweep couldn't
+reach; textually-clean merge, semantically incomplete). Fixed cac631108 (root fixture →
+both lineage fields None); worktree swept, no sibling deficits. BATTERY RE-FIRED task
+bypgk4f1q at cac631108. Ceremony DEPLOYED release_ceremony$5813553c…; release_ops worker
+live (worker_id=6, dispatch-eligible 01:45:31Z, pid file gate-logs/release-ceremony/
+worker.pid); acceptance input READY at scratchpad/ceremony-0.18.1-input.json (21 crates,
+attest mode citing gate run ace0bf15 — cargo-semver-checks absent on Mac). Waffles
+ratified line-13 path + approved ceremony at bytes of 29ad550f6; HIS HERMES SIGNAL
+(liminal-rs 0.6.1) HANGS ON MY ACCEPTANCE-GREEN SIGNAL. Order: battery green → land
+main+close #63/#51 → DONE mark w/ wt-59 clean rider → start ceremony acceptance
+(aion run or start w/ input file; expect 21 skips + idempotent tag + install proof) →
+signal Waffles. Tom Marimo candidates found: tools/wakewords/train.py,
+thing-finder/pocs/counting, grafeo+tessera examples — awaiting his pointer.
