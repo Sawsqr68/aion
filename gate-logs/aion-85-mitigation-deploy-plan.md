@@ -92,3 +92,33 @@ me a working fix had failed.
   *observability* exists; only *control* was missing, which is what this row added.
 - **Artemis's `Yielded` suspicion is a HYPOTHESIS, not a finding** — they explicitly
   have not measured it and named its discriminator first. Do not promote it.
+
+## Acceptance leg — positive control (Waffles GO 04:13Z, in-scope of the same exception)
+
+Isolated instance: `aion server --config <probe>/probe-config.toml --jit-threshold 100`,
+ports 9099/59051/59061, store `/Users/tom/.aion/probe100/data`. Up 04:16Z, zero errors,
+Tom's server untouched.
+
+Two obstacles worth recording, both the system behaving correctly:
+- With an explicit `--config`, the data root resolved to the **home** default rather than
+  the CWD-relative one, and the home store is held by another live writer. Fixed by
+  naming `store.data_dir` explicitly — which is the isolation the control wanted anyway.
+- The path-safety gate **refused** a `data_dir` under `/private/tmp`: ancestor mode 1777
+  grants group/world write, sticky bit not accepted. Correct refusal; moved under the
+  owner-only Aion home.
+
+**Predictions, named before the run** (already banked in the queue file so they cannot be
+retrofitted): at threshold 100 the sleep arm dies at **~100 rounds** and the activity arm
+at **~20 activities** — roughly a tenth of their counts at beamr's default 1000.
+
+🔴 **RUN THE ARMS SEQUENTIALLY, ON A FRESH SERVER EACH.** The profiler counts per
+`(module, function, arity)`, and both arms route through the same shared
+`gleam_json_ffi` module. Run concurrently, one arm's calls can push the shared module
+past the threshold and kill the other arm early — which would look like a confirmed
+prediction while actually measuring cross-talk. Sleep arm first; restart the probe
+server to clear counters before the activity arm.
+
+The activity arm is served by `probe_worker.awl` — a minimal `scan_inbox` returning a
+constant empty list (`aion awl check` clean). The counting notebook serves the same
+contract but drags in the vision stack; this arm measures how many activity round-trips
+a workflow survives, not what the activity says.
