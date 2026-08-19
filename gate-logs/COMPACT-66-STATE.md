@@ -5548,3 +5548,31 @@ verified:false, child c79eb8cb Completed. Deployed process_photo c1da100e, watch
 NEXT: Tom records a real truth → first scored accuracy number. Scale photos (bottle on
 scale, label forward, digits readable) give truth FOR FREE — the frame contains its own
 answer. Port history (stale-tab hazard): 2718/2719 walkthrough, 2720 old counter, 2721 live.
+
+## ZU-39 — 2026-08-19T03:0xZ — beamr JIT defect REPRODUCED IN PRODUCTION; server on 0.18.1
+
+Tom: "I think the watch inbox workflows failed." HE WAS RIGHT — and it was the beamr JIT
+native-services defect, live. watch_inbox bc957fdf Failed 02:57:36Z:
+`{bad_generator, <<"3000">>}` at gleam_json_ffi:object/1 ← aion@workflow@timer:sleep/1
+(3000 = the sleep's OWN duration ms reaching object/1 where a pair-list belongs).
+EVIDENCE CHAIN: failure at **seq 1012**; beamr DEFAULT_JIT_THRESHOLD = **1000**
+(profiler.rs:19) — engine's own sleep went hot, compiled, first external call out of
+the compiled frame broke. Trigger shape matches the recorded one (JIT'd F → bytecode →
+FFI). Running server was **aion 0.18.0 / beamr 0.18.2** (measured: strings on the lsof
+txt binary), i.e. BEFORE the fix.
+REMEDY ALREADY SHIPPED (law: re-measure the blocker first): beamr 0.19.2 carries the
+agreed shape — JitRuntimeContext holds `services` (process/types.rs:304-322); aion
+0.18.1 pins ^0.19.2. So last night's release IS the cure.
+ACTED: verified from-index 0.18.1 binary (sha 81c86913…, strings → beamr-0.19.2),
+swapped /Users/tom/.cargo/bin/aion by RENAME (never cp over a running image; prev kept
+at aion.0180.prev), killed pid 67099, respawner brought up 84023 from repo root on the
+new binary (verified beamr-0.19.2 in the RUNNING image). **Store intact** — 13 versions,
+all types survived. Worker b7joiu21d, watcher cf164116 (2000 scans, tiled).
+**SOAK ARMED** bmkqa35t8: watcher must pass seq>1100 (past the wall) — verdict pending,
+DO NOT claim the fix until it lands.
+**#85 filed** — production reproduction record (operator-facing: the failure names a
+function the author never wrote; any long-lived workflow on pre-0.19.2 dies ~1000 events).
+Tom's first scale image processed: 28 detected on ONE bottle — tiled detector's other
+edge (grid over a close-up over-counts). Named to him honestly + it's the exact case the
+truth book exists for. NEXT BUILD: scale-display weight reading (his images are for that,
+not for counting). Also open: #84 (awl checker gap), console-overwhelm design talk.
