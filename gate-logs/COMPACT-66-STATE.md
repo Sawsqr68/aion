@@ -5472,3 +5472,25 @@ around cell names (worker_sys/worker_json/worker_time/WorkerPath); @app.function
 largely untracked — did NOT commit there. NEXT for this lane: bar stocktake build
 (scale-display seven-segment OCR leg + tare/density standards + per-bottle durable
 session; pieces in pocs/bar/).
+
+## ZU-36 — 2026-08-19T02:4xZ — inbox pipeline LIVE (Tom's drop-a-photo demo)
+
+Tom's evolving demo (all live, all proven): **watch_inbox** durable watcher workflow
+(deployed 8abe4592…; run 8a56de0a live, 200-scan window ~12 min from 02:35Z) scans
+inbox every 3s via scan_inbox action (claim = rename to inbox/claimed/ — no
+double-dispatch, crash leaves in-flight visible), forks **process_photo** children
+(deployed 96c5dc92…) per image, awaits batch, loops (max scans visits). Child:
+count_photo action = count_objects.run mode=yolo (plain yolo11n, ~3s/photo; TILED
+mode is the shelf answer, 40s — offered to Tom, his call). Notebook walkthrough.py
+now serves THREE activities (count_scene, scan_inbox, count_photo) + records carry
+kind/label/stages; live cell renders per-record stage lists (photos: photo-in +
+bottles-found; no fake ground truth — "honest count"). PROVEN: Spirit-of-Scotland
+12 bottles (direct), bar_wall via FULL pipeline (watcher→child 0e6686f6 Completed→
+outbox/bar_wall_yolo.png→live strip). Worker briiuwdz3 (+ultralytics, concurrency 2).
+Marimo serve: RUN mode port 2719 (Tom's config auto_instantiate=false blanks EDIT
+mode — cause of his blank page; stale-tab token-skew was the other layer). Dirs:
+pocs/counting/{inbox,outbox}. **#84 filed**: `visits` in route payload passes local
+awl check, refused at deploy (checker gap + refusal names line 1 / symptom not rule).
+**Server predates 0.18.1** → children show parent:none in console; one restart onto
+0.18.1 lights lineage — offered, NOT done under Tom's live session. Watcher window
+expiry ~02:50Z — restart on Tom's word (same aion start input, scans as desired).
