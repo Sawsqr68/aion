@@ -5439,3 +5439,36 @@ main+close #63/#51 → DONE mark w/ wt-59 clean rider → start ceremony accepta
 (aion run or start w/ input file; expect 21 skips + idempotent tag + install proof) →
 signal Waffles. Tom Marimo candidates found: tools/wakewords/train.py,
 thing-finder/pocs/counting, grafeo+tessera examples — awaiting his pointer.
+
+## ZU-35 — 2026-08-19T02:2xZ — CHAIN COMPLETE: line-13 landed, ceremony acceptance GREEN, Marimo live-worker shipped
+
+**LINE 13 DONE** (mark 02:10:56Z, docs ef6e1ae): battery run 2 at cac631108 GREEN
+(nextest 5164/5164, clippy x2 rc=0, ended 02:06:30Z); pushed 67e0b8d9f..cac631108 as
+main (ff); #63+#51 closed w/ receipts + Failed-status reconciliation (NOT #34 — line-14);
+wt-59 target rm'd (58G; Mac 186Gi free after my 64G + Waffles' beamr/liminal cleans on
+Tom's word). E0063 fix cac631108 = the merged-tree battery's first live catch.
+
+**CEREMONY ACCEPTANCE GREEN** — run 02cd1acf-883d-4c8c-a175-0c99b23a8618, outcome
+`released`, 02:11:36–02:15:53Z: 21/21 ALL SKIPPED + ALL LIVE w/ checksums (aion-core
+byte-matches confirmed table), tag idempotent-green, verify_install REAL from-index
+cargo install of aion-cli 0.18.1 (unlocked) reporting its version, changelog both faces
++ 25-commit evidence, attestation w/ gate-run citation, ZERO refusals. Payload:
+scratchpad/ceremony-verdict-0.18.1.json + engine history. "Runs not files" DISCHARGED
+per ZU-32. GREEN SIGNALED to Waffles 02:1xZ — his Hermes liminal-rs 0.6.1 signal
+released. release_ops worker: pid file gate-logs/release-ceremony/worker.pid.
+
+**MARIMO LIVE-WORKER SHIPPED** (Tom's evolving ask, all live): counting walkthrough.py
+now has 🔴 Live section — handler composes the stage functions per dispatch, writes
+out/live/stage{1-5}*.png + jobs.jsonl; notebook mo.ui.refresh(1s) renders last-job
+stage strip + verdict + served count. marimo check rc=0 throughout. Proven: direct
+drive 50/50, engine run 64/64 through relaunched worker (task bpe3eyvna; old bjwzpzk7h
+stopped — worker reads file at launch). marimo edit serving http://localhost:2718
+(--sandbox --headless --no-token, detached, log pocs/counting/.marimo-serve.log; kill
+via lsof -ti :2718). Gotchas banked: preprocess returns (gray, blur);
+distance_transform raw px (normalize by max for PNG); setup-cell imports MUST alias
+around cell names (worker_sys/worker_json/worker_time/WorkerPath); @app.function over
+@activity stacks (registry-based). AWL: pocs/aion/count_scene.awl deployed
+(count_scene_check / queue thing_finder_counting). thing-finder repo is Tom's,
+largely untracked — did NOT commit there. NEXT for this lane: bar stocktake build
+(scale-display seven-segment OCR leg + tare/density standards + per-bottle durable
+session; pieces in pocs/bar/).
