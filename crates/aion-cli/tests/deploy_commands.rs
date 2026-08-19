@@ -125,6 +125,7 @@ fn runtime_config() -> RuntimeConfig {
         observability: aion_server::config::ObservabilityConfig::with_flush_policy(64, 0),
         mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
+        jit_threshold: None,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: "default".to_owned(),
         auto_create: aion_server::config::AutoCreate::default(),

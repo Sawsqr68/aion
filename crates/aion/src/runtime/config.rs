@@ -11,6 +11,52 @@ pub struct RuntimeConfig {
     /// runtime-aware default.
     pub thread_count: Option<usize>,
 
+    /// Optional JIT compilation threshold supplied by the engine builder.
+    ///
+    /// `None` is passed through to beamr so the embedded runtime applies its own
+    /// default (`beamr::jit::profiler::DEFAULT_JIT_THRESHOLD`, 1000 recorded
+    /// calls per `(module, function, arity)` at the version this builds against).
+    /// Nothing here invents a value.
+    ///
+    /// # Why this is reachable at all
+    ///
+    /// beamr counts calls per MFA and compiles once the count reaches the
+    /// threshold. Until this field existed the engine held the scheduler and
+    /// never named the threshold, so the compile point was unreachable from
+    /// aion — there was no way to move the moment of compilation, and therefore
+    /// no way to test whether a fault tracks it.
+    ///
+    /// That is what this is for: a *proportionality* instrument. Halving the
+    /// threshold should halve the call count at which a compile-correlated fault
+    /// appears, which predicts a number rather than explaining one. A fault that
+    /// moves with the threshold is caused by compilation; a fault that does not
+    /// is not, however well the arithmetic happened to fit.
+    ///
+    /// # 🔴 What a large value does, and what it does NOT do
+    ///
+    /// This is **not** a JIT off-switch, and must not be documented as one.
+    /// `beamr::jit::profiler::JitProfiler::record_call` increments with
+    /// `saturating_add(1)` and then compiles unless `new_count < threshold`
+    /// (`jit/profiler.rs:253-262`). At `u32::MAX` the counter saturates at
+    /// `u32::MAX` and the comparison stops being true, so the MFA compiles —
+    /// after 4,294,967,295 recorded calls to that one MFA.
+    ///
+    /// Both halves of that sentence are load-bearing. It is a real horizon, not
+    /// a semantic quibble: at the ~5 calls per durable wait measured on this
+    /// engine that is ~859 million waits, so a large value genuinely defers
+    /// compilation past any workload this engine will run. And it is genuinely
+    /// not "off": the compile still happens on the other side of that horizon,
+    /// so anything relying on it never happening is relying on the workload, not
+    /// on the configuration. beamr's own scheduler-level disable is the answer
+    /// to "off", and it is a separate beamr release; this field cannot stand in
+    /// for it.
+    ///
+    /// The threshold is stored in an `AtomicU32` read by `current_threshold`
+    /// (`jit/profiler.rs:109`, `:189-191`). beamr can retune it at runtime via
+    /// `tune_threshold`, but only when an embedder drives that call, and aion
+    /// never does — so a value set here is the value that governs.
+    pub jit_threshold: Option<u32>,
+
     /// Bounded readiness and retry policy for live signal mailbox delivery.
     pub signal_delivery: SignalDeliveryConfig,
 
@@ -411,10 +457,22 @@ impl RuntimeConfig {
     pub fn new(thread_count: Option<usize>) -> Self {
         Self {
             thread_count,
+            jit_threshold: None,
             signal_delivery: SignalDeliveryConfig::default(),
             completion_retry: CompletionRetryConfig::default(),
             outbox_enabled: false,
         }
+    }
+
+    /// Override the JIT compilation threshold passed to beamr's scheduler.
+    ///
+    /// Read [`Self::jit_threshold`] before using this. In particular a large
+    /// value defers compilation past any realistic workload but does not
+    /// disable the JIT, and must not be described as doing so.
+    #[must_use]
+    pub const fn with_jit_threshold(mut self, jit_threshold: Option<u32>) -> Self {
+        self.jit_threshold = jit_threshold;
+        self
     }
 
     /// Override the signal delivery retry policy.

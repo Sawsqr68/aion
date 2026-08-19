@@ -29,6 +29,8 @@ pub struct CliOverrides {
     pub store_url: Option<String>,
     /// Override for `[runtime].scheduler_threads`.
     pub scheduler_threads: Option<usize>,
+    /// Override for `[runtime].jit_threshold`.
+    pub jit_threshold: Option<u32>,
     /// Override for `[drain].timeout_seconds`.
     pub drain_timeout_seconds: Option<u64>,
     /// Additional workflow package archives loaded after config and auto-discovered packages.
@@ -75,6 +77,11 @@ pub struct RuntimeConfig {
     pub mcp: ResolvedMcpConfig,
     /// Engine scheduler thread count.
     pub scheduler_threads: usize,
+    /// Engine JIT compilation threshold, or [`None`] to defer to beamr's own
+    /// default. Carried as an [`Option`] because "the operator named a
+    /// threshold" and "nobody said" are different states, and only the first
+    /// may override beamr.
+    pub jit_threshold: Option<u32>,
     /// Engine reply deadline for workflow queries. REQUIRED — carried as an
     /// [`Option`] only so state construction can re-validate (defense in
     /// depth, like `websocket.event_broadcast_capacity`); validated

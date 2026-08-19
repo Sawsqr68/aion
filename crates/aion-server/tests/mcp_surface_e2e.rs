@@ -207,6 +207,7 @@ fn runtime_config(mcp_enabled: bool, options: &HarnessOptions) -> RuntimeConfig 
             ..ResolvedMcpConfig::default()
         },
         scheduler_threads: 1,
+        jit_threshold: None,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: NAMESPACE.to_owned(),
         auto_create: aion_server::config::AutoCreate::Open,
