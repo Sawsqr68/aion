@@ -1,0 +1,235 @@
+//! release_ceremony — a release EXISTS when the index holds it, checksum-
+//! verified (STANDING ORDER 4). This workflow is that law made structural:
+//! the tag step's input is the full per-crate confirmation set, so
+//! tag-without-publish is not writable — the #76 drift (0.16/0.17 tagged,
+//! never published) becomes inexpressible.
+//!
+//! Wave 1 of the codification (workflows/CODIFICATION-DESIGN.md §1.5),
+//! authored the night the v0.18.1 ceremony ran every failure face by hand:
+//!
+//! THE TREE ARRIVES CUT AND GATED (delta vs the approved design, flagged
+//! for review): the version cut must precede the LANDING GATE — the gate's
+//! lock witness measures the cut tree — so a ceremony that cuts after
+//! landing would publish a tree nobody gated. This workflow therefore takes
+//! a landed, gated, already-cut tree and REFUSES if the workspace version
+//! does not match the declared release version (the cut witness).
+//!
+//! CHANGELOG REFUSES BEFORE THE FIRST PUBLISH (Tom, 2026-08-18 23:13Z):
+//! the version being published must have a DATED section in CHANGELOG.md,
+//! and the server's embedded copy must match the authored root (the embed
+//! freshness twin caught live this night). The commits since the previous
+//! release tag travel WITH the probe as data — completeness of the section
+//! against that list is the reviewing eye's act, recorded, never silently
+//! skipped (Artemis's two-directional instrument; the mechanical faces
+//! refuse, the judgment face travels as evidence).
+//!
+//! SEMVER SURFACE IS A LEG (the haematite 0.8.3 lesson: a required field
+//! added mid-0.x-line detonated a published downstream): `semver_mode`
+//! selects `check` (cargo semver-checks over the workspace; the tool being
+//! absent is a typed refusal, never a silent pass) or `attest` (Hermes's
+//! delta-publish shape: when the code delta off a battery-proven tree is a
+//! version string, the publisher ATTESTS with a citation — named, recorded
+//! in history, never silent). An unknown mode refuses.
+//!
+//! ORDER IS DECLARED, THE INDEX ENFORCES IT: `publish_order` is the
+//! operator's declared full-graph topological order (release-set membership
+//! is a declared operator input — design ruling 3; the #76 addendum's
+//! dev-dep-aware order). The sequence region publishes and index-confirms
+//! each crate BEFORE the next begins, and cargo itself refuses a publish
+//! whose dependency is not yet at the index — a wrong order is a loud red,
+//! never a silent reorder.
+//!
+//! THE CEREMONY IS IDEMPOTENT: each crate's action skips when the version
+//! is already at the index (recorded as `skipped`), so a partial ceremony
+//! — the liminal-class foreign-graph verify failure, a network death —
+//! re-runs with the same input and resumes where the index says it stopped.
+//!
+//! VERDICT IS DATA: `released` carries the checksum set, the changelog
+//! probe, the semver probe, and the install probe; `attempted` carries the
+//! partial confirmation set (resumable); `unreleasable` names the refusing
+//! stage. A red install-verify does not un-release what the index holds —
+//! it travels as `install_green: false` for the parent to route on.
+//!
+//! Logs live in the tree at `<tree>/.release/` — the tree is the
+//! blackboard; `.release/` never rides a commit (explicit-pathspec law).
+workflow release_ceremony
+  timeout 4h
+  input version: String
+  input prev_tag: String
+  input tree: String
+  input publish_order: [String]
+  input tag_message: String
+  input install_probe_crate: String
+  // "check" runs cargo semver-checks; "attest" records the operator's
+  // citation for a delta publish off a battery-proven tree. No default —
+  // the mode is the operator's declared word (standing order 7).
+  input semver_mode: String
+  // The attestation citation when semver_mode is "attest" (the proven-tree
+  // battery it rides on); ignored by "check".
+  input semver_citation: String
+  outcome released:     type Released,     route success
+  outcome attempted:    type Attempted,    route failure
+  outcome unreleasable: type Unreleasable, route failure
+
+/// The cut witness: the tree exists, is clean, and its workspace version IS
+/// the declared release version — a ceremony never publishes a version the
+/// tree does not wear.
+type TreeProbe { ok: Bool, refusal: String, head_commit: String, workspace_version: String }
+
+/// The changelog gate: `dated` proves a dated section for this version
+/// exists at the root; `embed_synced` proves the server's embedded copy
+/// matches it; `commits_path` names the evidence file in the tree's
+/// `.release/` blackboard holding every commit subject since `prev_tag` —
+/// the completeness review reads it there (data, not a silent pass).
+type ChangelogProbe {
+  dated: Bool,
+  embed_synced: Bool,
+  commit_count: Int,
+  commits_path: String,
+  refusal: String,
+}
+
+/// The public-surface gate: green from a real `cargo semver-checks` run, or
+/// green by recorded attestation (`attested: true`, `citation` naming the
+/// battery-proven tree the delta rides on). The tool being absent is a red
+/// refusal, never a silent pass.
+type SemverProbe {
+  green: Bool,
+  attested: Bool,
+  citation: String,
+  rc: Int,
+  log_path: String,
+  refusal: String,
+}
+
+/// One crate's whole publish fact: skipped (already at the index), or
+/// published this run — and in either case LIVE at the index with its
+/// checksum, or red with the refusal named.
+type CrateProbe {
+  crate_name: String,
+  skipped: Bool,
+  live: Bool,
+  checksum: String,
+  rc: Int,
+  log_path: String,
+  refusal: String,
+}
+
+/// The tag fact: pushed only ever from the full confirmation set.
+type TagProbe { green: Bool, tag_ref: String, refusal: String }
+
+/// The from-index install proof: the shipped artifact reports its version.
+type InstallProbe {
+  green: Bool,
+  rc: Int,
+  reported_version: String,
+  log_path: String,
+  refusal: String,
+}
+
+type Released {
+  version: String,
+  head_commit: String,
+  tag_green: Bool,
+  install_green: Bool,
+  checksums: [CrateProbe],
+  changelog: ChangelogProbe,
+  semver: SemverProbe,
+}
+
+type Attempted { confirms: [CrateProbe], refusal: String }
+
+type Unreleasable { stage: String, refusal: String }
+
+worker release_ops
+  /// The cut witness: tree present, clean, workspace version = declared.
+  action probe_release_tree(tree: String, version: String) -> TreeProbe
+    timeout 5m, retry 2 every 30s
+  /// Dated section + embed sync + the commits-since evidence.
+  action check_changelog(tree: String, version: String, prev_tag: String) -> ChangelogProbe
+    timeout 5m, retry 2 every 30s
+  /// Real public-surface diff against the previous release.
+  action run_semver_check(tree: String, version: String) -> SemverProbe
+    timeout 1h, retry 2 every 30s
+  /// The delta-publish attestation, recorded as the probe.
+  action record_attestation(citation: String) -> SemverProbe
+    timeout 5m, retry 2 every 30s
+  /// One crate: skip if at index, else publish (verify on), then confirm at
+  /// the index and record the checksum. Idempotent by construction.
+  action publish_and_confirm(tree: String, crate_name: String, version: String) -> CrateProbe
+    timeout 30m, retry 2 every 60s
+  /// The tag, from the confirmation set alone — refuses any non-live row.
+  action push_tag(tree: String, version: String, message: String, confirms: [CrateProbe]) -> TagProbe
+    timeout 10m, retry 2 every 30s
+  /// From-index install of the named binary crate; reports its version.
+  action verify_install(tree: String, crate_name: String, version: String) -> InstallProbe
+    timeout 30m, retry 2 every 60s
+
+/// The tree must wear the declared version before anything publishes.
+step cut_witness
+  probe_release_tree(tree: tree, version: version) -> tree_probe
+  outcome ok: when tree_probe.ok, route changelog_gate
+  outcome refused: otherwise,
+    route unreleasable(stage: "cut_witness", refusal: tree_probe.refusal)
+
+/// The changelog refuses BEFORE the first publish — both mechanical faces.
+step changelog_gate
+  check_changelog(tree: tree, version: version, prev_tag: prev_tag) -> changelog_probe
+  outcome dated: when changelog_probe.dated and changelog_probe.embed_synced, route semver_gate
+  outcome undated: otherwise,
+    route unreleasable(stage: "changelog", refusal: changelog_probe.refusal)
+
+/// Check or attest — the operator's declared mode; anything else refuses.
+step semver_gate
+  outcome check: when semver_mode == "check", route semver_run
+  outcome attest: when semver_mode == "attest", route semver_attest
+  outcome unknown: otherwise,
+    route unreleasable(stage: "semver_mode",
+      refusal: "semver_mode must be check or attest — the mode is the operator's declared word")
+
+step semver_run
+  run_semver_check(tree: tree, version: version) -> semver_probe
+  route semver_verdict
+
+step semver_attest
+  record_attestation(citation: semver_citation) -> semver_probe
+  route semver_verdict
+
+step semver_verdict
+  outcome green: when semver_probe.green, route open
+  outcome red: otherwise,
+    route unreleasable(stage: "semver", refusal: semver_probe.refusal)
+
+/// One crate at a time in the operator's declared topological order — each
+/// is at the index, checksum recorded, before the next begins.
+step open
+  sequence crate in publish_order
+
+step publish_one after open
+  publish_and_confirm(tree: tree, crate_name: crate, version: version) -> crate_probe
+  route close
+
+step close
+  collect crate_probe -> confirms
+  route publish_verdict
+
+/// Every crate live, or the partial set travels for a resumable re-run.
+step publish_verdict
+  confirms |> all(.live) -> all_live
+  outcome complete: when all_live, route tag_step
+  outcome partial: otherwise,
+    route attempted(confirms: confirms,
+      refusal: "one or more crates not live at the index — re-run with the same input; skips resume the chain")
+
+/// The tag's input IS the confirmation set: tag-without-publish unwritable.
+step tag_step
+  push_tag(tree: tree, version: version, message: tag_message, confirms: confirms) -> tag_probe
+  route install_step
+
+/// The shipped artifact proves itself from the index.
+step install_step
+  verify_install(tree: tree, crate_name: install_probe_crate, version: version) -> install_probe
+  route verdict
+
+step verdict
+  route released(version: version, head_commit: tree_probe.head_commit, tag_green: tag_probe.green, install_green: install_probe.green, checksums: confirms, changelog: changelog_probe, semver: semver_probe)

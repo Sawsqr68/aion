@@ -1,0 +1,89 @@
+//! release_ops — the hands of release_ceremony, WHOLE CLOTH: every command
+//! written out in full and sealed into the package's content hash at deploy
+//! (Tom's order: no local scripts; the review of this file is the review of
+//! exactly what will run). Served with `aion worker awl`; commands run on
+//! the worker's host with a CLEARED ENVIRONMENT — every body sets PATH
+//! absolutely, derives HOME from the filesystem, and the PATH names both
+//! estate hosts' toolchains (box /home/aion, Mac /Users/tom).
+//!
+//! EXIT ZERO ALWAYS, REFUSAL AS DATA: every anticipated face — a dirty
+//! tree, an undated changelog, a missing tool, a red publish, an index that
+//! does not confirm — returns exit-zero as a typed probe with the rc or
+//! refusal named, because the workflow must ROUTE on these faces.
+//!
+//! IDEMPOTENT PUBLISH: publish_and_confirm skips a crate already at the
+//! index (recorded `skipped: true`) and still confirms it with its
+//! checksum, so a partial ceremony re-runs to completion with the same
+//! input. cargo itself refuses a publish whose dependency is not at the
+//! index yet — a wrong declared order is a loud red, never a reorder.
+//!
+//! Logs live in the tree at `<tree>/.release/` — the tree is the
+//! blackboard; `.release/` never rides a commit.
+worker release_ops
+  /// The cut witness: the tree exists, is a clean git work tree (untracked
+  /// blackboards ignored), and its workspace version IS the declared one.
+  action probe_release_tree(tree: String, version: String) -> TreeProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; t=\"$1\"; v=\"$2\"; if [ ! -d \"$t\" ]; then printf \"{\\\"ok\\\":false,\\\"refusal\\\":\\\"tree directory does not exist\\\",\\\"head_commit\\\":\\\"\\\",\\\"workspace_version\\\":\\\"\\\"}\"; exit 0; fi; h=$(git -C \"$t\" rev-parse HEAD 2>/dev/null); if [ -z \"$h\" ]; then printf \"{\\\"ok\\\":false,\\\"refusal\\\":\\\"not a git work tree or HEAD unreadable\\\",\\\"head_commit\\\":\\\"\\\",\\\"workspace_version\\\":\\\"\\\"}\"; exit 0; fi; dirty=$(git -C \"$t\" status --porcelain | grep -cv \"^??\"); if [ \"$dirty\" -gt 0 ]; then printf \"{\\\"ok\\\":false,\\\"refusal\\\":\\\"tree has tracked modifications — a ceremony publishes exactly what landed\\\",\\\"head_commit\\\":\\\"%s\\\",\\\"workspace_version\\\":\\\"\\\"}\" \"$h\"; exit 0; fi; wv=$(grep -m1 \"^version = \" \"$t/Cargo.toml\" | sed -n \"s/^version = .\\\\([0-9][^\\\"]*\\\\).*/\\\\1/p\"); if [ \"$wv\" != \"$v\" ]; then printf \"{\\\"ok\\\":false,\\\"refusal\\\":\\\"workspace version %s does not wear the declared release version %s\\\",\\\"head_commit\\\":\\\"%s\\\",\\\"workspace_version\\\":\\\"%s\\\"}\" \"$wv\" \"$v\" \"$h\" \"$wv\"; exit 0; fi; printf \"{\\\"ok\\\":true,\\\"refusal\\\":\\\"\\\",\\\"head_commit\\\":\\\"%s\\\",\\\"workspace_version\\\":\\\"%s\\\"}\" \"$h\" \"$wv\"' -- $tree $version"
+  /// Dated section at the root, embed copy byte-identical, and the
+  /// commits-since evidence written to the blackboard for the review.
+  action check_changelog(tree: String, version: String, prev_tag: String) -> ChangelogProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; t=\"$1\"; v=\"$2\"; p=\"$3\"; mkdir -p \"$t/.release\" 2>/dev/null; cp=\"$t/.release/commits-since-$p.log\"; git -C \"$t\" log --format=%s \"$p\"..HEAD > \"$cp\" 2>/dev/null; n=$(grep -c . \"$cp\" 2>/dev/null || printf 0); d=false; grep -q \"^## $v — 20\" \"$t/CHANGELOG.md\" 2>/dev/null && d=true; e=false; cmp -s \"$t/CHANGELOG.md\" \"$t/crates/aion-server/changelog-embed/CHANGELOG.md\" 2>/dev/null && e=true; r=\"\"; if [ \"$d\" = \"false\" ]; then r=\"CHANGELOG.md has no dated section for $v — the changelog refuses before the first publish\"; elif [ \"$e\" = \"false\" ]; then r=\"the server embedded changelog has drifted from the authored root — sync changelog-embed and re-land\"; fi; printf \"{\\\"dated\\\":%s,\\\"embed_synced\\\":%s,\\\"commit_count\\\":%s,\\\"commits_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"%s\\\"}\" \"$d\" \"$e\" \"$n\" \"$cp\" \"$r\"' -- $tree $version $prev_tag"
+  /// Real public-surface diff. The tool being absent is a RED, not a pass.
+  action run_semver_check(tree: String, version: String) -> SemverProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; ulimit -n 65536 2>/dev/null || true; t=\"$1\"; v=\"$2\"; mkdir -p \"$t/.release\" 2>/dev/null; l=\"$t/.release/semver-check.log\"; if ! command -v cargo-semver-checks >/dev/null 2>&1; then printf \"{\\\"green\\\":false,\\\"attested\\\":false,\\\"citation\\\":\\\"\\\",\\\"rc\\\":90,\\\"log_path\\\":\\\"\\\",\\\"refusal\\\":\\\"cargo-semver-checks is not installed on this worker host — install it or dispatch with semver_mode attest and a citation\\\"}\"; exit 0; fi; ( cd \"$t\" && cargo semver-checks --workspace ) > \"$l\" 2>&1; rc=$?; g=false; [ \"$rc\" = \"0\" ] && g=true; r=\"\"; [ \"$g\" = \"false\" ] && r=\"public-surface break detected against the released baseline — read the log\"; printf \"{\\\"green\\\":%s,\\\"attested\\\":false,\\\"citation\\\":\\\"\\\",\\\"rc\\\":%d,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"%s\\\"}\" \"$g\" \"$rc\" \"$l\" \"$r\"' -- $tree $version"
+  /// The delta-publish attestation: the operator names the battery-proven
+  /// tree the delta rides on; an empty citation refuses.
+  action record_attestation(citation: String) -> SemverProbe
+    run json "sh -c 'set -u; c=\"$1\"; if [ -z \"$c\" ]; then printf \"{\\\"green\\\":false,\\\"attested\\\":false,\\\"citation\\\":\\\"\\\",\\\"rc\\\":91,\\\"log_path\\\":\\\"\\\",\\\"refusal\\\":\\\"an attestation requires a citation naming the battery-proven tree — named, recorded, never silent\\\"}\"; exit 0; fi; printf \"{\\\"green\\\":true,\\\"attested\\\":true,\\\"citation\\\":\\\"%s\\\",\\\"rc\\\":0,\\\"log_path\\\":\\\"\\\",\\\"refusal\\\":\\\"\\\"}\" \"$c\"' -- $citation"
+  /// One crate, idempotent: skip when the index already holds the version,
+  /// else publish with verify on; in either case confirm at the index and
+  /// record the checksum as the step result.
+  action publish_and_confirm(tree: String, crate_name: String, version: String) -> CrateProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; ulimit -n 65536 2>/dev/null || true; t=\"$1\"; c=\"$2\"; v=\"$3\"; mkdir -p \"$t/.release\" 2>/dev/null; l=\"$t/.release/publish-$c.log\"; api=\"https://crates.io/api/v1/crates/$c/$v\"; body=$(curl -s -A aion-release-ceremony \"$api\"); sk=false; if printf \"%s\" \"$body\" | grep -q \"\\\"num\\\":\\\"$v\\\"\"; then sk=true; printf \"already at index\\n\" > \"$l\"; else ( cd \"$t\" && cargo publish -p \"$c\" ) > \"$l\" 2>&1; rc=$?; if [ \"$rc\" != \"0\" ]; then printf \"{\\\"crate_name\\\":\\\"%s\\\",\\\"skipped\\\":false,\\\"live\\\":false,\\\"checksum\\\":\\\"\\\",\\\"rc\\\":%d,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"cargo publish red — read the log\\\"}\" \"$c\" \"$rc\" \"$l\"; exit 0; fi; body=$(curl -s -A aion-release-ceremony \"$api\"); fi; ck=$(printf \"%s\" \"$body\" | sed -n \"s/.*..checksum.....\\\\([0-9a-f]\\\\{64\\\\}\\\\).*/\\\\1/p\"); yk=false; printf \"%s\" \"$body\" | grep -q \"\\\"yanked\\\":true\" && yk=true; if [ -n \"$ck\" ] && [ \"$yk\" = \"false\" ]; then printf \"{\\\"crate_name\\\":\\\"%s\\\",\\\"skipped\\\":%s,\\\"live\\\":true,\\\"checksum\\\":\\\"%s\\\",\\\"rc\\\":0,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"\\\"}\" \"$c\" \"$sk\" \"$ck\" \"$l\"; else printf \"{\\\"crate_name\\\":\\\"%s\\\",\\\"skipped\\\":%s,\\\"live\\\":false,\\\"checksum\\\":\\\"\\\",\\\"rc\\\":92,\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"published but the index does not confirm a live %s at %s — propagation or yank; the action retry re-reads\\\"}\" \"$c\" \"$sk\" \"$l\" \"$c\" \"$v\"; exit 0; fi' -- $tree $crate_name $version"
+  /// The tag, only ever from the full confirmation set: any non-live row
+  /// refuses. Idempotent: an existing v<version> tag on HEAD is green.
+  action push_tag(tree: String, version: String, message: String, confirms: [CrateProbe]) -> TagProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; t=\"$1\"; v=\"$2\"; m=\"$3\"; cf=\"$4\"; if printf \"%s\" \"$cf\" | grep -q \"\\\"live\\\":false\"; then printf \"{\\\"green\\\":false,\\\"tag_ref\\\":\\\"\\\",\\\"refusal\\\":\\\"a confirmation row is not live — the tag never precedes the index (standing order 4)\\\"}\"; exit 0; fi; tag=\"v$v\"; if git -C \"$t\" rev-parse -q --verify \"refs/tags/$tag\" >/dev/null 2>&1; then :; else if ! git -C \"$t\" tag -a \"$tag\" -m \"$m\" >/dev/null 2>&1; then printf \"{\\\"green\\\":false,\\\"tag_ref\\\":\\\"\\\",\\\"refusal\\\":\\\"git tag creation failed\\\"}\"; exit 0; fi; fi; if ! git -C \"$t\" push origin \"$tag\" >/dev/null 2>&1; then printf \"{\\\"green\\\":false,\\\"tag_ref\\\":\\\"%s\\\",\\\"refusal\\\":\\\"tag exists locally but the push failed — re-run resumes it\\\"}\" \"$tag\"; exit 0; fi; printf \"{\\\"green\\\":true,\\\"tag_ref\\\":\\\"%s\\\",\\\"refusal\\\":\\\"\\\"}\" \"$tag\"' -- $tree $version $message $confirms"
+  /// The shipped artifact proves itself: a from-index install into a scratch
+  /// root, and the installed binary reports its version.
+  action verify_install(tree: String, crate_name: String, version: String) -> InstallProbe
+    run json "sh -c 'set -u; PATH=/home/aion/.cargo/bin:/Users/tom/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; export PATH; if [ -z \"${HOME:-}\" ]; then if [ -d /home/aion ]; then HOME=/home/aion; else HOME=/Users/tom; fi; export HOME; fi; ulimit -n 65536 2>/dev/null || true; t=\"$1\"; c=\"$2\"; v=\"$3\"; mkdir -p \"$t/.release\" 2>/dev/null; l=\"$t/.release/install-verify.log\"; d=\"$t/.release/install-root\"; rm -rf \"$d\" 2>/dev/null; cargo install \"$c\" --version \"$v\" --root \"$d\" > \"$l\" 2>&1; rc=$?; if [ \"$rc\" != \"0\" ]; then printf \"{\\\"green\\\":false,\\\"rc\\\":%d,\\\"reported_version\\\":\\\"\\\",\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"from-index install red — read the log\\\"}\" \"$rc\" \"$l\"; exit 0; fi; b=$(ls \"$d/bin\" 2>/dev/null | head -1); if [ -z \"$b\" ]; then printf \"{\\\"green\\\":false,\\\"rc\\\":93,\\\"reported_version\\\":\\\"\\\",\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"install succeeded but no binary landed in the root\\\"}\" \"$l\"; exit 0; fi; rv=$(\"$d/bin/$b\" --version 2>/dev/null | head -1 | tr -d \"\\\"\"); g=false; printf \"%s\" \"$rv\" | grep -q \"$v\" && g=true; r=\"\"; [ \"$g\" = \"false\" ] && r=\"installed binary does not report the released version\"; printf \"{\\\"green\\\":%s,\\\"rc\\\":0,\\\"reported_version\\\":\\\"%s\\\",\\\"log_path\\\":\\\"%s\\\",\\\"refusal\\\":\\\"%s\\\"}\" \"$g\" \"$rv\" \"$l\" \"$r\"' -- $tree $crate_name $version"
+
+type TreeProbe { ok: Bool, refusal: String, head_commit: String, workspace_version: String }
+
+type ChangelogProbe {
+  dated: Bool,
+  embed_synced: Bool,
+  commit_count: Int,
+  commits_path: String,
+  refusal: String,
+}
+
+type SemverProbe {
+  green: Bool,
+  attested: Bool,
+  citation: String,
+  rc: Int,
+  log_path: String,
+  refusal: String,
+}
+
+type CrateProbe {
+  crate_name: String,
+  skipped: Bool,
+  live: Bool,
+  checksum: String,
+  rc: Int,
+  log_path: String,
+  refusal: String,
+}
+
+type TagProbe { green: Bool, tag_ref: String, refusal: String }
+
+type InstallProbe {
+  green: Bool,
+  rc: Int,
+  reported_version: String,
+  log_path: String,
+  refusal: String,
+}
