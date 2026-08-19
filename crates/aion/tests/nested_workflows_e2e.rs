@@ -265,6 +265,60 @@ fn child_started_id(history: &[Event], child_type: &str) -> Option<WorkflowId> {
 }
 
 /// The run id recorded by a workflow's own `WorkflowStarted`.
+/// The child's own start carries the exact spawned input, and since #77 the
+/// child WEARS its parent: its `WorkflowStarted` records the spawning
+/// WORKFLOW's id, so a chain is traversable backward from any link (the
+/// forward link stays in the parent's `ChildWorkflowStarted`).
+/// `parent_run_id` remains the continue-as-new predecessor link and stays
+/// `None` on spawn — the store's run-chain root rule depends on that single
+/// meaning.
+async fn assert_child_start_wears_parent(
+    store: &Arc<dyn EventStore>,
+    parent: &[Event],
+    child_id: &WorkflowId,
+    child_type: &str,
+    recorded_input: &Payload,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let parent_workflow = parent
+        .iter()
+        .find_map(|event| match event {
+            Event::WorkflowStarted { envelope, .. } => Some(envelope.workflow_id.clone()),
+            _ => None,
+        })
+        .ok_or("parent has no WorkflowStarted")?;
+    let child_history = store.read_history(child_id).await?;
+    let started = child_history
+        .iter()
+        .find_map(|event| match event {
+            Event::WorkflowStarted {
+                workflow_type,
+                input,
+                parent_run_id,
+                parent_workflow_id,
+                ..
+            } => Some((
+                workflow_type.clone(),
+                input.clone(),
+                parent_run_id.clone(),
+                parent_workflow_id.clone(),
+            )),
+            _ => None,
+        })
+        .ok_or("child has no WorkflowStarted")?;
+    assert_eq!(started.0, child_type);
+    assert_eq!(started.1, *recorded_input);
+    assert_eq!(
+        started.2, None,
+        "pin: parent_run_id stays the continue-as-new link — None on spawn"
+    );
+    assert_eq!(
+        started.3,
+        Some(parent_workflow),
+        "pin: a child's start wears its spawning workflow (#77)"
+    );
+    Ok(())
+}
+
 fn run_id_of(history: &[Event]) -> Result<RunId, Box<dyn std::error::Error>> {
     history
         .iter()
@@ -439,52 +493,8 @@ async fn three_level_chain_completes_and_propagates_results_bottom_up() -> TestR
             ))?;
         assert_eq!(decoded_string(&completion)?, child_output);
 
-        // The child's own start carries the exact spawned input, and since
-        // #77 the child WEARS its parent: its WorkflowStarted records the
-        // spawning WORKFLOW's id, so a chain is traversable backward from
-        // any link (the forward link stays in the parent's
-        // ChildWorkflowStarted). `parent_run_id` remains the continue-as-new
-        // predecessor link and stays None on spawn — the store's run-chain
-        // root rule depends on that single meaning.
-        let parent_workflow = parent
-            .iter()
-            .find_map(|event| match event {
-                Event::WorkflowStarted { envelope, .. } => {
-                    Some(envelope.workflow_id.clone())
-                }
-                _ => None,
-            })
-            .ok_or("parent has no WorkflowStarted")?;
-        let child_history = store.read_history(child_id).await?;
-        let started = child_history
-            .iter()
-            .find_map(|event| match event {
-                Event::WorkflowStarted {
-                    workflow_type,
-                    input,
-                    parent_run_id,
-                    parent_workflow_id,
-                    ..
-                } => Some((
-                    workflow_type.clone(),
-                    input.clone(),
-                    parent_run_id.clone(),
-                    parent_workflow_id.clone(),
-                )),
-                _ => None,
-            })
-            .ok_or("child has no WorkflowStarted")?;
-        assert_eq!(started.0, child_type);
-        assert_eq!(started.1, recorded_input);
-        assert_eq!(
-            started.2, None,
-            "pin: parent_run_id stays the continue-as-new link — None on spawn"
-        );
-        assert_eq!(
-            started.3,
-            Some(parent_workflow),
-            "pin: a child's start wears its spawning workflow (#77)"
-        );
+        assert_child_start_wears_parent(&store, parent, child_id, child_type, &recorded_input)
+            .await?;
     }
 
     // The leaf actually ran its activity, once, with the large payloads.
