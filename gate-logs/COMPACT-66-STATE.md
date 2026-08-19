@@ -6179,3 +6179,62 @@ Newest and best (Waffles: "the EIGHTH law"; handed to Hermes for the preamble):
 Cause worth remembering: **I renamed the binaries specifically so the pairing couldn't confuse them, and the rename broke the `pgrep` teardown the isolation depended on.**
 ⭐ **A guard is an instrument too, and inherits every failure mode in the catalogue.** Removals (enumeration) beat guards (positive controls).
 ⭐ **A remedy's cost lives in the manifest, not in the diff.**
+
+---
+
+## ZU-51 — 2026-08-19 ~05:50Z. HOLD DISCHARGED. Leg two is the last gate condition.
+
+### The hold is gone, and why
+Artemis answered the question the hold rested on, then **retracted a second defect they had filed an hour earlier** (beamr#29, a claimed uncatchable exit from a compiled bitstring op) on their own evidence, eleven minutes after filing it. Their sentence, to be quoted with its hedges intact and never laundered into mine:
+
+> *I know of no shape — AWL-authored, stdlib, or FFI — that reaches the `Exited`-without-exception face, because I can find no way to produce the bare exception word it requires.*
+
+Two instruments converging: all five producers of `InstructionOutcome::Exit` accounted for by trace, and zero hits across beamr's whole suite beside a **live 40-hit control** on the neighbouring arm. **Traced and measured, not proven**, with one residual named rather than buried (`process_from_abi` returning `None` — no process to set an exception on, and a far larger problem if it ever fires).
+
+**Waffles RULED the hold DISCHARGED** — but the deploy still waits for leg two, *not* as a remnant of the hold: the workload-shape lab green at default on the FIXED binary was always the gate's own last input.
+
+### Results banked
+- **Walls on `633b9c2`, rerun clean with port-holder verification on every arm:** sleep_wall Completed **805 events / 3 compiles**, fork_wall Completed **405 / 22** — **exact parity with `85c5f9d`**. nosleep_wall aborted on an instrument fault (below).
+- **These are REGRESSION evidence only.** Leg one's green on the OLD binary dissolved the pairing's positive control, so no arm of mine says the fix works. Repair evidence is Artemis's, at the unit level. Mechanism from their bench, workload survival from mine — kept apart in every message.
+- **Leg three CANCELLED outright**, not run and not counted. No control, and the width was the wrong lever: both of `watch_inbox`'s closure bodies park on their first effect, so eight images gives eight SHORT closure calls, never one long one. `lab-watch-wide.sh` is now inert and says so in its own text.
+
+### 🔴 THE NINTH LAW — a correct refusal presents as a hang
+Cost me `nosleep_wall` **and leg two, twice**. Both reported "smoke run never completed", which reads as exactly the engine death the rig exists to detect. Neither was.
+
+- **`nosleep_wall`:** the probe store is shared between the walls and the lab arms; a lab arm had deployed Tom's `process_photo`, which pins `count_photo` on `thing_finder_counting` **and routes new starts so it cannot be unloaded**. Every later walls worker on that queue was refused for the pool. Fixed by a private `probe_walls` queue.
+- **Leg two:** `watch_worker.awl` advertised a `PhotoVerdict` **without `labels`/`labels_attempted`** — fields *my own label-fields work* added to Tom's deployed `count_photo` output. The server refused it correctly and precisely, naming package, action, both missing properties and the changed `required` list.
+
+⭐ (Artemis's wording, kept) **A CORRECT REFUSAL THAT PRESENTS AS A HANG IS INDISTINGUISHABLE FROM A DEAD ENGINE, AND THE QUALITY OF THE ERROR MESSAGE IS NO DEFENCE — WHAT MATTERS IS WHETHER ANYTHING READS IT.** The worker's log was **zero bytes** in the directory I was reading, so the loudest error of the night was invisible at the only place I looked. Remedy, now in both scripts: **never let a timeout be the only witness for a condition that has a specific, greppable face** — grep the refusal out of the refused component's own log, and test the dependency's liveness *at the moment of failure*, not once at startup.
+
+My cause, plainly: **I audited the arm and never audited the state it inherited.** Sibling of ZU-50's law from the other end.
+
+Also fixed: `lab-watch.sh` now tears down on **every** exit path (`trap … EXIT`) and kills workers by `worker awl .*watch_worker`, not one filename — two stale responders had survived FATAL branches and the store had already recorded one claiming a later arm's activity (*"pending activity collision: a live responder already owns this execution site"*).
+
+### 🔴 I WAS WRONG THAT AWL CANNOT AUTHOR A SLICE-BURNING CLOSURE
+I told Artemis the AWL surface structurally cannot reach the `Yielded` precondition. **Reading the emitter rather than the surface overturned it.** `emitter/flows.rs:503`, `emit_instance_fanout`, strict `sequence` arm:
+
+```gleam
+use gathered <- result.try(list.try_fold(items, [], fn(acc, var) {
+  use item <- result.try(<region instance function>(args))
+  Ok([item, ..acc]) }))
+```
+
+The closure body calls a **whole multi-step region**, so its cost is bounded by DATA, not source text — the one AWL construct where that is true (`map`/`filter`/`sort` take a field projection and cannot nest). `probe100/slice_wall.awl` is built, `aion awl check` clean, and its emit confirms the shape verbatim.
+
+**Held at its real strength:** this is a READ OF THE EMITTER establishing the shape exists in generated code. It does **not** establish the shape reaches the face. Two vacuity modes registered before any run: `list.try_fold/3` never crossing 1000 entries (VACUOUS, not green), or the region instance parking before the fat body burns its slice. Artemis initially priced it as "reachable from what a user can write", I pushed back, and they amended their own file to carry it at my strength.
+
+⭐ (Artemis) **A CLAIM CROSSING A SEAT BOUNDARY LOSES ITS HEDGES UNLESS THEY TRAVEL AS PART OF THE CLAIM.** Recorded into `a-relayed-fact-wears-the-relayers-name`.
+
+### slice_wall predictions, registered BEFORE the run
+`outer`=1500, `heavy`=5000. ~1500 `try_fold` entries, crossing 1000 near item ~1000; ~10,000 charged calls per closure invocation. **Runs on `85c5f9d`, the UNFIXED binary** — its only job is to be the positive control the pairing lost. **If red, it must turn red AFTER roughly the thousandth item; an early red means I measured something else and the arm says nothing.**
+
+### 🔴 THE ORDER, and Tom is the reason for it
+1. **leg two** — relaunched 05:49:18Z, `1aba2b49-31f6-4631-b531-aff4b261b72d`, worker proven serving, 400 scans, ETA ~06:35Z
+2. **deploy conditions 3+4** — default threshold, rollback staged, rename-swap, `watch_inbox` past 1009, **TOM TOLD BEFORE THE TOUCH**
+3. Tom's verification window on a **QUIET BOX** — a presence assertion under contention can fail for load rather than the defect, and a false red on his live surface costs more than any arm
+4. `nosleep-pair.sh` — both binaries, private queue. **The remembered `85c5f9d` figure (605/29) does NOT ride free**: it was measured before `process_photo` existed in that store, so it is a number from a different world.
+5. `slice_wall` on `85c5f9d`
+6. Then `JitCache::keys()` — the enumeration Artemis wants pointed at *which functions reachable from an AWL workflow actually tier up*
+
+### Caveat carried on leg one
+The probe store holds two `process_photo` versions (`c59921bf…` unreachable, `a2edf0c1…` routing). Leg one's worker was admitted where leg two's was refused, and I have **not** established which contract leg one ran under. Payload shape differs; the ENGINE shape (timer → activity → fork → await → loop) does not, and my counts are engine-shape counts. Stated as an open loose end rather than resolved by assumption.
