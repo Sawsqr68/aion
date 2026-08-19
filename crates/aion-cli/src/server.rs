@@ -2,7 +2,7 @@
 //! workflow server in-process via [`aion_server::run()`].
 
 use std::net::SocketAddr;
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 
 use aion_server::config::{CliOverrides, ServerConfig};
@@ -35,6 +35,15 @@ pub struct ServerArgs {
     /// Number of engine scheduler worker threads.
     #[arg(long)]
     scheduler_threads: Option<NonZeroUsize>,
+    /// Recorded calls to one `(module, function, arity)` before the embedded VM
+    /// JIT-compiles it. Omitted, the VM applies its own default.
+    ///
+    /// This moves the moment of compilation; it does not switch compilation
+    /// off. A very large value defers it past any realistic workload, but the
+    /// call counter saturates rather than stopping, so compilation still occurs
+    /// on the far side of that horizon.
+    #[arg(long = "jit-threshold")]
+    jit_threshold: Option<NonZeroU32>,
     /// Maximum graceful drain duration in seconds.
     #[arg(long = "drain-timeout")]
     drain_timeout_seconds: Option<NonZeroU64>,
@@ -110,6 +119,7 @@ impl From<ServerArgs> for CliOverrides {
             grpc_address: args.grpc_address,
             store_url: args.store_url,
             scheduler_threads: args.scheduler_threads.map(NonZeroUsize::get),
+            jit_threshold: args.jit_threshold.map(NonZeroU32::get),
             drain_timeout_seconds: args.drain_timeout_seconds.map(NonZeroU64::get),
             workflow_packages: args.workflow_packages,
             gleam_path: args.gleam_path,

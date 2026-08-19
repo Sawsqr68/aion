@@ -39,6 +39,7 @@ naming a missing file still refuses rather than inventing one
 | `--listen-address <addr>` | Override `server.listen_address` (HTTP/JSON + ops console). |
 | `--grpc-address <addr>` | Override `server.grpc_address` — the server's **own bind address**. The global `--endpoint` is a *client* dial address; `aion server` refuses to start if it is passed rather than silently binding the default port. |
 | `--scheduler-threads <n>` | Override `runtime.scheduler_threads`; must be non-zero. |
+| `--jit-threshold <n>` | Override `runtime.jit_threshold`; must be non-zero. Recorded calls to one `(module, function, arity)` before the embedded VM JIT-compiles it. Omitted, the VM applies its own default. **Moves the moment of compilation; it does not switch compilation off** — the call counter saturates rather than stopping, so a very large value defers compilation past any realistic workload but it still occurs beyond that horizon. |
 | `--drain-timeout <seconds>` | Override `drain.timeout_seconds`; must be non-zero. |
 | `--workflow-package <path>` | Extra `.aion` archive loaded at startup; repeatable (see "Boot-time loads"). |
 | `--gleam-path <path>` | Set `authoring.gleam_path`: commissions the server-side Gleam authoring loop and mounts `/authoring/*`; requires `--authoring-project-root`. |
@@ -168,6 +169,11 @@ owned_shards = []                       # default: empty = this node owns ALL
 
 [runtime]
 scheduler_threads = 1                   # default; must be > 0
+# jit_threshold = 1000                  # ABSENT by default: the embedded VM's
+                                        # own default governs. Set only to move
+                                        # when hot code is compiled; a large
+                                        # value defers compilation, it does not
+                                        # disable it
 query_timeout_ms = 10000                # default; reply deadline for
                                         # /workflows/query. Explicit 0 rejected
 
@@ -475,7 +481,8 @@ supported variables are:
 - `AION_SERVER_LISTEN_ADDRESS`, `AION_SERVER_GRPC_ADDRESS`,
   `AION_SERVER_CORS_ALLOWED_ORIGINS` (comma-separated; empty clears the list)
 - `AION_STORE_BACKEND`, `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
-- `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`
+- `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`,
+  `AION_RUNTIME_JIT_THRESHOLD`
 - `AION_DRAIN_TIMEOUT_SECONDS`
 - `AION_AUTH_ENABLED`, `AION_AUTH_JWKS_URL`, `AION_AUTH_JWKS_REFRESH_SECONDS`
 - `AION_METRICS_ENABLED`

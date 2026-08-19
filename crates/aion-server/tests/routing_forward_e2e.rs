@@ -91,6 +91,7 @@ fn test_runtime() -> aion_server::config::RuntimeConfig {
         observability: aion_server::config::ObservabilityConfig::with_flush_policy(64, 0),
         mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
+        jit_threshold: None,
         query_timeout: Some(Duration::from_secs(5)),
         default_namespace: "default".to_owned(),
         auto_create: aion_server::config::AutoCreate::Open,
