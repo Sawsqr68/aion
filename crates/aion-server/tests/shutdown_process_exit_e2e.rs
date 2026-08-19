@@ -414,6 +414,7 @@ fn runtime_config() -> RuntimeConfig {
         observability: ObservabilityConfig::with_flush_policy(64, 0),
         mcp: ResolvedMcpConfig::default(),
         scheduler_threads: 1,
+        jit_threshold: None,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: NAMESPACE.to_owned(),
         auto_create: AutoCreate::Open,

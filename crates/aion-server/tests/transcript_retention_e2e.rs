@@ -130,6 +130,7 @@ fn runtime_config(observability: ObservabilityConfig) -> RuntimeConfig {
         observability,
         mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
+        jit_threshold: None,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: TENANT_A.to_owned(),
         auto_create: aion_server::config::AutoCreate::Open,

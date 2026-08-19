@@ -86,6 +86,7 @@ pub struct EngineBuilder {
     store: Option<Arc<dyn EventStore>>,
     visibility_store: Option<Arc<dyn VisibilityStore>>,
     scheduler_threads: Option<usize>,
+    scheduler_jit_threshold: Option<u32>,
     signal_delivery: SignalDeliveryConfig,
     completion_retry: crate::runtime::CompletionRetryConfig,
     outbox_enabled: bool,
@@ -122,6 +123,7 @@ impl EngineBuilder {
             store: None,
             visibility_store: None,
             scheduler_threads: None,
+            scheduler_jit_threshold: None,
             signal_delivery: SignalDeliveryConfig::default(),
             completion_retry: crate::runtime::CompletionRetryConfig::default(),
             outbox_enabled: false,
@@ -246,6 +248,18 @@ impl EngineBuilder {
     #[must_use]
     pub const fn scheduler_threads(mut self, threads: usize) -> Self {
         self.scheduler_threads = Some(threads);
+        self
+    }
+
+    /// Record the caller-supplied JIT compilation threshold.
+    ///
+    /// If this setter is never called, `None` is passed through to beamr, which
+    /// applies its own default. Read [`crate::RuntimeConfig::jit_threshold`]
+    /// before choosing a value — a large one defers compilation past any
+    /// realistic workload but is **not** a JIT off-switch.
+    #[must_use]
+    pub const fn scheduler_jit_threshold(mut self, threshold: u32) -> Self {
+        self.scheduler_jit_threshold = Some(threshold);
         self
     }
 
@@ -481,6 +495,12 @@ impl EngineBuilder {
         self.scheduler_threads
     }
 
+    /// Inspect the configured JIT compilation threshold.
+    #[must_use]
+    pub const fn configured_jit_threshold(&self) -> Option<u32> {
+        self.scheduler_jit_threshold
+    }
+
     /// Inspect the configured periodic visibility reconciliation interval.
     #[must_use]
     pub const fn configured_visibility_reconciliation_interval(&self) -> Option<Duration> {
@@ -491,6 +511,7 @@ impl EngineBuilder {
     /// signal delivery, completion-retry, and outbox knobs.
     fn runtime_config(&self) -> RuntimeConfig {
         RuntimeConfig::new(self.scheduler_threads)
+            .with_jit_threshold(self.scheduler_jit_threshold)
             .with_signal_delivery(self.signal_delivery)
             .with_completion_retry(self.completion_retry)
             .with_outbox_enabled(self.outbox_enabled)
@@ -1500,6 +1521,47 @@ mod tests {
             "the runtime must be started with the operator's ladder, not the inherited default"
         );
         Ok(())
+    }
+
+    /// The JIT threshold the caller set is the threshold the runtime is started
+    /// with.
+    ///
+    /// Asserting on `runtime_config()` rather than on
+    /// `configured_jit_threshold()` is the whole point, for the reason given on
+    /// the completion-retry test above: an accessor test stays green with the
+    /// `.with_jit_threshold(self.scheduler_jit_threshold)` line deleted, because
+    /// the builder field would still hold what the setter put there while the
+    /// scheduler silently ran on beamr's inherited default. This is the only
+    /// place that link is held.
+    ///
+    /// That distinction is not academic here. The threshold's whole purpose is
+    /// to *move the moment of compilation* so a compile-correlated fault can be
+    /// shown to track it. A silently-ignored threshold would not fail loudly —
+    /// it would produce a run that looks like a measurement and measured the
+    /// default, which is the shape of every instrument that reports a
+    /// comfortable number without touching what it claims to touch.
+    ///
+    /// The first assertion is the control: it fixes that the unset builder does
+    /// **not** name a threshold, so the equality below cannot be satisfied by a
+    /// configuration that ignored the builder and happened to match.
+    #[test]
+    fn the_jit_threshold_reaches_the_runtime_configuration() {
+        assert_eq!(
+            EngineBuilder::new().runtime_config().jit_threshold,
+            None,
+            "an unset builder must pass None through, so beamr applies its own default rather \
+             than a value aion invented"
+        );
+
+        assert_eq!(
+            EngineBuilder::new()
+                .scheduler_jit_threshold(100)
+                .runtime_config()
+                .jit_threshold,
+            Some(100),
+            "the scheduler must be started with the operator's threshold, not beamr's default — \
+             otherwise a proportionality run reports on the default while claiming to vary it"
+        );
     }
 
     #[test]

@@ -148,6 +148,10 @@ impl RuntimeHandle {
         let nif_state = Arc::new(super::nif_state::EngineNifState::default());
         let scheduler_config = SchedulerConfig {
             thread_count: config.thread_count,
+            // `None` here is beamr's own default threshold, not a value aion
+            // chose. See `RuntimeConfig::jit_threshold` for what a large value
+            // does and — importantly — what it does not do.
+            jit_threshold: config.jit_threshold,
             nif_private_data: Some(Arc::clone(&nif_state) as _),
             ..Default::default()
         };

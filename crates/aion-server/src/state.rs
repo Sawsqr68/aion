@@ -1360,6 +1360,15 @@ async fn boot_engine(assembly: EngineAssembly<'_>) -> Result<Arc<aion::Engine>, 
     } else {
         builder.owned_shards(runtime.owned_shards.iter().copied())
     };
+    // JIT compilation threshold: applied ONLY when the operator named one, so
+    // absent stays absent all the way down to beamr rather than becoming a
+    // value the server picked. Same shape as `owned_shards` above — an unset
+    // knob leaves the builder untouched and the boot is byte-identical to a
+    // tree without this field.
+    let builder = match runtime.jit_threshold {
+        Some(threshold) => builder.scheduler_jit_threshold(threshold),
+        None => builder,
+    };
     let engine = Arc::new(builder.build().await.map_err(ServerError::from)?);
     install_engine_backed_seams(assembly.seams, &engine, runtime.outbox.enabled);
     // #266: startup recovery runs HERE — after every seam the decorated
@@ -2346,6 +2355,7 @@ mod tests {
             observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             mcp: crate::config::ResolvedMcpConfig::default(),
             scheduler_threads: 1,
+            jit_threshold: None,
             query_timeout: Some(Duration::from_secs(10)),
             default_namespace: "default".to_owned(),
             auto_create: crate::config::AutoCreate::Open,

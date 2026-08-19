@@ -1124,6 +1124,7 @@ mod tests {
             observability: crate::config::ObservabilityConfig::with_flush_policy(64, 0),
             mcp: crate::config::ResolvedMcpConfig::default(),
             scheduler_threads: 1,
+            jit_threshold: None,
             query_timeout: Some(Duration::from_secs(10)),
             default_namespace: "default".to_owned(),
             auto_create: crate::config::AutoCreate::Open,
@@ -1268,6 +1269,7 @@ mod tests {
             },
             runtime: RuntimeSection {
                 scheduler_threads: 1,
+                jit_threshold: None,
                 query_timeout_ms: Some(10_000),
             },
             websocket: WebSocketConfig {
@@ -1504,6 +1506,7 @@ mod lsub_prod_xnode_e2e {
             },
             runtime: RuntimeSection {
                 scheduler_threads: 1,
+                jit_threshold: None,
                 query_timeout_ms: Some(10_000),
             },
             websocket: WebSocketConfig {

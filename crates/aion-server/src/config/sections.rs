@@ -290,6 +290,14 @@ pub struct ClusterPeer {
 pub struct RuntimeSection {
     /// Number of scheduler worker threads.
     pub scheduler_threads: usize,
+    /// JIT compilation threshold: recorded calls to one
+    /// `(module, function, arity)` before beamr compiles it.
+    ///
+    /// Absent means beamr applies its own default; the server invents no value.
+    /// Read `aion::RuntimeConfig::jit_threshold` before setting it — a large
+    /// value defers compilation past any realistic workload but is **not** a
+    /// JIT off-switch.
+    pub jit_threshold: Option<u32>,
     /// Engine reply deadline for workflow queries, in milliseconds.
     /// REQUIRED — the server always mounts `/workflows/query`, so the query
     /// reply deadline must be an explicit operator decision; there is no
@@ -981,6 +989,11 @@ impl Default for RuntimeSection {
     fn default() -> Self {
         Self {
             scheduler_threads: 1,
+            // Absent on purpose, for a different reason than the deadline
+            // below: this one is deferred to beamr's own default rather than
+            // demanded from the operator. The server must not name a
+            // compilation threshold it did not choose.
+            jit_threshold: None,
             // Deliberately absent: validation fails loudly until the operator
             // sets the workflow query reply deadline for the deployment.
             query_timeout_ms: None,

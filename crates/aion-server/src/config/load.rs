@@ -375,6 +375,7 @@ impl ServerConfig {
             observability: self.observability,
             mcp: self.mcp.resolved(),
             scheduler_threads: self.runtime.scheduler_threads,
+            jit_threshold: self.runtime.jit_threshold,
             query_timeout: self.runtime.query_timeout_ms.map(Duration::from_millis),
             default_namespace: self.namespaces.default,
             auto_create: self.namespaces.auto_create,
@@ -399,6 +400,9 @@ impl ServerConfig {
         }
         if let Some(threads) = cli.scheduler_threads {
             self.runtime.scheduler_threads = threads;
+        }
+        if let Some(threshold) = cli.jit_threshold {
+            self.runtime.jit_threshold = Some(threshold);
         }
         if let Some(timeout) = cli.drain_timeout_seconds {
             self.drain.timeout_seconds = timeout;
