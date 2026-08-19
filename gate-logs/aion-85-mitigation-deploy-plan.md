@@ -223,3 +223,47 @@ A green here means **"the workload survives with compilation occurring"** — no
 "both sites are fixed". Artemis's probe proves the mechanism in two constructed
 functions; these arms prove a real workload survives. Those are different claims
 and the deployment record keeps them apart.
+
+---
+
+## Owed row (a), now with a measured reason and a concrete shape
+
+The deploy plan already carried "JIT-compiled observability" as owed. Tonight
+it stopped being a nice-to-have and became the thing standing between a number
+and a measurement.
+
+**The gap, established by reading the source rather than inferring it:** beamr
+emits **no tracing whatsoever** in the JIT compile path — zero
+`tracing::{info,debug,trace}` under `crates/beamr/src/jit/` or `/scheduler/`.
+The only compile evidence reaching aion is cranelift's own `defining function
+funcidNN` at INFO, whose CLIF body carries no module or function name.
+
+Consequence: `compiles > 0` says *something* heated. It can never say **which**
+function did. Every arm tonight that reported a compile witness is therefore
+reporting a real count keyed to the wrong thing — the same shape as the false
+green Artemis caught in their own probe, where a counter bucketed on a value
+the callee could clobber.
+
+**What already exists:** `Scheduler::jit_cache()` is public and returns
+`&Arc<JitCache>`; `JitCache::lookup(module, function, arity, generation)` is
+public. So a *targeted* question — "is `gleam@list:try_fold/3` compiled?" — is
+answerable today if the caller knows the generation. What is missing is
+**enumeration**: there is no way to ask what the cache holds.
+
+**The two shapes, cheapest first:**
+1. *(beamr, preferred)* an iterator over `JitCache`'s keys, plus a
+   `tracing::debug!` naming the MFA on **both** the accept and the refuse
+   paths. The refuse half is already filed inside beamr#28 — the compile job
+   discards the `JitError`, so an operator cannot learn why the tier declined a
+   function. The same silence means they cannot learn what it accepted.
+2. *(aion side)* a runtime query that asks the cache about a named MFA, so an
+   arm's pass condition can be **that MFA present** rather than **count > 0**.
+
+Until one lands, a lab arm can establish that a workload survives with
+compilation occurring — it cannot establish that the compilation was of the
+function under test. That limit is stated on every verdict tonight rather than
+papered over.
+
+**Not done during the pairing, deliberately.** It needs an aion rebuild, and a
+rebuild mid-pairing hands the comparison a second variable. It goes after the
+deploy.

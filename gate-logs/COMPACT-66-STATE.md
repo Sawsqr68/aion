@@ -6127,3 +6127,55 @@ bottle's label from its crop. Measured old-vs-new on 12 real photos: 17 → 35
 usable values, 9 of 12 correct brand+name. **Not redeployed on purpose** — the
 AWL contract changed, and altering Tom's live workload mid-diagnosis would
 confound the engine measurement. Lands with the engine deploy.
+
+---
+
+## ZU-50 — RESUME POINT (2026-08-19 05:28Z). Read this first.
+
+### Where everything is
+- **Tom's box UNTOUCHED**: `~/.cargo/bin/aion` (18f89a62…) + `--jit-threshold 4294967295`, pid 86322. His `watch_inbox` **completed a full window: 6,011 events, compiles=0**, from four deaths at 1,009. Fresh window running as `9a53974f-0c12-44b5-88c2-4a8de44dc957`.
+- **Staged builds** (identify by hash):
+  - `scratchpad/aion-85c5f9d` = `43b1b573a7c8103c` — beamr 85c5f9d6, **two faces**
+  - `scratchpad/aion-633b9c2` = `14b509c16506da90` — beamr 633b9c22, **three faces** (deploy candidate)
+  - Both patch witnesses hold on both: one beamr lock entry with **no `source` line**, `take_jit_transfer` compiled, version checked vs `^0.19.2` **before** building.
+- **Running now** (`chain2.sh`, detached, PID group under `scratchpad/probe100/`): walls on `633b9c2` → leg two → leg three. Progress in `WALLS-633b9c2.txt`, `LAB-WATCH-633b9c2.txt`, `LAB-WATCH-633b9c2-wide.txt`, `CHAIN2.txt`.
+
+### LEG ONE RESULT (85c5f9d, Tom's shape, DEFAULT threshold)
+```
+Completed  events=2803  compiles=22
+ActivityScheduled=400  ActivityCompleted=400  ChildWorkflowStarted=399
+```
+No count exceeds its partner. **The third face did not fire through Tom's shape on the two-face build.** 399 is correct (the `scan` step tests the window before dispatch); my predicted 400 was a **miss, logged as a miss**.
+
+**Two limits, both belong in every citation of this result:**
+1. It sees **recorded** effects only. A replayed prefix that never reached the Recorder leaves these counts intact.
+2. `compiles=22` does **not** establish that `try_fold` compiled. The scan-~238 timing was registered in advance and is consistent, but circumstantial — and the run is over, so `keys()` cannot settle it retroactively.
+
+### 🔴 ARTEMIS'S STRUCTURAL CORRECTION — ACT ON THIS BEFORE SPENDING RERUNS
+**Leg one going green destroyed the positive control.**
+- **Leg two is now a REGRESSION check only** — "the fix didn't break Tom's workload". Old green + new green cannot be evidence the fix *works*. Bank it as the weaker claim from the start.
+- **Leg three as designed says nothing**: it runs on `633b9c2` only, so a green is an absence argument — the exact shape I refused for the mitigation. **Leg three needs an `85c5f9d` twin at 8 images/scan.** The control is not leg one; it is *an old-binary run of whatever shape is being tested*.
+
+**Artemis's prediction, registered before the rerun:** leg three will be **green on both binaries for reasons unrelated to the fix**. Mechanism: the `Yielded` face needs the nested interpreted run to burn a **full reduction slice — 4,000 charged calls — without parking**. A closure body that spawns a child and awaits parks after a handful of reductions, so it exits as `Waiting` (the already-fixed face). **Fan-out width does not change this** — eight items = eight closure calls that each park early, not one long slice.
+
+**A better leg three, if one is wanted:** a callee performing **thousands of charged calls before it suspends** — a fold over a list in the low thousands, or a compute-heavy body between the effect and the await. Any aion workflow shape that walks a big list before its first await reaches this face; more images does not.
+
+### Deploy gate (Waffles, amended and standing)
+fresh build at `633b9c2` ✅ · three walls on THAT build ⏳ · shape lab green at default ⏳ · Artemis's arm statement ✅ → then conditions 3 and 4: **deploy at DEFAULT with rollback staged** (`probe100/deploy-fixed.sh`, reads the STAGED copy and asserts sha `14b509c16506da9033b6`), **watch past 1009**, **Tom told before the touch**.
+
+Arm statement: `Waiting` both helpers proven · `DirtyCall` both fixed, **no arm** · `Yielded` both fixed, external-call helper proven + closure helper now proven red→green · `Exited`-without-exception **not fixed**, unreached with a live control.
+
+### Owed after the deploy
+- **JIT observability**: `JitCache::keys()` is pushed at `10ff54827128f46bf84592925126f9d5cd582d33` on `feat/jit-cache-enumeration` (stacked on `a6004fc`). Chain: `scheduler.jit_cache().keys()` → `key.module/function/arity/generation` → `scheduler.atom_table().resolve(atom)` gives `gleam@list$<hash>` **as a resolved string**. Build aion against it and leg three's pass condition becomes *`try_fold` present* instead of *count > 0*. **`lookup` alone is unreachable from aion** — content-hash namespacing means the module hash lives only in a stacktrace; `aion versions` exposes only the entry module's, a different value.
+- beamr#28's surviving half: the compile job discards the `JitError`, so *why* the tier refused is unavailable. (The tracing remedy is NOT one line — beamr has **no `tracing` dependency at all**.)
+- Remove `patch_witness.rs` + the `[patch]` block when beamr ships published.
+
+### Tom's other ask — label fields: DONE, NOT DEPLOYED
+`prototyping/thing-finder/pocs/LABEL-FIELDS-CHANGE.md`. Held deliberately: the AWL contract changed and altering his live workload mid-diagnosis would confound the engine measurement. **Lands with the engine deploy.**
+
+### Instrument-bug tally: 8 laws, 6 mine, none reached a verdict
+Newest and best (Waffles: "the EIGHTH law"; handed to Hermes for the preamble):
+⭐ **Verifying the identity of the thing you started is not the same as verifying the identity of the thing that answers.** A hash check passed on a corpse while the previous binary held the port. Cure: resolve the process **holding the port** (`lsof -nP -iTCP:<port> -sTCP:LISTEN`), require exactly one, hash *its* image; match kill patterns on the invariant part of the argv, never the binary name; every stage stops what it started before declaring DONE.
+Cause worth remembering: **I renamed the binaries specifically so the pairing couldn't confuse them, and the rename broke the `pgrep` teardown the isolation depended on.**
+⭐ **A guard is an instrument too, and inherits every failure mode in the catalogue.** Removals (enumeration) beat guards (positive controls).
+⭐ **A remedy's cost lives in the manifest, not in the diff.**
