@@ -5519,3 +5519,32 @@ levels + forward labels for label/scale legs; awkward — blur/angle/shadow); (b
 console "a bit overwhelming" — design conversation he wants later, I offered opinions;
 (c) tiled detector vs fast (his call); (d) server restart onto 0.18.1 for console
 parent→child lineage (offered, not done under his live session).
+
+## ZU-38 — 2026-08-19T02:50Z — VERIFICATION built (Tom: "you need a way of verifying what's going through there is correct")
+
+Tom was RIGHT and it was the sharpest question of the night. Diagnosis: synthetic path
+self-verifies (known N); PHOTO path had NO ground truth — every count was a claim in a
+measurement's font. MEASURED the gap myself: bar_wall fast=6 vs tiled=128 (same photo;
+July README's 128 independently reproduced by me, not cited on trust).
+
+BUILT (counter.py + both AWL docs, all checks clean):
+- **truth.json** truth book keyed by image filename, read by count_photo. NOTHING writes
+  truth from a detector — explicitly commented as the reason (a detector scoring itself
+  measures nothing; seeding 128 would have hidden the very errors we hunt). No entry →
+  `verified: false`, page says "N detected — **unverified** (no ground truth recorded)",
+  never "correct".
+- **PhotoVerdict** grew verified/true_count/detector; records carry detector + truth +
+  correct; table columns detected/actual/error(+/-); header shows "X/Y exact against
+  recorded truth" across the scored set.
+- **Operator truth control** on the page (mo.ui.number + run_button → writes truth.json).
+  One human count makes everything after it measurable.
+- **detector is a JOB INPUT** ("fast"|"tiled") threaded workflow→child→action, recorded
+  per job — fast-vs-tiled is a visible comparison, not my claim. Watcher now defaults
+  tiled (~40s/photo).
+LIVE NOW: page **:2721** (marimo run counter.py), worker bi4twpjvr, watcher bc957fdf
+(400 scans, tiled). PROVEN end-to-end on new contracts: bar_wall_tiled.jpg → 128,
+verified:false, child c79eb8cb Completed. Deployed process_photo c1da100e, watch_inbox
+303c7a2e.
+NEXT: Tom records a real truth → first scored accuracy number. Scale photos (bottle on
+scale, label forward, digits readable) give truth FOR FREE — the frame contains its own
+answer. Port history (stale-tab hazard): 2718/2719 walkthrough, 2720 old counter, 2721 live.
