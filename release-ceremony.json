@@ -1,0 +1,9 @@
+{
+  "repo": "aion",
+  "changelog_embeds": [
+    {
+      "source": "CHANGELOG.md",
+      "embed": "crates/aion-server/changelog-embed/CHANGELOG.md"
+    }
+  ]
+}

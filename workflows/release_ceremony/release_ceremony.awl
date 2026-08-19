@@ -53,9 +53,11 @@
 //! Logs live in the tree at `<tree>/.release/` — the tree is the
 //! blackboard; `.release/` never rides a commit (explicit-pathspec law).
 //!
-//! CURRENTLY AION-SHAPED: the changelog gate's embed-sync face names
-//! crates/aion-server/changelog-embed; generalizing that face is a later
-//! wave. Every other leg is repo-agnostic.
+//! REPO-AGNOSTIC: every leg, the changelog gate included. Each repo declares
+//! its own changelog embed pairs in `<tree>/release-ceremony.json`; an absent
+//! declaration REFUSES (`embed_status: undeclared`) rather than passing, and a
+//! repo that embeds no changelog declares an empty array — declared absence,
+//! carried loudly in `embed_status` and in `.release/changelog-embed-status.txt`.
 workflow release_ceremony
   timeout 4h
   input version: String
@@ -81,13 +83,20 @@ workflow release_ceremony
 type TreeProbe { ok: Bool, refusal: String, head_commit: String, workspace_version: String }
 
 /// The changelog gate: `dated` proves a dated section for this version
-/// exists at the root; `embed_synced` proves the server's embedded copy
-/// matches it; `commits_path` names the evidence file in the tree's
+/// exists at the root; `embed_synced` proves every embed pair the repo
+/// DECLARES in its `release-ceremony.json` is byte-identical to its source;
+/// `embed_status` names which world that was — `verified: N declared
+/// pair(s)`, `declared-none` (the repo declares no embeds, gate not
+/// applicable), or a refusal face (`undeclared`, `drifted`, `missing-embed`,
+/// `missing-source`, `malformed`, `unmeasured`, `not-reached`) — so the
+/// durable record distinguishes a check that passed from one that had
+/// nothing to do. `commits_path` names the evidence file in the tree's
 /// `.release/` blackboard holding every commit subject since `prev_tag` —
 /// the completeness review reads it there (data, not a silent pass).
 type ChangelogProbe {
   dated: Bool,
   embed_synced: Bool,
+  embed_status: String,
   commit_count: Int,
   commits_path: String,
   refusal: String,
