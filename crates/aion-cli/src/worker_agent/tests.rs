@@ -404,6 +404,88 @@ fn serving_a_document_with_no_harness_section_refuses_naming_the_section() -> Te
     Ok(())
 }
 
+/// A document in the exact shape aion#88 is about: one queue, one BODILESS
+/// `agent`-marked action, and no `harness` section.
+///
+/// It is the shape of `crates/aion-awl/tests/fixtures/rev2/harness-section/valid/
+/// harness_absent_control.awl` — a fixture the checker holds as PASSING — so the
+/// test below measures the real case rather than one that happens to resemble it.
+const AGENT_SEAM_WITHOUT_A_HARNESS: &str = r"//! An agent seam with no launch: valid as a document, unservable by this verb.
+workflow ask_flow
+  input question: String
+
+  outcome answered: type Answer, route success
+
+/// What the flow routes on.
+type Answer { reply: String }
+
+/// The canonical agent-outcome record.
+type Reply {
+  text: String,
+  final_message: String,
+  stop_reason: String,
+  session_id: String,
+}
+
+/// The queue an agent worker would serve.
+worker reviewers
+  action review(brief: String) -> Reply
+    agent
+
+step do_review
+  review(brief: question) -> reply
+  route answered(reply: reply.text)
+";
+
+/// aion#88: the refusal must not send the operator to a check that answers `ok`.
+///
+/// The two assertions are one claim in two halves, and the first is what stops this
+/// becoming a string test that outlives the behaviour it describes:
+///
+/// 1. `aion awl check` REALLY DOES pass this document — asserted by running the
+///    checker itself, not by trusting the wording. If a later change makes the
+///    checker refuse an agent seam with no harness, this half goes red and the
+///    refusal's explanation has to be revisited, which is exactly the moment it
+///    should be.
+/// 2. Given that, the refusal must lead its remedy with the `kind` line (the one
+///    setting nothing can infer, and the one that gives the checker a required set
+///    to scope to) and must say outright that the check reports the document valid
+///    until the section exists.
+///
+/// The old wording failed the second half: it printed a paste-ready
+/// `aion awl check <path>` whose answer on that same document was `ok`, exit 0.
+#[test]
+fn the_refusal_does_not_point_at_a_check_that_answers_ok() -> TestResult {
+    let document = write_document("agent-seam-no-harness", AGENT_SEAM_WITHOUT_A_HARNESS)?;
+
+    // Half one: the checker's ACTUAL verdict on this document, taken from the checker.
+    let parsed = aion_awl::parse(AGENT_SEAM_WITHOUT_A_HARNESS)?;
+    let findings = aion_awl::check(&parsed);
+    assert!(
+        findings.is_empty(),
+        "the premise of aion#88 is that `aion awl check` PASSES an agent seam carrying no \
+         harness section; it now reports {findings:?} — the refusal's explanation must be \
+         revisited before this assertion is relaxed"
+    );
+
+    // Half two: the refusal earns the check it recommends.
+    let surface = surface::derive(&document, None)?;
+    let message = super::serve::no_harness_section(&surface, &document).to_string();
+    for expected in [
+        "kind acp",
+        "kind norn",
+        "reports the document valid",
+        "is a legitimate document",
+    ] {
+        assert!(
+            message.contains(expected),
+            "the remedy must carry `{expected}` so the recommended check is not read as a \
+             contradiction, got:\n{message}"
+        );
+    }
+    Ok(())
+}
+
 /// `--check` prints the exact surface — every action, both schemas — plus the harness
 /// that would drive it, and connects to nothing. It is written to an injected writer
 /// here, which is the same call the verb makes against stdout.

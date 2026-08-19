@@ -140,10 +140,15 @@ worker fleet
 adapter; everything else is literal. `env_pass` is the judge's whole
 environment — a variable not named there is absent in the spawned norn, whatever
 the shell that started the worker exported. `aion awl check` names any setting
-left out.
+left out — **once the section carries a `kind`**, which is what scopes the
+required set. The tracked document carries no `harness` section at all, so step
+1 below passes on it exactly as it stands; it is step 2 that reports the launch
+missing. Write the section first, then let the checker complete it (aion#88).
 
 ```sh
-# 1. Validate locally (no server)
+# 1. Validate locally (no server). NOTE: on the tracked document, which carries
+#    no `harness` section, this passes — the checker's job is the document, and
+#    a document with no launch declared is a valid one. Step 2 is what refuses.
 aion awl check workflows/norn-fleet/norn_fleet.awl
 
 # 2. Start the judge worker (from the repository root — see the warning below)

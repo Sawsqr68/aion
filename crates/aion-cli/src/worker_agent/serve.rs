@@ -143,6 +143,31 @@ async fn prepare(args: &AgentArgs) -> Result<Prepared> {
 /// operator meeting this has almost certainly arrived with the deleted flags in their
 /// fingers, and the useful answer is where those settings live now — not that one of
 /// them is absent.
+///
+/// # Why the remedy leads with `kind`, and says what the checker will do BEFORE one exists
+///
+/// This paragraph used to read "add a `harness` section and run `aion awl check <path>`:
+/// the checker names every setting the section is missing". Every clause of that is true
+/// once a section exists, and it printed a paste-ready command whose immediate answer on
+/// the very document being refused is `ok`, exit 0 — read one line under a refusal, that
+/// is a contradiction, and an operator resolves it by disbelieving one of the two.
+///
+/// Neither is wrong. A `worker` block with no `harness` section is a legitimate, valid
+/// document: it is the shape of a queue served by a worker SDK build or by
+/// `aion worker shell` rather than by this verb, and `crates/aion-awl/tests/fixtures/
+/// rev2/harness-section/valid/harness_absent_control.awl` is that case held as a passing
+/// fixture. So the checker cannot refuse it, and it is not the instrument that can.
+///
+/// Nor can the checker be made to name the missing settings before a section exists: the
+/// required set is scoped to the declared kind (an `acp` section needs a `command`, a
+/// `norn` section has no use for one), and with no kind there is no set to report. That
+/// is the harness pass's own stated rule — guessing a kind "would report settings the
+/// operator never asked for".
+///
+/// So the remedy names the one line only the operator can supply, and the check that
+/// follows it earns its keep: with a `kind` declared, one `aion awl check` run names
+/// every remaining setting at once, each with the reason it has no default. Filed as
+/// aion#88.
 pub(super) fn no_harness_section(
     surface: &AdvertisedSurface,
     document: &std::path::Path,
@@ -153,9 +178,17 @@ pub(super) fn no_harness_section(
          concurrency, the three reconnect settings, the agent's command, working directory, \
          permission policy and shutdown grace, and the environment variables the agent \
          subprocess is given — is declared in the document and nowhere else. There is no flag \
-         for any of it.\n\nAdd a `harness` section under `worker {queue}` and run `aion awl \
-         check {path}`: the checker names every setting the section is missing, scoped to the \
-         kind it declares.",
+         for any of it.\n\nAdd a `harness` section under `worker {queue}`, starting with its \
+         `kind` — write `kind acp` or `kind norn`. The kind is the one setting nothing can \
+         infer for you, and every other required setting is scoped to it. Then run `aion awl \
+         check {path}`: with a kind declared, the checker names every remaining setting in a \
+         single run, each with the reason it has no default.\n\nRun that check BEFORE the \
+         section exists and it reports the document valid. That is honest, not a \
+         contradiction: a queue with no `harness` section is a legitimate document — it is \
+         the shape of one served by a worker SDK build instead of by this verb — and with no \
+         kind declared there is no required set for the checker to scope to. This verb is \
+         what tells you the launch is missing; the checker is what tells you what the \
+         section still lacks.",
         queue = surface.task_queue,
         path = document.display()
     )

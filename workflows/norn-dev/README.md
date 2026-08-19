@@ -56,9 +56,19 @@ aion worker agent workflows/norn-dev/norn_dev.awl \
     --identity norn-dev-builder
 ```
 
+Once the section exists and carries its `kind`,
 `aion awl check workflows/norn-dev/norn_dev.awl` names every setting the
-section is missing, scoped to the kind it declares, so the document can be
-brought up against the checker rather than against this README.
+section is still missing, scoped to that kind, so the document can be brought up
+against the checker rather than against this README — a bare `kind norn` gets
+all of them back in one run.
+
+**Run that check on the tracked document, before you add the section, and it
+passes.** That is honest rather than a contradiction of the refusal above: a
+`worker` block with no `harness` section is a valid document — it is what a queue
+served by a worker SDK build looks like — and with no `kind` declared there is no
+required set for the checker to scope to. `aion worker agent` is what tells you
+the launch is missing; the checker is what tells you what the section still
+lacks (aion#88).
 
 `env_pass` is the one that changes behaviour rather than just moving house: it
 is the builder agent's **entire** environment. The document names the

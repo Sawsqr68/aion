@@ -97,9 +97,29 @@ verb means adding one first. (The census is every document with an
 `agent`-marked action:
 `grep -rln 'agent,\|^    agent$' workflows/ crates/aion-server/assistant-embed/`.) Hand it a document
 without one and it refuses by saying so: the queue "declares no `harness`
-section", "There is no flag for any of it", and run `aion awl check` on it. The
-section below is the whole of what to write, and the checker names anything you
-leave out.
+section", and "There is no flag for any of it".
+
+**A document with no `harness` section is valid, and `aion awl check` says so.**
+That is not a contradiction with the refusal above, and the order the two are run
+in matters (aion#88):
+
+- A `worker` block with no `harness` section is a legitimate document — it is the
+  shape of a queue served by a worker SDK build, by `aion worker shell`, or by
+  declared `run` bodies. `crates/aion-awl/tests/fixtures/rev2/harness-section/valid/harness_absent_control.awl`
+  is that case held as a **passing** fixture. So the checker cannot refuse it, and
+  running `aion awl check` on a document this verb has just refused prints `ok`
+  and exits 0.
+- Nor can the checker name the settings you are missing before a section exists:
+  the required set is **scoped to the declared kind** — an `acp` section needs a
+  `command`, a `norn` section has no use for one — so with no `kind` there is no
+  set to report, and guessing one would name settings you never asked for.
+
+So write the section's `kind` line first — `kind acp` or `kind norn` — and *then*
+run `aion awl check`. With a kind declared the checker names every remaining
+setting **in one run**, each with the reason it has no default: on a bare
+`kind acp` it reports all nine at once. The section below is the whole of what to
+write. `aion worker agent` is what tells you the launch is missing; `aion awl
+check` is what tells you what the section still lacks.
 
 ### A managed-worker record minted before this change
 
