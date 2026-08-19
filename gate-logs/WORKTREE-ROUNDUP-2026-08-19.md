@@ -67,10 +67,11 @@ else.
 2. **`investigate-workflow`** — 115 commits: the MCP task-durability change
    (built, gated, killed twice on a live binary), the console "run unknown" fix,
    and the investigation records. One conflicted file,
-   `crates/aion-store-haematite/src/store.rs`. Notably NOT the conflict I
-   predicted — I expected the `parent_workflow_id` field from #77 to clash with
-   my e2e fixtures, and it auto-merged. Predicting a conflict is not measuring
-   one.
+   `crates/aion-store-haematite/src/store.rs`. It IS the `parent_workflow_id`
+   clash from #77 that I predicted, but not where I predicted it: I expected it
+   in my `mcp_surface_e2e.rs` fixtures, which auto-merged, and it surfaced in a
+   haematite store fixture instead. Right about the cause, wrong about the site,
+   which is the ordinary reason a located conflict beats a guessed one.
 3. **`lane1-declared-body-cancel`** — 5 commits, clean, real feature work in
    red-then-green pairs: an authored per-attempt bound reaching the server's own
    process, and a cancelled run stopping the body the server is running. Wants
@@ -82,6 +83,46 @@ else.
 5. **`28-dig`** — cherry-pick `ed3f1db4f` (the findings) only.
 
 Then the eight side trees that are done, plus the thirteen empty ones, come out.
+
+## What is merged, as of 2026-08-19 09:0xZ
+
+Branch `integration-20260819`, cut from `origin/main` in
+`.worktrees/integration-20260819`. **Not pushed.**
+
+```
+ed495aaec docs(28): record the no-reproduction dig findings   (cherry-pick)
+d428bfa4c Merge branch 'lane1-declared-body-cancel'           (clean)
+3fadc993e Merge branch 'investigate-workflow'                 (1 conflict, resolved)
+c03ad81c7 Merge branch 'jit-threshold-on-0181'                (clean)
+cac631108 origin/main
+```
+
+126 commits over main, no working-tree changes outstanding. The one conflict
+was resolved by keeping `parent_workflow_id: None` — the field main added to
+`Event::WorkflowStarted` is not optional, so the side that has it is the only
+side that compiles.
+
+### 247-transcript-spool is a PORT, not a merge — and it is stopped here
+
+Its two conflicts both sit in `activity_publisher.rs`, and neither is textual.
+Main rewrote the single-event `publish` into a batched
+`publish_all` → `publish_all_outcomes` → `persist_group`. The spool branch adds
+durable replay-idempotency (`accepted_replay`) at two points **on the old
+single-event path that no longer exists** — once before seeding the
+optimistic-concurrency loop, and once inside the `SequenceConflict` arm, where a
+concurrent delivery might have been the same spool entry.
+
+`accepted_replay` itself auto-merged and is present. What has no home is the
+pair of call sites: in the batched shape the check has to run per event inside
+`persist_group`, against that stream's cap-splitting and its `outcomes[index]`
+write-back.
+
+Resolving that by picking a side, or by dropping the call sites to make the
+merge go through, would silently disable de-duplication — a re-delivered spool
+entry would be appended twice, or a distinct event eaten. **This is the exact
+shape of a safety layer that fails quiet**, and it does not get done inside a
+four-way merge commit where a mistake leaves no trace. It is named here as its
+own piece of work, with the two call sites and the reason already located.
 
 ## What I have not done, and why
 
