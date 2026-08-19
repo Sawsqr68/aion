@@ -30,6 +30,7 @@ import {
   type NamespaceRecordsResponse,
   type NamespacesResponse,
   normalizeCreateNamespace,
+  normalizeDescribeGenerations,
   normalizeDescribeSummary,
   normalizeHistory,
   normalizeLoadPackage,
@@ -156,10 +157,10 @@ export class ApiClient {
    * authorization failure or malformed response propagates as an
    * {@link ApiError}.
    */
-  async getWorkflowSummary(
+  async getWorkflowHead(
     workflowId: WorkflowId,
     options: RequestOptions
-  ): Promise<WorkflowSummary | null> {
+  ): Promise<WorkflowHead> {
     const response = await this.transport.request<unknown>(
       AW_REST_CONTRACT.endpoints.history,
       AW_REST_CONTRACT.methods.history,
@@ -172,7 +173,10 @@ export class ApiClient {
       }
     );
 
-    return normalizeDescribeSummary(response);
+    return {
+      summary: normalizeDescribeSummary(response),
+      generations: normalizeDescribeGenerations(response),
+    };
   }
 
   /** Fetch an elision-aware, ascending window of durable workflow history. */

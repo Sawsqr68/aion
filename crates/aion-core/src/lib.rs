@@ -57,7 +57,7 @@ pub use cluster_event::{
     NamespacePlacementWire, PutOutcome, WorkerDeathReason, WorkerTransport,
 };
 pub use current_step::{current_step, open_steps};
-pub use describe::{DescribeWorkflowResponse, UnservedActivity};
+pub use describe::{DescribeWorkflowResponse, RunGeneration, UnservedActivity};
 pub use describe_live::{
     AttemptLiveness, CurrentStep, DescribeLiveResponse, HeartbeatNote, LiveAttempt, OpenStep,
     StepState, TranscriptStreamHead, TranscriptTail,

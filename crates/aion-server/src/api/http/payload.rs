@@ -69,10 +69,13 @@ pub(crate) fn describe_response_to_ops_console(
         .collect::<Result<Vec<_>, _>>()?;
     // The unserved verdict is a LIVE-fleet read, not a decode of the wire
     // response, so it is attached by the handler that holds the server state.
+    // `generations` is likewise projected by that handler, from the run's full
+    // decoded history rather than from this response's (possibly omitted) one.
     Ok(DescribeWorkflowResponse {
         summary,
         history,
         unserved: Vec::new(),
+        generations: Vec::new(),
     })
 }
 

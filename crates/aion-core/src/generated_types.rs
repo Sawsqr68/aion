@@ -35,7 +35,7 @@ use crate::{
     OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail, PutOutcome, RunId,
     ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StepState, StopKind,
     TimerCancelCause, TimerId, TimerIdKind, TranscriptStreamHead, TranscriptTail, TriggerSpec,
-    UnservedActivity, WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError,
+    RunGeneration, UnservedActivity, WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError,
     WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
 };
 
@@ -230,6 +230,7 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<WithTimeoutOutcome>(&mut pipeline)?;
     push_type::<Event>(&mut pipeline)?;
     push_type::<UnservedActivity>(&mut pipeline)?;
+    push_type::<RunGeneration>(&mut pipeline)?;
     push_type::<DescribeWorkflowResponse>(&mut pipeline)?;
 
     // WS3 cluster real-time channel wire types. The aion-proto frame envelopes

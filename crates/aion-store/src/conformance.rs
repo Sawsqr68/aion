@@ -742,6 +742,7 @@ async fn read_run_chain_orders_continuations(store: Arc<dyn EventStore>) -> Resu
                 parent_run_id: None,
                 status: WorkflowStatus::ContinuedAsNew,
                 started_at: recorded_at(1)?,
+                started_seq: 1,
                 closed_at: Some(recorded_at(2)?),
             },
             RunSummary {
@@ -749,6 +750,7 @@ async fn read_run_chain_orders_continuations(store: Arc<dyn EventStore>) -> Resu
                 parent_run_id: Some(first_continuation_run),
                 status: WorkflowStatus::Running,
                 started_at: recorded_at(3)?,
+                started_seq: 3,
                 closed_at: None,
             },
         ],
@@ -782,6 +784,7 @@ async fn read_run_chain_single_and_multi_continuations(
             parent_run_id: None,
             status: WorkflowStatus::Running,
             started_at: recorded_at(1)?,
+            started_seq: 1,
             closed_at: None,
         }],
         "single-run workflow should return one running RunSummary",
@@ -827,6 +830,7 @@ async fn read_run_chain_single_and_multi_continuations(
                 parent_run_id: None,
                 status: WorkflowStatus::ContinuedAsNew,
                 started_at: recorded_at(1)?,
+                started_seq: 1,
                 closed_at: Some(recorded_at(2)?),
             },
             RunSummary {
@@ -834,6 +838,7 @@ async fn read_run_chain_single_and_multi_continuations(
                 parent_run_id: Some(first),
                 status: WorkflowStatus::ContinuedAsNew,
                 started_at: recorded_at(3)?,
+                started_seq: 3,
                 closed_at: Some(recorded_at(4)?),
             },
             RunSummary {
@@ -841,6 +846,7 @@ async fn read_run_chain_single_and_multi_continuations(
                 parent_run_id: Some(second),
                 status: WorkflowStatus::Completed,
                 started_at: recorded_at(5)?,
+                started_seq: 5,
                 closed_at: Some(recorded_at(6)?),
             },
         ],

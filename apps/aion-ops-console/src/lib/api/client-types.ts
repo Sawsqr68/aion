@@ -3,8 +3,10 @@ import type {
   InterventionCapabilities,
   InterventionKind,
   Namespace,
+  RunGeneration,
   RunId,
   WorkflowId,
+  WorkflowSummary,
 } from '@/types';
 
 import type { JsonRecord } from './client-normalize';
@@ -78,6 +80,23 @@ export type ApiClientOptions = {
   baseUrl?: string;
   fetchImpl?: FetchFn;
   credentials?: ApiCredentials;
+};
+
+/**
+ * The describe read's HEAD: everything about a run that is a whole-history fact
+ * and therefore cannot be recovered from a loaded window.
+ *
+ * Both members are server-stated for the same reason. `summary` carries the
+ * projected status and display name; `generations` carries the sequence at which
+ * each `WorkflowStarted` opened a run, which is what lets a reader holding any
+ * window name the run an event belongs to. History is deliberately NOT part of
+ * this read — the windowed endpoint already loads it.
+ */
+export type WorkflowHead = {
+  /** `null` is the honest answer for a workflow the server does not know. */
+  summary: WorkflowSummary | null;
+  /** Ascending generation boundaries over the whole history. */
+  generations: RunGeneration[];
 };
 
 export type RequestOptions = {

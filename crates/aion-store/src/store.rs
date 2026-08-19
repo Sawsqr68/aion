@@ -46,6 +46,18 @@ pub struct RunSummary {
     pub status: WorkflowStatus,
     /// Timestamp of this run's `WorkflowStarted` event.
     pub started_at: DateTime<Utc>,
+    /// Workflow sequence of this run's `WorkflowStarted` event — the boundary
+    /// at which this generation opens.
+    ///
+    /// SEQUENCE, NOT TIMESTAMP, IS THE AXIS THAT LOCATES AN EVENT'S GENERATION.
+    /// A reader holding an event at sequence `n` answers "which run is this?" by
+    /// taking the last boundary at or before `n`; `started_at` is a recorded
+    /// value and cannot order events against it. Without this field the only way
+    /// to answer that question is to scan history for `WorkflowStarted` — which
+    /// is exactly what the ops console did, over whatever window it happened to
+    /// have loaded, so on any workflow longer than one window it reported
+    /// "run unknown" for every attempt it showed.
+    pub started_seq: u64,
     /// Timestamp of this run's terminal lifecycle event, when closed.
     pub closed_at: Option<DateTime<Utc>>,
 }

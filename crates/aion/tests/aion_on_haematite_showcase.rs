@@ -239,7 +239,7 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     let reopened = {
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         loop {
-            match HaematiteStore::open(&store_path) {
+            match HaematiteStore::open(&store_path, haematite::NodeCacheBudget::Unlimited) {
                 Ok(reopened) => break reopened,
                 Err(error) if std::time::Instant::now() < deadline => {
                     let message = error.to_string();
