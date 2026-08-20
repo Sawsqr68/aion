@@ -206,6 +206,7 @@ async fn builder_owned_shards_scopes_recovery_to_disjoint_sets() -> TestResult {
     let store_first: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
     )?);
     let active_first = active_ids_scoped_to(store_first, &[0]).await?;
     let first_view = id_strings(&active_first);
@@ -225,6 +226,7 @@ async fn builder_owned_shards_scopes_recovery_to_disjoint_sets() -> TestResult {
     let store_second: Arc<dyn EventStore> = Arc::new(HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
     )?);
     let active_second = active_ids_scoped_to(store_second, &other_shards).await?;
     let second_view = id_strings(&active_second);
