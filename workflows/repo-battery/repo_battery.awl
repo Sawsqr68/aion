@@ -1,0 +1,207 @@
+//! repo_battery measures a caller-named ref in a run-owned tree by invoking the
+//! tree's committed `scripts/battery.sh` and
+//! `scripts/gates/verify-declaration.sh`. The workflow holds no leg list and
+//! never reimplements either instrument.
+//!
+//! A successful workflow status says a determinate measurement completed; it
+//! does not say the gates were green. Red is receipt data. `undeclared` is a
+//! successful census but explicitly not a verdict. Could-not-measure faces are
+//! failures, and a declared leg that did not execute is `unproven`.
+//!
+//! WHAT THIS DOES NOT PROVE: a green does not establish that leg names describe
+//! their commands, that the venue is trustworthy, or that another ref,
+//! environment, declaration, or script byte would produce the same result. The
+//! receipt witnesses the measured bytes and scope; it records and proceeds.
+workflow repo_battery
+  timeout 8h
+  input subject_repo: String
+  input subject_ref: String
+  input workspace_root: String
+  input waivers: [Waiver]
+  outcome reported:   type Receipt,    route success
+  outcome undeclared: type Undeclared, route success
+  outcome unproven:   type Receipt,    route failure
+  outcome refused:    type Refusal,    route failure
+
+type Waiver { leg: String, reason: String, ruled_by: String }
+type ScriptWitness { path: String, sha256: String }
+type EnvRecord { leg: String, name: String, present: Bool, secret: Bool, value: String, digest: String }
+type LegRecord { name: String, rc: Int, status: String }
+
+/// The stable battery receipt. Declaration order is the required wire order.
+type Receipt {
+  subject_repo: String,
+  /// A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE
+  /// AN AUTHORITY-BEARING ACT.
+  ref_requested: String,
+  head_commit: String,
+  tree_path: String,
+  gates_json_sha256: String,
+  battery_sha256: String,
+  /// Sha256 witnesses for the invoked subject and workflow scripts, sorted by path.
+  script_witnesses: [ScriptWitness],
+  /// A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE
+  /// AN AUTHORITY-BEARING ACT.
+  venue: String,
+  /// A gate's scope is set by its environment as much as by its declaration.
+  /// Values for non-secret variables and presence plus a digest for
+  /// secret-shaped variables travel beside the frozen HEAD. A test that skips
+  /// when a *_TEST_URL-style value is absent measures a different scope while
+  /// it may report the same green; receipts without environment are not comparable.
+  environment: [EnvRecord],
+  /// These names come from the provisioned tree's gates.json, never the venue.
+  /// Zero legs is a typed refusal naming the selector path: a census returns
+  /// empty when its selector is dead, and that is byte-identical to the thing
+  /// being absent; zero legs would otherwise compare, render, and pass proofs intact.
+  legs_declared: [String],
+  /// Names from the battery's exactly-one EXECUTED_LEGS line.
+  legs_executed: [String],
+  legs: [LegRecord],
+  /// The verbatim names-only declaration-verifier result.
+  verify_verdict: String,
+  /// Per-run waivers name leg, reason, and who ruled; the denominator travels.
+  waivers: [Waiver],
+  /// VERDICT INVERSION: a red gate routes to workflow SUCCESS; Failed is
+  /// reserved for could-not-measure; only unproven routes to failure. The
+  /// status answers "did I measure?", the receipt answers "what did I measure?".
+  verdict: String,
+}
+
+/// A determinate census of a tree with no committed gates contract.
+type Undeclared {
+  subject_repo: String,
+  /// A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE
+  /// AN AUTHORITY-BEARING ACT.
+  ref_requested: String,
+  head_commit: String,
+  tree_path: String,
+  /// Workflow status is SUCCESS: the workflow measured the tree and found no
+  /// contract, a determinate census result rather than could-not-measure. The
+  /// literal `undeclared` is not-a-verdict and consumers MUST treat it as never
+  /// green, never red, and never pass-by-omission. A refusal with no assigned
+  /// status resolves to the runtime's default, and a repo with no gates.json
+  /// must never be able to read as a pass.
+  verdict: String,
+  refusal: String,
+  teardown_ok: Bool,
+}
+
+type Refusal { kind: String, reason: String, selector_path: String, teardown_ok: Bool }
+type ProvisionProbe { ok: Bool, owns_tree: Bool, refusal: String, tree_path: String, head_commit: String }
+type PrecheckProbe { ok: Bool, kind: String, refusal: String, selector_path: String }
+type BatteryProbe { measured: Bool, cancelled: Bool, rc: Int, contended: Bool, log_path: String, refusal: String }
+type VerifyProbe { measured: Bool, exact: Bool, refusal: String }
+type ReceiptProbe { ok: Bool, disposition: String, refusal: String, receipt: Receipt? }
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
+
+worker lane_repo_battery
+  action provision(subject_repo: String, ref_requested: String, workspace_root: String, workflow_id: String) -> ProvisionProbe
+    timeout 30m
+  action precheck(workspace_root: String, workflow_id: String) -> PrecheckProbe
+    timeout 30m
+  /// No retry clause: a repository battery runs once under the workflow duration.
+  action battery(workspace_root: String, workflow_id: String) -> BatteryProbe
+    timeout 8h
+  action verify(workspace_root: String, workflow_id: String) -> VerifyProbe
+    timeout 30m
+  action receipt(subject_repo: String, ref_requested: String, workspace_root: String, workflow_id: String, waivers: [Waiver]) -> ReceiptProbe
+    timeout 30m
+  action teardown(workspace_root: String, workflow_id: String) -> TeardownProbe
+    timeout 30m
+
+step admit
+  outcome anonymous: when waivers |> any(.ruled_by == ""),
+    route refused(kind: "anonymous_waiver", reason: "every waiver must name who ruled it", selector_path: "input.waivers", teardown_ok: true)
+  outcome accepted: otherwise, route provision
+
+step provision
+  provision(subject_repo: subject_repo, ref_requested: subject_ref,
+    workspace_root: workspace_root, workflow_id: workflow.id) -> p
+  outcome ready: when p.ok, route precheck
+  outcome owned: when p.owns_tree, route teardown_provision_refused
+  outcome refused: otherwise,
+    route refused(kind: "unprovisioned", reason: p.refusal, selector_path: "", teardown_ok: true)
+
+step precheck
+  precheck(workspace_root: workspace_root, workflow_id: workflow.id) -> c
+  outcome ready: when c.ok, route battery
+  outcome undeclared: when c.kind == "undeclared", route teardown_undeclared
+  outcome refused: otherwise, route teardown_precheck_refused
+
+step battery
+  battery(workspace_root: workspace_root, workflow_id: workflow.id) -> b
+  outcome complete: when b.measured and not b.cancelled, route verify
+  outcome refused: otherwise, route teardown_battery_refused
+
+step verify
+  verify(workspace_root: workspace_root, workflow_id: workflow.id) -> v
+  outcome complete: when v.measured, route receipt
+  outcome refused: otherwise, route teardown_verify_refused
+
+step receipt
+  receipt(subject_repo: subject_repo, ref_requested: subject_ref,
+    workspace_root: workspace_root, workflow_id: workflow.id, waivers: waivers) -> r
+  outcome measured: when r.ok and r.disposition == "measured", route teardown_reported
+  outcome unproven: when r.ok and r.disposition == "unproven", route teardown_unproven
+  outcome refused: otherwise, route teardown_receipt_refused
+
+step teardown_reported
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome carried: when r.receipt is present, route reported(r.receipt)
+  outcome ghost: otherwise,
+    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
+
+step teardown_unproven
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome carried: when r.receipt is present, route unproven(r.receipt)
+  outcome ghost: otherwise,
+    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
+
+step teardown_undeclared
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route undeclared(subject_repo: subject_repo, ref_requested: subject_ref,
+      head_commit: p.head_commit, tree_path: p.tree_path, verdict: "undeclared",
+      refusal: c.refusal, teardown_ok: true)
+
+step teardown_provision_refused
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "unprovisioned", reason: p.refusal, selector_path: p.tree_path, teardown_ok: true)
+
+step teardown_precheck_refused
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: c.kind, reason: c.refusal, selector_path: c.selector_path, teardown_ok: true)
+
+step teardown_battery_refused
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "cancelled_or_unmeasured_battery", reason: b.refusal,
+      selector_path: p.tree_path, teardown_ok: true)
+
+step teardown_verify_refused
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "verify_unmeasured", reason: v.refusal, selector_path: p.tree_path, teardown_ok: true)
+
+step teardown_receipt_refused
+  teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "receipt_unmeasured", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
