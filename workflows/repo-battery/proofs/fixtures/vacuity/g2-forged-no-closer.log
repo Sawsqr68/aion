@@ -1,0 +1,5 @@
+=== estate-guard ===
+estate root /x
+=== must-be-claimed gate ===
+  every claim in the estate queue is claimed
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion/tests/test_support/gleam.rs:188 compiled nothing

@@ -1,0 +1,5 @@
+=== rust:test-all-features ===
+running 2 tests
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a kill -9 of a node in a 3-node cluster failing over and completing the work EXACTLY ONCE — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. (crates/aion-cli/tests/lsub5b_osproc_kill9_failover_e2e.rs:31)
+test result: ok. 2 passed; 0 failed
+--- rust:test-all-features exit 0 ---

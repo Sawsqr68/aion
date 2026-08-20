@@ -1,0 +1,5 @@
+aion house battery — repo root /x
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion/tests/test_support/gleam.rs:188 compiled nothing
+
+=== rust:fmt ===
+--- rust:fmt exit 0 ---

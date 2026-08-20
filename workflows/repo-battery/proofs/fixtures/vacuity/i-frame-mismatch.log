@@ -1,0 +1,3 @@
+=== rust:test ===
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion/tests/test_support/gleam.rs:188 compiled nothing
+--- rust:clippy exit 0 ---

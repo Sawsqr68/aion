@@ -1,0 +1,9 @@
+aion house battery — repo root /x
+HEAD abc1234
+
+=== rust:test ===
+running 13 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion-package/tests/golden_gleam_exec.rs:289 compiled nothing
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+--- rust:test exit 0 ---

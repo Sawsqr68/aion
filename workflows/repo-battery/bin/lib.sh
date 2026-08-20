@@ -36,7 +36,19 @@ secret_shaped() {
 worker_env_value() {
   local name=$1
   local entry
-  if [[ -v "$name" ]]; then
+  # 🔴 `${!name+set}`, NOT `[[ -v "$name" ]]`. `-v` is a bash 4.2 unary operator
+  # and bash 3.2 — which is what macOS ships, and still the only bash on some of
+  # the machines this estate runs gates from — does not know it. It is not a
+  # runtime failure that a guard could catch: `[[` is parsed as a compound
+  # command, so bash 3.2 rejects the line at PARSE time with "conditional binary
+  # operator expected", and sourcing this library fails outright. Every script in
+  # this directory sources it, so all of them were unusable there, whether or not
+  # they ever call this function.
+  #
+  # The replacement is exactly equivalent — `+set` expands for a variable that is
+  # set INCLUDING when it is empty, which is precisely what `-v` tests — and was
+  # checked both ways on bash 3.2 rather than assumed.
+  if [[ -n "${!name+set}" ]]; then
     printf '%s' "${!name}"
     return 0
   fi

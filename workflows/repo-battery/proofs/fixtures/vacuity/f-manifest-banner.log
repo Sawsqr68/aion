@@ -1,0 +1,8 @@
+=== rust:test ===
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion-server/tests/test_support/gleam.rs:188 compiled nothing
+--- rust:test exit 0 ---
+
+================ BATTERY MANIFEST ================
+  PASS  rust:test                    exit 0
+=================================================
+SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion/tests/test_support/gleam.rs:188 compiled nothing

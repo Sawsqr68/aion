@@ -40,20 +40,104 @@ while read -r result name _ rc; do
   legs=$(jq -c --argjson record "$record" '. + [$record]' <<<"$legs")
 done < <(sed -n '/^================ BATTERY MANIFEST ================/,/^=================================================/p' "$log_path" | sed '1d;$d')
 
+# ── Vacuity: legs that PASSED while announcing they proved nothing ───────────
+#
+# A runtime-gated skip returns Ok(()) and libtest counts it a PASS, so a leg can
+# be green while the proofs it is named for did not happen. The suites announce
+# it on the raw stderr handle; until now nothing consumed the announcement.
+#
+# 🔴 THE MARKER IS DECLARED BY THE REPOSITORY, NOT ASSUMED HERE. This workflow
+# runs against any repo, and a marker invented by the harness would silently
+# match nothing in a repo that spells it differently — a scan that measures
+# nothing while reporting clean. A repo that declares none is told so in the
+# verdict rather than quietly skipped, because "not checked" and "checked and
+# clean" must never look the same.
+vacuity_marker=$(jq -r '.vacuity_marker // empty' "$tree/gates.json" 2>/dev/null || true)
+vacuity='{"scanned":false,"total":0,"legs":[],"unattributed":[]}'
+vacuity_refusal=""
+if [[ -z "$vacuity_marker" ]]; then
+  vacuity_refusal="gates.json declares no vacuity_marker, so announcements of the form a runtime-gated skip emits were NOT checked in this run. This is unmeasured, not clean."
+else
+  # The scanner is told which leg names are real, so a line printed BY a leg in
+  # the shape of a frame cannot hijack attribution. This is not hypothetical:
+  # the #113 landing log has 25 frame openers for 24 legs, the extra printed by
+  # `estate-guard`'s own output.
+  declared_legs_file="$run_dir/declared-legs.txt"
+  jq -r '.legs[].name' "$tree/gates.json" >"$declared_legs_file"
+  set +e
+  vacuity_out=$(bash "$SCRIPT_DIR/scan-vacuity.sh" "$log_path" "$vacuity_marker" "$declared_legs_file" 2>&1)
+  vacuity_rc=$?
+  set -e
+  if [[ "$vacuity_rc" -eq 0 ]]; then
+    vacuity=$vacuity_out
+  else
+    vacuity_refusal="vacuity scanner refused (rc $vacuity_rc): $vacuity_out"
+  fi
+fi
+
+# An announcement that belongs to no leg means the log framing changed or the
+# log is truncated. Either way this verifier no longer knows what it measured,
+# so it refuses instead of reporting the legs it did manage to attribute.
+if [[ -z "$vacuity_refusal" ]] && [[ $(jq '.unattributed | length' <<<"$vacuity") -gt 0 ]]; then
+  vacuity_refusal="vacuity scanner found $(jq '.unattributed | length' <<<"$vacuity") announcement(s) it could not attribute to a leg ($(jq '.frame_mismatches' <<<"$vacuity") of them from a closer naming a different leg than the open frame). A run that cannot say WHICH leg proved nothing has not measured the thing this verdict reports."
+fi
+
+# Fold the scan into the leg records. A leg that FAILED stays red: red is the
+# stronger statement and a vacuous red is still a red.
+if [[ -z "$vacuity_refusal" ]]; then
+  # 🔴 AN INDEX, NOT A GENERATOR IN A BINDING. The first version of this used
+  # `($vac.legs[] | select(.name == $leg.name) | .announcements) as $ann`. In jq
+  # a binding over an EMPTY generator yields zero outputs, so `map` silently
+  # DROPPED every leg that had no announcements — 22 of 24 legs vanished from the
+  # record while the verdict still read correctly, because the verdict only
+  # depends on the legs that remained. Caught by noticing the green count was 0
+  # when it should have been 22; nothing in the verdict itself could show it.
+  legs=$(jq -c --argjson vac "$vacuity" '
+    ($vac.legs | map({key: .name, value: .announcements}) | from_entries) as $index
+    | map(. as $leg
+          | ($index[$leg.name] // []) as $ann
+          | if ($ann | length) > 0
+            then $leg + {announcements: $ann}
+                 + (if $leg.status == "green" then {status: "unproven"} else {} end)
+            else $leg end)' <<<"$legs")
+fi
+
 measured=true
 exact=false
 verdict=""
 refusal=""
 if [[ "$verify_rc" -eq 0 ]]; then
   exact=true
-  if jq -e 'all(.[]; .status == "green")' <<<"$legs" >/dev/null; then verdict="green"; else verdict="red"; fi
+  # Precedence: a red outranks an unproven, and an unproven outranks a green.
+  # Green is the only verdict that claims the run ESTABLISHED what it ran.
+  if jq -e 'any(.[]; .status == "red")' <<<"$legs" >/dev/null; then
+    verdict="red"
+  elif jq -e 'any(.[]; .status == "unproven")' <<<"$legs" >/dev/null; then
+    verdict="unproven"
+  else
+    verdict="green"
+  fi
 elif [[ "$verify_rc" -eq 1 ]]; then
   verdict="unproven"
 else
   measured=false
   refusal="declaration verifier could not measure (rc $verify_rc): $verify_verdict"
 fi
+
+# A vacuity refusal never upgrades a verdict, and never hides behind one: it
+# cannot make a red green, and it must not let a green read as established.
+if [[ -n "$vacuity_refusal" ]]; then
+  refusal="${refusal:+$refusal | }$vacuity_refusal"
+  # 🔴 An `if`, not `[[ … ]] && …`. Under `set -e` a failing test at the end of
+  # an AND-list carries its non-zero status to the statement and kills the
+  # script — here that would mean a green run producing NO verdict file at all,
+  # which reads as a harness crash rather than as the verdict it had computed.
+  if [[ "$verdict" == "green" ]]; then
+    verdict="unproven"
+  fi
+fi
 jq -cn --argjson measured "$measured" --argjson exact "$exact" --argjson verify_rc "$verify_rc" \
   --arg verify_verdict "$verify_verdict" --arg verdict "$verdict" \
   --arg refusal "$refusal" --argjson legs_executed "$legs_executed" --argjson legs "$legs" \
-  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, refusal:$refusal}' | tee "$result_path"
+  --argjson vacuity "$vacuity" \
+  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, vacuity:$vacuity, refusal:$refusal}' | tee "$result_path"

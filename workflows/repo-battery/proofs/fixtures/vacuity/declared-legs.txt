@@ -1,0 +1,5 @@
+rust:fmt
+rust:clippy
+rust:test
+rust:test-all-features
+estate-guard

@@ -1,0 +1,13 @@
+=== rust:clippy ===
+warning: constant `SKIP_MARKER` is never used
+   --> crates/aion-package/tests/test_support/gleam.rs:33:18
+    |
+ 33 | pub(crate) const SKIP_MARKER: &str = "SKIPPED (PROVES NOTHING)";
+    |                  ^^^^^^^^^^^
+    |
+warning: unused format string
+   --> crates/aion-awl/tests/test_support/gleam.rs:113:9
+    |
+113 |         "SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test \
+    |         ^
+--- rust:clippy exit 0 ---

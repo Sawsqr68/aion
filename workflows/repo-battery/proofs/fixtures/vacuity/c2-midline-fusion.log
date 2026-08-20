@@ -1,0 +1,5 @@
+=== rust:test ===
+running 13 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... okSKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the Gleam-dependent test at crates/aion-cli/tests/test_support/gleam.rs:188 compiled nothing
+test result: ok. 13 passed; 0 failed
+--- rust:test exit 0 ---
