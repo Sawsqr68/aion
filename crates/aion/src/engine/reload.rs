@@ -5,7 +5,7 @@
 //! D3 embedded-only API with serde-ready types (the server endpoint is a
 //! follow-up brief), D4 required `package_version` on start events.
 
-use aion_core::Event;
+use aion_core::{Event, run_segment, status_from_events};
 use aion_package::ContentHash;
 
 use crate::error::PinHolder;
@@ -307,19 +307,41 @@ impl Engine {
         }
 
         for handle in self.registry().list()? {
-            if handle.workflow_type() == workflow_type
-                && handle.loaded_version() == version
-                && !handle.cached_status().is_terminal()
-            {
-                return Err(EngineError::VersionPinned {
-                    workflow_type: workflow_type.to_owned(),
-                    version: version.clone(),
-                    pinned_by: PinHolder::LiveRun {
-                        workflow_id: handle.workflow_id().clone(),
-                        run_id: handle.run_id().clone(),
-                    },
-                });
+            if handle.workflow_type() != workflow_type || handle.loaded_version() != version {
+                continue;
             }
+            if handle.cached_status().is_terminal() {
+                continue;
+            }
+            // 🔴 The cached status is NOT the authority, and a check keyed on it
+            // alone refused legitimate unloads (aion#94). `handle_process_exit_attempt`
+            // appends the terminal, rings the completion doorbell — which releases
+            // `Engine::result` — and only THEN reconciles this handle. An unload
+            // issued promptly after observing the run's result therefore arrives
+            // while a durably-terminal run still caches `Running`, and was refused
+            // as a live pin. That is issue #51's window reached through this
+            // caller; #51 was fixed at `reopen` (see `lifecycle/reopen.rs:106-115`,
+            // "history is the authority. The handle is NOT") and closed, while
+            // this second consumer of the same window was never touched.
+            //
+            // History settles it. The read costs one store round trip and happens
+            // only on the path that was about to refuse, never on the common one.
+            let history = self.store().read_history(handle.workflow_id()).await?;
+            if status_from_events(run_segment(&history, handle.run_id())).is_terminal() {
+                continue;
+            }
+            // Not proven terminal — including a run whose history cannot be read
+            // as a terminal segment at all — so the pin stands. The unproven case
+            // resolves toward REFUSING an unload, never toward deleting a module
+            // a live run is executing.
+            return Err(EngineError::VersionPinned {
+                workflow_type: workflow_type.to_owned(),
+                version: version.clone(),
+                pinned_by: PinHolder::LiveRun {
+                    workflow_id: handle.workflow_id().clone(),
+                    run_id: handle.run_id().clone(),
+                },
+            });
         }
 
         let recorded = crate::loader::package_version_of(version);
@@ -434,3 +456,7 @@ impl Engine {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "reload_tests.rs"]
+mod reload_tests;
