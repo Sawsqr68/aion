@@ -1380,9 +1380,6 @@ mod lsub_prod_xnode_e2e {
     const FAN_OUT: usize = 4;
     const FAN_ACTIVITY_TYPES: [&str; FAN_OUT] = ["fan:0", "fan:1", "fan:2", "fan:3"];
     const POLL_DEADLINE: Duration = Duration::from_secs(20);
-    /// How long the in-band registration is given. Unchanged from the value this
-    /// wait has always used; named so both tests share one, not re-chosen.
-    const REGISTRATION_PATIENCE: Duration = Duration::from_secs(5);
     /// The one fan-out member the reconnect pin holds. Any of the four would do —
     /// they are dispatched independently and served by identical handlers.
     const HELD_ACTIVITY_TYPE: &str = FAN_ACTIVITY_TYPES[0];
@@ -1760,6 +1757,45 @@ mod lsub_prod_xnode_e2e {
         Ok(aion_core::WorkflowId::new(workflow_id))
     }
 
+    /// How long a freshly connected worker needs before the dispatch path may
+    /// select it, DERIVED from the same two facts the server derives it from.
+    ///
+    /// A worker is dispatch-ineligible until it serves an OPENING PROBATION:
+    /// [`Reachability::is_proved`] requires `DISPATCH_PROBATION_PINGS` consecutive
+    /// answered liveness pings, at the probe's cadence of
+    /// [`sweep_interval`](crate::worker::sweep_interval)`(heartbeat_window)`. The
+    /// constant's own documentation states the cost — *"at the probe's cadence a
+    /// fresh worker is undispatchable for K cadences while its first dispatches
+    /// park"* — so this is designed behaviour a test must wait out, not a delay to
+    /// be shortened.
+    ///
+    /// One extra cadence is allowed because the first round lands at an arbitrary
+    /// offset inside the first interval: the worker connects between rounds, so it
+    /// can miss up to one whole cadence before its first answer is even counted.
+    ///
+    /// # Why this is not a raised timeout
+    ///
+    /// It was 5 seconds, fixed, and that is how this test became one of four
+    /// documented carriers of a load-sensitive flake
+    /// (`gate-logs/lock-race-attribution/VERDICT.md`). The mechanism, measured:
+    /// `dispatch_ineligible` starts EMPTY and `select_worker` filters only against
+    /// what the probe has published, so a run in which **no probe round lands
+    /// inside the window** selects the worker immediately and passes, while a run
+    /// in which one does correctly withholds it for ~2 cadences and fails. On the
+    /// default 30s window that is 7.5s per cadence against a 5s wait.
+    ///
+    /// 🔴 The passing runs were the WRONG ones. They dispatched to a worker that
+    /// had not served its probation — a path production does not permit, because
+    /// production parks those dispatches. Waiting for genuine eligibility makes
+    /// this test MORE production-shaped, not more lenient, and that is the reason
+    /// to do it. Raising a bound until a flake stops is how a liveness bug gets
+    /// buried; deriving the bound from the mechanism that sets it is not the same
+    /// act, and the register warns about the first for good reason.
+    fn eligibility_patience(config: &ServerConfig) -> Duration {
+        let cadence = crate::worker::sweep_interval(config.worker.heartbeat_window);
+        cadence * (crate::worker::heartbeat::DISPATCH_PROBATION_PINGS + 1)
+    }
+
     /// Wait until the worker's in-band registration lands in the SAME registry the
     /// dispatch path selects from, with every fan-out activity type eligible.
     ///
@@ -1770,7 +1806,17 @@ mod lsub_prod_xnode_e2e {
     ///
     /// 1. the liminal listener never bound, so nothing could dial in;
     /// 2. the worker never connected, or died dialling;
-    /// 3. it connected and registration was merely slow.
+    /// 3. it connected and registration was merely slow;
+    /// 4. it connected, registered correctly, and the SELECTOR refused it anyway —
+    ///    because the liveness probe published it as unreachable, or because it is
+    ///    not indexed for the activity type it advertises.
+    ///
+    /// The fourth was not in the first version of this report, and it is the world
+    /// a real occurrence turned out to be in: the listener was bound, a worker was
+    /// registered under the right namespace and queue advertising all four activity
+    /// types, and every `select_worker` still returned nothing. A report that
+    /// cannot separate "not registered" from "registered and refused" names the
+    /// wrong half of the system.
     ///
     /// That is not a hypothetical distinction here. This module's e2e is one of
     /// four documented carriers of a load-sensitive flake
@@ -1855,16 +1901,57 @@ mod lsub_prod_xnode_e2e {
         lines.push(format!(
             "asked of it: namespace={NAMESPACE:?} task_queue={TASK_QUEUE:?}"
         ));
-        // Which of the four the selector could not satisfy. A PARTIAL answer here
-        // is the loudest signal available: it rules out both the listener and the
-        // connection, and names the mismatch instead.
+        // The liveness probe's reachability verdict. `select_worker` skips every
+        // worker in this set, so a registered, correctly-advertised worker that is
+        // listed here is refused for a reason nothing else in this report shows.
+        lines.push(match registry.dispatch_ineligible() {
+            Ok(ineligible) if ineligible.is_empty() => {
+                String::from("dispatch-ineligible: none — reachability is not refusing anyone")
+            }
+            Ok(ineligible) => format!(
+                "dispatch-ineligible: {ineligible:?} — the liveness probe has published these \
+                 as unreachable and select_worker skips them"
+            ),
+            Err(error) => format!("dispatch-ineligible: UNREADABLE ({error})"),
+        });
+        // Which of the four the selector could not satisfy, and — the part that
+        // discriminates — the pool census beside each refusal.
+        //
+        // `select_worker` filters on THREE things: the activity index for
+        // `(namespace, task_queue) + activity_type`, the node pin, and the
+        // dispatch-ineligible set. The census counts the first two and does NOT
+        // apply the third, so the pair of answers separates the remaining worlds
+        // that a registry dump alone leaves fused:
+        //
+        // - census serves it, selector refuses  ⇒ REACHABILITY, not registration;
+        // - census serves 0 for the activity    ⇒ the worker is in the pool but not
+        //   indexed for this activity type;
+        // - census serves 0 for the pool        ⇒ it is not in this pool at all,
+        //   whatever `all_workers` shows.
+        //
+        // Written after the bare registry dump above failed to close a real case:
+        // it proved the listener was bound and a worker with all four activity
+        // types was registered, and still could not say why every selection
+        // returned nothing.
         for activity_type in FAN_ACTIVITY_TYPES {
             let outcome = match registry.select_worker(NAMESPACE, TASK_QUEUE, activity_type, None) {
                 Ok(Some(handle)) => format!("worker {:?}", handle.id()),
                 Ok(None) => String::from("NO worker"),
                 Err(error) => format!("error: {error}"),
             };
-            lines.push(format!("select_worker({activity_type}) -> {outcome}"));
+            let census = match registry.pool_census(NAMESPACE, TASK_QUEUE, activity_type, None) {
+                Ok(census) => format!(
+                    "in_pool={} serving_activity={} compatible={} last_compatible_age={:?}",
+                    census.workers_in_pool,
+                    census.workers_serving_activity,
+                    census.compatible_workers,
+                    census.last_compatible_poller_age
+                ),
+                Err(error) => format!("census UNREADABLE ({error})"),
+            };
+            lines.push(format!(
+                "select_worker({activity_type}) -> {outcome}  [census: {census}]"
+            ));
         }
         format!("\n  {}", lines.join("\n  "))
     }
@@ -1887,6 +1974,9 @@ mod lsub_prod_xnode_e2e {
         // the live engine (gated on outbox.enabled).
         let config = server_config(&db_path, package_path, listen_address);
         let outbox_config = config.outbox.clone();
+        // Captured before `build` consumes the config: the wait below is derived
+        // from the very window this server is about to run its liveness probe on.
+        let patience = eligibility_patience(&config);
         let state = ServerState::build(config).await.map_err(test_error)?;
 
         // (B) Drive the EXACT production commissioning function run_server calls:
@@ -1924,9 +2014,7 @@ mod lsub_prod_xnode_e2e {
         // Wait until the in-band registration landed in the SAME registry the
         // dispatch path selects from (every fan-out activity type is eligible).
         let registry = state.worker_registry().clone();
-        if let Err(error) =
-            wait_for_registration(&registry, listen_address, REGISTRATION_PATIENCE).await
-        {
+        if let Err(error) = wait_for_registration(&registry, listen_address, patience).await {
             worker.stop();
             return Err(error);
         }
@@ -2256,6 +2344,22 @@ mod lsub_prod_xnode_e2e {
     ///   a NUMBER asserted against nothing. No threshold is invented here: the
     ///   right bound is a conversation to have with the measurement in hand.
     ///
+    /// ⚠️ **O3 is recovery LATENCY, and latency is not COST.** The number is
+    /// measured on a fixture activity that is a pure `String -> String`, so its
+    /// repeat costs microseconds. The real cost of a repeat is the repeated
+    /// activity's own runtime plus its repeated SIDE EFFECTS, which this pin does
+    /// not measure and structurally cannot: #69's own exhibit was an *agent*
+    /// activity, whose repeat is minutes of compute and files written twice.
+    /// Quote the finding — *repeated work, not lost work, one repeat per in-flight
+    /// activity* — rather than the milliseconds, which carry their premise (a
+    /// trivial activity) only for as long as someone remembers to attach it.
+    ///
+    /// The settle-wait below is bounded by [`POLL_DEADLINE`], so this pin cannot
+    /// hang; but that bound is ~100x the observed recovery, so it is a liveness
+    /// guard and NOT a latency guard. A large latency regression would still pass
+    /// here, reported in O3 and asserted by nothing — deliberately, because the
+    /// correct bound is not derivable from the samples taken so far.
+    ///
     /// Executions are REPORTED, never asserted equal to the fan-out. A transport
     /// that can lose a reply gives at-least-once delivery, so the sibling test's
     /// `executions == FAN_OUT` is the wrong shape here and must not be copied
@@ -2288,6 +2392,9 @@ mod lsub_prod_xnode_e2e {
 
         let config = server_config(&db_path, package_path, listen_address);
         let outbox_config = config.outbox.clone();
+        // Captured before `build` consumes the config: the wait below is derived
+        // from the very window this server is about to run its liveness probe on.
+        let patience = eligibility_patience(&config);
         let state = ServerState::build(config).await.map_err(test_error)?;
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let backpressure_settings = BackpressureSettings {
@@ -2323,7 +2430,8 @@ mod lsub_prod_xnode_e2e {
             timing,
         );
 
-        let outcome = observe_reconnect(&state, &relay, &seen, &release, listen_address).await;
+        let outcome =
+            observe_reconnect(&state, &relay, &seen, &release, listen_address, patience).await;
 
         // Teardown runs on EVERY path, including a failing one: a leaked worker
         // thread or listener poisons whatever runs next, and this venue is already
@@ -2379,13 +2487,9 @@ mod lsub_prod_xnode_e2e {
         seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>,
         release: &Arc<std::sync::atomic::AtomicBool>,
         listen_address: SocketAddr,
+        patience: Duration,
     ) -> Result<(), TestError> {
-        wait_for_registration(
-            state.worker_registry(),
-            listen_address,
-            REGISTRATION_PATIENCE,
-        )
-        .await?;
+        wait_for_registration(state.worker_registry(), listen_address, patience).await?;
 
         let router = http_router(state.clone()).map_err(test_error)?;
         let workflow_id = start_over_http(&router).await?;
