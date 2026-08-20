@@ -29,6 +29,8 @@ backend = "haematite"               # durable ablative event store (the default)
 # once you know your box, e.g.:
 #   node_cache_budget = { bytes = 1073741824 }   # 1 GiB
 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 # The database directory defaults to `<AION_HOME>/data`, created on start.
 # One legacy exception: when AION_HOME is unset (a derived home) and a real
 # `./aion-data` directory sits in the server's working directory, that
