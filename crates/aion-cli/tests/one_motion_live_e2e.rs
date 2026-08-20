@@ -98,6 +98,21 @@ max_inflated_bytes = 67108864
 "#
             ),
         )?;
+        // The server's output goes to a FILE, not a pipe, for two reasons the
+        // pipe form cannot satisfy at once:
+        //
+        // - `Stdio::piped()` with nobody reading it is a hang waiting to happen.
+        //   Nothing drains these handles while the boot loop polls, so a server
+        //   chatty enough to fill the pipe buffer blocks on write and never
+        //   becomes healthy — a deadlock surfacing as a boot timeout.
+        // - A failure must be READABLE. A boot failure reporting only an exit
+        //   status is undiagnosable; the cause is one line of the server's own
+        //   log (`Address already in use`, a rejected config field).
+        //
+        // One file takes both streams, so interleaving is preserved in the order
+        // the server actually wrote it.
+        let server_log = workspace.path().join("server.log");
+        let log_handle = std::fs::File::create(&server_log)?;
         let mut child = Command::new(env!("CARGO_BIN_EXE_aion"))
             .args([
                 "server",
@@ -106,10 +121,10 @@ max_inflated_bytes = 67108864
             ])
             .env("AION_HOME", workspace.path().join("aion-home"))
             .current_dir(workspace.path())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::from(log_handle.try_clone()?))
+            .stderr(Stdio::from(log_handle))
             .spawn()?;
-        wait_for_boot(&mut child, http_port)?;
+        wait_for_boot(&mut child, http_port, &server_log)?;
         Ok(Self {
             child,
             grpc_port,
@@ -165,11 +180,39 @@ fn http_get_live(http_port: u16) -> Option<String> {
     Some(response)
 }
 
-fn wait_for_boot(child: &mut Child, http_port: u16) -> Result<(), TestError> {
+/// Whatever the server wrote before it died, read from its log file.
+///
+/// Three outcomes an empty string would otherwise collapse into one are kept
+/// apart, because they demand different next steps: the log could not be read
+/// at all, the server ran and wrote nothing, or the server named its own cause.
+/// "It wrote nothing" is a finding; "I could not read it" is a broken
+/// instrument, and reporting the second as the first is how a diagnosis gets
+/// abandoned.
+///
+/// The child must already be reaped when this is called, so everything it
+/// buffered has reached the file.
+fn dying_words(log: &Path) -> String {
+    match std::fs::read_to_string(log) {
+        Err(error) => format!(
+            "; the server log at {} was unreadable: {error}",
+            log.display()
+        ),
+        Ok(text) if text.trim().is_empty() => {
+            String::from(" (the server ran but wrote nothing before it died)")
+        }
+        Ok(text) => format!("; the server's own log said:\n{text}"),
+    }
+}
+
+fn wait_for_boot(child: &mut Child, http_port: u16, log: &Path) -> Result<(), TestError> {
     let started = Instant::now();
     loop {
         if let Some(status) = child.try_wait()? {
-            return Err(format!("server exited during boot with {status}").into());
+            return Err(format!(
+                "server exited during boot with {status}{}",
+                dying_words(log)
+            )
+            .into());
         }
         if let Some(response) = http_get_live(http_port)
             && response.starts_with("HTTP/1.1 200")
@@ -178,7 +221,20 @@ fn wait_for_boot(child: &mut Child, http_port: u16) -> Result<(), TestError> {
         }
         if started.elapsed() > BOOT_DEADLINE {
             child.kill()?;
-            return Err("server did not boot within the deadline".into());
+            // Reap before reading: the server's last writes only reach the file
+            // once it is gone, and a truncated post-mortem is worse than a slow
+            // one — it can omit the very line that names the cause.
+            if let Err(error) = child.wait() {
+                return Err(format!(
+                    "server did not boot within {BOOT_DEADLINE:?}, and reaping it failed: {error}"
+                )
+                .into());
+            }
+            return Err(format!(
+                "server did not boot within {BOOT_DEADLINE:?}{}",
+                dying_words(log)
+            )
+            .into());
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -412,6 +468,82 @@ fn the_run_timeout_flag_has_no_default() -> TestResult {
     assert!(
         !section.contains("[default: "),
         "`--timeout` must declare no default: {section}"
+    );
+    Ok(())
+}
+
+/// The boot-failure path must carry the server's OWN account of why it died.
+///
+/// This harness used to report a bare `server exited during boot with exit
+/// status: 1` while the server's dying words sat unread in a pipe nobody
+/// drained. A red in that shape is undiagnosable: it names the fact of failure
+/// and withholds the cause, so the next person to hit it starts from nothing.
+///
+/// The failure is forced with a config the server is guaranteed to reject, so
+/// the assertion is on a KNOWN cause rather than on whatever happened to go
+/// wrong — a post-mortem that cannot echo a cause it was given would pass a
+/// vaguer test.
+#[test]
+fn a_boot_failure_reports_the_servers_own_account_of_it() -> TestResult {
+    let workspace = tempfile::tempdir()?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(workspace.path(), std::fs::Permissions::from_mode(0o700))?;
+    }
+    let config = workspace.path().join("server-config.toml");
+    // `backend` is a closed set; this value is in no version of it.
+    std::fs::write(
+        &config,
+        "workflow_packages = []\n\n[store]\nbackend = \"no-such-backend\"\n",
+    )?;
+    let server_log = workspace.path().join("server.log");
+    let log_handle = std::fs::File::create(&server_log)?;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_aion"))
+        .args([
+            "server",
+            "--config",
+            config.to_str().ok_or("non-utf8 config path")?,
+        ])
+        .env("AION_HOME", workspace.path().join("aion-home"))
+        .current_dir(workspace.path())
+        .stdout(Stdio::from(log_handle.try_clone()?))
+        .stderr(Stdio::from(log_handle))
+        .spawn()?;
+
+    let Err(error) = wait_for_boot(&mut child, reserve_port()?, &server_log) else {
+        // Reaching here means a config naming an impossible backend booted a
+        // healthy server, which is a far larger finding than this test's own.
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(
+            "a server configured with `backend = \"no-such-backend\"` booted healthy".into(),
+        );
+    };
+    let report = error.to_string();
+
+    assert!(
+        report.contains("server exited during boot"),
+        "the failure must still say what happened: {report}"
+    );
+    // The invariant is that the server's own failure record reaches the report —
+    // not that the report echoes any particular token back. An earlier version
+    // of this assertion looked for the rejected value `no-such-backend`, which
+    // the server never repeats: it names the ALLOWED SET instead. That assertion
+    // failed against a perfectly working instrument, which is the wrong way for
+    // a test to be wrong.
+    assert!(
+        report.contains("aion-server failed"),
+        "the failure must carry the server's OWN failure record — got only:\n{report}"
+    );
+    assert!(
+        report.contains("store.backend must be one of"),
+        "the failure must carry the server's diagnosis of the config it was \
+         given, not merely the fact that it died — got only:\n{report}"
+    );
+    assert!(
+        !report.contains("wrote nothing before it died"),
+        "the server did write; reporting silence here would mean the log was \
+         never read:\n{report}"
     );
     Ok(())
 }
