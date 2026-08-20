@@ -4686,7 +4686,7 @@ mod tests {
         let reopened = HaematiteStore::open(
             &dir,
             test_node_cache_budget()?,
-            crate::LockAcquisitionRuling::from_millis(250, 5),
+            crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )?;
         assert_eq!(
             reopened.read_history(&workflow_id).await?.len(),
@@ -4772,7 +4772,7 @@ mod tests {
         let reopened = HaematiteStore::open(
             &dir,
             test_node_cache_budget()?,
-            crate::LockAcquisitionRuling::from_millis(250, 5),
+            crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )?;
         assert_eq!(
             reopened.read_history(&workflow_id).await?.len(),
@@ -4794,7 +4794,7 @@ mod tests {
         let via_open_or_create = HaematiteStore::open_or_create(
             &dir,
             test_node_cache_budget()?,
-            crate::LockAcquisitionRuling::from_millis(250, 5),
+            crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;
         assert_eq!(

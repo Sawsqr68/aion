@@ -611,7 +611,7 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     let leaf = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let outbox_leaf = leaf.clone();
@@ -848,7 +848,7 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let seeder = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let (workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
@@ -974,7 +974,7 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     let seeder = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let (_workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;

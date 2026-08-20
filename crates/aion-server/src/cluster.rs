@@ -910,7 +910,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 db_path.clone(),
                 haematite::NodeCacheBudget::Unlimited,
-                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
         );

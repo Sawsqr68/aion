@@ -475,7 +475,7 @@ async fn open_store() -> Result<Arc<HaematiteStore>, TestError> {
     HaematiteStore::open_or_create(
         path,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await
     .map(Arc::new)

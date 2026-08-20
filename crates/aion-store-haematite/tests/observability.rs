@@ -219,7 +219,9 @@ async fn list_activity_streams_enumerates_only_the_runs_streams_and_survives_reo
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
+            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
+        })?,
     )?;
     let summaries = reopened
         .list_activity_streams(&workflow(), &generation_one())
@@ -321,7 +323,9 @@ async fn two_generations_of_one_chain_never_share_a_durable_stream() -> Result<(
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
+            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
+        })?,
     )?;
     let second_generation = reopened.read_activity_events_from(&second_key, 0).await?;
     assert_eq!(
@@ -367,7 +371,9 @@ async fn observability_records_survive_reopen_and_are_invisible_to_replay() -> R
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
+            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
+        })?,
     )?;
 
     // The observability transcript survived kill-and-reopen.

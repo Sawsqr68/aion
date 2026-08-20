@@ -175,7 +175,7 @@ async fn server_over(
     let store = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let reader = store.clone();
@@ -389,7 +389,7 @@ async fn seed_corpses(
     let seeder = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let probe_history = seeder.read_history(probe_workflow).await?;

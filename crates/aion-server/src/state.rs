@@ -1814,21 +1814,25 @@ fn required_node_cache_budget(
 fn required_lock_acquisition_ruling(
     config: &StoreConfig,
 ) -> Result<aion_store_haematite::LockAcquisitionRuling, ServerError> {
-    let invalid = || ServerError::Config {
+    let absent = || ServerError::Config {
         message: crate::config::STORE_LOCK_ACQUISITION_REQUIRED.to_owned(),
     };
-    let patience_ms = config
-        .lock_acquisition_patience_ms
-        .filter(|value| *value > 0)
-        .ok_or_else(&invalid)?;
+    let patience_ms = config.lock_acquisition_patience_ms.ok_or_else(&absent)?;
     let retry_cadence_ms = config
         .lock_acquisition_retry_cadence_ms
-        .filter(|value| *value > 0 && *value <= patience_ms)
-        .ok_or_else(invalid)?;
-    Ok(aion_store_haematite::LockAcquisitionRuling::new(
-        std::time::Duration::from_millis(patience_ms),
-        std::time::Duration::from_millis(retry_cadence_ms),
-    ))
+        .ok_or_else(absent)?;
+    // Absence is this function's judgement; the SHAPE of the spans is the
+    // ruling type's own invariant. Re-deciding "both positive, cadence no
+    // greater than patience" here would be a second copy of one rule, free to
+    // drift from the one the type enforces on every other caller.
+    aion_store_haematite::LockAcquisitionRuling::from_millis(patience_ms, retry_cadence_ms).map_err(
+        |error| ServerError::Config {
+            message: format!(
+                "{}: {error}",
+                crate::config::STORE_LOCK_ACQUISITION_REQUIRED
+            ),
+        },
+    )
 }
 
 fn required_transcript_batch_policy(
@@ -2781,10 +2785,15 @@ mod tests {
         Ok(haematite::NodeCacheBudget::bytes(1 << 30)?)
     }
 
-    fn test_lock_acquisition() -> aion_store_haematite::LockAcquisitionRuling {
+    fn test_lock_acquisition()
+    -> Result<aion_store_haematite::LockAcquisitionRuling, Box<dyn std::error::Error>> {
         // Explicit test ruling for the measured 93–150 ms inherited-descriptor
-        // window; this bounds real lock attempts and is not a hidden sleep.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)
+        // window; this bounds real lock attempts and is not a hidden sleep. It
+        // is a TEST value, not a default: production reads the operator's
+        // ruling, and the type refuses spans that bound no waited retry.
+        Ok(aion_store_haematite::LockAcquisitionRuling::from_millis(
+            250, 5,
+        )?)
     }
 
     #[cfg(unix)]
@@ -2807,7 +2816,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
             || {
                 // The server has acquired and hardened `configured_root`, but
                 // Haematite has not opened or created anything. Replace the
@@ -2866,7 +2875,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         )?;
         assert!(responder.is_none());
         std::fs::rename(&configured_root, &held_root)?;
@@ -2930,7 +2939,7 @@ mod tests {
                 4,
                 None,
                 test_node_cache_budget()?,
-                test_lock_acquisition(),
+                test_lock_acquisition()?,
             ) else {
                 return Err(format!("mode {mode:04o} ancestor was accepted").into());
             };
@@ -2989,7 +2998,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
@@ -3059,7 +3068,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
@@ -3107,7 +3116,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
@@ -3164,7 +3173,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
@@ -3203,7 +3212,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         )?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
@@ -3232,7 +3241,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
-            test_lock_acquisition(),
+            test_lock_acquisition()?,
         )?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());

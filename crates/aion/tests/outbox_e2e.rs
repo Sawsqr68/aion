@@ -307,7 +307,7 @@ async fn started_and_suspended_at(
         HaematiteStore::open_or_create(
             unique_temp_path(name),
             haematite::NodeCacheBudget::Unlimited,
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,
     );

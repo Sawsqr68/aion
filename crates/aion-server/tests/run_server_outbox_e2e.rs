@@ -72,7 +72,7 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
         let reader = HaematiteStore::open_or_create(
             db_path.clone(),
             haematite::NodeCacheBudget::Unlimited,
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;
         let history = reader.read_history(&workflow_id).await?;
@@ -147,7 +147,7 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     let reader = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let history = assert_fan_out_settled(&reader, &workflow_id).await?;
@@ -196,7 +196,7 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
         let reader = HaematiteStore::open_or_create(
             db_path.clone(),
             haematite::NodeCacheBudget::Unlimited,
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;
         let states = row_states(&reader, &workflow_id, &[0, 1, 2, 3]).await?;
@@ -246,7 +246,7 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
     let reader = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let history = assert_fan_out_settled(&reader, &workflow_id).await?;
@@ -331,7 +331,7 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
     let reader = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
     let mut worker = WorkerSession::connect(grpc).await?;
@@ -456,7 +456,7 @@ async fn force_rows_to_stale_claimed(
     let store = HaematiteStore::open(
         data_dir,
         haematite::NodeCacheBudget::Unlimited,
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )?;
     let claimed_at = Utc::now() - chrono::Duration::seconds(60);
     for ordinal in ordinals {
