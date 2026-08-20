@@ -472,10 +472,14 @@ async fn open_store() -> Result<Arc<HaematiteStore>, TestError> {
         "aion-lsub3-failover-{}-{nanos}.db",
         std::process::id()
     ));
-    HaematiteStore::open_or_create(path, haematite::NodeCacheBudget::Unlimited)
-        .await
-        .map(Arc::new)
-        .map_err(test_error)
+    HaematiteStore::open_or_create(
+        path,
+        haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+    )
+    .await
+    .map(Arc::new)
+    .map_err(test_error)
 }
 
 /// Dispatcher config tuned for a fast test sweep: a short poll interval so the

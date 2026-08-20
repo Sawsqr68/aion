@@ -1811,6 +1811,26 @@ fn required_node_cache_budget(
     })
 }
 
+fn required_lock_acquisition_ruling(
+    config: &StoreConfig,
+) -> Result<aion_store_haematite::LockAcquisitionRuling, ServerError> {
+    let invalid = || ServerError::Config {
+        message: crate::config::STORE_LOCK_ACQUISITION_REQUIRED.to_owned(),
+    };
+    let patience_ms = config
+        .lock_acquisition_patience_ms
+        .filter(|value| *value > 0)
+        .ok_or_else(&invalid)?;
+    let retry_cadence_ms = config
+        .lock_acquisition_retry_cadence_ms
+        .filter(|value| *value > 0 && *value <= patience_ms)
+        .ok_or_else(invalid)?;
+    Ok(aion_store_haematite::LockAcquisitionRuling::new(
+        std::time::Duration::from_millis(patience_ms),
+        std::time::Duration::from_millis(retry_cadence_ms),
+    ))
+}
+
 fn required_transcript_batch_policy(
     runtime: &RuntimeConfig,
 ) -> Result<crate::activity_publisher::TranscriptBatchPolicy, ServerError> {
@@ -2072,6 +2092,7 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
     // `observability.max_batch_events` uses, at the same kind of seam. Read
     // before `config` is partially moved below.
     let node_cache_budget = required_node_cache_budget(&config)?;
+    let lock_acquisition = required_lock_acquisition_ruling(&config)?;
     let Some(data_dir) = config.data_dir else {
         return Err(ServerError::Config {
             message: "store.data_dir must not be empty when store.backend is haematite".to_owned(),
@@ -2120,7 +2141,13 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
     // must not stall the async runtime, so run it on the blocking pool. The
     // distributed constructor itself steps onto a bare thread for the bind.
     let (store, responder) = tokio::task::spawn_blocking(move || {
-        build_haematite_store(&data_dir, shard_count, cluster, node_cache_budget)
+        build_haematite_store(
+            &data_dir,
+            shard_count,
+            cluster,
+            node_cache_budget,
+            lock_acquisition,
+        )
     })
     .await
     .map_err(|error| ServerError::Config {
@@ -2193,6 +2220,7 @@ fn build_haematite_store(
     shard_count: usize,
     cluster: Option<crate::config::ClusterConfig>,
     node_cache_budget: haematite::NodeCacheBudget,
+    lock_acquisition: aion_store_haematite::LockAcquisitionRuling,
 ) -> Result<
     (
         aion_store_haematite::HaematiteStore,
@@ -2200,7 +2228,14 @@ fn build_haematite_store(
     ),
     ServerError,
 > {
-    build_haematite_store_with_hook(data_dir, shard_count, cluster, node_cache_budget, || Ok(()))
+    build_haematite_store_with_hook(
+        data_dir,
+        shard_count,
+        cluster,
+        node_cache_budget,
+        lock_acquisition,
+        || Ok(()),
+    )
 }
 
 fn build_haematite_store_with_hook(
@@ -2208,6 +2243,7 @@ fn build_haematite_store_with_hook(
     shard_count: usize,
     cluster: Option<crate::config::ClusterConfig>,
     node_cache_budget: haematite::NodeCacheBudget,
+    lock_acquisition: aion_store_haematite::LockAcquisitionRuling,
     before_backend_touch: impl FnOnce() -> Result<(), std::io::Error>,
 ) -> Result<
     (
@@ -2278,7 +2314,8 @@ fn build_haematite_store_with_hook(
             // store that predates the field (aion#75: an upgrade must never
             // present as data loss); a store that already rules keeps its
             // recorded ruling and this value is ignored.
-            HaematiteStore::open(&backend_path, node_cache_budget).map_err(ServerError::from)?
+            HaematiteStore::open(&backend_path, node_cache_budget, lock_acquisition)
+                .map_err(ServerError::from)?
         } else {
             HaematiteStore::create_with_shard_count(&backend_path, shard_count, node_cache_budget)
                 .map_err(ServerError::from)?
@@ -2685,6 +2722,8 @@ mod tests {
             shard_count: 1,
             cluster: None,
             node_cache_budget: Some(test_node_cache_budget()?),
+            lock_acquisition_patience_ms: Some(250),
+            lock_acquisition_retry_cadence_ms: Some(5),
             ..StoreConfig::default()
         })
         .await?;
@@ -2742,6 +2781,12 @@ mod tests {
         Ok(haematite::NodeCacheBudget::bytes(1 << 30)?)
     }
 
+    fn test_lock_acquisition() -> aion_store_haematite::LockAcquisitionRuling {
+        // Explicit test ruling for the measured 93–150 ms inherited-descriptor
+        // window; this bounds real lock attempts and is not a hidden sleep.
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)
+    }
+
     #[cfg(unix)]
     #[test]
     fn haematite_root_swap_before_first_backend_touch_cannot_redirect_writes()
@@ -2762,6 +2807,7 @@ mod tests {
             4,
             None,
             test_node_cache_budget()?,
+            test_lock_acquisition(),
             || {
                 // The server has acquired and hardened `configured_root`, but
                 // Haematite has not opened or created anything. Replace the
@@ -2815,8 +2861,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) =
-            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        )?;
         assert!(responder.is_none());
         std::fs::rename(&configured_root, &held_root)?;
         symlink(&capture, &configured_root)?;
@@ -2874,9 +2925,13 @@ mod tests {
                 .to_str()
                 .ok_or("temporary data path was not UTF-8")?;
 
-            let Err(error) =
-                super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)
-            else {
+            let Err(error) = super::build_haematite_store(
+                configured,
+                4,
+                None,
+                test_node_cache_budget()?,
+                test_lock_acquisition(),
+            ) else {
                 return Err(format!("mode {mode:04o} ancestor was accepted").into());
             };
             let message = error.to_string();
@@ -2929,7 +2984,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
+        let result = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&shared)
@@ -2993,7 +3054,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
+        let result = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&private_parent)
@@ -3035,7 +3102,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
+        let result = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&shared)
@@ -3086,7 +3159,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let result = super::build_haematite_store(configured, 4, None, test_node_cache_budget()?);
+        let result = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        );
         let cleanup = std::process::Command::new("chmod")
             .arg("-RN")
             .arg(&private_parent)
@@ -3119,8 +3198,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) =
-            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        )?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         drop(store);
@@ -3143,8 +3227,13 @@ mod tests {
             .to_str()
             .ok_or("temporary data path was not UTF-8")?;
 
-        let (store, responder) =
-            super::build_haematite_store(configured, 4, None, test_node_cache_budget()?)?;
+        let (store, responder) = super::build_haematite_store(
+            configured,
+            4,
+            None,
+            test_node_cache_budget()?,
+            test_lock_acquisition(),
+        )?;
         assert!(responder.is_none());
         assert!(data_root.join("config.json").is_file());
         for shard in 0..4 {
@@ -3242,6 +3331,8 @@ mod tests {
             ),
             shard_count: 4,
             node_cache_budget: Some(haematite::NodeCacheBudget::bytes(ONE_GIB)?),
+            lock_acquisition_patience_ms: Some(250),
+            lock_acquisition_retry_cadence_ms: Some(5),
             ..StoreConfig::default()
         })
         .await?;

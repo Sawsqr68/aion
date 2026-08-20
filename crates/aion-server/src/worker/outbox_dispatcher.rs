@@ -812,6 +812,7 @@ mod tests {
         HaematiteStore::open_or_create(
             unique_temp_path(name),
             haematite::NodeCacheBudget::Unlimited,
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
         )
         .await
         .map(Arc::new)
