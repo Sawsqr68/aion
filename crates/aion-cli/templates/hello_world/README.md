@@ -27,7 +27,7 @@ gleam build
 aion package .
 ```
 
-Start the server (terminal 1; state persists in `./aion-data`):
+Start the server (terminal 1; state persists in `$AION_HOME/data`, by default `~/.aion/data`):
 
 ```sh
 aion server --config aion.toml
