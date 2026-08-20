@@ -24,6 +24,8 @@ data_dir = "{data_dir}"
 shard_count = 1
 # Unlimited: this e2e measures BOOT and shard election, never caching.
 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 scheduler_threads = 1
@@ -70,6 +72,8 @@ grpc_address = "127.0.0.1:50051"
 backend = "haematite"
 # Unlimited: this e2e measures BOOT and shard election, never caching.
 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 query_timeout_ms = 10000
@@ -107,6 +111,8 @@ backend = "haematite"
 data_dir = ""
 # Unlimited: this e2e measures BOOT and shard election, never caching.
 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 query_timeout_ms = 10000
@@ -168,6 +174,8 @@ data_dir = "{data_dir}"
 shard_count = 1
 # Unlimited: this e2e measures BOOT and shard election, never caching.
 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 owned_shards = [0]
 
 [store.cluster]

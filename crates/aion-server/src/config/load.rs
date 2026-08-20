@@ -1196,6 +1196,8 @@ mod tests {
 
                 [store]
                 node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
             "#,
         )?;
         assert_eq!(

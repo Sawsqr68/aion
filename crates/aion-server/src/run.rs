@@ -1265,6 +1265,8 @@ mod tests {
                 // Required, no default: the haematite boot path refuses a config
                 // that does not rule on the node cache's byte ceiling.
                 node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
+                lock_acquisition_patience_ms: Some(250),
+                lock_acquisition_retry_cadence_ms: Some(5),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1505,6 +1507,8 @@ mod lsub_prod_xnode_e2e {
                 // Required, no default: the haematite boot path refuses a config
                 // that does not rule on the node cache's byte ceiling.
                 node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
+                lock_acquisition_patience_ms: Some(250),
+                lock_acquisition_retry_cadence_ms: Some(5),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {

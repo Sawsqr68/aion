@@ -273,6 +273,8 @@ fn server_config(http: u16, grpc: u16, liminal: u16) -> String {
          backend = \"haematite\"\n\
          # Unlimited: this e2e measures adoption across a server death, never caching.\n\
          node_cache_budget = \"unlimited\"\n\
+         lock_acquisition_patience_ms = 250\n\
+         lock_acquisition_retry_cadence_ms = 5\n\
          \n[runtime]\n\
          query_timeout_ms = 10000\n\
          \n[outbox]\n\

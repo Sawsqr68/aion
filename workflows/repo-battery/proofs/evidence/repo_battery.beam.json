@@ -1,0 +1,463 @@
+{
+  "actions": [
+    {
+      "action": "provision",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    },
+    {
+      "action": "precheck",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    },
+    {
+      "action": "battery",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    },
+    {
+      "action": "verify",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    },
+    {
+      "action": "receipt",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    },
+    {
+      "action": "teardown",
+      "node": null,
+      "task_queue": "lane_repo_battery"
+    }
+  ],
+  "input_schema": {
+    "$defs": {
+      "Waiver": {
+        "properties": {
+          "leg": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ruled_by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "leg",
+          "reason",
+          "ruled_by"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "repo_battery measures a caller-named ref in a run-owned tree by invoking the tree's committed `scripts/battery.sh` and `scripts/gates/verify-declaration.sh`. The workflow holds no leg list and never reimplements either instrument.  A successful workflow status says a determinate measurement completed; it does not say the gates were green. Red is receipt data. `undeclared` is a successful census but explicitly not a verdict. Could-not-measure faces are failures, and a declared leg that did not execute is `unproven`.  WHAT THIS DOES NOT PROVE: a green does not establish that leg names describe their commands, that the venue is trustworthy, or that another ref, environment, declaration, or script byte would produce the same result. The receipt witnesses the measured bytes and scope; it records and proceeds.",
+    "properties": {
+      "subject_ref": {
+        "type": "string"
+      },
+      "subject_repo": {
+        "type": "string"
+      },
+      "waivers": {
+        "items": {
+          "$ref": "#/$defs/Waiver"
+        },
+        "type": "array"
+      },
+      "workspace_root": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "subject_repo",
+      "subject_ref",
+      "workspace_root",
+      "waivers"
+    ],
+    "type": "object"
+  },
+  "output_schema": {
+    "$defs": {
+      "EnvRecord": {
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "leg": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "leg",
+          "name",
+          "present",
+          "secret",
+          "value",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "LegRecord": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rc": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "rc",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ScriptWitness": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "Waiver": {
+        "properties": {
+          "leg": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "ruled_by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "leg",
+          "reason",
+          "ruled_by"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "The repo_battery outcome envelope: which declared workflow outcome fired, with its payload.",
+    "oneOf": [
+      {
+        "properties": {
+          "outcome": {
+            "const": "reported"
+          },
+          "payload": {
+            "description": "The stable battery receipt. Declaration order is the required wire order.",
+            "properties": {
+              "battery_sha256": {
+                "type": "string"
+              },
+              "environment": {
+                "description": "A gate's scope is set by its environment as much as by its declaration. Values for non-secret variables and presence plus a digest for secret-shaped variables travel beside the frozen HEAD. A test that skips when a *_TEST_URL-style value is absent measures a different scope while it may report the same green; receipts without environment are not comparable.",
+                "items": {
+                  "$ref": "#/$defs/EnvRecord"
+                },
+                "type": "array"
+              },
+              "gates_json_sha256": {
+                "type": "string"
+              },
+              "head_commit": {
+                "type": "string"
+              },
+              "legs": {
+                "items": {
+                  "$ref": "#/$defs/LegRecord"
+                },
+                "type": "array"
+              },
+              "legs_declared": {
+                "description": "These names come from the provisioned tree's gates.json, never the venue. Zero legs is a typed refusal naming the selector path: a census returns empty when its selector is dead, and that is byte-identical to the thing being absent; zero legs would otherwise compare, render, and pass proofs intact.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "legs_executed": {
+                "description": "Names from the battery's exactly-one EXECUTED_LEGS line.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "ref_requested": {
+                "description": "A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE AN AUTHORITY-BEARING ACT.",
+                "type": "string"
+              },
+              "script_witnesses": {
+                "description": "Sha256 witnesses for the invoked subject and workflow scripts, sorted by path.",
+                "items": {
+                  "$ref": "#/$defs/ScriptWitness"
+                },
+                "type": "array"
+              },
+              "subject_repo": {
+                "type": "string"
+              },
+              "tree_path": {
+                "type": "string"
+              },
+              "venue": {
+                "description": "A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE AN AUTHORITY-BEARING ACT.",
+                "type": "string"
+              },
+              "verdict": {
+                "description": "VERDICT INVERSION: a red gate routes to workflow SUCCESS; Failed is reserved for could-not-measure; only unproven routes to failure. The status answers \"did I measure?\", the receipt answers \"what did I measure?\".",
+                "type": "string"
+              },
+              "verify_verdict": {
+                "description": "The verbatim names-only declaration-verifier result.",
+                "type": "string"
+              },
+              "waivers": {
+                "description": "Per-run waivers name leg, reason, and who ruled; the denominator travels.",
+                "items": {
+                  "$ref": "#/$defs/Waiver"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "subject_repo",
+              "ref_requested",
+              "head_commit",
+              "tree_path",
+              "gates_json_sha256",
+              "battery_sha256",
+              "script_witnesses",
+              "venue",
+              "environment",
+              "legs_declared",
+              "legs_executed",
+              "legs",
+              "verify_verdict",
+              "waivers",
+              "verdict"
+            ],
+            "type": "object"
+          }
+        }
+      },
+      {
+        "properties": {
+          "outcome": {
+            "const": "undeclared"
+          },
+          "payload": {
+            "description": "A determinate census of a tree with no committed gates contract.",
+            "properties": {
+              "head_commit": {
+                "type": "string"
+              },
+              "ref_requested": {
+                "description": "A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE AN AUTHORITY-BEARING ACT.",
+                "type": "string"
+              },
+              "refusal": {
+                "type": "string"
+              },
+              "subject_repo": {
+                "type": "string"
+              },
+              "teardown_ok": {
+                "type": "boolean"
+              },
+              "tree_path": {
+                "type": "string"
+              },
+              "verdict": {
+                "description": "Workflow status is SUCCESS: the workflow measured the tree and found no contract, a determinate census result rather than could-not-measure. The literal `undeclared` is not-a-verdict and consumers MUST treat it as never green, never red, and never pass-by-omission. A refusal with no assigned status resolves to the runtime's default, and a repo with no gates.json must never be able to read as a pass.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "subject_repo",
+              "ref_requested",
+              "head_commit",
+              "tree_path",
+              "verdict",
+              "refusal",
+              "teardown_ok"
+            ],
+            "type": "object"
+          }
+        }
+      },
+      {
+        "properties": {
+          "outcome": {
+            "const": "unproven"
+          },
+          "payload": {
+            "description": "The stable battery receipt. Declaration order is the required wire order.",
+            "properties": {
+              "battery_sha256": {
+                "type": "string"
+              },
+              "environment": {
+                "description": "A gate's scope is set by its environment as much as by its declaration. Values for non-secret variables and presence plus a digest for secret-shaped variables travel beside the frozen HEAD. A test that skips when a *_TEST_URL-style value is absent measures a different scope while it may report the same green; receipts without environment are not comparable.",
+                "items": {
+                  "$ref": "#/$defs/EnvRecord"
+                },
+                "type": "array"
+              },
+              "gates_json_sha256": {
+                "type": "string"
+              },
+              "head_commit": {
+                "type": "string"
+              },
+              "legs": {
+                "items": {
+                  "$ref": "#/$defs/LegRecord"
+                },
+                "type": "array"
+              },
+              "legs_declared": {
+                "description": "These names come from the provisioned tree's gates.json, never the venue. Zero legs is a typed refusal naming the selector path: a census returns empty when its selector is dead, and that is byte-identical to the thing being absent; zero legs would otherwise compare, render, and pass proofs intact.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "legs_executed": {
+                "description": "Names from the battery's exactly-one EXECUTED_LEGS line.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "ref_requested": {
+                "description": "A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE AN AUTHORITY-BEARING ACT.",
+                "type": "string"
+              },
+              "script_witnesses": {
+                "description": "Sha256 witnesses for the invoked subject and workflow scripts, sorted by path.",
+                "items": {
+                  "$ref": "#/$defs/ScriptWitness"
+                },
+                "type": "array"
+              },
+              "subject_repo": {
+                "type": "string"
+              },
+              "tree_path": {
+                "type": "string"
+              },
+              "venue": {
+                "description": "A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A REF IS THEREFORE AN AUTHORITY-BEARING ACT.",
+                "type": "string"
+              },
+              "verdict": {
+                "description": "VERDICT INVERSION: a red gate routes to workflow SUCCESS; Failed is reserved for could-not-measure; only unproven routes to failure. The status answers \"did I measure?\", the receipt answers \"what did I measure?\".",
+                "type": "string"
+              },
+              "verify_verdict": {
+                "description": "The verbatim names-only declaration-verifier result.",
+                "type": "string"
+              },
+              "waivers": {
+                "description": "Per-run waivers name leg, reason, and who ruled; the denominator travels.",
+                "items": {
+                  "$ref": "#/$defs/Waiver"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "subject_repo",
+              "ref_requested",
+              "head_commit",
+              "tree_path",
+              "gates_json_sha256",
+              "battery_sha256",
+              "script_witnesses",
+              "venue",
+              "environment",
+              "legs_declared",
+              "legs_executed",
+              "legs",
+              "verify_verdict",
+              "waivers",
+              "verdict"
+            ],
+            "type": "object"
+          }
+        }
+      },
+      {
+        "properties": {
+          "outcome": {
+            "const": "refused"
+          },
+          "payload": {
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "selector_path": {
+                "type": "string"
+              },
+              "teardown_ok": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "reason",
+              "selector_path",
+              "teardown_ok"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "required": [
+      "outcome",
+      "payload"
+    ],
+    "type": "object"
+  },
+  "synthesized_workflows": [],
+  "target": "beam",
+  "timeout_seconds": 28800,
+  "workflow_name": "repo_battery"
+}

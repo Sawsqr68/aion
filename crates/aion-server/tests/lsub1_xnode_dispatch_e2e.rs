@@ -357,10 +357,15 @@ async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, TestError> {
         "aion-lsub1-{name}-{}-{nanos}.db",
         std::process::id()
     ));
-    HaematiteStore::open_or_create(path, haematite::NodeCacheBudget::Unlimited)
-        .await
-        .map(Arc::new)
-        .map_err(test_error)
+    HaematiteStore::open_or_create(
+        path,
+        haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
+    )
+    .await
+    .map(Arc::new)
+    .map_err(test_error)
 }
 
 /// THE LOAD-BEARING TEST: a remote worker self-registers IN-BAND, the installed

@@ -150,3 +150,72 @@ it reported the listener state, the registry contents, the pool census and the
 dispatch-eligible set, the cause was legible on the first real occurrence. A
 failure that names the fact and withholds the cause is why this carrier survived
 two full re-derivations of this study.
+
+# 🔴 UPDATE 2026-08-21 — EVERY RATE ABOVE IS A PRE-PROFILE NUMBER
+
+The `fleet/rb-lockfix-result` landing introduces workspace build profiles that
+did not exist when any rate on this page was measured:
+
+    [profile.dev]   debug = 0, incremental = false
+    [profile.test]  debug = 0, incremental = false
+
+`origin/main` carried **no `[profile]` sections at all** before it. Every rate in
+the carrier census — 2/24, 2/24, 2/24, 1/24, and both branch columns — was
+measured under cargo's default `debug = 2, incremental = true`.
+
+## Why that matters more here than it would elsewhere
+
+These are **load- and timing-sensitive** failures. That is the whole reason this
+page exists. A build-profile change is not neutral with respect to them:
+
+- Measured at the desk on one crate's full target set, clean slate each arm:
+  **1913 MiB / 50.7s** at the old default → **862 MiB / 38.5s** at `debug = 0`.
+- The lockfix delivery's own report records the sharper case: a SHA-256 of the
+  whole test binary collapsed from **60s+ to 18s** under `debug = 0`, and that
+  collapse is what moved carrier 4 **into** its race window. The profile change
+  is documented, by the delivery itself, as having changed which side of a race
+  a test lands on.
+
+A change that moves one test into a race can move another out of one. Nothing
+here says the rates got better or worse — it says **they were taken in a
+different world**.
+
+## The rule this page now carries
+
+🔴 **Do not cite a rate from the census above as the base rate for a red
+observed after this landing.** "Known flake, 2/24" would be a control from a
+build profile that no longer exists — and that citation is precisely the thing
+that stops the next person investigating. That is the failure this page was
+written to prevent, so it must not become the way this page causes it.
+
+**What is still legitimate after the landing:**
+
+- The **within-battery control** — the same lib test running in both `rust:test`
+  and `rust:test-all-features`, passing in one leg and failing in the other at
+  one commit. It compares two runs in the *same* world, so no rate is needed and
+  the profile change cannot touch it. It stays the cheapest evidence available
+  that a red is not attributable to a branch. It costs one `grep`.
+- The **mechanisms**, all of which are properties of the code and not of the
+  profile: carrier 3's opening-probation race (diagnosed and cured, see the
+  2026-08-21 update above), and carrier 4's inherited-OFD race (diagnosed by the
+  fleet — the writer lock was held by a `posix_spawn`ed child of a *different*
+  test, caught in its clone→exec window holding an inherited copy of the lock's
+  open file description; flock ownership rides the OFD, so the copy IS the lock).
+
+**What is not legitimate:** the numbers, as numbers, for anything measured after
+this lands.
+
+## Marked, not re-derived — and said plainly
+
+I am **not** re-deriving four base rates here. Each one costs a 24-leg battery,
+and carriers 3 and 4 are now cured, so two of the four would be re-measuring
+something that no longer fails for the recorded reason.
+
+Naming the gap is the honest move; quoting a number I have not measured in the
+new world would be worse than admitting I do not have one. If a post-landing red
+needs a base rate, **measure it then, in the world it will be spent in, and
+write the profile beside it** — which is the discipline this page should have
+carried from the first day.
+
+⇒ Every future rate recorded on this page states the build profile it was
+measured under. A number without its world is not a control.

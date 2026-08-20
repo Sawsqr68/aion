@@ -809,9 +809,15 @@ mod tests {
     /// One shared store handle drives both the dispatcher and the test
     /// assertions, so they observe the same rows without a second connection.
     async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, ServerError> {
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+        let lock_acquisition = aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)
+            .map_err(|error| ServerError::Config {
+                message: format!("test lock acquisition ruling refused: {error}"),
+            })?;
         HaematiteStore::open_or_create(
             unique_temp_path(name),
             haematite::NodeCacheBudget::Unlimited,
+            lock_acquisition,
         )
         .await
         .map(Arc::new)

@@ -90,7 +90,7 @@ CLI driving the run.
 gleam build
 aion package .
 
-# Terminal 1 — the server (state persists in ./aion-data).
+# Terminal 1 — the server (state persists in $AION_HOME/data, by default ~/.aion/data).
 aion server --config aion.toml
 
 # Deploy ALL THREE: a spawned child's workflow type is resolved by entry

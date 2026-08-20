@@ -132,6 +132,8 @@ async fn http_put_survives_a_second_server_state_over_the_same_store() -> TestRe
         aion_store_haematite::HaematiteStore::open_or_create(
             path.clone(),
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,
     );
@@ -160,6 +162,8 @@ async fn http_put_survives_a_second_server_state_over_the_same_store() -> TestRe
         aion_store_haematite::HaematiteStore::open_or_create(
             path,
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,
     );

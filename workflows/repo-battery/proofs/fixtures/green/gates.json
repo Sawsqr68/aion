@@ -1,0 +1,1 @@
+{"legs":[{"name":"fixture:reads-tree","kind":"shell","cmd":"test \"$(cat fixture.txt)\" = green","why":"prove commands run in the provisioned tree"},{"name":"fixture:true","kind":"shell","cmd":"true","why":"positive control"}]}

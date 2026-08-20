@@ -73,6 +73,8 @@ impl Server {
             HaematiteStore::open_or_create(
                 db_path.to_path_buf(),
                 haematite::NodeCacheBudget::Unlimited,
+                // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
         );

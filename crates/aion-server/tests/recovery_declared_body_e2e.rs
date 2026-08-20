@@ -172,8 +172,13 @@ fn runtime_config() -> RuntimeConfig {
 async fn server_over(
     db_path: PathBuf,
 ) -> Result<(ServerState, axum::Router, HaematiteStore), TestError> {
-    let store =
-        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let store = HaematiteStore::open_or_create(
+        db_path,
+        haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
+    )
+    .await?;
     let reader = store.clone();
     let state = ServerState::build_with_store(store, runtime_config()).await?;
     let router = http_router(state.clone())?;
@@ -382,8 +387,13 @@ async fn seed_corpses(
     corpse_markers: &[PathBuf],
 ) -> Result<Vec<(WorkflowId, PathBuf)>, TestError> {
     let mut corpses: Vec<(WorkflowId, PathBuf)> = Vec::with_capacity(corpse_markers.len());
-    let seeder =
-        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
+    let seeder = HaematiteStore::open_or_create(
+        db_path,
+        haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
+    )
+    .await?;
     let probe_history = seeder.read_history(probe_workflow).await?;
     for marker in corpse_markers {
         let corpse_workflow = WorkflowId::new_v4();

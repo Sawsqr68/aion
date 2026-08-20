@@ -41,9 +41,11 @@
 mod config_migration;
 mod error;
 mod keyspace;
+mod lock_acquisition;
 /// Namespace-registry shard resolution ([`HaematiteStore::shard_for_namespace`]).
 mod namespace_shard;
 /// The [`HaematiteStore`] type and its `EventStore` trait implementations.
 pub mod store;
 
+pub use lock_acquisition::{LockAcquisitionRuling, LockAcquisitionRulingError};
 pub use store::{ClusterBootstrap, ClusterResponder, HaematiteStore, OutboxRowState};
