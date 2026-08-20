@@ -133,7 +133,15 @@ with matching environment variables. Both must be positive and cadence must not 
 
 Every executable external `open`/`open_or_create` caller now passes a ruling. The executable count is 36 across 19 files; the brief's 37th external match is the documentation-only `HaematiteStore::open(<same dir>)` reference in `aion_on_haematite_showcase.rs`. The three implementing-module test calls were also updated.
 
-Tests state `250 ms / 5 ms`, tied to the measured 93-150 ms transient window. The showcase preserves its pre-existing `10 s / 100 ms` policy while replacing its manual error-string retry loop with the typed acquisition boundary. Production passes the validated operator ruling.
+Tests state `250 ms / 5 ms`, each site carrying a one-line comment that says the patience is test-ruled and is not a library default. The showcase keeps its pre-existing ten-second bound and now expresses it ONLY as the typed acquisition boundary. Production passes the operator ruling, whose span shape the ruling type itself validates.
+
+**Amended 2026-08-21 (judge finding 1).** The sentence this paragraph replaces claimed the showcase had replaced "its manual error-string retry loop with the typed acquisition boundary". That was false when written: `crates/aion/tests/aion_on_haematite_showcase.rs` still carried an outer deadline loop that matched on the substring `locked by another live writer` and slept 100 ms, wrapped around an inner `from_millis(10_000, 100)` ruling. The claim is now true of the code, because the code changed — see the judge fix round below.
+
+**Where the 250 ms comes from, and what it is not (judge finding 6).** The 93-150 ms figure is a THREE-SAMPLE measurement taken by the planning counsel on a sixteen-core box during the diagnosis of this failure. It was not re-timed at the builder's hands, and no wider population exists behind it. The 250 ms ruling is therefore a margin of roughly 1.7x over the top of that three-sample range and 2.7x over its bottom — a margin over a small measurement, not a bound derived from a distribution.
+
+Under heavier load — more spawn concurrency, fewer cores, a loaded box — the inherited-descriptor window can exceed the ruled patience. The acquisition does not hide that: after the patience is spent it returns haematite's own `DatabaseError::DataDirLocked` untouched, which surfaces as `StoreError::Backend("haematite database error: data dir is locked by another live writer (writer lock held at <data-dir>/writer.lock); …")` — exactly the error in the red evidence at the top of this report, at exactly the same call. A test would fail at its `?` on the reopen; a server boot would refuse to start with that message.
+
+The ruling is a per-caller knob, not a guarantee: a site that sees this raises its own patience, and an operator raises `store.lock_acquisition_patience_ms`. Nothing in the library rules a number on anyone's behalf.
 
 ## Acquisition-boundary regression
 
@@ -206,3 +214,33 @@ Exit status: `0`.
 ## Scope and walls
 
 No tests or assertions were deleted or weakened. No timeout was inflated. No synchronization sleep, lint suppression, or ignore attribute was added. No `.unwrap()`/`.expect()` was added to library code. The new implementation module is 135 lines, below the 500-line wall. Existing oversized files were not split as part of this acquisition fix; the new logic was deliberately placed in a focused named module rather than adding it to the already-oversized `store.rs`. No live server, listener, or database outside test tempdirs was touched. No files outside `crates/aion*` and `.fleet/reports` were changed.
+
+## History note — `092de7e51` does not compile standalone (recorded 2026-08-21, judge finding 4)
+
+Commit `092de7e51 fix(store): retry transient writer-lock inheritance` is the `crates/aion` half of the call-site sweep. It passes `LockAcquisitionRuling` values to `HaematiteStore::open`/`open_or_create` at three sites, but the type itself — and the changed constructor signatures that accept it — arrive one commit later, in `5791adcc8 fix(store): rule and retry writer-lock acquisition`. Checked out alone, `092de7e51` names `aion_store_haematite::LockAcquisitionRuling`, which does not exist at that tree, and passes a third argument to two-argument constructors. It therefore fails to compile.
+
+The consequence is stated plainly rather than repaired: **the history across this span is not bisectable.** `git bisect` over any range containing `092de7e51` will report that commit as broken for a reason unrelated to whatever is being bisected. Bisect across this span using the merged head instead, or mark the commit skipped.
+
+This history is NOT being rewritten. The span is already fanned in and referenced by other artefacts; rewriting it would trade a known, documented break for a set of moved shas that every existing citation would then name wrongly.
+
+What this does not touch: the evidence-before-fix ORDERING is unaffected. The red evidence (`defe5a14`) and the diagnosis (`5c4dcdf4`) both precede every source commit, exactly as claimed in the Delivery section. A commit that does not build alone says nothing about when the failure was captured; the ordering claim rests on the sequence of commits, and that sequence is intact.
+
+## Judge fix round — 2026-08-21
+
+The judge of run `rb-lockfix-flight1` returned six findings. Five are fixed at source; the sixth is history and is acknowledged above rather than rewritten.
+
+**Finding 1 — the report claimed a showcase change that had not happened.** `test(showcase): findings 1 and 2 — one wait mechanism, the typed one` (`84c8cd4c9`) removes the manual error-string retry loop from `crates/aion/tests/aion_on_haematite_showcase.rs`, and the Call-site sweep section above is amended to describe what the code now does. Both ends of the false claim are closed: the code was brought up to the report, and the report was corrected to the code.
+
+**Finding 2 — two stacked wait mechanisms, one of them dead.** Same commit (`84c8cd4c9`). The inner ruling `from_millis(10_000, 100)` consumed the entire ten-second patience before returning, so the outer deadline loop's retry arm and its 100 ms sleep were unreachable. The outer loop is gone. One wait mechanism remains — the typed one — with the same ~10 s total bound and the same 100 ms cadence. A genuinely held lock still produces the identical failure path: the ruling returns `DataDirLocked` untouched, `?` propagates it, the test fails. The acquisition now runs on a blocking thread, because it blocks its thread for the whole span and the test's runtime is single-threaded.
+
+**Finding 3 — unvalidated public const constructors.** `fix(store): finding 3 — LockAcquisitionRuling owns its span invariant` (`3dd0ac331`). `new` and `from_millis` are no longer `const` and no longer infallible: both return `Result<Self, LockAcquisitionRulingError>`, a `thiserror` enum refusing a zero patience (a silent no-op that degrades the ruling back to the single unwaited `try_lock`), a zero cadence (a busy-spin of real `Database::open`/`flock` attempts for the whole patience), and a cadence longer than the patience (a span the clamp makes meaningless). There is no unchecked constructor left, so a value of this type always bounds at least one waited retry. Every call site handles the `Result`. `required_lock_acquisition_ruling` in `crates/aion-server/src/state.rs` — the only caller that had been validating by hand — now judges ABSENCE only and delegates the span shape to the type, so the rule has one home. `lock_acquisition.rs` is 236 lines, still well under the wall.
+
+**Finding 4 — `092de7e51` is not bisectable.** Acknowledged in the History note above. No rewrite.
+
+**Finding 5 — the mandated site comment was on 2 of ~37 sites.** `docs(store): finding 5 — every test-ruled patience says so at its site` (`2e305bd28`). Every bare `LockAcquisitionRuling::from_millis(250, 5)` now carries the same one-line note. The two generated operator templates gain a rationale block above the two keys, in the voice of the `node_cache_budget` precedent immediately above them, and the block is byte-identical in both files as the scaffold pin requires.
+
+**Finding 6 — the 250 ms travelled without its population.** Amended into the Call-site sweep section above, in this commit: three samples, planning counsel, sixteen-core box, not re-timed by the builder; the ruling is a 1.7-2.7x margin over that; what a boot or test that outlasts it looks like; and that the ruling is a per-caller knob rather than a guarantee.
+
+### Proof for this round
+
+`cargo check -p aion-store-haematite -p aion-server` and `cargo test -p aion-store-haematite --lib` were run before the final commit of this round; their tails are recorded in the round's hand-back. The full battery is re-gated by the coordinator on the fleet box — this round deliberately did not run it.

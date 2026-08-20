@@ -167,6 +167,8 @@ mod tests {
             }),
             "a cadence longer than the patience never governs an attempt"
         );
+        // The accepted case: a well-formed pair keeps both spans verbatim. This
+        // is the constructor's own contract, not a ruling on any acquisition.
         let ruling = LockAcquisitionRuling::from_millis(250, 5)?;
         assert_eq!(ruling.patience, Duration::from_millis(250));
         assert_eq!(ruling.retry_cadence, Duration::from_millis(5));
