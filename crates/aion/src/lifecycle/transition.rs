@@ -143,12 +143,20 @@ mod tests {
         Payload::from_json(&json!({ "label": label }))
     }
 
-    fn started(workflow_id: &aion_core::WorkflowId) -> Result<Event, PayloadError> {
+    // The run id is a PARAMETER, not a constant. It used to be
+    // `Uuid::from_u128(1)` regardless of the run being reconciled, which models a
+    // history that cannot exist — a `WorkflowStarted` for a run nobody registered
+    // — and it went unnoticed for as long as the projection ignored which run it
+    // was projecting (aion#94).
+    fn started(
+        workflow_id: &aion_core::WorkflowId,
+        run_id: &aion_core::RunId,
+    ) -> Result<Event, PayloadError> {
         Ok(Event::WorkflowStarted {
             envelope: envelope(workflow_id, 1),
             workflow_type: String::from("checkout"),
             input: payload("input")?,
-            run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
+            run_id: run_id.clone(),
             parent_run_id: None,
             parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
@@ -189,7 +197,7 @@ mod tests {
         let registry = Registry::default();
         let (workflow_id, run_id) = insert_running_handle(&registry)?;
         suspend(&registry, &workflow_id, &run_id)?;
-        let events = vec![started(&workflow_id)?];
+        let events = vec![started(&workflow_id, &run_id)?];
 
         let reconciled = registry.reconcile(&workflow_id, &run_id, &events)?;
 

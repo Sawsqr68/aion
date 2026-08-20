@@ -324,6 +324,28 @@ pub enum EngineError {
     #[error("active workflow registry lock was poisoned")]
     RegistryPoisoned,
 
+    /// A registered run has no `WorkflowStarted` in the history it was
+    /// reconciled against — the registry and the store disagree that it exists.
+    ///
+    /// Raised by registry reconciliation rather than defaulting the projection.
+    /// `status_from_events` returns `Running` for a slice holding no lifecycle
+    /// event, so a run absent from the history it is projected against would
+    /// otherwise be silently cached as RUNNING — a terminal run reported live,
+    /// produced by the reconciliation whose whole job is to stop exactly that.
+    ///
+    /// Not reachable through a normal start: `WorkflowStarted` is recorded
+    /// before the handle is published. It means a genuine invariant breach, so
+    /// it is surfaced rather than absorbed.
+    #[error(
+        "run {run_id} of workflow {workflow_id} is absent from the history it was reconciled against"
+    )]
+    RunNotInHistory {
+        /// Workflow whose history was read.
+        workflow_id: WorkflowId,
+        /// Run that the history does not contain.
+        run_id: RunId,
+    },
+
     /// The workflow catalog lock was poisoned.
     #[error("workflow catalog lock was poisoned")]
     CatalogPoisoned,
