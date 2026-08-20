@@ -131,7 +131,8 @@ case "$proof" in
     bash "$scratch/census-perturbed.sh" "$scratch/source"
     ;;
   8c-worktree)
-    git -C "$repo" worktree add --detach "$scratch/venue" HEAD >/dev/null
+    git -C "$repo" worktree prune
+    git -C "$repo" worktree add --force --detach "$scratch/venue" HEAD >/dev/null
     printf 'venue show-toplevel %s\n' "$(git -C "$scratch/venue" rev-parse --show-toplevel)"
     printf 'venue git-common-dir %s\n' "$(git -C "$scratch/venue" rev-parse --git-common-dir)"
     printf '$ %s 1-green\n' "$scratch/venue/workflows/repo-battery/proofs/run-offline-proof.sh"
