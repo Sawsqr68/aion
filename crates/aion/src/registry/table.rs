@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use aion_core::{Event, RunId, WorkflowId, status_from_events};
+use aion_core::{Event, RunId, WorkflowId, run_segment, status_from_events};
 use aion_store::EventStore;
 
 use crate::EngineError;
@@ -281,27 +281,64 @@ impl Registry {
         Ok(Some(handle.clone()))
     }
 
-    /// Reconciles a cached handle status against the core event projection.
+    /// Reconciles a cached handle status against the core event projection
+    /// **of the named run**.
     ///
     /// The projected status always wins. If the workflow run is not registered,
     /// no cache is updated and `Ok(None)` is returned. Residency is not read or changed.
     ///
+    /// 🔴 THE PROJECTION IS SCOPED TO `run`, AND THAT IS LOAD-BEARING (aion#94).
+    /// It used to be `status_from_events(events)` over the caller's whole slice,
+    /// and every production caller passes the ENTIRE history for the workflow id.
+    /// `status_from_events` is last-lifecycle-event-wins, so after a
+    /// continue-as-new — one workflow id, two runs — the last lifecycle event
+    /// belongs to the SUCCESSOR, and the predecessor's handle was cached as
+    /// `Running` when it was terminal.
+    ///
+    /// That was not a race. `Engine::list_workflows` reconciles every registered
+    /// handle against full history, so a read-only listing wrote it, and the
+    /// nif-driven continue-as-new path never removes the predecessor's handle —
+    /// so it stood for the life of the engine and was rewritten on every list.
+    ///
+    /// Taking a `RunId` and then not scoping by it made every call site correct
+    /// only under an invariant stated nowhere: that the handle is the workflow's
+    /// latest run. Scoping here means no caller has to know that.
+    ///
+    /// For a workflow's latest run this changes no answer — its segment runs to
+    /// the end of history, which is where the backwards scan starts.
+    ///
     /// # Errors
     ///
     /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
+    ///
+    /// Returns [`EngineError::RunNotInHistory`] if the registered run has no
+    /// `WorkflowStarted` in `events`. The alternative is worse than an error:
+    /// an empty slice projects `Running` by default, so the reconciliation whose
+    /// purpose is to stop terminal runs being cached as live would itself cache
+    /// one as live.
     pub fn reconcile(
         &self,
         id: &WorkflowId,
         run: &RunId,
         events: &[Event],
     ) -> Result<Option<WorkflowHandle>, EngineError> {
-        let projected = status_from_events(events);
         let mut slots = self.slots()?;
+        // The registration check comes first deliberately: a run this registry
+        // does not track is nothing to reconcile, and reporting a history
+        // inconsistency about it would be an error about someone else's run.
         let Some(handle) = slots.handles.get_mut(&(id.clone(), run.clone())) else {
             return Ok(None);
         };
 
-        handle.replace_projected_status(projected);
+        let segment = run_segment(events, run);
+        if segment.is_empty() {
+            return Err(EngineError::RunNotInHistory {
+                workflow_id: id.clone(),
+                run_id: run.clone(),
+            });
+        }
+
+        handle.replace_projected_status(status_from_events(segment));
         Ok(Some(handle.clone()))
     }
 
@@ -546,18 +583,6 @@ mod tests {
         Payload::from_json(&json!({ "label": label }))
     }
 
-    fn started(workflow_id: &aion_core::WorkflowId) -> Result<Event, aion_core::PayloadError> {
-        Ok(Event::WorkflowStarted {
-            envelope: envelope(workflow_id, 1),
-            workflow_type: String::from("checkout"),
-            input: payload("input")?,
-            run_id: aion_core::RunId::new(uuid::Uuid::from_u128(1)),
-            parent_run_id: None,
-            parent_workflow_id: None,
-            package_version: aion_core::PackageVersion::new("a".repeat(64)),
-        })
-    }
-
     fn completed(workflow_id: &aion_core::WorkflowId) -> Result<Event, aion_core::PayloadError> {
         Ok(Event::WorkflowCompleted {
             envelope: envelope(workflow_id, 2),
@@ -793,7 +818,10 @@ mod tests {
             (workflow_id.clone(), run_id.clone()),
             handle(1, 1, WorkflowStatus::Running),
         )?;
-        let events = vec![started(&workflow_id)?, completed(&workflow_id)?];
+        let events = vec![
+            started_run(&workflow_id, &run_id, 1, None)?,
+            completed(&workflow_id)?,
+        ];
 
         let reconciled = registry.reconcile(&workflow_id, &run_id, &events)?;
 
@@ -819,7 +847,10 @@ mod tests {
             (workflow_id.clone(), run_id.clone()),
             handle(1, 1, WorkflowStatus::Running),
         )?;
-        let events = vec![started(&workflow_id)?, cancelled(&workflow_id)];
+        let events = vec![
+            started_run(&workflow_id, &run_id, 1, None)?,
+            cancelled(&workflow_id),
+        ];
 
         let reconciled = registry.reconcile(&workflow_id, &run_id, &events)?;
 
@@ -839,7 +870,7 @@ mod tests {
             (workflow_id.clone(), run_id.clone()),
             handle(1, 1, WorkflowStatus::Failed),
         )?;
-        let events = vec![started(&workflow_id)?];
+        let events = vec![started_run(&workflow_id, &run_id, 1, None)?];
 
         let reconciled = registry.reconcile(&workflow_id, &run_id, &events)?;
 
@@ -1016,9 +1047,212 @@ mod tests {
         let registry = Registry::default();
         let workflow_id = aion_core::WorkflowId::new_v4();
         let run_id = aion_core::RunId::new_v4();
-        let events = vec![started(&workflow_id)?];
+        let events = vec![started_run(&workflow_id, &run_id, 1, None)?];
 
         assert_eq!(registry.reconcile(&workflow_id, &run_id, &events)?, None);
+        Ok(())
+    }
+
+    // --- reconcile must scope its projection to the run it names (aion#94) ----
+    //
+    // 🔴 The helpers above cannot see this defect, and that is worth saying out
+    // loud: `started()` stamps a hardcoded `run_id` unrelated to the registry key
+    // it is reconciled against, so every existing `reconcile` test asserts on a
+    // history that does not belong to the run under test — and they all pass,
+    // because the projection ignores the `run` argument entirely. A test that
+    // cannot tell the two apart cannot detect the confusion between them.
+    //
+    // These two build the one history shape where the distinction is load-bearing:
+    // a continue-as-new, where ONE workflow id owns TWO runs, the predecessor is
+    // terminal, and the successor is running.
+
+    fn started_run(
+        workflow_id: &aion_core::WorkflowId,
+        run_id: &aion_core::RunId,
+        seq: u64,
+        parent_run_id: Option<aion_core::RunId>,
+    ) -> Result<Event, aion_core::PayloadError> {
+        Ok(Event::WorkflowStarted {
+            envelope: envelope(workflow_id, seq),
+            workflow_type: String::from("checkout"),
+            input: payload("input")?,
+            run_id: run_id.clone(),
+            parent_run_id,
+            // A continue-as-new chain, not a child spawn: one workflow id owns
+            // both runs, so there is no parent WORKFLOW to wear (aion#77).
+            parent_workflow_id: None,
+            package_version: aion_core::PackageVersion::new("a".repeat(64)),
+        })
+    }
+
+    fn continued_as_new(
+        workflow_id: &aion_core::WorkflowId,
+        parent_run_id: &aion_core::RunId,
+        seq: u64,
+    ) -> Result<Event, aion_core::PayloadError> {
+        Ok(Event::WorkflowContinuedAsNew {
+            envelope: envelope(workflow_id, seq),
+            input: payload("carried")?,
+            workflow_type: None,
+            parent_run_id: parent_run_id.clone(),
+        })
+    }
+
+    /// A predecessor run stays `ContinuedAsNew` when its successor is running.
+    ///
+    /// Today this FAILS with `Running`: `status_from_events` is
+    /// last-lifecycle-event-wins over whatever slice it is handed, every
+    /// production caller hands it the whole history for the workflow id, and
+    /// after a continue-as-new the last lifecycle event belongs to the SUCCESSOR.
+    /// So the predecessor's handle is told it is running.
+    ///
+    /// It is reachable from a read-only API: `Engine::list_workflows` iterates
+    /// every registered handle and reconciles each against full history, and the
+    /// nif-driven continue-as-new path never removes the predecessor's handle.
+    #[test]
+    fn reconcile_scopes_the_projection_to_the_named_run() -> TestResult {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let predecessor = aion_core::RunId::new_v4();
+        let successor = aion_core::RunId::new_v4();
+
+        registry.insert(
+            (workflow_id.clone(), predecessor.clone()),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+        registry.insert(
+            (workflow_id.clone(), successor.clone()),
+            handle(2, 1, WorkflowStatus::Running),
+        )?;
+
+        let events = vec![
+            started_run(&workflow_id, &predecessor, 1, None)?,
+            continued_as_new(&workflow_id, &predecessor, 2)?,
+            started_run(&workflow_id, &successor, 3, Some(predecessor.clone()))?,
+        ];
+
+        // Fixture control: the whole-history projection really is `Running`, so a
+        // failure below is the scoping defect and not a malformed history.
+        assert_eq!(
+            aion_core::status_from_events(&events),
+            WorkflowStatus::Running,
+            "fixture control: the successor's start is the last lifecycle event"
+        );
+
+        let reconciled = registry.reconcile(&workflow_id, &predecessor, &events)?;
+
+        assert_eq!(
+            reconciled.map(|handle| handle.cached_status()),
+            Some(WorkflowStatus::ContinuedAsNew),
+            "the predecessor run is terminal; only the successor is running"
+        );
+        Ok(())
+    }
+
+    /// The twin, and it is not decoration: without it the assertion above is
+    /// satisfied by anything that reports `ContinuedAsNew` unconditionally.
+    ///
+    /// Measured 2026-08-20: this test is deliberately NOT red under the
+    /// mutation that reddens its twin. Reverting `reconcile` to the
+    /// whole-history projection leaves this one green, because on this history
+    /// both readings answer `Running` for the successor. That is the OTHER
+    /// direction, not a vacuous pass — its job is to prove the run-scoping does
+    /// not over-correct by making the LIVE run look terminal, which a scoping
+    /// bug that took the wrong segment would do. A fix has two ways to be
+    /// wrong, and one red twin measures only one of them.
+    #[test]
+    fn reconcile_still_sees_the_successor_as_running() -> TestResult {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let predecessor = aion_core::RunId::new_v4();
+        let successor = aion_core::RunId::new_v4();
+
+        registry.insert(
+            (workflow_id.clone(), successor.clone()),
+            handle(2, 1, WorkflowStatus::Completed),
+        )?;
+
+        let events = vec![
+            started_run(&workflow_id, &predecessor, 1, None)?,
+            continued_as_new(&workflow_id, &predecessor, 2)?,
+            started_run(&workflow_id, &successor, 3, Some(predecessor.clone()))?,
+        ];
+
+        let reconciled = registry.reconcile(&workflow_id, &successor, &events)?;
+
+        assert_eq!(
+            reconciled.map(|handle| handle.cached_status()),
+            Some(WorkflowStatus::Running),
+            "the successor is the live run and the projection must still say so"
+        );
+        Ok(())
+    }
+
+    /// A registered run absent from the history it is projected against is an
+    /// ERROR, and that is this branch's own stated point: `status_from_events`
+    /// answers `Running` for an empty slice, so absorbing the case would leave
+    /// the reconciliation whose whole purpose is to stop terminal runs being
+    /// cached as live caching one as live itself — silently, and precisely for
+    /// the run whose history had gone missing.
+    ///
+    /// 🔴 This test was missing when the fix was written. The variant, its raise
+    /// site, and both `aion-server` mappings shipped together with nothing
+    /// exercising any of them, so reverting the `Err` to the old default passed
+    /// the entire tree. A guard is not a guard until something has watched it
+    /// refuse.
+    #[test]
+    fn reconcile_refuses_a_run_absent_from_the_history() -> TestResult {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let registered = aion_core::RunId::new_v4();
+        let stranger = aion_core::RunId::new_v4();
+
+        // The handle must really be registered: the missing-handle path returns
+        // `Ok(None)` BEFORE the segment is ever taken, so without this insert
+        // the call would leave through a different branch and assert nothing.
+        registry.insert(
+            (workflow_id.clone(), registered.clone()),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+
+        // A history for this workflow id that belongs entirely to another run.
+        let events = vec![
+            started_run(&workflow_id, &stranger, 1, None)?,
+            continued_as_new(&workflow_id, &stranger, 2)?,
+        ];
+
+        // Fixture control, and it is the whole reason the error exists: the
+        // empty segment this produces would itself project `Running`.
+        assert_eq!(
+            aion_core::status_from_events(&[]),
+            WorkflowStatus::Running,
+            "fixture control: an empty slice defaults to Running"
+        );
+
+        let refusal = registry.reconcile(&workflow_id, &registered, &events).err();
+
+        assert!(
+            matches!(
+                &refusal,
+                Some(EngineError::RunNotInHistory {
+                    workflow_id: named_workflow,
+                    run_id: named_run,
+                }) if named_workflow == &workflow_id && named_run == &registered
+            ),
+            "the refusal must name the run that is missing, not the one the \
+             history happens to hold; got: {refusal:?}"
+        );
+
+        // The handle must be untouched. A refusal that had already written
+        // would leave the cache holding the very status it declined to vouch
+        // for, which is worse than either answering or erroring cleanly.
+        assert_eq!(
+            registry
+                .get(&workflow_id, &registered)?
+                .map(|handle| handle.cached_status()),
+            Some(WorkflowStatus::Running),
+            "a refused reconciliation must not have mutated the handle"
+        );
         Ok(())
     }
 }

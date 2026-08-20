@@ -636,6 +636,7 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::CleanupExecutorShutdownTimedOut { .. } => {
             simple_engine_fields("CleanupExecutorShutdownTimedOut", source)
         }
+        EngineError::RunNotInHistory { .. } => simple_engine_fields("RunNotInHistory", source),
         EngineError::ProcessExitRegistryPoisoned => {
             simple_engine_fields("ProcessExitRegistryPoisoned", source)
         }
@@ -777,6 +778,12 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         E::CleanupExecutorShutdownTimedOut { .. } => {
             backend("CleanupExecutorShutdownTimedOut", source)
         }
+        // aion#94: the registry holds a run that the history it was reconciled
+        // against does not contain. Nothing about the caller's request is wrong
+        // — it is an engine-internal disagreement between two of the engine's
+        // own stores — so `backend`, which makes no claim about the run's state
+        // and carries the variant's own Display.
+        E::RunNotInHistory { .. } => backend("RunNotInHistory", source),
         E::ProcessExitRegistryPoisoned => backend("ProcessExitRegistryPoisoned", source),
         E::ProcessExitOwnershipPoisoned { .. } => backend("ProcessExitOwnershipPoisoned", source),
         EngineError::ProcessExitStatePoisoned { .. }
