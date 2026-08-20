@@ -77,7 +77,7 @@ struct Seam {
 
 fn seam(config: QueueServiceConfig, declarations: Option<Arc<DeclaredQueues>>) -> Seam {
     let registry = ConnectedWorkerRegistry::default();
-    let pending = PendingActivities::default();
+    let pending = PendingActivities::new(Duration::from_secs(5));
     let state = QueueServiceState::default();
     let source = QueueDeclarationSource::default();
     if let Some(declarations) = declarations {

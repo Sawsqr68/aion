@@ -1382,6 +1382,9 @@ mod lsub_prod_xnode_e2e {
     const FAN_OUT: usize = 4;
     const FAN_ACTIVITY_TYPES: [&str; FAN_OUT] = ["fan:0", "fan:1", "fan:2", "fan:3"];
     const POLL_DEADLINE: Duration = Duration::from_secs(20);
+    /// The one fan-out member the reconnect pin holds. Any of the four would do —
+    /// they are dispatched independently and served by identical handlers.
+    const HELD_ACTIVITY_TYPE: &str = FAN_ACTIVITY_TYPES[0];
 
     fn test_error(message: impl std::fmt::Display) -> TestError {
         message.to_string().into()
@@ -1627,6 +1630,45 @@ mod lsub_prod_xnode_e2e {
             }
         }
 
+        /// Spawn the worker through [`aion_worker::serve_with_redial`] — the entry
+        /// point every REAL worker uses — so a broken link is survivable.
+        ///
+        /// [`Self::spawn`] uses `LiminalActivityWorker::serve_until`, which returns
+        /// the first transport error by design: a single-connection serve has no
+        /// survivor to migrate to. That is the right shape for a test whose link
+        /// never breaks, and the wrong instrument entirely for one whose link is
+        /// broken on purpose — a worker that dies at the break can only ever show
+        /// that outstanding work fails, whoever is at fault.
+        ///
+        /// The redial driver is SYNCHRONOUS and builds its own current-thread
+        /// runtime, so it runs on the bare thread rather than inside one.
+        fn spawn_redialing(
+            address: String,
+            config: WorkerConfig,
+            registry: Arc<ActivityRegistry>,
+            timing: aion_worker::RedialTiming,
+        ) -> Self {
+            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let thread_stop = Arc::clone(&stop);
+            let handle = std::thread::spawn(move || {
+                if let Err(error) = aion_worker::serve_with_redial(
+                    vec![address],
+                    &config,
+                    &registry,
+                    timing,
+                    &thread_stop,
+                    None,
+                    || {},
+                ) {
+                    eprintln!("redialing worker ended with error: {error}");
+                }
+            });
+            Self {
+                stop,
+                handle: Some(handle),
+            }
+        }
+
         fn stop(mut self) {
             self.stop.store(true, Ordering::SeqCst);
             if let Some(handle) = self.handle.take() {
@@ -1719,6 +1761,205 @@ mod lsub_prod_xnode_e2e {
         Ok(aion_core::WorkflowId::new(workflow_id))
     }
 
+    /// How long a freshly connected worker needs before the dispatch path may
+    /// select it, DERIVED from the same two facts the server derives it from.
+    ///
+    /// A worker is dispatch-ineligible until it serves an OPENING PROBATION:
+    /// [`Reachability::is_proved`] requires `DISPATCH_PROBATION_PINGS` consecutive
+    /// answered liveness pings, at the probe's cadence of
+    /// [`sweep_interval`](crate::worker::sweep_interval)`(heartbeat_window)`. The
+    /// constant's own documentation states the cost — *"at the probe's cadence a
+    /// fresh worker is undispatchable for K cadences while its first dispatches
+    /// park"* — so this is designed behaviour a test must wait out, not a delay to
+    /// be shortened.
+    ///
+    /// One extra cadence is allowed because the first round lands at an arbitrary
+    /// offset inside the first interval: the worker connects between rounds, so it
+    /// can miss up to one whole cadence before its first answer is even counted.
+    ///
+    /// # Why this is not a raised timeout
+    ///
+    /// It was 5 seconds, fixed, and that is how this test became one of four
+    /// documented carriers of a load-sensitive flake
+    /// (`gate-logs/lock-race-attribution/VERDICT.md`). The mechanism, measured:
+    /// `dispatch_ineligible` starts EMPTY and `select_worker` filters only against
+    /// what the probe has published, so a run in which **no probe round lands
+    /// inside the window** selects the worker immediately and passes, while a run
+    /// in which one does correctly withholds it for ~2 cadences and fails. On the
+    /// default 30s window that is 7.5s per cadence against a 5s wait.
+    ///
+    /// 🔴 The passing runs were the WRONG ones. They dispatched to a worker that
+    /// had not served its probation — a path production does not permit, because
+    /// production parks those dispatches. Waiting for genuine eligibility makes
+    /// this test MORE production-shaped, not more lenient, and that is the reason
+    /// to do it. Raising a bound until a flake stops is how a liveness bug gets
+    /// buried; deriving the bound from the mechanism that sets it is not the same
+    /// act, and the register warns about the first for good reason.
+    fn eligibility_patience(config: &ServerConfig) -> Duration {
+        let cadence = crate::worker::sweep_interval(config.worker.heartbeat_window);
+        cadence * (crate::worker::heartbeat::DISPATCH_PROBATION_PINGS + 1)
+    }
+
+    /// Wait until the worker's in-band registration lands in the SAME registry the
+    /// dispatch path selects from, with every fan-out activity type eligible.
+    ///
+    /// On the deadline this reports the state that DISCRIMINATES the worlds a
+    /// missed registration can be in, because the bare sentence it replaced —
+    /// "worker never registered in-band for the pool" — is equally true in at
+    /// least three of them, and they want different fixes:
+    ///
+    /// 1. the liminal listener never bound, so nothing could dial in;
+    /// 2. the worker never connected, or died dialling;
+    /// 3. it connected and registration was merely slow;
+    /// 4. it connected, registered correctly, and the SELECTOR refused it anyway —
+    ///    because the liveness probe published it as unreachable, or because it is
+    ///    not indexed for the activity type it advertises.
+    ///
+    /// The fourth was not in the first version of this report, and it is the world
+    /// a real occurrence turned out to be in: the listener was bound, a worker was
+    /// registered under the right namespace and queue advertising all four activity
+    /// types, and every `select_worker` still returned nothing. A report that
+    /// cannot separate "not registered" from "registered and refused" names the
+    /// wrong half of the system.
+    ///
+    /// That is not a hypothetical distinction here. This module's e2e is one of
+    /// four documented carriers of a load-sensitive flake
+    /// (`gate-logs/lock-race-attribution/VERDICT.md`), it fails through THIS wait,
+    /// and the reason the carrier has never been explained is that the failure
+    /// named the fact and withheld the cause.
+    async fn wait_for_registration(
+        registry: &crate::worker::ConnectedWorkerRegistry,
+        listen_address: SocketAddr,
+        patience: Duration,
+    ) -> Result<(), TestError> {
+        let deadline = Instant::now() + patience;
+        loop {
+            let ready = FAN_ACTIVITY_TYPES.iter().all(|activity_type| {
+                registry
+                    .select_worker(NAMESPACE, TASK_QUEUE, activity_type, None)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            });
+            if ready {
+                return Ok(());
+            }
+            if Instant::now() > deadline {
+                return Err(test_error(format!(
+                    "worker never registered in-band for the pool within {patience:?}{}",
+                    registration_diagnosis(registry, listen_address)
+                )));
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// The discriminator behind [`wait_for_registration`]'s failure: enough of the
+    /// world to tell those three apart, gathered at the moment of the failure.
+    fn registration_diagnosis(
+        registry: &crate::worker::ConnectedWorkerRegistry,
+        listen_address: SocketAddr,
+    ) -> String {
+        let mut lines = vec![String::from("--- registration diagnosis ---")];
+        // World 1, PROBED rather than assumed. The port was reserved by binding a
+        // listener and dropping it, so losing the race for it is a real
+        // possibility rather than a theoretical one, and it is indistinguishable
+        // from every other failure unless something asks.
+        lines.push(
+            match std::net::TcpStream::connect_timeout(&listen_address, Duration::from_millis(500))
+            {
+                Ok(stream) => {
+                    drop(stream);
+                    format!("listener {listen_address}: ACCEPTS — the port is bound and dialable")
+                }
+                Err(error) => format!(
+                    "listener {listen_address}: NOT connectable ({error}) — nothing could have \
+                     registered, so this is not a timing problem"
+                ),
+            },
+        );
+        // Worlds 2 and 3: did any worker arrive at all, and if one did, what does
+        // the registry hold for it against what the dispatch path asks of it? A
+        // worker present under a different pool or advertising different activity
+        // types is a contract mismatch wearing a timeout's clothes.
+        match registry.all_workers() {
+            Err(error) => lines.push(format!("registry: UNREADABLE ({error})")),
+            Ok(workers) if workers.is_empty() => lines.push(String::from(
+                "registry: EMPTY — no worker of any pool registered, so no connection ever \
+                 completed an in-band registration",
+            )),
+            Ok(workers) => {
+                lines.push(format!("registry: {} worker(s) registered", workers.len()));
+                for worker in &workers {
+                    lines.push(format!(
+                        "  id={:?} namespaces={:?} task_queue={:?} node={:?} types={:?}",
+                        worker.id(),
+                        worker.namespaces(),
+                        worker.task_queue(),
+                        worker.node(),
+                        worker.activity_types()
+                    ));
+                }
+            }
+        }
+        lines.push(format!(
+            "asked of it: namespace={NAMESPACE:?} task_queue={TASK_QUEUE:?}"
+        ));
+        // The liveness probe's reachability verdict. `select_worker` skips every
+        // worker in this set, so a registered, correctly-advertised worker that is
+        // listed here is refused for a reason nothing else in this report shows.
+        lines.push(match registry.dispatch_ineligible() {
+            Ok(ineligible) if ineligible.is_empty() => {
+                String::from("dispatch-ineligible: none — reachability is not refusing anyone")
+            }
+            Ok(ineligible) => format!(
+                "dispatch-ineligible: {ineligible:?} — the liveness probe has published these \
+                 as unreachable and select_worker skips them"
+            ),
+            Err(error) => format!("dispatch-ineligible: UNREADABLE ({error})"),
+        });
+        // Which of the four the selector could not satisfy, and — the part that
+        // discriminates — the pool census beside each refusal.
+        //
+        // `select_worker` filters on THREE things: the activity index for
+        // `(namespace, task_queue) + activity_type`, the node pin, and the
+        // dispatch-ineligible set. The census counts the first two and does NOT
+        // apply the third, so the pair of answers separates the remaining worlds
+        // that a registry dump alone leaves fused:
+        //
+        // - census serves it, selector refuses  ⇒ REACHABILITY, not registration;
+        // - census serves 0 for the activity    ⇒ the worker is in the pool but not
+        //   indexed for this activity type;
+        // - census serves 0 for the pool        ⇒ it is not in this pool at all,
+        //   whatever `all_workers` shows.
+        //
+        // Written after the bare registry dump above failed to close a real case:
+        // it proved the listener was bound and a worker with all four activity
+        // types was registered, and still could not say why every selection
+        // returned nothing.
+        for activity_type in FAN_ACTIVITY_TYPES {
+            let outcome = match registry.select_worker(NAMESPACE, TASK_QUEUE, activity_type, None) {
+                Ok(Some(handle)) => format!("worker {:?}", handle.id()),
+                Ok(None) => String::from("NO worker"),
+                Err(error) => format!("error: {error}"),
+            };
+            let census = match registry.pool_census(NAMESPACE, TASK_QUEUE, activity_type, None) {
+                Ok(census) => format!(
+                    "in_pool={} serving_activity={} compatible={} last_compatible_age={:?}",
+                    census.workers_in_pool,
+                    census.workers_serving_activity,
+                    census.compatible_workers,
+                    census.last_compatible_poller_age
+                ),
+                Err(error) => format!("census UNREADABLE ({error})"),
+            };
+            lines.push(format!(
+                "select_worker({activity_type}) -> {outcome}  [census: {census}]"
+            ));
+        }
+        format!("\n  {}", lines.join("\n  "))
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn production_boot_dispatches_executes_and_records_over_liminal() -> Result<(), TestError>
     {
@@ -1737,6 +1978,9 @@ mod lsub_prod_xnode_e2e {
         // the live engine (gated on outbox.enabled).
         let config = server_config(&db_path, package_path, listen_address);
         let outbox_config = config.outbox.clone();
+        // Captured before `build` consumes the config: the wait below is derived
+        // from the very window this server is about to run its liveness probe on.
+        let patience = eligibility_patience(&config);
         let state = ServerState::build(config).await.map_err(test_error)?;
 
         // (B) Drive the EXACT production commissioning function run_server calls:
@@ -1774,23 +2018,9 @@ mod lsub_prod_xnode_e2e {
         // Wait until the in-band registration landed in the SAME registry the
         // dispatch path selects from (every fan-out activity type is eligible).
         let registry = state.worker_registry().clone();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let ready = FAN_ACTIVITY_TYPES.iter().all(|activity_type| {
-                registry
-                    .select_worker(NAMESPACE, TASK_QUEUE, activity_type, None)
-                    .ok()
-                    .flatten()
-                    .is_some()
-            });
-            if ready {
-                break;
-            }
-            if Instant::now() > deadline {
-                worker.stop();
-                return Err(test_error("worker never registered in-band for the pool"));
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        if let Err(error) = wait_for_registration(&registry, listen_address, patience).await {
+            worker.stop();
+            return Err(error);
         }
 
         // (D) Start collect_four over the REAL HTTP transport: the engine stages
@@ -1831,6 +2061,543 @@ mod lsub_prod_xnode_e2e {
         worker.stop();
         drop(listener_guard);
         state.shutdown().map_err(test_error)?;
+        Ok(())
+    }
+
+    /// One dispatch as the WORKER saw it: the identity the server sent it under,
+    /// and when it arrived.
+    #[derive(Clone, Debug)]
+    struct SeenDispatch {
+        activity_type: String,
+        activity_id: String,
+        attempt: u32,
+        at: Instant,
+    }
+
+    /// A loopback TCP relay the test can BREAK, sitting between the worker and the
+    /// production liminal listener.
+    ///
+    /// The worker dials this instead of the listener, so the test owns a socket it
+    /// can shut from the outside. That is the only way to make a REAL
+    /// [`LiminalActivityWorker`] lose its connection mid-flight without reaching
+    /// inside either the worker or the server — and a link broken from the inside
+    /// would be a different experiment, because the code under test would be the
+    /// code doing the breaking.
+    ///
+    /// # Why this is not the relay in `tests/dead_man_switch_e2e.rs`
+    ///
+    /// That file has `WedgeableRelay`, which can both wedge and sever, and this is
+    /// deliberately not it. The two cannot be one, for a structural reason rather
+    /// than a matter of taste: an integration test links this crate as an ordinary
+    /// dependency, so it can see neither `#[cfg(test)] pub(crate) mod test_support`
+    /// nor the private `maybe_spawn_outbox_dispatcher` this harness is built on,
+    /// and `src/` cannot see `tests/`. Sharing one instrument would mean exporting
+    /// a public, feature-gated test surface from a production crate.
+    ///
+    /// So the split is stated rather than hidden, and this half is a strict subset:
+    /// it only severs. Wedging — which leaves both sockets open and merely discards
+    /// bytes, so writes keep succeeding into the kernel buffer — is a DIFFERENT
+    /// instrument answering a different question. #69 is about a broken link, not
+    /// a silent one.
+    struct SeverableRelay {
+        address: SocketAddr,
+        /// Every relayed socket, held so [`Self::sever`] can break them.
+        sockets: Arc<std::sync::Mutex<Vec<std::net::TcpStream>>>,
+        stop: Arc<std::sync::atomic::AtomicBool>,
+        handle: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl SeverableRelay {
+        /// Bind a loopback port and relay every accepted connection to `upstream`.
+        fn spawn(upstream: SocketAddr) -> Result<Self, TestError> {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(test_error)?;
+            let address = listener.local_addr().map_err(test_error)?;
+            // Non-blocking accept so the relay can be shut down deterministically
+            // rather than by parking a thread in `accept` until something happens
+            // to connect. Accepted sockets are put back into blocking mode
+            // explicitly: on this platform they would otherwise inherit the flag
+            // and every pump would spin on `WouldBlock`.
+            listener.set_nonblocking(true).map_err(test_error)?;
+            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let sockets: Arc<std::sync::Mutex<Vec<std::net::TcpStream>>> =
+                Arc::new(std::sync::Mutex::new(Vec::new()));
+            let accept_stop = Arc::clone(&stop);
+            let accept_sockets = Arc::clone(&sockets);
+            let handle = std::thread::spawn(move || {
+                while !accept_stop.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((downstream, _)) => {
+                            if let Err(error) =
+                                Self::relay_one(&downstream, upstream, &accept_sockets)
+                            {
+                                // The worker redials, so a connection this relay
+                                // fails to carry surfaces as a slower recovery
+                                // rather than as a wrong answer — but silence here
+                                // would make that indistinguishable from the
+                                // server never pushing, which is exactly the
+                                // confusion this pin exists to resolve.
+                                eprintln!("relay could not carry a connection: {error}");
+                            }
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
+                        Err(error) => {
+                            eprintln!("relay accept failed: {error}");
+                            return;
+                        }
+                    }
+                }
+            });
+            Ok(Self {
+                address,
+                sockets,
+                stop,
+                handle: Some(handle),
+            })
+        }
+
+        /// Dial upstream for one accepted connection and pump both directions.
+        fn relay_one(
+            downstream: &std::net::TcpStream,
+            upstream: SocketAddr,
+            sockets: &Arc<std::sync::Mutex<Vec<std::net::TcpStream>>>,
+        ) -> Result<(), TestError> {
+            downstream.set_nonblocking(false).map_err(test_error)?;
+            let up = std::net::TcpStream::connect(upstream).map_err(test_error)?;
+            let down_read = downstream.try_clone().map_err(test_error)?;
+            let down_write = downstream.try_clone().map_err(test_error)?;
+            let up_read = up.try_clone().map_err(test_error)?;
+            let up_write = up.try_clone().map_err(test_error)?;
+            let held = downstream.try_clone().map_err(test_error)?;
+            let mut parked = sockets
+                .lock()
+                .map_err(|_| test_error("relay socket register poisoned"))?;
+            parked.push(held);
+            parked.push(up);
+            drop(parked);
+            for (from, to) in [(down_read, up_write), (up_read, down_write)] {
+                std::thread::spawn(move || Self::pump(from, to));
+            }
+            Ok(())
+        }
+
+        /// Copy one direction until the connection ends.
+        ///
+        /// A read or write error here IS the severed link in the expected case, and
+        /// in every case it means the peer this pump exists to serve is gone: there
+        /// is no party left to propagate to, so ending the pump is the handling,
+        /// not an omission of it.
+        fn pump(mut from: std::net::TcpStream, mut to: std::net::TcpStream) {
+            use std::io::{Read, Write};
+            let mut buffer = [0_u8; 8192];
+            loop {
+                match from.read(&mut buffer) {
+                    Ok(0) | Err(_) => return,
+                    Ok(read) => {
+                        if to.write_all(&buffer[..read]).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        const fn address(&self) -> SocketAddr {
+            self.address
+        }
+
+        /// BREAK every relayed socket, and report how many were broken.
+        ///
+        /// The count is returned, and asserted non-zero by the caller, so that a
+        /// sever which severed nothing can never masquerade as a measurement — the
+        /// pin would otherwise pass by never having run its own experiment.
+        fn sever(&self) -> Result<usize, TestError> {
+            let mut parked = self
+                .sockets
+                .lock()
+                .map_err(|_| test_error("relay socket register poisoned"))?;
+            let mut severed = 0;
+            for socket in parked.iter() {
+                if socket.shutdown(std::net::Shutdown::Both).is_ok() {
+                    severed += 1;
+                }
+            }
+            parked.clear();
+            Ok(severed)
+        }
+
+        fn shutdown(mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            if let Some(handle) = self.handle.take() {
+                handle.join().ok();
+            }
+        }
+    }
+
+    /// Registry for the reconnect pin: every dispatch is RECORDED with the identity
+    /// the server sent it under, and [`HELD_ACTIVITY_TYPE`]'s FIRST dispatch holds
+    /// — the work is finished, its reply is not yet on the wire — until released.
+    ///
+    /// Only the first is held. A blanket hold would stall the re-delivery this pin
+    /// exists to observe, and the pin would then measure its own instrument.
+    fn recording_registry(
+        seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>,
+        release: &Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<Arc<ActivityRegistry>, TestError> {
+        let mut registry = ActivityRegistry::new();
+        for activity_type in FAN_ACTIVITY_TYPES {
+            let seen = Arc::clone(seen);
+            let release = Arc::clone(release);
+            let arrivals = Arc::new(AtomicUsize::new(0));
+            registry = registry
+                .register_activity_with_contract(
+                    activity_type,
+                    move |_input: FanInput, context: &aion_worker::ActivityContext| {
+                        let seen = Arc::clone(&seen);
+                        let release = Arc::clone(&release);
+                        let arrivals = Arc::clone(&arrivals);
+                        let record = SeenDispatch {
+                            activity_type: activity_type.to_owned(),
+                            activity_id: context.activity_id().to_string(),
+                            attempt: context.attempt(),
+                            at: Instant::now(),
+                        };
+                        Box::pin(async move {
+                            // Recorded BEFORE the hold: a dispatch that arrives and
+                            // is never answered must still be visible, or the pin
+                            // cannot tell "never re-delivered" from "re-delivered
+                            // and lost again".
+                            match seen.lock() {
+                                Ok(mut log) => log.push(record),
+                                Err(_) => {
+                                    return Err(aion_worker::ActivityFailure::terminal(
+                                        "the pin's dispatch log is poisoned, so this run can \
+                                         observe nothing — failing loudly rather than \
+                                         returning a result no assertion could trust",
+                                    ));
+                                }
+                            }
+                            let first = arrivals.fetch_add(1, Ordering::SeqCst) == 0;
+                            if activity_type == HELD_ACTIVITY_TYPE && first {
+                                while !release.load(Ordering::SeqCst) {
+                                    tokio::time::sleep(Duration::from_millis(5)).await;
+                                }
+                            }
+                            Ok(activity_type.to_owned())
+                        })
+                    },
+                )
+                .map_err(test_error)?;
+        }
+        Ok(Arc::new(registry))
+    }
+
+    fn dispatches_of(
+        seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>,
+        activity_type: &str,
+    ) -> Result<Vec<SeenDispatch>, TestError> {
+        let log = seen
+            .lock()
+            .map_err(|_| test_error("the pin's dispatch log is poisoned"))?;
+        Ok(log
+            .iter()
+            .filter(|record| record.activity_type == activity_type)
+            .cloned()
+            .collect())
+    }
+
+    fn dispatch_log(seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>) -> String {
+        match seen.lock() {
+            Ok(log) => format!("{:#?}", *log),
+            Err(_) => String::from("<poisoned>"),
+        }
+    }
+
+    /// aion #69 at the ENGINE level: what the system DOES after an activity's
+    /// completion is lost to a broken link.
+    ///
+    /// # What this measures, and why the transport-level pin cannot
+    ///
+    /// #69's existing red-first pin lives on its fix branch rather than here (it
+    /// is red on purpose and lands with the fix), and it establishes that the
+    /// completion is DISCARDED: the server abandons the correlated reply-wait the
+    /// moment the delivering connection closes. It drives `WorkerDelivery`
+    /// directly, with no engine, no store and no workflow behind it, so it can say
+    /// nothing at all about what happens NEXT. That gap is the whole severity of
+    /// #69: "the work is repeated once" and "the work is lost" are priced very
+    /// differently, and nothing in-tree could tell them apart.
+    ///
+    /// So this pin observes four things, and asserts only what must hold in EVERY
+    /// world — including the one a #69 fix creates:
+    ///
+    /// - **O4, ASSERTED** — the workflow still reaches a recorded terminal. This is
+    ///   the invariant: a broken link must not cost the workflow. It is not a weak
+    ///   assertion, because `collect_four` consumes all four members, so the
+    ///   workflow cannot complete while any member's work is missing;
+    /// - **O1, REPORTED** — whether the held activity is dispatched a SECOND time.
+    ///   This is the MECHANISM, and the mechanism is what a fix changes: a fix that
+    ///   carries the completion across the reconnect would produce NO re-delivery,
+    ///   and a pin asserting one would read that fix as a regression.
+    ///   regression;
+    /// - **O2, asserted CONDITIONALLY** — if a re-delivery happened it must carry
+    ///   the activity's OWN identity. That is what makes the finished work
+    ///   discarded rather than recovered; a re-delivery under a different identity
+    ///   is a different defect and must not pass quietly;
+    /// - **O3, REPORTED** — the elapsed time from the break to the re-delivery, as
+    ///   a NUMBER asserted against nothing. No threshold is invented here: the
+    ///   right bound is a conversation to have with the measurement in hand.
+    ///
+    /// ⚠️ **O3 is recovery LATENCY, and latency is not COST.** The number is
+    /// measured on a fixture activity that is a pure `String -> String`, so its
+    /// repeat costs microseconds. The real cost of a repeat is the repeated
+    /// activity's own runtime plus its repeated SIDE EFFECTS, which this pin does
+    /// not measure and structurally cannot: #69's own exhibit was an *agent*
+    /// activity, whose repeat is minutes of compute and files written twice.
+    /// Quote the finding — *repeated work, not lost work, one repeat per in-flight
+    /// activity* — rather than the milliseconds, which carry their premise (a
+    /// trivial activity) only for as long as someone remembers to attach it.
+    ///
+    /// The settle-wait below is bounded by [`POLL_DEADLINE`], so this pin cannot
+    /// hang; but that bound is ~100x the observed recovery, so it is a liveness
+    /// guard and NOT a latency guard. A large latency regression would still pass
+    /// here, reported in O3 and asserted by nothing — deliberately, because the
+    /// correct bound is not derivable from the samples taken so far.
+    ///
+    /// Executions are REPORTED, never asserted equal to the fan-out. A transport
+    /// that can lose a reply gives at-least-once delivery, so the sibling test's
+    /// `executions == FAN_OUT` is the wrong shape here and must not be copied
+    /// across.
+    ///
+    /// # The world this models
+    ///
+    /// One server process with its transport-loss ledger live in memory, a worker
+    /// that redials the SAME address, and a SINGLE loss — well inside
+    /// `TRANSPORT_LOSS_BUDGET_WINDOWS`. It is NOT a server restart and NOT budget
+    /// exhaustion, both of which are different worlds with different recoveries.
+    /// The re-delivery this venue can produce is the outbox dispatcher's re-claim
+    /// under the `max_attempts`/backoff this test's config sets, not the #266
+    /// recovery replay — which is what gives O3's number a slot to mean anything in.
+    ///
+    /// The relay's own accept poll (2ms) sits inside the measured elapsed.
+    ///
+    /// ⚠️ This pin shares a venue with
+    /// `production_boot_dispatches_executes_and_records_over_liminal`, one of four
+    /// documented carriers of a load-sensitive flake — 2/24 on a base that
+    /// predates it (`gate-logs/lock-race-attribution/VERDICT.md`). It inherits that
+    /// sensitivity, and a red here should be read against that register first.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_completion_lost_to_a_severed_link_is_re_dispatched_and_the_workflow_settles()
+    -> Result<(), TestError> {
+        let dir = crate::test_support::private_tempdir().map_err(test_error)?;
+        let db_path = dir.path().join("aion.db");
+        let package_path = write_package_archive(dir.path())?;
+        let listen_address = reserve_loopback_port()?;
+
+        let config = server_config(&db_path, package_path, listen_address);
+        let outbox_config = config.outbox.clone();
+        // Captured before `build` consumes the config: the wait below is derived
+        // from the very window this server is about to run its liveness probe on.
+        let patience = eligibility_patience(&config);
+        let state = ServerState::build(config).await.map_err(test_error)?;
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        let backpressure_settings = BackpressureSettings {
+            platform_default: crate::config::DEFAULT_MAX_IN_FLIGHT_ACTIVITIES,
+            fraction: crate::worker::OwnedShardFraction::own_all(),
+        };
+        let listener_guard = maybe_spawn_outbox_dispatcher(
+            &state,
+            &outbox_config,
+            false,
+            backpressure_settings,
+            &shutdown_rx,
+            "set outbox.liminal_listen_address in the test config",
+        )
+        .map_err(test_error)?;
+
+        // The worker dials the RELAY, which carries it to the production listener.
+        let relay = SeverableRelay::spawn(listen_address)?;
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // The redial timings are the ones this module's `worker_config` already
+        // declares, read off it rather than re-chosen here: a reconnect pin that
+        // picked its own recovery timings would be measuring a world of its own.
+        let config = worker_config()?;
+        let timing = aion_worker::RedialTiming::new(
+            config.reconnect.initial_backoff,
+            config.reconnect.max_backoff,
+        );
+        let worker = WorkerThread::spawn_redialing(
+            relay.address().to_string(),
+            config,
+            recording_registry(&seen, &release)?,
+            timing,
+        );
+
+        let outcome =
+            observe_reconnect(&state, &relay, &seen, &release, listen_address, patience).await;
+
+        // Teardown runs on EVERY path, including a failing one: a leaked worker
+        // thread or listener poisons whatever runs next, and this venue is already
+        // load-sensitive enough without the pin adding to it.
+        shutdown_tx.send(true).ok();
+        release.store(true, Ordering::SeqCst);
+        worker.stop();
+        relay.shutdown();
+        drop(listener_guard);
+        state.shutdown().map_err(test_error)?;
+        outcome
+    }
+
+    /// The measurement behind
+    /// [`a_completion_lost_to_a_severed_link_is_re_dispatched_and_the_workflow_settles`],
+    /// split out so its many early returns cannot skip the harness teardown.
+    /// Wait until the held member is dispatched and holding — the moment the link
+    /// can be broken — and report how many of its siblings had already settled.
+    ///
+    /// The split at the break is REPORTED, never required. An earlier draft
+    /// demanded that the other three settle first, for a single-variable
+    /// experiment. Measured across runs it simply varies: the four pushes land
+    /// within microseconds of each other and which records a terminal first is a
+    /// race, so requiring a particular split would fail the pin for a reason that
+    /// has nothing to do with what it measures.
+    async fn await_held_dispatch(
+        reader: &dyn aion_store::ReadableEventStore,
+        workflow_id: &aion_core::WorkflowId,
+        seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>,
+    ) -> Result<(SeenDispatch, usize), TestError> {
+        let deadline = Instant::now() + POLL_DEADLINE;
+        loop {
+            if let Some(first) = dispatches_of(seen, HELD_ACTIVITY_TYPE)?.first() {
+                let at_the_break = reader.read_history(workflow_id).await.map_err(test_error)?;
+                return Ok((first.clone(), count_completed(&at_the_break)));
+            }
+            if Instant::now() > deadline {
+                let history = reader.read_history(workflow_id).await.map_err(test_error)?;
+                return Err(test_error(format!(
+                    "{HELD_ACTIVITY_TYPE} was never dispatched at all within {POLL_DEADLINE:?}, \
+                     so there was no held completion to lose and this run measured nothing.\n\
+                     dispatch log: {}\nhistory: {history:#?}",
+                    dispatch_log(seen),
+                )));
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    async fn observe_reconnect(
+        state: &ServerState,
+        relay: &SeverableRelay,
+        seen: &Arc<std::sync::Mutex<Vec<SeenDispatch>>>,
+        release: &Arc<std::sync::atomic::AtomicBool>,
+        listen_address: SocketAddr,
+        patience: Duration,
+    ) -> Result<(), TestError> {
+        wait_for_registration(state.worker_registry(), listen_address, patience).await?;
+
+        let router = http_router(state.clone()).map_err(test_error)?;
+        let workflow_id = start_over_http(&router).await?;
+        let reader = state.engine().map_err(test_error)?.store();
+
+        let (first, settled_before) =
+            await_held_dispatch(reader.as_ref(), &workflow_id, seen).await?;
+
+        // BREAK the link while the finished work is still holding its reply.
+        let severed = relay.sever()?;
+        let severed_at = Instant::now();
+        if severed == 0 {
+            return Err(test_error(
+                "the relay severed NOTHING, so no link was ever broken and this run measured \
+                 nothing — a pass here would have been an artefact of the instrument",
+            ));
+        }
+        // Release the hold: the worker now writes its reply into a dead socket.
+        release.store(true, Ordering::SeqCst);
+
+        // O4 FIRST, because it is the INVARIANT: a broken link must not cost the
+        // workflow. Every other observable here describes the MECHANISM by which
+        // that holds, and the mechanism is exactly what a #69 fix is expected to
+        // change — so asserting today's mechanism would make the fix read as a
+        // regression, and would be asserting the enumeration rather than the
+        // invariant.
+        //
+        // O4 is load-bearing rather than weak because `collect_four` CONSUMES all
+        // four members: the workflow cannot reach a completed terminal while any
+        // member's work is missing, so "the workflow settled" is not a state that
+        // silently lost work can also produce.
+        let settled = wait_for_history(
+            reader.as_ref(),
+            &workflow_id,
+            "the workflow to settle after the severed link",
+            |events| count_completed(events) == FAN_OUT && count_workflow_completed(events) == 1,
+        )
+        .await
+        .map_err(|error| {
+            test_error(format!(
+                "O4 FAILED — the workflow did not settle after the link broke ({severed} \
+                 socket(s) severed), so the lost completion cost the workflow rather than \
+                 costing a repeat of the work.\n{error}\ndispatch log: {}",
+                dispatch_log(seen),
+            ))
+        })?;
+        assert_eq!(
+            count_completed(&settled),
+            FAN_OUT,
+            "every fan-out member must still record a terminal after the link broke"
+        );
+        assert_eq!(
+            count_workflow_completed(&settled),
+            1,
+            "the workflow must complete exactly once even though a completion was lost"
+        );
+
+        // O1/O2/O3 — the MECHANISM, reported. O2 is asserted only CONDITIONALLY:
+        // if a re-delivery happened it must have carried the activity's own
+        // identity, because a re-delivery under a different identity would be a
+        // different defect entirely and must not pass quietly. If no re-delivery
+        // happened, the completion survived the reconnect — which is what a fixed
+        // #69 looks like, and this pin should report it, not fail on it.
+        let held = dispatches_of(seen, HELD_ACTIVITY_TYPE)?;
+        match held.get(1) {
+            None => println!(
+                "aion#69 — {HELD_ACTIVITY_TYPE} ({}) was NOT re-dispatched and the workflow \
+                 still settled, so the held completion survived the break; {settled_before} of \
+                 {FAN_OUT} members had settled when it broke, {severed} socket(s) severed",
+                first.activity_id,
+            ),
+            Some(second) => {
+                if second.activity_id != first.activity_id {
+                    return Err(test_error(format!(
+                        "O2 FAILED — the re-delivery carried a DIFFERENT activity identity. The \
+                         first dispatch was {} (attempt {}) and the second was {} (attempt {}), \
+                         so the work was not re-run under its own identity and #69's framing \
+                         does not describe what happened here.",
+                        first.activity_id, first.attempt, second.activity_id, second.attempt,
+                    )));
+                }
+                let recovery = second.at.saturating_duration_since(severed_at);
+                println!(
+                    "aion#69 O3 — re-delivery of {} ({}) took {}ms from the link breaking; \
+                     first attempt {}, second attempt {}; {settled_before} of {FAN_OUT} members \
+                     had already recorded a terminal when the link broke; {severed} socket(s) \
+                     severed",
+                    HELD_ACTIVITY_TYPE,
+                    first.activity_id,
+                    recovery.as_millis(),
+                    first.attempt,
+                    second.attempt,
+                );
+            }
+        }
+
+        let all = seen
+            .lock()
+            .map_err(|_| test_error("the pin's dispatch log is poisoned"))?
+            .len();
+        println!(
+            "aion#69 — {all} dispatch(es) served for {FAN_OUT} activities; the transport is \
+             at-least-once, so the excess is the repeated work a broken link costs"
+        );
         Ok(())
     }
 }

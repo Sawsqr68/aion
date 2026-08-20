@@ -78,17 +78,71 @@ ended up correct and unexecuted.\n'
 # tool with a known no-op invocation. `python3 -c pass` is one. There is no such
 # universal argument, so `require_tool` keeps its cheaper question and the tools
 # that can be probed properly are probed properly.
+# WHY THE PATH IS WALKED BY HAND rather than asked for with `type -ap`:
+#
+# This file is SOURCED, and the shell doing the sourcing is not always bash.
+# macOS `/bin/sh` IS bash — 3.2, in POSIX mode — which disables process
+# substitution, so the `done < <(type -ap python3)` this replaced was a SYNTAX
+# ERROR there, and `type -ap` is a bash extension besides.
+#
+# The reason it had to be REMOVED rather than guarded: a syntax error is a PARSE
+# failure, and the whole file is parsed before any line of it executes. No
+# runtime check inside this file can ever run early enough to catch it, and no
+# `$BASH_VERSION` test would have fired anyway — bash-as-`sh` sets that variable
+# like any other bash. The construct has to be absent.
+#
+# Failure direction was already right (the source failed, `|| exit $?` caught
+# it, rc 1) — this makes the file work in both shells instead of documenting a
+# limitation it could close.
+#
+# WHAT "UNDER sh" MEANS HERE, MEASURED — and it is narrower than it sounds.
+# It means bash invoked as `sh`, which is the only `sh` macOS has. Under a
+# genuinely POSIX shell it is still not sourceable, and the blocker is NOT this
+# function: `/bin/dash -c '. scripts/gates/lib.sh'` fails `Bad substitution` on
+# the `${BASH_SOURCE[0]}` at the bottom of this file, and both entry scripts
+# (`scripts/battery.sh`, `scripts/gates/verify-declaration.sh`) compute
+# `REPO_ROOT` from `${BASH_SOURCE[0]}` too, so they would die before reaching
+# this file at all. Fixing it here alone would close nothing.
+# ⇒ A sourced file cannot learn its own path in POSIX sh; the cure is a calling
+# convention (the caller passes the root), which is a change to the whole gate
+# family and needs its own red-first. It is scoped separately rather than
+# smuggled in here — and named rather than left for someone to rediscover.
 select_python3() {
-  local candidate tried=""
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
+  local candidate tried="" dir saved_ifs glob_was_off
+  saved_ifs=$IFS
+
+  # Split PATH on `:` into the positional parameters. `set -f` because a PATH
+  # entry containing a glob character must be taken literally, not expanded.
+  #
+  # The state is SAVED and RESTORED rather than ended with a bare `set +f`.
+  # This file is SOURCED, so `set +f` is not a local cleanup — it reaches into
+  # the caller's shell and turns globbing back on for everything after it. A
+  # caller that deliberately ran `set -f` would have it silently revoked by a
+  # helper it only asked for a path, and the revocation is in the PERMISSIVE
+  # direction, which is the one that fails quietly rather than loudly.
+  case $- in
+    *f*) glob_was_off=1 ;;
+    *)   glob_was_off=0 ;;
+  esac
+
+  IFS=:
+  set -f
+  set -- $PATH
+  [ "$glob_was_off" -eq 1 ] || set +f
+  IFS=$saved_ifs
+
+  for dir in "$@"; do
+    # POSIX: an empty PATH entry means the current directory.
+    [ -n "$dir" ] || dir=.
+    candidate="$dir/python3"
+    [ -f "$candidate" ] && [ -x "$candidate" ] || continue
     tried="$tried$candidate
 "
     if "$candidate" -c 'pass' >/dev/null 2>&1; then
       printf '%s' "$candidate"
       return 0
     fi
-  done < <(type -ap python3 2>/dev/null)
+  done
 
   printf 'NO WORKING python3.\n' >&2
   if [ -n "$tried" ]; then

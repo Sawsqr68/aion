@@ -572,7 +572,7 @@ impl Harness {
         let sweeper = HeartbeatSweeper::new(
             tracker.clone(),
             registry.clone(),
-            aion_server::worker::PendingActivities::default(),
+            aion_server::worker::PendingActivities::new(HEARTBEAT_WINDOW),
             aion_server::shutdown::DrainState::default(),
             HEARTBEAT_WINDOW,
         );

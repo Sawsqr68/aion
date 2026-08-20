@@ -372,12 +372,10 @@ impl ServerState {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
-        // the operator's heartbeat window BEFORE it does. A default ledger here
-        // would give an embedder-booted server a ZERO budget — exactly one
-        // re-dispatchable worker loss, then transport-exhausted — while the
-        // full-boot path got the real one.
-        let pending_activities =
-            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
+        // the operator's heartbeat window BEFORE it does. The window is a
+        // constructor parameter, so an embedder-booted server cannot reach the
+        // state carrying a budget the operator never declared.
+        let pending_activities = PendingActivities::new(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -470,12 +468,10 @@ impl ServerState {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
-        // the operator's heartbeat window BEFORE it does. A default ledger here
-        // would give an embedder-booted server a ZERO budget — exactly one
-        // re-dispatchable worker loss, then transport-exhausted — while the
-        // full-boot path got the real one.
-        let pending_activities =
-            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
+        // the operator's heartbeat window BEFORE it does. The window is a
+        // constructor parameter, so an embedder-booted server cannot reach the
+        // state carrying a budget the operator never declared.
+        let pending_activities = PendingActivities::new(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -563,12 +559,10 @@ impl ServerState {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
-        // the operator's heartbeat window BEFORE it does. A default ledger here
-        // would give an embedder-booted server a ZERO budget — exactly one
-        // re-dispatchable worker loss, then transport-exhausted — while the
-        // full-boot path got the real one.
-        let pending_activities =
-            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
+        // the operator's heartbeat window BEFORE it does. The window is a
+        // constructor parameter, so an embedder-booted server cannot reach the
+        // state carrying a budget the operator never declared.
+        let pending_activities = PendingActivities::new(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -653,12 +647,10 @@ impl ServerState {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
-        // the operator's heartbeat window BEFORE it does. A default ledger here
-        // would give an embedder-booted server a ZERO budget — exactly one
-        // re-dispatchable worker loss, then transport-exhausted — while the
-        // full-boot path got the real one.
-        let pending_activities =
-            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
+        // the operator's heartbeat window BEFORE it does. The window is a
+        // constructor parameter, so an embedder-booted server cannot reach the
+        // state carrying a budget the operator never declared.
+        let pending_activities = PendingActivities::new(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -1514,8 +1506,7 @@ fn build_worker_seams(
         // window (the one value declaring what silence means), so a worker that
         // keeps dying under an activity is re-dispatched attempt-neutrally for
         // a bounded span and then terminates naming the TRANSPORT.
-        pending_activities: PendingActivities::default()
-            .with_heartbeat_window(runtime.worker.heartbeat_window),
+        pending_activities: PendingActivities::new(runtime.worker.heartbeat_window),
         heartbeat_tracker: HeartbeatTracker::new(runtime.worker.heartbeat_window),
         drain_state: DrainState::default(),
         queue_declarations: crate::worker::QueueDeclarationSource::default(),
