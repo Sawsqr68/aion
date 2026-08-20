@@ -78,17 +78,46 @@ ended up correct and unexecuted.\n'
 # tool with a known no-op invocation. `python3 -c pass` is one. There is no such
 # universal argument, so `require_tool` keeps its cheaper question and the tools
 # that can be probed properly are probed properly.
+# WHY THE PATH IS WALKED BY HAND rather than asked for with `type -ap`:
+#
+# This file is SOURCED, and the shell doing the sourcing is not always bash.
+# macOS `/bin/sh` IS bash — 3.2, in POSIX mode — which disables process
+# substitution, so the `done < <(type -ap python3)` this replaced was a SYNTAX
+# ERROR there, and `type -ap` is a bash extension besides.
+#
+# The reason it had to be REMOVED rather than guarded: a syntax error is a PARSE
+# failure, and the whole file is parsed before any line of it executes. No
+# runtime check inside this file can ever run early enough to catch it, and no
+# `$BASH_VERSION` test would have fired anyway — bash-as-`sh` sets that variable
+# like any other bash. The construct has to be absent.
+#
+# Failure direction was already right (the source failed, `|| exit $?` caught
+# it, rc 1) — this makes the file work in both shells instead of documenting a
+# limitation it could close.
 select_python3() {
-  local candidate tried=""
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
+  local candidate tried="" dir saved_ifs
+  saved_ifs=$IFS
+
+  # Split PATH on `:` into the positional parameters. `set -f` because a PATH
+  # entry containing a glob character must be taken literally, not expanded.
+  IFS=:
+  set -f
+  set -- $PATH
+  set +f
+  IFS=$saved_ifs
+
+  for dir in "$@"; do
+    # POSIX: an empty PATH entry means the current directory.
+    [ -n "$dir" ] || dir=.
+    candidate="$dir/python3"
+    [ -f "$candidate" ] && [ -x "$candidate" ] || continue
     tried="$tried$candidate
 "
     if "$candidate" -c 'pass' >/dev/null 2>&1; then
       printf '%s' "$candidate"
       return 0
     fi
-  done < <(type -ap python3 2>/dev/null)
+  done
 
   printf 'NO WORKING python3.\n' >&2
   if [ -n "$tried" ]; then
