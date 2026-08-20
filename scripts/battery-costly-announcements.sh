@@ -22,9 +22,39 @@
 # a dead-code warning quotes the source line that defines the constant —
 # `pub const SKIP_TOKEN: &str = "COSTLY_PROOF_SKIPPED";`. And that warning
 # appears exactly when a call site is removed, so the count was inflated in
-# precisely the case the gate exists to detect. The anchored
-# `^COSTLY_PROOF_SKIPPED (PROVES NOTHING):` cannot match a quoted source line,
-# which compilers indent.
+# precisely the case the gate exists to detect.
+#
+# 🔴 THE `^` ANCHOR IS GONE — IT WAS MANUFACTURING FALSE REDS. Measured
+# 2026-08-20, battery run 2: this gate reported
+# `parked_timer_osproc_kill9_failover_e2e announced NOTHING` while that suite was
+# announcing perfectly. Six consecutive runs, counting the same output two ways:
+# anchored 0, unanchored 1, EVERY TIME.
+#
+# The cause is an interleave the gate does not control. The announcement is
+# written to the REAL stderr handle (deliberately — `println!` goes through the
+# harness's per-test capture and is swallowed on a passing test, and a gated skip
+# always passes). The harness writes its progress dots to STDOUT. Under `2>&1`
+# both land in one pipe, so a dot can arrive first and the line becomes
+# `.COSTLY_PROOF_SKIPPED (PROVES NOTHING): …` — which `^` cannot match.
+#
+# ★ THE DIRECTION WAS SAFE AND THE SHAPE WAS NOT. A genuinely missing
+# announcement still counts 0 either way, so the anchor never bought a false
+# green. But an intermittently-red gate is the kind people learn to wave through,
+# and the wave-through is what eventually covers a real red.
+#
+# ★ WHAT REPLACES THE ANCHOR'S JOB, because the paragraph above is a real
+# dependency and dropping it needed a replacement, not a shrug. The defence is
+# now ADJACENCY: the two literals `COSTLY_PROOF_SKIPPED` and `(PROVES NOTHING):`
+# sit next to each other ONLY after runtime formatting. In source the first is a
+# constant and the second lives in a format string beside `{SKIP_TOKEN}`, so no
+# source line — and no compiler diagnostic quoting one — can carry both.
+#
+# Verified by inverted control rather than asserted, the same way the original
+# defect was found:
+#   * the full pattern across every .rs in aion-cli ......... 0 matches
+#   * `48 | pub const SKIP_TOKEN: &str = "COSTLY_PROOF_SKIPPED";` .. 0
+#   * `64 | "{SKIP_TOKEN} (PROVES NOTHING): {proof} …` ............. 0
+#   * `.COSTLY_PROOF_SKIPPED (PROVES NOTHING): a workflow parked …` . 1
 #
 # 🔴 A BASELINE IS ONLY A CONTROL IF IT IS INDEPENDENT OF WHAT IT MEASURES.
 # The second defect the inverted control found, and the one that would have
@@ -49,13 +79,28 @@ costly_announcements() {
   local targets="lsub5b_osproc_failover_e2e lsub5b_osproc_kill9_failover_e2e \
                  parked_timer_osproc_kill9_failover_e2e stacked_dev_live_e2e \
                  new_scaffold_build"
-  local target out found failures=0 checked=0
+  local target out rc found failures=0 checked=0
 
   for target in $targets; do
     out=$(cargo test -q -p aion-cli --test "$target" 2>&1)
-    found=$(printf '%s' "$out" | grep -c '^COSTLY_PROOF_SKIPPED (PROVES NOTHING):')
+    rc=$?
+    found=$(printf '%s' "$out" | grep -c 'COSTLY_PROOF_SKIPPED (PROVES NOTHING):')
     checked=$((checked + 1))
-    if [ "$found" -eq 0 ]; then
+    # 🔴 CARGO'S EXIT CODE IS CHECKED FIRST, AND SEPARATELY. Without this, a
+    # target that fails to COMPILE emits no announcement, counts 0, and is
+    # reported as "skipped silently" — so a build break, a panic and a genuine
+    # lost announcement all arrive wearing the same face, and the gate's own
+    # diagnosis sends the next reader hunting the wrong thing. A gate that
+    # cannot say WHICH failure it saw is measuring one thing and reporting
+    # another.
+    if [ "$rc" -ne 0 ]; then
+      printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` did not RUN (cargo exit %d).\n' "$target" "$rc"
+      printf 'This is NOT a missing announcement — the suite never got far enough\n'
+      printf 'to announce anything. Fix the build or the failing test first; the\n'
+      printf 'announcement claim is unmeasured until this target runs. Last lines:\n'
+      printf '%s\n' "$out" | tail -15 | sed 's/^/  | /'
+      failures=$((failures + 1))
+    elif [ "$found" -eq 0 ]; then
       printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` announced NOTHING.\n' "$target"
       printf 'Its costly proof is being skipped silently — the exact invisibility\n'
       printf '`#[ignore]` was banned for. Either it now runs (move it off this list)\n'

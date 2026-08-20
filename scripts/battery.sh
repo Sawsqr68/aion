@@ -30,13 +30,80 @@
 # invisible, which is the exact defect this script exists to fix. If `uv` or
 # `bun` is absent the battery says so and goes red; install them or run the
 # gates you can and say which ones in your report.
+#
+# WHERE THE LEG LIST LIVES — and why it is not here any more.
+#
+# It used to be here AND in `gates.json`, and the two had drifted in BOTH
+# directions: this script ran 23 legs and never ran `estate-guard`; `gates.json`
+# declared 7 and named none of the posture, console, Gleam, Python or TypeScript
+# legs. Neither was a superset, so which gates you lost depended on which runner
+# executed — and the answer to "is this repository green?" depended on who asked.
+#
+# 🔴 THE CURE IS SUBTRACTION, NOT A CHECKER. A drift-checker would be a third
+# copy of the same list. `gates.json` is now the ONE list and this script
+# executes exactly what is declared there, so the two sets cannot differ by
+# construction rather than by discipline.
+#
+# 🔴 AND THE POPULATION IS NOW FIXED. Legs used to be wrapped in
+# `if require_tool gleam; then ... fi`, so a box without gleam did not run three
+# named legs and recorded ONE `toolchain:gleam` entry instead — two manifests
+# could list different populations with nothing saying so. Every declared leg now
+# appears in the manifest with its own exit code, so a missing toolchain is
+# visible PER LEG (127) instead of shrinking the population.
 
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-# Gate name → exit code, in declaration order. Bash 3.2 (macOS system bash) has
+DECLARATION="$REPO_ROOT/gates.json"
+
+# Sourced with `|| exit $?` — a sourced refusal is a `return`, and unchecked it
+# is advice. This script needs exactly one thing from the library, `select_python3`,
+# and takes it from there rather than carrying its own copy: an interpreter
+# chosen one way here and another way in the legs is the same defect this whole
+# refactor removed, one layer down.
+. "$REPO_ROOT/scripts/gates/lib.sh" || exit $?
+
+# The estate root the `estate-guard` leg needs. Ruled 2026-08-20 (Waffles,
+# implemented by Athena in tools/gates/lib/estate-root.sh): THE INVOKING RUNNER
+# OWNS THE EXPORT — never a shell profile, never machine config, so nothing lands
+# in anyone's ambient environment. Measured the same day: four repositories had
+# landed the leg and NOT ONE runner in the estate exported the variable, so every
+# one of those legs refused rc 3 on every run. Until this, aion was one of them.
+#
+# The four lines below only LOCATE that file; they carry no judgement. The walk
+# that decides the root is re-run inside it, from $ESTATE_ROOT_FROM, against its
+# own marker — so a bootstrap that drifts cannot return a WRONG root, it can only
+# fail to find the file, which leaves the variable unset and the leg refusing
+# rc 3 as a named declared omission. An off-estate venue takes that same road.
+# That is why duplicating the locator across runners is tolerable.
+#
+# 🔴 `|| exit $?` IS NOT DECORATION. A refusal from a sourced file is a `return`,
+# and a return the caller does not check is advice, not a refusal — without it
+# this runner sails past rc 86 (a root that is named but is not a directory) and
+# runs the whole battery against a root it cannot scan.
+#
+# ⚠️ AND rc-CHECKING A SOURCE IS NOT SUFFICIENT ON ITS OWN — a file that is
+# present but TRUNCATED is valid shell and sources with rc 0, so status catches
+# only the cuts that land mid-construct. The check that actually holds here is on
+# the VALUE this runner consumes, and the leg already performs it:
+# `[ -n "${ABLATIVE_ESTATE_ROOT:-}" ] || exit 3`. Every truncation of
+# estate-root.sh either stops before the export (unset → the leg refuses, loud)
+# or after it (root already resolved); none yields a set-but-wrong root.
+# Do NOT "harden" this with a `command -v` symbol check copied from the estate's
+# class-A guard: that guard consumes a FUNCTION and fails OPEN on its absence,
+# this runner consumes a VALUE and fails CLOSED. Same hole, opposite direction —
+# check the thing that is actually consumed.
+ESTATE_ROOT_FROM="$REPO_ROOT"
+_d="$REPO_ROOT"
+while [ "$_d" != "/" ] && [ ! -f "$_d/tools/gates/lib/estate-root.sh" ]; do _d="$(dirname "$_d")"; done
+if [ -f "$_d/tools/gates/lib/estate-root.sh" ]; then
+  . "$_d/tools/gates/lib/estate-root.sh" || exit $?
+fi
+unset _d
+
+# Gate name -> exit code, in declaration order. Bash 3.2 (macOS system bash) has
 # no associative arrays, so this is two parallel arrays rather than one map.
 GATE_NAMES=()
 GATE_CODES=()
@@ -61,44 +128,58 @@ gate() {
   return 0
 }
 
-# Runs a gate inside a directory without leaking the `cd` into later gates.
-#
-# The `cd` happens in a subshell rather than via `env -C`, which BSD `env` did
-# not carry until recently and which would fail on an older macOS with a
-# message that looks nothing like the real problem.
-gate_in() {
-  local name="$1"
-  local dir="$2"
-  shift 2
-  if [ ! -d "$dir" ]; then
-    printf '\n=== %s ===\n' "$name"
-    printf 'MISSING DIRECTORY: %s\n' "$dir"
-    GATE_NAMES+=("$name")
-    GATE_CODES+=(127)
-    return 0
-  fi
-  gate "$name" bash -c 'cd "$1" && shift && "$@"' _ "$dir" "$@"
-}
-
-# Fails the battery loudly when a required tool is absent, rather than skipping.
-require_tool() {
-  local tool="$1"
-  local why="$2"
-  if command -v "$tool" >/dev/null 2>&1; then
-    return 0
-  fi
-  printf '\n=== toolchain: %s ===\n' "$tool"
-  printf 'NOT INSTALLED. %s\n' "$why"
-  printf 'This is a FAILURE, not a skip: a gate that cannot run is a gate that
-proves nothing, and silently skipping it is how three gates in this repository
-ended up correct and unexecuted.\n'
-  GATE_NAMES+=("toolchain:$tool")
-  GATE_CODES+=(127)
-  return 1
-}
-
 printf 'aion house battery — repo root %s\n' "$REPO_ROOT"
 printf 'HEAD %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+# --- Reading the declaration --------------------------------------------------
+#
+# 🔴 THIS RUNS IN EVERY MODE, INCLUDING THE SELF-TEST, and that is the point.
+# It used to sit inside the `else` arm, so the self-test branched straight past
+# it — which is how a reader that could not execute at all survived a green
+# self-test. A harness check that skips the step most likely to break is
+# checking the easy half.
+#
+# The declaration is read with python3 rather than jq: jq is not guaranteed on a
+# fresh box, and a battery that cannot start because its own reader is missing
+# is the failure mode this script exists to prevent.
+#
+# 🔴 AND THE READER IS CHOSEN BY RUNNING IT, not by asking the PATH. On the box
+# this was written on, the FIRST python3 on the PATH is a Linux x86-64 ELF binary
+# that cannot exec on an arm64 Mac — so the reader this script picked to avoid a
+# missing dependency was itself unrunnable, and the battery could not start. The
+# self-test never caught it, because self-test mode branches around the reader:
+# the harness was proven and the thing that reads the list was not. See
+# `select_python3` in scripts/gates/lib.sh.
+#
+# Names and commands are
+# emitted base64-encoded because a leg's `cmd` legitimately contains quotes,
+# newlines and shell metacharacters — round-tripping them through a delimiter
+# would be a parser, and a parser is a place for this to go quietly wrong.
+if [ ! -f "$DECLARATION" ]; then
+  printf '🔴 NO DECLARATION at %s. This script runs what gates.json declares, so\n' "$DECLARATION"
+  printf 'without it there are no legs to run — which is a failure, not a clean tree.\n'
+  exit 1
+fi
+
+PYTHON3=$(select_python3) || {
+  printf '🔴 the battery cannot read its declaration: no working python3 (see above).\n'
+  exit 1
+}
+
+LEGS=$("$PYTHON3" - "$DECLARATION" <<'READER'
+import base64, json, sys
+doc = json.load(open(sys.argv[1]))
+legs = doc.get("legs") or []
+if not legs:
+    sys.exit("declaration contains no legs")
+for leg in legs:
+    name, cmd = leg["name"], leg["cmd"]
+    print(base64.b64encode(name.encode()).decode(), base64.b64encode(cmd.encode()).decode())
+READER
+) || { printf '🔴 could not read the declaration at %s\n' "$DECLARATION"; exit 1; }
+
+printf 'declaration %s read with %s — %d legs declared\n' \
+  "$DECLARATION" "$PYTHON3" "$(printf '%s\n' "$LEGS" | grep -c .)"
 
 # The battery's own failure path, executable.
 #
@@ -107,323 +188,70 @@ printf 'HEAD %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 # of those. `AION_BATTERY_SELF_TEST=1 scripts/battery.sh` runs one passing and
 # one failing synthetic gate and MUST exit 1 with `1 of 2 gates failed`. If it
 # ever exits 0, this script cannot report a real failure either.
+#
+# The declared legs are read but not run in this mode, so the self-test now
+# exercises the reader as well as the reporting — and a self-test log is exactly
+# the log `scripts/gates/verify-declaration.sh` must REJECT, which is how that
+# verifier's own red path is demonstrated without breaking anything.
 if [ "${AION_BATTERY_SELF_TEST:-}" = "1" ]; then
   printf 'SELF-TEST MODE: no real gate runs. Expect exit 1 and 1 of 2 failed.\n'
   gate "self-test:passes" true
   gate "self-test:fails" false
 else
 
-# --- Rust ---------------------------------------------------------------------
-
-gate "rust:fmt" cargo fmt --all -- --check
-gate "rust:clippy" cargo clippy --workspace --all-targets -- -D warnings
-
-# `--no-fail-fast` IS LOAD-BEARING, and its absence cost a P0 on 2026-07-31.
+# --- running a subset, and why it cannot be mistaken for a full battery -------
 #
-# This script already refuses to stop at the first failing GATE, for the reason
-# in the header: a battery that stops early hides the gates behind it. Without
-# this flag the Rust gates broke that same rule one level down — `cargo test`
-# stops at the first failing TARGET, so a single red lib test silently un-runs
-# every integration target after it.
+# `AION_BATTERY_ONLY="rust:fmt posture:worker-default" scripts/battery.sh` runs
+# only the named legs. This exists because the alternative is worse: without it,
+# checking one leg means either firing the whole battery — minutes of load, on a
+# machine someone else is working on — or running the leg's command by hand,
+# outside the runner, which proves nothing about the runner.
 #
-# That is not hypothetical. A red lib test in `aion-server` truncated a run
-# before any integration target started, and the reading — "688 passed, 1
-# failed" — was taken as one known exception on an otherwise green suite. It was
-# a truncated run reported as a complete one, and among the targets that never
-# executed was one that would have HUNG FOREVER on a P0 introduced the day
-# before (every liminal worker accepting dispatches and executing none). See
-# docs/design/aion-authoring/RED-MAIN-118-RECORD.md.
+# 🔴 IT CANNOT LAUNDER A PARTIAL RUN INTO A GREEN ONE. A subset log's
+# EXECUTED_LEGS is a strict subset of the declaration, so
+# `scripts/gates/verify-declaration.sh` REJECTS it — with the skipped legs named.
+# The escape hatch is only usable while it is visible, which is the whole reason
+# the executed set is emitted at all.
 #
-# A count is only a coverage claim if the run reached the end. Read the target
-# list, not the tally.
-# Runs a cargo test invocation and asserts the run REACHED THE END (#120).
-#
-# A test run's exit code and its tally are two different claims, and only the
-# first is about completeness. `--no-fail-fast` continues past failing tests, but
-# a target that dies — or a run cut short — simply stops producing output, and
-# the surviving tally still reads `0 failed`. That is how "688 passed, 1 failed"
-# was taken as one known exception on an otherwise green suite when it was in
-# fact a truncated run reported as a complete one, hiding a P0 (see the comment
-# above `rust:test`).
-#
-# 🔴 THE OBVIOUS CONTROL — comparing the COUNT of target-start lines against the
-# count of `test result:` lines — DOES NOT WORK, and this was measured rather
-# than assumed. On fully green runs the two disagree:
-#
-#     .evidence/118/battery-final.log        45 targets, 48 results
-#     .evidence/118/shakedown-allfeatures    240 targets, 243 results
-#
-# Because a test that RE-EXECUTES ITS OWN BINARY as a child prints the child's
-# `running N tests` / `test result:` into the parent's stdout, mid-target — e.g.
-# `config::load::home_tests::aion_home_env_probe_child` from the AION_HOME work.
-# A counting gate would fire on every green run; worse, a real truncation
-# coinciding with N child extras would net to zero and read as complete.
-#
-# So assert the PAIRING, not the count: every target-start line must be followed
-# by at least one `test result:` before the next target line. Child extras land
-# inside a target's own block and are tolerated by construction; a truncation
-# leaves a started target with nothing after it.
-#
-# Validated both ways before being wired in: `unpaired=0` on three real green
-# logs (including both counting-mismatch cases above) and `unpaired=1` on the
-# same log with one result line removed.
-#
-# Note the filter trap: a legitimately filtered top-level run also reports
-# `filtered out > 0`, so that field cannot be used to identify child lines — the
-# `posture:*` gates filter deliberately.
-#
-# 🔴 TWO NOUNS THAT LOOK LIKE ONE, both consequences of those same child
-# re-invocations. Worked out at two hands on the 2026-08-01 green run and
-# written here because the next person re-derives them from scratch otherwise:
-#
-#   * `N passed` is a count of PASS EVENTS, not of DISTINCT TESTS. A subprocess
-#     test passes twice — once inside its parent target's tally, once as the
-#     filtered child. That run reported 3952 passed; distinct is ~3949.
-#   * VERDICT LINES ARE NOT TARGETS. The same run had 243 `test result:` lines
-#     and 240 targets; the gap is exactly the 3 nested child verdicts.
-#
-# Which is why this control counts TARGETS and pairs them rather than summing a
-# column: a nested child verdict cannot reach it. Summing across verdict lines
-# treats child re-invocations as peers of top-level runs, and an aggregate over
-# heterogeneous rows is a number about no population at all. (The same run's
-# `2133 filtered out` is 3 x 711 from one self-filtering binary — it looks like a
-# third of the suite was skipped and nothing was.)
-#
-# And the pattern needs its COLON. `grep '^test result'` also matches a test
-# NAMED `result_...`, which is how the 244-vs-243 discrepancy arose in the first
-# place. Count `^test result:`.
-paired_test() {
-  local log
-  log=$(mktemp) || return 1
-  "$@" 2>&1 | tee "$log"
-  local code=${PIPESTATUS[0]}
-
-  local counts targets unpaired
-  counts=$(awk '
-    /^[[:space:]]+Running |^[[:space:]]+Doc-tests / { if (started) unpaired++; started = 1; targets++ }
-    /^test result:/ { started = 0 }
-    END { if (started) unpaired++; print targets + 0, unpaired + 0 }
-  ' "$log")
-  targets=${counts%% *}
-  unpaired=${counts##* }
-  rm -f "$log"
-
-  if [ "$targets" -eq 0 ]; then
-    printf 'COVERAGE CONTROL FAILED: the run started ZERO test targets.\n'
-    printf 'An exit code from a run that tested nothing is not a result about this code.\n'
-    return 1
-  fi
-  if [ "$unpaired" -ne 0 ]; then
-    printf 'COVERAGE CONTROL FAILED: %d of %d target(s) started and never reported a result.\n' \
-      "$unpaired" "$targets"
-    printf 'The run was TRUNCATED. Its tally is not a coverage claim, whatever it says.\n'
-    return 1
-  fi
-  printf 'coverage control ok: %d targets started, %d reached a result\n' "$targets" "$targets"
-  return "$code"
-}
-
-gate "rust:test" paired_test cargo test --workspace --no-fail-fast
-
-# The all-features resolution differs from the default one — `--workspace`
-# resolves some features ON that `-p <crate>` leaves off — so this is a
-# genuinely different run, not a slower copy of the one above.
-gate "rust:test-all-features" paired_test cargo test --workspace --all-features --no-fail-fast
-
-# --- Build-posture controls (#119) ---------------------------------------------
-#
-# Two crates carry a default-OFF feature that gates an entire surface, so a
-# per-package run of either compiles none of it and exits 0:
-#
-#   aion-worker / liminal-transport  — the whole liminal transport
-#   aion-proto  / generated          — the tonic/prost stubs the hand-written
-#                                      wire contracts are supposed to be
-#                                      checked AGAINST
-#
-# Both crates now ANNOUNCE their posture through a test name, which a runner
-# always prints. But `reconcile-nextest.sh` states the law this would otherwise
-# break: *a pinned test denominator that nothing mechanically compares is an
-# instruction, not a control.* A printed announcement that nothing checks is
-# observability, not a gate — a run where the wrong arm fires reconciles
-# perfectly, because every count still adds up.
-#
-# So the gate asserts BOTH directions: the posture-appropriate name appeared,
-# AND its opposite did not. That is also what anchors the negative arms — they
-# assert little on their own, and deleting one would otherwise go unnoticed.
-posture_control() {
-  local label="$1" expect="$2" forbid="$3"
-  shift 3
-  local out code
-  out=$("$@" 2>&1)
-  code=$?
-  if [ "$code" -ne 0 ]; then
-    printf '%s\n' "$out"
-    printf 'POSTURE CONTROL (%s): the run itself failed with exit %d\n' "$label" "$code"
-    return "$code"
-  fi
-  if ! printf '%s' "$out" | grep -q -- "$expect"; then
-    printf 'POSTURE CONTROL FAILED (%s): expected announcement `%s` never appeared.\n' "$label" "$expect"
-    printf 'The build did not have the feature posture this gate believes it ran.\n'
-    return 1
-  fi
-  if printf '%s' "$out" | grep -q -- "$forbid"; then
-    printf 'POSTURE CONTROL FAILED (%s): forbidden announcement `%s` appeared.\n' "$label" "$forbid"
-    printf 'This build is NOT the posture the gate believes it is.\n'
-    return 1
-  fi
-  printf 'posture control ok (%s): %s\n' "$label" "$expect"
-  return 0
-}
-
-gate "posture:worker-default" posture_control "aion-worker, default features" \
-  liminal_transport_absent_from_this_build \
-  liminal_transport_compiled_here \
-  cargo test -p aion-worker --lib build_coverage::
-
-gate "posture:worker-liminal" posture_control "aion-worker, liminal-transport on" \
-  liminal_transport_compiled_here \
-  liminal_transport_absent_from_this_build \
-  cargo test -p aion-worker --lib --features liminal-transport build_coverage::
-
-gate "posture:proto-default" posture_control "aion-proto ALONE, default features" \
-  generated_stubs_absent_from_this_build \
-  generated_stubs_compiled_into_this_build \
-  cargo test -p aion-proto --lib build_coverage::
-
-gate "posture:proto-generated" posture_control "aion-proto, generated on" \
-  generated_stubs_compiled_into_this_build \
-  generated_stubs_absent_from_this_build \
-  cargo test -p aion-proto --lib --features generated build_coverage::
-
-# --- Costly proofs announce their own absence (#86) ----------------------------
-
-# Kept in a helper so this orchestrator remains below the 500-line house limit.
-source "$REPO_ROOT/scripts/battery-costly-announcements.sh"
-
-gate "gates:costly-announced" costly_announcements
-
-# --- serde_json Map-ordering posture (#76) -------------------------------------
-#
-# `serde_json/preserve_order` swaps `Map` from a key-sorted `BTreeMap` to an
-# insertion-ordered `IndexMap`. Emitters here WALK a `Map` to build generated
-# record field order, decoder field sequence, and the MIR literal pool — program
-# structure, not layout — so the swap changes a compiled package's bytes and
-# therefore its content hash.
-#
-# 🔴 NO CRATE IN THIS WORKSPACE ASKS FOR IT. Measured, and it is what makes this
-# structural rather than a one-off:
-#
-#   $ grep -rn 'preserve_order' --include=Cargo.toml .
-#   (no matches)
-#
-# It arrives entirely by cargo feature unification from
-# `agent-client-protocol-schema`, which means it can turn on with NO DIFF IN THIS
-# REPOSITORY AT ALL — a dependency bump anywhere in the tree flips it and our
-# change is a lockfile line. It has already cost two red goldens once, when the
-# same `.awl` source compiled to a different package version depending on an
-# unrelated crate sharing the build.
-#
-# 🔴 WHY THE EXISTING COVERAGE IS AN ACCIDENT, NOT A GATE. The ON case does run
-# today — `rust:test-all-features` above resolves it ON, and `-p <crate>` leaves
-# it OFF. That disagreement is the ONLY reason the incident was caught. But
-# nothing states that both resolutions are required, so the detection evaporates
-# the day the acp crate stops being a workspace member, or the day someone reads
-# a per-crate green and stops. These gates give it a name.
-#
-# 🔴 AND UNDER `OFF`, EVERY `*_independent_of_insertion_order` TEST IS VACUOUS.
-# `Map` is a `BTreeMap`, so a fixture built `alpha, beta, gamma` and one built
-# `gamma, beta, alpha` are not two objects — they are the same object, and
-# asserting they serialize alike compares a value with itself. Those tests read
-# identically whether they prove something or nothing, which is why the ON run
-# has to be pinned by name rather than left to resolution.
-#
-# The posture is detected by BEHAVIOUR, not by a `cfg`. A crate can only `cfg` on
-# its own features, so a forwarding `preserve-order` feature would report `false`
-# while the feature was ON in the unification case — a label that lies in exactly
-# the situation it exists to detect. See crates/aion-package/src/build_coverage.rs.
-#
-# `-- --nocapture` is load-bearing: a cfg-selected announcement is printed as a
-# test NAME whether or not output is captured, but a runtime-detected one is
-# printed by the running test and cargo swallows it otherwise.
-#
-# `-p aion-package` ALONE is also load-bearing, for the reason the proto posture
-# gates already carry: the resolution depends on which packages are named, so a
-# run that names a neighbour is measuring a different program.
-
-gate "posture:serde-json-sorted" posture_control "aion-package ALONE, default features" \
-  "SERDE_JSON_MAP=key_sorted" \
-  "SERDE_JSON_MAP=insertion_ordered" \
-  cargo test -p aion-package --lib build_coverage:: -- --nocapture
-
-gate "posture:serde-json-insertion" posture_control "aion-package, preserve_order forced ON" \
-  "SERDE_JSON_MAP=insertion_ordered" \
-  "SERDE_JSON_MAP=key_sorted" \
-  cargo test -p aion-package --features serde_json/preserve_order --lib build_coverage:: -- --nocapture
-
-# The claim itself, under the resolution where it is not vacuous: every
-# ordering-sensitive pin in the two crates that walk `Map`s for structure.
-gate "rust:preserve-order-pins" paired_test \
-  cargo test -p aion-package -p aion-awl --features serde_json/preserve_order --no-fail-fast
-
-# --- Gleam workflow API and examples ------------------------------------------
-
-# These packages consume the generated aion_flow API directly. `gleam build`
-# only compiles their src halves; `gleam test` is required to catch stale total
-# constructors in test support, including the AgentOutcome contract break that
-# motivated this gate.
-if require_tool gleam "The canonical Gleam workflow API and its example consumers require compile-and-test coverage."; then
-  gate_in "gleam:aion-flow" gleam/aion_flow gleam test
-  gate_in "gleam:assistant" examples/assistant gleam test
-  gate_in "gleam:agent-dev" examples/agent-dev gleam test
+# AN UNKNOWN NAME IS A FAILURE, NOT AN EMPTY RUN. A typo would otherwise select
+# nothing, run nothing, and exit 0 through a manifest with no rows — the exact
+# shape of a green that measured nothing.
+ONLY="${AION_BATTERY_ONLY:-}"
+if [ -n "$ONLY" ]; then
+  printf '\n🔴 PARTIAL RUN — only these legs will run: %s\n' "$ONLY"
+  printf 'This log is NOT a battery result and cannot pass verify-declaration.sh.\n'
 fi
+SELECTED=""
 
-# --- Ops console --------------------------------------------------------------
+while read -r name_b64 cmd_b64; do
+  [ -n "$name_b64" ] || continue
+  name=$(printf '%s' "$name_b64" | base64 --decode)
+  cmd=$(printf '%s' "$cmd_b64" | base64 --decode)
+  if [ -n "$ONLY" ]; then
+    case " $ONLY " in
+      *" $name "*) SELECTED="$SELECTED $name" ;;
+      *) continue ;;
+    esac
+  fi
+  gate "$name" bash -c "$cmd"
+done <<EOF
+$LEGS
+EOF
 
-if require_tool bun "The ops console is a separate bun project; without it the console's typecheck and tests cannot run."; then
-  gate_in "console:typecheck" apps/aion-ops-console bun run typecheck
-  gate_in "console:test" apps/aion-ops-console bun test
-fi
-
-# --- The gates workflow's own worker crate -------------------------------------
-#
-# workflows/gates/worker is deliberately its OWN cargo workspace (root
-# membership is a named follow-up), so every workspace-wide Rust gate above
-# compiles NONE of it — and it is the crate that RUNS the workflow battery.
-# An instrument nothing gates is exactly how a mutation to a gate command
-# ships silently (the #57 r1 review proved it with one). The aion-side gates
-# workflow carries the same three checks as its `gates_worker` leg; this entry
-# keeps the hand battery's coverage identical, so the F3 comparison stays
-# leg-for-leg over the overlap.
-
-# The three checks do NOT short-circuit: they are three independent questions
-# about one crate, and `&&`-chaining hides the clippy and test answers behind
-# a formatting failure — the same truncated-diagnosis shape `--no-fail-fast`
-# exists to prevent, one level up. All three run; the gate's exit code is the
-# FIRST failure's, so the verdict is unchanged and only the diagnosis is
-# complete.
-gate_in "gates:worker-crate" workflows/gates/worker bash -c '
-  first=0
-  cargo fmt --check; s=$?; [ "$first" -eq 0 ] && first=$s
-  cargo clippy --all-targets -- -D warnings; s=$?; [ "$first" -eq 0 ] && first=$s
-  cargo test; s=$?; [ "$first" -eq 0 ] && first=$s
-  exit "$first"'
-
-# --- Python SDKs --------------------------------------------------------------
-#
-# These carry the proto-drift gates that are the remediation for the wire-dead
-# SDK incident. `cargo test` does not run them; nothing did until this script.
-
-if require_tool uv "The Python SDKs and their proto-drift gates are uv projects."; then
-  gate_in "python:aion-worker" sdks/python/aion-worker uv run --extra dev python -m pytest tests/ -q
-  gate_in "python:aion-client" sdks/python/aion-client uv run --extra dev python -m pytest tests/ -q
-fi
-
-# --- TypeScript SDKs ----------------------------------------------------------
-
-if command -v bun >/dev/null 2>&1; then
-  gate_in "ts-worker:proto-drift" sdks/typescript/aion-worker bun run check:proto
-  gate_in "ts-worker:typecheck" sdks/typescript/aion-worker bun run typecheck
-  gate_in "ts-worker:test" sdks/typescript/aion-worker bun test
+# A name in AION_BATTERY_ONLY that matched no declared leg is a typo, and a typo
+# that quietly selects nothing is indistinguishable from a leg that passed.
+if [ -n "$ONLY" ]; then
+  for requested in $ONLY; do
+    case " $SELECTED " in
+      *" $requested "*) ;;
+      *)
+        printf '\n🔴 AION_BATTERY_ONLY names `%s`, which no leg in %s declares.\n' \
+          "$requested" "$DECLARATION"
+        printf 'Refusing to report on a selection that selected nothing.\n'
+        exit 1
+        ;;
+    esac
+  done
 fi
 
 fi # end of the real-gates branch
@@ -446,12 +274,31 @@ while [ "$index" -lt "${#GATE_NAMES[@]}" ]; do
 done
 printf '=================================================\n'
 
+# 🔴 THE EXECUTED LEG SET, EMITTED. The claim "the runner cannot differ from the
+# declaration" is exactly the kind that must be measured rather than argued, and
+# it cannot be measured against a manifest that only a human reads. This line is
+# machine-comparable against `gates.json`; scripts/gates/verify-declaration.sh
+# does the comparison.
+printf 'EXECUTED_LEGS %s\n' "$(printf '%s\n' "${GATE_NAMES[@]}" | sort | tr '\n' ' ')"
+
 if [ "${#GATE_NAMES[@]}" -eq 0 ]; then
   printf 'NO GATES RAN. That is a failure of this script, not a clean tree.\n'
   exit 1
 fi
 
 printf '%d of %d gates failed.\n' "$failed" "${#GATE_NAMES[@]}"
+
+# 🔴 A GREEN HERE IS NOT YET A BATTERY RESULT, and saying so is this script's job
+# rather than the reader's memory. `0 of N failed` is a claim about the legs that
+# RAN; whether those were the legs this repository declares is a separate
+# question, and the whole reason the two lists drifted for as long as they did is
+# that nobody was asked it. This script cannot answer it about itself — the
+# comparison needs the completed EXECUTED_LEGS line above — so it names the
+# command that can.
+printf '\nNOT VERIFIED YET. This run reports on the legs it ran; that they are the\n'
+printf 'legs gates.json declares is a separate claim. Capture this output and run:\n'
+printf '    scripts/gates/verify-declaration.sh <this-log>\n'
+
 if [ "$failed" -ne 0 ]; then
   exit 1
 fi

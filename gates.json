@@ -1,41 +1,153 @@
 {
   "repo": "aion",
+  "why_this_file": "THE ONE LIST of this repository's gate legs. It used to be two: this file declared 7 legs and scripts/battery.sh ran 23, neither a superset of the other \u2014 battery.sh never ran estate-guard, and this file declared none of the posture, console, Gleam, Python or TypeScript legs. Which gates you lost depended on which runner you used, so the answer to 'is this repo green?' depended on who asked. The cure is subtraction, not a drift-checker: a checker would be a third copy. scripts/battery.sh now executes exactly what is declared here, so the two sets cannot differ by construction. Every leg's cmd is self-contained and runnable by any runner from the repository root.",
   "legs": [
     {
-      "name": "fmt",
-      "cmd": "cargo fmt --all --check",
-      "kind": "check"
+      "name": "rust:fmt",
+      "kind": "check",
+      "cmd": "cargo fmt --all -- --check",
+      "why": "Formatting is checked, never auto-applied, so a formatting change is a reviewed diff rather than a silent one."
     },
     {
-      "name": "clippy",
+      "name": "rust:clippy",
+      "kind": "check",
       "cmd": "cargo clippy --workspace --all-targets -- -D warnings",
-      "kind": "check"
+      "why": "--all-targets is load-bearing: without it tests and benches are not linted, which is where bypasses accumulate."
     },
     {
-      "name": "tests-rs",
-      "cmd": "cargo test -p aion-rs",
-      "kind": "cargo-test"
+      "name": "rust:test",
+      "kind": "cargo-test",
+      "cmd": ". scripts/gates/lib.sh || exit $?; paired_test cargo test --workspace --no-fail-fast",
+      "why": "--no-fail-fast cost a P0 by its absence on 2026-07-31: cargo test stops at the first failing TARGET, so one red lib test silently un-runs every integration target after it and the surviving tally still reads complete. paired_test asserts the run REACHED THE END by pairing target starts with result lines \u2014 see scripts/gates/lib.sh for why counting them does not work."
     },
     {
-      "name": "tests-awl",
-      "cmd": "cargo test -p aion-awl",
-      "kind": "cargo-test"
+      "name": "rust:test-all-features",
+      "kind": "cargo-test",
+      "cmd": ". scripts/gates/lib.sh || exit $?; paired_test cargo test --workspace --all-features --no-fail-fast",
+      "why": "The all-features resolution differs from the default one \u2014 --workspace resolves some features ON that -p <crate> leaves off \u2014 so this is a genuinely different run, not a slower copy of rust:test."
     },
     {
-      "name": "tests-pkg",
-      "cmd": "cargo test -p aion-awl-package -p aion-package",
-      "kind": "cargo-test"
+      "name": "posture:worker-default",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-worker, default features\" liminal_transport_absent_from_this_build liminal_transport_compiled_here cargo test -p aion-worker --lib build_coverage::",
+      "why": "A default-OFF feature gates an entire surface, so a per-package run compiles none of it and exits 0. The gate asserts BOTH directions \u2014 the posture-appropriate announcement appeared AND its opposite did not \u2014 because a printed announcement nothing checks is observability, not a gate."
     },
     {
-      "name": "tests-core",
-      "cmd": "cargo test -p aion-core",
-      "kind": "cargo-test"
+      "name": "posture:worker-liminal",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-worker, liminal-transport on\" liminal_transport_compiled_here liminal_transport_absent_from_this_build cargo test -p aion-worker --lib --features liminal-transport build_coverage::",
+      "why": "A default-OFF feature gates an entire surface, so a per-package run compiles none of it and exits 0. The gate asserts BOTH directions \u2014 the posture-appropriate announcement appeared AND its opposite did not \u2014 because a printed announcement nothing checks is observability, not a gate."
+    },
+    {
+      "name": "posture:proto-default",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-proto ALONE, default features\" generated_stubs_absent_from_this_build generated_stubs_compiled_into_this_build cargo test -p aion-proto --lib build_coverage::",
+      "why": "A default-OFF feature gates an entire surface, so a per-package run compiles none of it and exits 0. The gate asserts BOTH directions \u2014 the posture-appropriate announcement appeared AND its opposite did not \u2014 because a printed announcement nothing checks is observability, not a gate."
+    },
+    {
+      "name": "posture:proto-generated",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-proto, generated on\" generated_stubs_compiled_into_this_build generated_stubs_absent_from_this_build cargo test -p aion-proto --lib --features generated build_coverage::",
+      "why": "A default-OFF feature gates an entire surface, so a per-package run compiles none of it and exits 0. The gate asserts BOTH directions \u2014 the posture-appropriate announcement appeared AND its opposite did not \u2014 because a printed announcement nothing checks is observability, not a gate."
+    },
+    {
+      "name": "gates:costly-announced",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; costly_announcements",
+      "why": "Costly proofs announce their own absence (#86), so a proof that did not run cannot read as one that passed."
+    },
+    {
+      "name": "posture:serde-json-sorted",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-package ALONE, default features\" \"SERDE_JSON_MAP=key_sorted\" \"SERDE_JSON_MAP=insertion_ordered\" cargo test -p aion-package --lib build_coverage:: -- --nocapture",
+      "why": "serde_json/preserve_order swaps Map from a key-sorted BTreeMap to an insertion-ordered IndexMap, which changes a compiled package's bytes and therefore its content hash. NO CRATE HERE ASKS FOR IT \u2014 it arrives by cargo feature unification, so it can turn on with no diff in this repository at all. -p aion-package ALONE is load-bearing: the resolution depends on which packages are named. -- --nocapture is load-bearing: a runtime-detected announcement is printed by the running test and cargo swallows it otherwise."
+    },
+    {
+      "name": "posture:serde-json-insertion",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; posture_control \"aion-package, preserve_order forced ON\" \"SERDE_JSON_MAP=insertion_ordered\" \"SERDE_JSON_MAP=key_sorted\" cargo test -p aion-package --features serde_json/preserve_order --lib build_coverage:: -- --nocapture",
+      "why": "The ON arm, pinned by name rather than left to resolution. Under OFF every *_independent_of_insertion_order test is VACUOUS \u2014 Map is a BTreeMap, so two differently-ordered fixtures are the same object and asserting they serialize alike compares a value with itself."
+    },
+    {
+      "name": "rust:preserve-order-pins",
+      "kind": "cargo-test",
+      "cmd": ". scripts/gates/lib.sh || exit $?; paired_test cargo test -p aion-package -p aion-awl --features serde_json/preserve_order --no-fail-fast",
+      "why": "The claim itself, under the resolution where it is not vacuous: every ordering-sensitive pin in the two crates that walk Maps for structure."
+    },
+    {
+      "name": "gleam:aion-flow",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool gleam \"The canonical Gleam workflow API and its example consumers require compile-and-test coverage.\" || exit $?; in_dir gleam/aion_flow gleam test",
+      "why": "gleam build only compiles the src half; gleam test is required to catch stale total constructors in test support, including the AgentOutcome contract break that motivated this gate."
+    },
+    {
+      "name": "gleam:assistant",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool gleam \"The canonical Gleam workflow API and its example consumers require compile-and-test coverage.\" || exit $?; in_dir examples/assistant gleam test",
+      "why": "gleam build only compiles the src half; gleam test is required to catch stale total constructors in test support, including the AgentOutcome contract break that motivated this gate."
+    },
+    {
+      "name": "gleam:agent-dev",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool gleam \"The canonical Gleam workflow API and its example consumers require compile-and-test coverage.\" || exit $?; in_dir examples/agent-dev gleam test",
+      "why": "gleam build only compiles the src half; gleam test is required to catch stale total constructors in test support, including the AgentOutcome contract break that motivated this gate."
+    },
+    {
+      "name": "console:typecheck",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool bun \"The ops console is a separate bun project; without it the console typecheck and tests cannot run.\" || exit $?; in_dir apps/aion-ops-console bun run typecheck",
+      "why": "The ops console is a separate bun project that no cargo gate compiles."
+    },
+    {
+      "name": "console:test",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool bun \"The ops console is a separate bun project; without it the console typecheck and tests cannot run.\" || exit $?; in_dir apps/aion-ops-console bun test",
+      "why": "The ops console is a separate bun project that no cargo gate compiles."
+    },
+    {
+      "name": "gates:worker-crate",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; in_dir workflows/gates/worker bash -c 'first=0; cargo fmt --check; s=$?; [ \"$first\" -eq 0 ] && first=$s; cargo clippy --all-targets -- -D warnings; s=$?; [ \"$first\" -eq 0 ] && first=$s; cargo test; s=$?; [ \"$first\" -eq 0 ] && first=$s; exit \"$first\"'",
+      "why": "workflows/gates/worker is deliberately its OWN cargo workspace, so every workspace-wide Rust gate compiles NONE of it \u2014 and it is the crate that RUNS the workflow battery. An instrument nothing gates is how a mutation to a gate command ships silently. The three checks do NOT short-circuit: &&-chaining would hide the clippy and test answers behind a formatting failure. The exit code is the FIRST failure's, so the verdict is unchanged and only the diagnosis is complete."
+    },
+    {
+      "name": "python:aion-worker",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool uv \"The Python SDKs and their proto-drift gates are uv projects.\" || exit $?; in_dir sdks/python/aion-worker uv run --extra dev python -m pytest tests/ -q",
+      "why": "These carry the proto-drift gates that are the remediation for the wire-dead SDK incident. cargo test does not run them; nothing did until the house battery existed."
+    },
+    {
+      "name": "python:aion-client",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool uv \"The Python SDKs and their proto-drift gates are uv projects.\" || exit $?; in_dir sdks/python/aion-client uv run --extra dev python -m pytest tests/ -q",
+      "why": "These carry the proto-drift gates that are the remediation for the wire-dead SDK incident. cargo test does not run them; nothing did until the house battery existed."
+    },
+    {
+      "name": "ts-worker:proto-drift",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool bun \"The TypeScript worker SDK and its proto-drift gate are a bun project.\" || exit $?; in_dir sdks/typescript/aion-worker bun run check:proto",
+      "why": "\ud83d\udd34 These three were previously guarded by a bare `command -v bun`, which SILENTLY SKIPPED them when bun was absent \u2014 in direct contradiction of the battery's own stated law that a missing toolchain is a failure, not a skip, and for the very proto-drift gates that law was written about. They now refuse with 127 like every other leg."
+    },
+    {
+      "name": "ts-worker:typecheck",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool bun \"The TypeScript worker SDK and its proto-drift gate are a bun project.\" || exit $?; in_dir sdks/typescript/aion-worker bun run typecheck",
+      "why": "\ud83d\udd34 These three were previously guarded by a bare `command -v bun`, which SILENTLY SKIPPED them when bun was absent \u2014 in direct contradiction of the battery's own stated law that a missing toolchain is a failure, not a skip, and for the very proto-drift gates that law was written about. They now refuse with 127 like every other leg."
+    },
+    {
+      "name": "ts-worker:test",
+      "kind": "check",
+      "cmd": ". scripts/gates/lib.sh || exit $?; require_tool bun \"The TypeScript worker SDK and its proto-drift gate are a bun project.\" || exit $?; in_dir sdks/typescript/aion-worker bun test",
+      "why": "\ud83d\udd34 These three were previously guarded by a bare `command -v bun`, which SILENTLY SKIPPED them when bun was absent \u2014 in direct contradiction of the battery's own stated law that a missing toolchain is a failure, not a skip, and for the very proto-drift gates that law was written about. They now refuse with 127 like every other leg."
     },
     {
       "name": "estate-guard",
-      "cmd": "sh scripts/estate-guard.sh",
       "kind": "check",
-      "note": "ESTATE ASSERTION, NOT THIS REPOSITORY'S. A red here names a SUBJECT repository and the seat who ruled its obligation, and that subject is usually not this repo -- this battery is only the clock. Take it to the named seat; do not delete this leg because it inconvenienced your landing. It asserts two things per listed row: that the repository carries refs/guards/shared-tree (the promise) and that the class-A guard is installed there as ruled (the mechanism). The population comes from docs/tracking/must-be-claimed.tsv, never from this repo. The trailing root runs the REVERSE arm (claimed but unlisted) -- without it, claim-without-listing then unclaim is a complete bypass of the witness, and it costs ~38s. PORTABILITY, 2026-08-20: this leg used to name a macOS absolute path and exited 127 on Linux, recording SILENT while enforcing nothing -- measured on rocketfish during the aion#84 re-gate. It now invokes scripts/estate-guard.sh tree-relatively. That shim carries NO logic of its own: it locates the single canonical 945-line gate and hands over, because a tree-local COPY is Finding 22's exact shape. Where the estate ledger is unreachable it EXITS 2 (unmeasured, per the canonical gate's own contract) rather than 127-as-silent -- a red on such a box is TRUE, not inconvenient. Set ABLATIVE_ROOT to a checkout of the estate, or have the obligation re-ruled; do not soften the leg."
+      "cmd": "[ -n \"${ABLATIVE_ESTATE_ROOT:-}\" ] || { printf \"REFUSED rc3: estate-guard requires ABLATIVE_ESTATE_ROOT, declared in this leg .environment. It is unset at this venue, so the estate claim census is UNMEASURED here \u2014 report it as a named declared omission, never a pass.\\n\" >&2; exit 3; }; sh \"$ABLATIVE_ESTATE_ROOT/tools/gates/hooks/check_must_be_claimed.sh\" \"$ABLATIVE_ESTATE_ROOT\"",
+      "why": "This leg asserts an ESTATE property, so it needs the estate root \u2014 which is not derivable from this repository. It was previously two hardcoded absolute Mac paths, which made the leg pass only on one machine and fail opaquely everywhere else. Declaring the requirement makes an off-estate venue REFUSE with rc 3 naming the missing declaration, so the run routes to a NAMED DECLARED OMISSION rather than a silent skip or a false green.",
+      "environment": [
+        "ABLATIVE_ESTATE_ROOT"
+      ]
     }
   ]
 }
