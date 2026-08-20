@@ -62,6 +62,49 @@ fn not_owner_store_error_maps_to_wire_not_owner() {
     assert_eq!(wire.error_type.as_deref(), Some("NotOwner"));
 }
 
+/// aion#94 added `EngineError::RunNotInHistory` and mapped it on BOTH server
+/// halves — `wire_from_engine` and `engine_trace_fields` — and shipped no test
+/// with either.
+///
+/// 🔴 THAT IS THE THIRD TIME IN THIS ONE FILE. The sibling below records the
+/// first two: a mapping added in two halves with no test, then two MORE halves
+/// of the same mapping added with no test. The omission is not carelessness in
+/// any single change — it is that adding a `match` arm feels finished, because
+/// the compiler's exhaustiveness check really does prove the arm EXISTS. What
+/// it cannot prove is that the arm says the right thing, and the label is the
+/// entire content of the decision.
+///
+/// `Backend` is the load-bearing choice. The variant means the registry and the
+/// history disagree about a run the engine itself owns; nothing about the
+/// caller's request is wrong, so a client-facing class would blame the caller
+/// for an engine-internal breach. And the message must carry the run, because
+/// an operator reading this needs to know WHICH run to repair.
+#[test]
+fn run_not_in_history_maps_to_typed_backend_on_both_halves() {
+    let run_id = aion_core::RunId::new(uuid::Uuid::from_u128(94));
+    let error = ServerError::EngineCall {
+        source: EngineError::RunNotInHistory {
+            workflow_id: workflow_id(),
+            run_id: run_id.clone(),
+        },
+    };
+
+    let wire = error.to_wire_error();
+    assert_eq!(
+        wire.code,
+        WireErrorCode::Backend,
+        "an engine-internal disagreement must not be classed as the caller's fault"
+    );
+    assert_eq!(wire.error_type.as_deref(), Some("RunNotInHistory"));
+    assert_eq!(error.trace_fields().error_type, "RunNotInHistory");
+
+    assert!(
+        wire.message.contains(&run_id.to_string()),
+        "the wire message dropped the run the refusal is about: {}",
+        wire.message
+    );
+}
+
 fn workflow_id() -> WorkflowId {
     WorkflowId::new(uuid::Uuid::from_u128(7))
 }

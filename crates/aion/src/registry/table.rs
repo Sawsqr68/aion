@@ -1187,4 +1187,72 @@ mod tests {
         );
         Ok(())
     }
+
+    /// A registered run absent from the history it is projected against is an
+    /// ERROR, and that is this branch's own stated point: `status_from_events`
+    /// answers `Running` for an empty slice, so absorbing the case would leave
+    /// the reconciliation whose whole purpose is to stop terminal runs being
+    /// cached as live caching one as live itself — silently, and precisely for
+    /// the run whose history had gone missing.
+    ///
+    /// 🔴 This test was missing when the fix was written. The variant, its raise
+    /// site, and both `aion-server` mappings shipped together with nothing
+    /// exercising any of them, so reverting the `Err` to the old default passed
+    /// the entire tree. A guard is not a guard until something has watched it
+    /// refuse.
+    #[test]
+    fn reconcile_refuses_a_run_absent_from_the_history() -> TestResult {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let registered = aion_core::RunId::new_v4();
+        let stranger = aion_core::RunId::new_v4();
+
+        // The handle must really be registered: the missing-handle path returns
+        // `Ok(None)` BEFORE the segment is ever taken, so without this insert
+        // the call would leave through a different branch and assert nothing.
+        registry.insert(
+            (workflow_id.clone(), registered.clone()),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+
+        // A history for this workflow id that belongs entirely to another run.
+        let events = vec![
+            started_run(&workflow_id, &stranger, 1, None)?,
+            continued_as_new(&workflow_id, &stranger, 2)?,
+        ];
+
+        // Fixture control, and it is the whole reason the error exists: the
+        // empty segment this produces would itself project `Running`.
+        assert_eq!(
+            aion_core::status_from_events(&[]),
+            WorkflowStatus::Running,
+            "fixture control: an empty slice defaults to Running"
+        );
+
+        let refusal = registry.reconcile(&workflow_id, &registered, &events).err();
+
+        assert!(
+            matches!(
+                &refusal,
+                Some(EngineError::RunNotInHistory {
+                    workflow_id: named_workflow,
+                    run_id: named_run,
+                }) if named_workflow == &workflow_id && named_run == &registered
+            ),
+            "the refusal must name the run that is missing, not the one the \
+             history happens to hold; got: {refusal:?}"
+        );
+
+        // The handle must be untouched. A refusal that had already written
+        // would leave the cache holding the very status it declined to vouch
+        // for, which is worse than either answering or erroring cleanly.
+        assert_eq!(
+            registry
+                .get(&workflow_id, &registered)?
+                .map(|handle| handle.cached_status()),
+            Some(WorkflowStatus::Running),
+            "a refused reconciliation must not have mutated the handle"
+        );
+        Ok(())
+    }
 }
