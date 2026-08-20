@@ -103,29 +103,6 @@ pub struct TransportLossLedger {
     budget: Duration,
 }
 
-impl Default for TransportLossLedger {
-    /// A ledger with a ZERO budget: an execution site gets exactly ONE
-    /// re-dispatchable loss (its first, at elapsed zero) and the next one is
-    /// exhaustion.
-    ///
-    /// Defaulting to zero rather than to some invented span is the honest
-    /// choice: a ledger that was never told the operator's window must not
-    /// silently grant a budget nobody declared.
-    ///
-    /// EVERY production wiring supplies that window — both the full boot
-    /// (`build_worker_seams`) and all four embedder `from_parts*` constructors
-    /// call [`PendingActivities::with_heartbeat_window`] before `runtime` moves
-    /// into the state. So this default is reachable only from a
-    /// `PendingActivities::default()` built directly, which in this workspace
-    /// means isolated unit tests. That is a property of the call sites, not of
-    /// this type: a new wiring that forgets the builder silently inherits a
-    /// zero budget, so the builder call belongs beside `HeartbeatTracker::new`
-    /// wherever a server is assembled.
-    fn default() -> Self {
-        Self::new(Duration::ZERO)
-    }
-}
-
 /// Identity of one activity execution site across its transport losses.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ExecutionKey(WorkflowId, ActivityId);

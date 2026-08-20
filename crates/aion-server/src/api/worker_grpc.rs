@@ -921,7 +921,7 @@ mod tests {
             .worker_id()
             .ok_or("test worker registration missing id")?;
         let tracker = HeartbeatTracker::new(Duration::from_secs(5));
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(Duration::from_secs(5));
         let workflow_id = WorkflowId::new_v4();
         let activity_id = ActivityId::from_sequence_position(0);
         let (completion_token, rx) =
