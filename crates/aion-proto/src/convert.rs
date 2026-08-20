@@ -276,8 +276,15 @@ pub fn encode_core_value<T>(
 where
     T: Serialize,
 {
-    let bytes =
-        serde_json::to_vec(value).map_err(|_| WireError::backend("core value encode failed"))?;
+    // The encode twin of the decode swallow fixed below (#83): same file, same
+    // pair, same failure mode. Left alone it would hand the next operator the
+    // identical dead end from the other direction, so it carries its error too.
+    let bytes = serde_json::to_vec(value).map_err(|error| {
+        WireError::backend(format!(
+            "core value encode failed for {}: {error}",
+            std::any::type_name::<T>()
+        ))
+    })?;
     Ok(WireEnvelope {
         namespace: namespace.into(),
         request_id,
@@ -311,8 +318,27 @@ where
             "wire envelope content type is unknown",
         ));
     }
-    serde_json::from_slice(&payload.bytes)
-        .map_err(|_| WireError::invalid_input("core value decode failed"))
+    // 🔴 THE SERDE ERROR IS CARRIED, NOT DISCARDED (#83). This previously mapped
+    // every failure to the bare string "core value decode failed", throwing away
+    // the one thing that identifies the defect: serde knows the missing field and
+    // the byte offset, and the operator was handed a sentence naming neither.
+    //
+    // That is not a cosmetic loss. #83 sat open naming "a typed error is being
+    // swallowed somewhere inside the decode path", and #96 was filed as a
+    // duplicate with a GUESSED cause, because the instrument refused to say what
+    // it saw. A refusal that cannot name what it refused sends the next reader
+    // hunting the wrong thing.
+    //
+    // There is nothing to withhold here: this is OUR OWN envelope, produced by
+    // this process's encode path, failing to decode. It is not attacker-supplied
+    // input, and the type name plus serde's message are facts about our own wire
+    // contract, not about a caller.
+    serde_json::from_slice(&payload.bytes).map_err(|error| {
+        WireError::invalid_input(format!(
+            "core value decode failed for {}: {error}",
+            std::any::type_name::<T>()
+        ))
+    })
 }
 
 /// Serializes a workflow filter into a thin wire envelope.

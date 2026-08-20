@@ -897,6 +897,79 @@ async fn describe_run_reads_back_a_recorded_display_name() -> TestResult {
     Ok(())
 }
 
+/// #83: `list_runs` must survive a namespace that actually HAS a run in it.
+///
+/// 🔴 THE EMPTY NAMESPACE IS WHY THIS BUG LIVED THREE WEEKS. The tool decodes
+/// each summary inside a `.map(...).collect::<Result<_,_>>()`, so over an EMPTY
+/// list the closure never runs and the call returns `Ok(vec![])`. Every
+/// assertion of the form "it did not error" therefore PASSES on an empty
+/// namespace while proving nothing — the green was invariant to the defect. The
+/// suite had `list_runs` in its catalogue assertions (it is listed, its schema
+/// is an object, its hints are booleans) and never once CALLED it.
+///
+/// So this test asserts the list is NON-EMPTY and that the row names its run.
+/// `Harness::start` seeds `colliding_chain()`, so the namespace is populated and
+/// the decode path is genuinely on this test's path.
+///
+/// `run_id` is the load-bearing field, not incidental: the server's own MCP
+/// instructions point callers at this tool to OBTAIN run ids, so a run list that
+/// cannot name the run is the failure the issue is actually about.
+#[tokio::test]
+async fn list_runs_returns_the_seeded_run_and_names_its_run_id() -> TestResult {
+    let harness = Harness::start(true).await?;
+
+    // 🔴 THE SEEDED CHAIN MUST CARRY THE NAMESPACE ATTRIBUTE OR THIS TEST
+    // MEASURES NOTHING. `handlers::visibility::list` narrows every filter with an
+    // `aion.namespace` equality predicate so a shared engine cannot leak another
+    // tenant's summaries, and the harness seeds history directly through the
+    // store rather than starting a workflow through the engine — so nothing has
+    // projected that attribute. Without this the list comes back EMPTY, the
+    // decode under test never runs, and the assertions below pass or fail for a
+    // reason that has nothing to do with #83. Recorded exactly as the engine
+    // records it, the same way the display-name test above does.
+    let chain = colliding_chain();
+    harness
+        .store
+        .append(
+            WriteToken::recorder(),
+            &workflow_id(),
+            &[Event::SearchAttributesUpdated {
+                envelope: envelope(u64::try_from(chain.len())? + 1),
+                workflow_id: workflow_id(),
+                attributes: std::collections::HashMap::from([(
+                    aion_server::NAMESPACE_ATTRIBUTE.to_owned(),
+                    aion_core::SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+            }],
+            u64::try_from(chain.len())?,
+        )
+        .await?;
+
+    let (status, value) = harness
+        .post(
+            &call("list_runs", &json!({ "namespace": NAMESPACE }), false),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+
+    let out = structured(&value)?;
+    let runs = out["runs"]
+        .as_array()
+        .ok_or_else(|| format!("list_runs returned no runs array: {out}"))?;
+    assert!(
+        !runs.is_empty(),
+        "the seeded workflow must appear — an empty list here means this test is \
+         measuring nothing, which is exactly how #83 survived: {out}"
+    );
+    assert!(
+        runs[0]["run_id"].is_string(),
+        "a run list must name the run it lists; the MCP instructions advertise \
+         this tool as the road to run ids (#83): {out}"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn describe_run_refuses_a_run_that_is_not_this_workflows() -> TestResult {
     let harness = Harness::start(true).await?;

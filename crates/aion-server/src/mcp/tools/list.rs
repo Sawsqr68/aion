@@ -53,7 +53,26 @@ pub(crate) async fn list_runs(
     let runs = response
         .summaries
         .iter()
-        .map(aion_proto::decode_core_value::<aion_core::WorkflowSummary>)
+        // 🔴 THE STORE SUMMARY, NOT THE CORE ONE (#83). These envelopes are
+        // produced by `api::handlers::visibility::list`, which encodes exactly
+        // what `VisibilityStore::list_workflows` returns — an
+        // `aion_store::visibility::WorkflowSummary`. That is the wire contract
+        // for `ProtoListWorkflowsResponse.summaries`, and the handler's own
+        // tests decode it back as that type.
+        //
+        // Decoding it as `aion_core::WorkflowSummary` fails: the two structs
+        // have drifted names for the same facts (`start_time`/`close_time`
+        // against `started_at`/`ended_at`), and the core one has no default for
+        // the fields it is missing. The observed failure was exactly
+        // `missing field \`started_at\``.
+        //
+        // ⚠️ It read as INTERMITTENT because this decode runs per summary: over
+        // an EMPTY list the closure never runs and the call returns `Ok(vec![])`.
+        // So the tool worked for any namespace with no runs and failed as soon as
+        // one held a row. Do not "simplify" this back to the core type against an
+        // empty-namespace test — see the pin in `tests/mcp_surface_e2e.rs`, which
+        // asserts the list is NON-EMPTY for that reason.
+        .map(aion_proto::decode_core_value::<aion_store::visibility::WorkflowSummary>)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| tool_failure(&error))?;
     let runs = serde_json::to_value(&runs).map_err(|error| {
