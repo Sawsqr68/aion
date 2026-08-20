@@ -1,0 +1,511 @@
+{
+  "actions": [
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/provision.sh $subject_repo $ref_requested $workspace_root $workflow_id",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ref_requested": {
+            "type": "string"
+          },
+          "subject_repo": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_repo",
+          "ref_requested",
+          "workspace_root",
+          "workflow_id"
+        ],
+        "type": "object"
+      },
+      "name": "provision",
+      "output_schema": {
+        "$defs": {
+          "ProvisionProbe": {
+            "properties": {
+              "head_commit": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "owns_tree": {
+                "type": "boolean"
+              },
+              "refusal": {
+                "type": "string"
+              },
+              "tree_path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ok",
+              "owns_tree",
+              "refusal",
+              "tree_path",
+              "head_commit"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/ProvisionProbe"
+      }
+    },
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/precheck.sh $workspace_root $workflow_id",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_root",
+          "workflow_id"
+        ],
+        "type": "object"
+      },
+      "name": "precheck",
+      "output_schema": {
+        "$defs": {
+          "PrecheckProbe": {
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "refusal": {
+                "type": "string"
+              },
+              "selector_path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ok",
+              "kind",
+              "refusal",
+              "selector_path"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/PrecheckProbe"
+      }
+    },
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/run-battery.sh $workspace_root $workflow_id",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_root",
+          "workflow_id"
+        ],
+        "type": "object"
+      },
+      "name": "battery",
+      "output_schema": {
+        "$defs": {
+          "BatteryProbe": {
+            "properties": {
+              "cancelled": {
+                "type": "boolean"
+              },
+              "contended": {
+                "type": "boolean"
+              },
+              "log_path": {
+                "type": "string"
+              },
+              "measured": {
+                "type": "boolean"
+              },
+              "rc": {
+                "type": "integer"
+              },
+              "refusal": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "measured",
+              "cancelled",
+              "rc",
+              "contended",
+              "log_path",
+              "refusal"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/BatteryProbe"
+      }
+    },
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/verify.sh $workspace_root $workflow_id",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_root",
+          "workflow_id"
+        ],
+        "type": "object"
+      },
+      "name": "verify",
+      "output_schema": {
+        "$defs": {
+          "VerifyProbe": {
+            "properties": {
+              "exact": {
+                "type": "boolean"
+              },
+              "measured": {
+                "type": "boolean"
+              },
+              "refusal": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "measured",
+              "exact",
+              "refusal"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/VerifyProbe"
+      }
+    },
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/receipt.sh $subject_repo $ref_requested $workspace_root $workflow_id $waivers",
+      "input_schema": {
+        "$defs": {
+          "Waiver": {
+            "properties": {
+              "leg": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "ruled_by": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "leg",
+              "reason",
+              "ruled_by"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "ref_requested": {
+            "type": "string"
+          },
+          "subject_repo": {
+            "type": "string"
+          },
+          "waivers": {
+            "items": {
+              "$ref": "#/$defs/Waiver"
+            },
+            "type": "array"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_repo",
+          "ref_requested",
+          "workspace_root",
+          "workflow_id",
+          "waivers"
+        ],
+        "type": "object"
+      },
+      "name": "receipt",
+      "output_schema": {
+        "$defs": {
+          "EnvRecord": {
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "present": {
+                "type": "boolean"
+              },
+              "secret": {
+                "type": "boolean"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "present",
+              "secret",
+              "value",
+              "digest"
+            ],
+            "type": "object"
+          },
+          "LegRecord": {
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "rc": {
+                "type": "integer"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "rc",
+              "status"
+            ],
+            "type": "object"
+          },
+          "Receipt": {
+            "properties": {
+              "battery_sha256": {
+                "type": "string"
+              },
+              "environment": {
+                "items": {
+                  "$ref": "#/$defs/EnvRecord"
+                },
+                "type": "array"
+              },
+              "gates_json_sha256": {
+                "type": "string"
+              },
+              "head_commit": {
+                "type": "string"
+              },
+              "legs": {
+                "items": {
+                  "$ref": "#/$defs/LegRecord"
+                },
+                "type": "array"
+              },
+              "legs_declared": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "legs_executed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "ref_requested": {
+                "type": "string"
+              },
+              "script_witnesses": {
+                "items": {
+                  "$ref": "#/$defs/ScriptWitness"
+                },
+                "type": "array"
+              },
+              "subject_repo": {
+                "type": "string"
+              },
+              "tree_path": {
+                "type": "string"
+              },
+              "venue": {
+                "type": "string"
+              },
+              "verdict": {
+                "type": "string"
+              },
+              "verify_verdict": {
+                "type": "string"
+              },
+              "waivers": {
+                "items": {
+                  "$ref": "#/$defs/Waiver"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "subject_repo",
+              "ref_requested",
+              "head_commit",
+              "tree_path",
+              "gates_json_sha256",
+              "battery_sha256",
+              "script_witnesses",
+              "venue",
+              "environment",
+              "legs_declared",
+              "legs_executed",
+              "legs",
+              "verify_verdict",
+              "waivers",
+              "verdict"
+            ],
+            "type": "object"
+          },
+          "ReceiptProbe": {
+            "properties": {
+              "disposition": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "receipt": {
+                "$ref": "#/$defs/Receipt"
+              },
+              "refusal": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ok",
+              "disposition",
+              "refusal"
+            ],
+            "type": "object"
+          },
+          "ScriptWitness": {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "Waiver": {
+            "properties": {
+              "leg": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "ruled_by": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "leg",
+              "reason",
+              "ruled_by"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/ReceiptProbe"
+      }
+    },
+    {
+      "capture": "json",
+      "command": "bash workflows/repo-battery/bin/teardown.sh $workspace_root $workflow_id",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "workflow_id": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_root",
+          "workflow_id"
+        ],
+        "type": "object"
+      },
+      "name": "teardown",
+      "output_schema": {
+        "$defs": {
+          "TeardownProbe": {
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "refusal": {
+                "type": "string"
+              },
+              "removed": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ok",
+              "removed",
+              "refusal"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/TeardownProbe"
+      }
+    }
+  ],
+  "task_queue": "lane_repo_battery"
+}
