@@ -82,3 +82,71 @@ loaded box or whether it is a **liveness bug that load exposes**. Those want
 different fixes, and the distinction is measurable under controlled load. A bound
 raised until the flake stops is how a liveness bug gets buried — aion **#7** is a
 shard-read timeout that already caused a permanent workflow wedge here.
+
+---
+
+# UPDATE 2026-08-21 — carrier 3 is DIAGNOSED AND FIXED
+
+`run::lsub_prod_xnode_e2e::production_boot_dispatches_executes_and_records_over_liminal`
+(2/24 base, 1/24 branch above) has a cause and a cure. The other three rows are
+untouched and remain unexplained.
+
+## Cause
+
+The test waited a fixed **5 seconds** for `select_worker` to return a worker. But a
+freshly connected worker is **dispatch-ineligible by design** until it serves an
+opening probation: `Reachability::is_proved` requires `DISPATCH_PROBATION_PINGS`
+(= 2) consecutive answered liveness pings, at a probe cadence of
+`sweep_interval(heartbeat_window)` = `window / 4` — **7.5s** on the default 30s
+window, so **~15s** before eligibility.
+
+Which raises the obvious objection: if probation always took ~15s the test would
+always fail, and it passed about half the time. The resolution is not a second
+mechanism, it is that `dispatch_ineligible` starts **empty** and `select_worker`
+filters only against what the probe has already published:
+
+- **no probe round inside the wait** → the set is empty → the worker is selected
+  immediately → PASS;
+- **a round lands inside the wait** → the fresh worker is correctly withheld for
+  its probation → ~15s > 5s → FAIL.
+
+Load-sensitive exactly as this study describes, and now with a direction: load
+slows the test's own progress, which gives the probe time to land a round.
+
+## 🔴 The passing runs were the wrong ones
+
+When it passed, the test dispatched to a worker that had **not served its
+probation** — a path production does not permit, because production parks those
+dispatches. So this was never "a good test that occasionally trips": it was a test
+outrunning a safety gate and failing when the gate won.
+
+## Cure — derived, not raised
+
+The wait now targets dispatch **eligibility** with a patience computed from the two
+values the server itself derives it from: `sweep_interval(configured_window) *
+(DISPATCH_PROBATION_PINGS + 1)`. The test and the probe read the same source, so
+they cannot drift, and no constant was invented.
+
+This is emphatically **not** the timeout-raising that section "Do not fix these by
+raising timeouts" warns against. That warning is about raising a bound until a
+symptom stops. Here the bound is a function of the mechanism that sets it, and the
+change makes the test model production rather than race it.
+
+## Confirmed by prediction
+
+```
+BEFORE  13 / 25 failures
+AFTER    0 / 20 failures
+```
+
+Same box, same session, same venue. (That 13/25 is not this study's 2/24 — rapid
+back-to-back runs on a box already carrying a live server. The rate is not
+transferable between venues; the mechanism is.) If the rate were unchanged,
+P(0 in 20) ~ 4e-7.
+
+**Instrument note.** This was found by the registration diagnosis added the same
+night: the failure had reported one sentence for three different worlds, and once
+it reported the listener state, the registry contents, the pool census and the
+dispatch-eligible set, the cause was legible on the first real occurrence. A
+failure that names the fact and withholds the cause is why this carrier survived
+two full re-derivations of this study.
