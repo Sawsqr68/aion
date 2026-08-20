@@ -1151,6 +1151,15 @@ mod tests {
 
     /// The twin, and it is not decoration: without it the assertion above is
     /// satisfied by anything that reports `ContinuedAsNew` unconditionally.
+    ///
+    /// Measured 2026-08-20: this test is deliberately NOT red under the
+    /// mutation that reddens its twin. Reverting `reconcile` to the
+    /// whole-history projection leaves this one green, because on this history
+    /// both readings answer `Running` for the successor. That is the OTHER
+    /// direction, not a vacuous pass — its job is to prove the run-scoping does
+    /// not over-correct by making the LIVE run look terminal, which a scoping
+    /// bug that took the wrong segment would do. A fix has two ways to be
+    /// wrong, and one red twin measures only one of them.
     #[test]
     fn reconcile_still_sees_the_successor_as_running() -> TestResult {
         let registry = Registry::default();
