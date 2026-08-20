@@ -1,0 +1,7 @@
+ts_aest	free_gib	load1	pid_5954
+20:00:06	71	55.55	alive
+20:01:06	68	67.74	alive
+20:02:06	67	55.03	alive
+20:03:06	71	42.38	alive
+20:04:06	70	37.27	alive
+20:05:06	69	-	GONE
