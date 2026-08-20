@@ -1,0 +1,167 @@
+===== ITERATION 1 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 1 RC=0
+===== ITERATION 2 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 2 RC=0
+===== ITERATION 3 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 3 RC=0
+===== ITERATION 4 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 4 RC=0
+===== ITERATION 5 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 5 RC=0
+===== ITERATION 6 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 6 RC=0
+===== ITERATION 7 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 7 RC=0
+===== ITERATION 8 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 8 RC=0
+===== ITERATION 9 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 9 RC=0
+===== ITERATION 10 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 10 RC=0
+===== ITERATION 11 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 11 RC=0
+===== ITERATION 12 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 12 RC=0
+===== ITERATION 13 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 13 RC=0
+===== ITERATION 14 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 14 RC=0
+===== ITERATION 15 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 15 RC=0
+===== ITERATION 16 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 16 RC=0
+===== ITERATION 17 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 17 RC=0
+===== ITERATION 18 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 18 RC=0
+===== ITERATION 19 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 19 RC=0
+===== ITERATION 20 =====
+running 3 tests
+test runtime::nif_query_mailbox::tests::a_continued_workflow_resolves_to_its_current_run ... ok
+test runtime::nif_query_mailbox::tests::a_stale_predecessor_handle_without_an_index_entry_is_unknown ... FAILED
+test runtime::nif_query_mailbox::tests::the_live_run_index_follows_registration_order ... FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 718 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p aion-rs --lib`
+ITER 20 RC=0
+
+===================================================================
+⚠️ THE "ITER n RC=" LINES ABOVE ARE MEANINGLESS — DO NOT READ THEM.
+They captured the rc of the trailing `grep`, not of `cargo test`.
+The verdict in this file comes from the `test result:` lines and the
+individual `test ... ok` / `test ... FAILED` lines, never from an rc.
+===================================================================

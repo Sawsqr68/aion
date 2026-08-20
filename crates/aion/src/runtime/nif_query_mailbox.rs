@@ -117,12 +117,47 @@ impl EngineHandle for QueryMailboxEngine {
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<WorkflowResidency, EngineSeamError> {
+        // 🔴 THE INDEX ANSWERS "WHICH RUN IS CURRENT"; THE HANDLE MAP ANSWERS
+        // ONLY "DOES ANY HANDLE EXIST" — `Slots::any_handle_for` draws exactly
+        // that distinction, and this call site wants the first question. It
+        // previously asked the second: a `find` over `Registry::list`, which is
+        // `slots.handles.values().cloned().collect()`, a bare `HashMap::values`
+        // in arbitrary order. After a continue-as-new TWO handles share one
+        // workflow id — on the nif path the predecessor's handle is never
+        // removed at all, and on the API path `lifecycle::continue_as_new`
+        // records the terminal, starts the successor, and only then removes it,
+        // so both are registered and resolvable inside that window. The scan
+        // could therefore return the predecessor, and which one it returned was
+        // determined by nothing the caller controls.
+        //
+        // `live_run_pid` is the run-aware lookup and its own documentation names
+        // this case (OBX-011): the index is upserted newest-run-wins on insert,
+        // and `forget_live_index_entry` drops an entry only while it still
+        // points at the run being removed — so through the whole window the
+        // index names the SUCCESSOR and nothing else.
+        //
+        // ⚠️ THE PID COMES FROM THE HANDLE, NOT FROM THE INDEX TUPLE, which is
+        // why it is discarded here. The index is read under its own lock and the
+        // handle under another; pairing a handle with a pid sampled from the
+        // other lock is how the two come apart. The handle is the single
+        // authority for both residency and pid, so both are taken from it.
+        let Some((run, _pid)) = self
+            .registry
+            .live_run_pid(workflow_id)
+            .map_err(|error| delivery_error(error.to_string()))?
+        else {
+            return Ok(WorkflowResidency::Unknown);
+        };
+        // A live handle whose index entry is gone is a workflow with no current
+        // run, and `Unknown` is the honest answer for it. That is a deliberate
+        // change from the scan, which reported such a workflow as `Terminal`:
+        // both refuse the query — `QueryError::Unknown` against
+        // `QueryError::NotRunning` — and `Unknown` is the accurate one when
+        // nothing is current. Pinned by test rather than left to be discovered.
         let handle = self
             .registry
-            .list()
-            .map_err(|error| delivery_error(error.to_string()))?
-            .into_iter()
-            .find(|handle| handle.workflow_id() == workflow_id);
+            .get(workflow_id, &run)
+            .map_err(|error| delivery_error(error.to_string()))?;
         match handle {
             Some(handle) if handle.cached_status() != WorkflowStatus::Running => {
                 Ok(WorkflowResidency::Terminal)
@@ -299,3 +334,7 @@ fn arguments_text(payload: &Payload) -> Result<String, String> {
     })?;
     Ok(text.to_owned())
 }
+
+#[cfg(test)]
+#[path = "nif_query_mailbox_tests.rs"]
+mod tests;
