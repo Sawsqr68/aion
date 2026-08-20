@@ -360,6 +360,7 @@ async fn open_store(name: &str) -> Result<Arc<HaematiteStore>, TestError> {
     HaematiteStore::open_or_create(
         path,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await

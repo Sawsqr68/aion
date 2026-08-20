@@ -72,6 +72,7 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
         let reader = HaematiteStore::open_or_create(
             db_path.clone(),
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;
@@ -147,6 +148,7 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     let reader = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
@@ -196,6 +198,7 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
         let reader = HaematiteStore::open_or_create(
             db_path.clone(),
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;
@@ -246,6 +249,7 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
     let reader = HaematiteStore::open_or_create(
         db_path,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
@@ -331,6 +335,7 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
     let reader = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
@@ -456,6 +461,7 @@ async fn force_rows_to_stale_claimed(
     let store = HaematiteStore::open(
         data_dir,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )?;
     let claimed_at = Utc::now() - chrono::Duration::seconds(60);

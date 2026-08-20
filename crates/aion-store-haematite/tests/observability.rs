@@ -219,6 +219,7 @@ async fn list_activity_streams_enumerates_only_the_runs_streams_and_survives_reo
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
             StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
         })?,
@@ -323,6 +324,7 @@ async fn two_generations_of_one_chain_never_share_a_durable_stream() -> Result<(
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
             StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
         })?,
@@ -371,6 +373,7 @@ async fn observability_records_survive_reopen_and_are_invisible_to_replay() -> R
     let reopened = HaematiteStore::open(
         &dir,
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
             StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
         })?,

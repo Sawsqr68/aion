@@ -294,6 +294,7 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
         HaematiteStore::open_or_create(
             db_path.clone(),
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,
@@ -326,6 +327,7 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
         HaematiteStore::open_or_create(
             db_path,
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,
@@ -377,6 +379,7 @@ async fn empty_store_restart_reloads_nothing() -> Result<(), TestError> {
         HaematiteStore::open_or_create(
             unique_db_path(),
             haematite::NodeCacheBudget::Unlimited,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?,

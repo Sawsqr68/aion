@@ -67,6 +67,7 @@ async fn haematite_store_satisfies_worker_deployment_conformance_suite() -> Resu
                 Ok(Arc::new(HaematiteStore::open(
                     data_dir,
                     haematite::NodeCacheBudget::Unlimited,
+                    // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
                     aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(
                         |error| {
                             StoreError::Backend(format!("lock acquisition ruling refused: {error}"))

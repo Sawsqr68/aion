@@ -29,6 +29,17 @@ backend = "haematite"               # durable ablative event store (the default)
 # once you know your box, e.g.:
 #   node_cache_budget = { bytes = 1073741824 }   # 1 GiB
 node_cache_budget = "unlimited"
+# How long a boot keeps RETRYING the data directory's writer lock, and how often
+# it re-attempts. BOTH REQUIRED — the server refuses to start without them,
+# because haematite takes that lock with ONE non-blocking attempt: a boot landing
+# in the window where a departing process's forked child still holds an inherited
+# descriptor is refused outright, and how long THIS deployment may wait on that
+# is not something this file can know for you. The values below are a starting
+# point, not a guarantee: 250 ms is roughly twice the 93-150 ms window measured
+# in three samples on a sixteen-core box. A busier machine can hold the lock
+# longer than the patience, and then the boot fails with haematite's "data dir is
+# locked by another live writer" — RAISE THE PATIENCE if you see that. Both spans
+# must be positive and the cadence must not exceed the patience.
 lock_acquisition_patience_ms = 250
 lock_acquisition_retry_cadence_ms = 5
 # The database directory defaults to `<AION_HOME>/data`, created on start.

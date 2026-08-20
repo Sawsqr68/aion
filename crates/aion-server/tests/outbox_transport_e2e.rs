@@ -611,6 +611,7 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     let leaf = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
@@ -848,6 +849,7 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     let seeder = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;
@@ -974,6 +976,7 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     let seeder = HaematiteStore::open_or_create(
         db_path.clone(),
         haematite::NodeCacheBudget::Unlimited,
+        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
         aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
     )
     .await?;

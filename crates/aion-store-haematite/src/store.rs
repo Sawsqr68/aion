@@ -4686,6 +4686,7 @@ mod tests {
         let reopened = HaematiteStore::open(
             &dir,
             test_node_cache_budget()?,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )?;
         assert_eq!(
@@ -4772,6 +4773,7 @@ mod tests {
         let reopened = HaematiteStore::open(
             &dir,
             test_node_cache_budget()?,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )?;
         assert_eq!(
@@ -4794,6 +4796,7 @@ mod tests {
         let via_open_or_create = HaematiteStore::open_or_create(
             &dir,
             test_node_cache_budget()?,
+            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
             crate::LockAcquisitionRuling::from_millis(250, 5)?,
         )
         .await?;

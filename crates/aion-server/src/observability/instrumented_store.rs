@@ -612,6 +612,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path(name),
                 haematite::NodeCacheBudget::Unlimited,
+                // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
                 aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
@@ -778,6 +779,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("fires"),
                 haematite::NodeCacheBudget::Unlimited,
+                // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
                 aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
@@ -822,6 +824,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("empty"),
                 haematite::NodeCacheBudget::Unlimited,
+                // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
                 aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
@@ -862,6 +865,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("failed"),
                 haematite::NodeCacheBudget::Unlimited,
+                // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
                 aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
             )
             .await?,
