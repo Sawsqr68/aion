@@ -160,7 +160,7 @@ pub trait OutboxDeliveryCallback: Send + Sync {
 /// Clones share both the pending map and the outbox-delivery callback through
 /// `Arc`, so [`set_outbox_delivery`](Self::set_outbox_delivery) called once on
 /// any clone after construction is visible to the clone the dispatcher holds.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PendingActivities {
     pending: Arc<DashMap<PendingActivityKey, SyncSender>>,
     completion_fences: CompletionFences,
@@ -168,8 +168,8 @@ pub struct PendingActivities {
     /// The transport's OWN re-dispatch budget for activities whose worker died
     /// before reporting (see [`transport_loss`](crate::worker::transport_loss)).
     /// Shared across clones, so every loss for one execution site lands in one
-    /// budget. Zero-budget by default (a wiring that was never told the
-    /// operator's heartbeat window must not invent one).
+    /// budget. There is no default: the window is required at construction, so
+    /// a zero budget cannot be inherited by omission.
     transport_losses: super::transport_loss::TransportLossLedger,
 }
 
@@ -337,17 +337,25 @@ impl PendingActivities {
         Ok(self.complete(workflow_id, activity_id, run_id, result))
     }
 
-    /// Install the operator's heartbeat window so the transport-loss ledger
-    /// derives its budget from it (see
+    /// Build a sink whose transport-loss ledger derives its budget from the
+    /// operator's heartbeat window (see
     /// [`transport_loss`](crate::worker::transport_loss)).
     ///
-    /// Called once at boot on the shared instance; clones made afterwards
-    /// observe it because the ledger's state is shared, and the builder replaces
-    /// the whole ledger before any dispatch runs.
+    /// The window is a CONSTRUCTOR parameter rather than a builder step, and
+    /// that is the point: there is no way to obtain a `PendingActivities`
+    /// without naming the window, so a wiring cannot supply everything else and
+    /// silently inherit a zero budget. The previous shape —
+    /// `default().with_heartbeat_window(w)` — was two calls where the second was
+    /// omissible, and nothing in the test suite could tell the wired world from
+    /// the unwired one.
     #[must_use]
-    pub fn with_heartbeat_window(mut self, heartbeat_window: std::time::Duration) -> Self {
-        self.transport_losses = super::transport_loss::TransportLossLedger::new(heartbeat_window);
-        self
+    pub fn new(heartbeat_window: std::time::Duration) -> Self {
+        Self {
+            pending: Arc::default(),
+            completion_fences: CompletionFences::default(),
+            outbox_delivery: Arc::default(),
+            transport_losses: super::transport_loss::TransportLossLedger::new(heartbeat_window),
+        }
     }
 
     /// The transport-loss ledger this sink classifies worker deaths through.
@@ -570,7 +578,10 @@ impl WorkerActivityDispatcher {
         Self {
             registry,
             namespace: namespace.into(),
-            pending: PendingActivities::default(),
+            // Derived from the tracker this constructor is already handed,
+            // which already carries the operator's window: the dispatcher
+            // cannot be given a heartbeat window and a mismatched budget.
+            pending: PendingActivities::new(heartbeat_tracker.heartbeat_window()),
             heartbeat_tracker,
             drain_state: DrainState::default(),
             tokio_handle: None,
@@ -632,6 +643,15 @@ impl WorkerActivityDispatcher {
     ) -> Self {
         self.attempt_owners = Some(attempt_owners);
         self
+    }
+
+    /// The completion sink this dispatcher classifies worker deaths through.
+    ///
+    /// Exposed so the transport-loss budget a wiring actually ends up with is
+    /// observable, rather than being a property only prose asserts.
+    #[must_use]
+    pub const fn pending(&self) -> &PendingActivities {
+        &self.pending
     }
 
     /// Share a caller-supplied pending-activities tracker.
@@ -1706,7 +1726,7 @@ mod tests {
 
     #[test]
     fn pending_insert_and_complete_delivers_result() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(1);
         let rx = pending.insert(workflow_id.clone(), id.clone())?.1;
@@ -1725,7 +1745,7 @@ mod tests {
     /// terminal "activity response channel dropped" specimen.
     #[test]
     fn same_execution_collision_is_a_named_typed_refusal() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(2);
         let _first = pending.insert(workflow_id.clone(), id.clone())?;
@@ -1747,7 +1767,7 @@ mod tests {
 
     #[test]
     fn pending_complete_unknown_returns_false() {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         assert!(!pending.complete(
             &WorkflowId::new_v4(),
             &activity_id(99),
@@ -1797,7 +1817,7 @@ mod tests {
 
     #[test]
     fn unmatched_completion_routes_to_outbox_callback_when_installed() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let callback = Arc::new(RecordingOutboxCallback {
             live: true,
             ..RecordingOutboxCallback::default()
@@ -1825,7 +1845,7 @@ mod tests {
     #[test]
     fn unmatched_failure_routes_to_outbox_callback_and_not_live_reports_false()
     -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         // live = false models the expected stale-completion case.
         let callback = Arc::new(RecordingOutboxCallback::default());
         pending.set_outbox_delivery(callback.clone());
@@ -1847,7 +1867,7 @@ mod tests {
     fn unmatched_completion_is_silent_drop_when_no_callback_installed() {
         // Flag-off byte-identical behaviour: no callback, unmatched returns
         // false (silent drop) exactly as before.
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         assert!(!pending.complete(
             &WorkflowId::new_v4(),
             &activity_id(9),
@@ -1858,7 +1878,7 @@ mod tests {
 
     #[test]
     fn matched_completion_never_reaches_outbox_callback() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let callback = Arc::new(RecordingOutboxCallback {
             live: true,
             ..RecordingOutboxCallback::default()
@@ -1890,7 +1910,7 @@ mod tests {
     /// `Parked` — and nothing else.
     #[test]
     fn park_activity_resolves_matched_waiter_with_the_parked_sentinel() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(11);
         let rx = pending.insert(workflow_id.clone(), id.clone())?.1;
@@ -1908,7 +1928,7 @@ mod tests {
     /// workflow.
     #[test]
     fn unmatched_park_is_a_noop_and_never_reaches_the_outbox_callback() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let callback = Arc::new(RecordingOutboxCallback {
             live: true,
             ..RecordingOutboxCallback::default()
@@ -1938,7 +1958,7 @@ mod tests {
 
     #[test]
     fn completion_sink_routes_success() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(2);
         let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
@@ -1961,7 +1981,7 @@ mod tests {
 
     #[test]
     fn malformed_payload_does_not_consume_the_current_generation() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(12);
         let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
@@ -2001,7 +2021,7 @@ mod tests {
 
     #[test]
     fn completion_sink_routes_retryable_error() -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(3);
         let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
@@ -2036,7 +2056,7 @@ mod tests {
     #[test]
     fn stale_result_for_other_workflow_does_not_complete_pending_dispatch()
     -> Result<(), ServerError> {
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let post_restart_workflow = WorkflowId::new_v4();
         let pre_restart_workflow = WorkflowId::new_v4();
         // Counter resets to the same sequence position after restart.
@@ -2083,8 +2103,66 @@ mod tests {
 
     /// Liveness tracker for dispatcher unit tests; the window only matters
     /// to expiry checks, which nothing in these tests drives.
+    /// The heartbeat window these unit tests wire, named once so the
+    /// transport-loss budget they run under is explicit rather than inherited.
+    /// It is the same window [`test_tracker`] uses, so a sink and a tracker
+    /// built side by side in a test agree exactly as they do in production.
+    const TEST_HEARTBEAT_WINDOW: Duration = Duration::from_secs(5);
+
+    /// The budget a sink ends up with is DERIVED from the operator's window,
+    /// and this is the arithmetic — not prose about it.
+    ///
+    /// Before #100 the wiring was `default().with_heartbeat_window(w)`: two
+    /// calls where the second was omissible, and deleting it from all five
+    /// production sites reddened nothing, because every test ran the zero-budget
+    /// default. This pin and its sibling below are what make that deletion
+    /// impossible to perform silently.
+    #[test]
+    fn a_sink_derives_its_transport_budget_from_the_operator_window() {
+        let window = Duration::from_secs(7);
+        let sink = PendingActivities::new(window);
+
+        assert_eq!(
+            sink.transport_losses().budget(),
+            window * super::super::transport_loss::TRANSPORT_LOSS_BUDGET_WINDOWS,
+            "the transport-loss budget must be the operator's heartbeat window times \
+             TRANSPORT_LOSS_BUDGET_WINDOWS; a sink carrying any other budget is one no \
+             operator declared"
+        );
+    }
+
+    /// The wiring itself, which is where the defect actually lived: a dispatcher
+    /// is handed a `HeartbeatTracker` and must not be able to carry a transport
+    /// budget that disagrees with it.
+    ///
+    /// This asserts on the dispatcher a caller really builds, so it sits on the
+    /// path a forgetful wiring would take rather than on the constructor in
+    /// isolation.
+    #[test]
+    fn a_dispatcher_carries_the_transport_budget_of_the_tracker_it_was_given() {
+        let window = Duration::from_secs(11);
+        let registry = ConnectedWorkerRegistry::default();
+        let dispatcher =
+            WorkerActivityDispatcher::new(registry, "default", HeartbeatTracker::new(window));
+
+        assert_eq!(
+            dispatcher.pending().transport_losses().budget(),
+            window * super::super::transport_loss::TRANSPORT_LOSS_BUDGET_WINDOWS,
+            "the dispatcher's transport budget must be derived from the heartbeat window it \
+             was constructed with; a zero or mismatched budget here means a worker loss is \
+             declared transport-exhausted after ONE re-dispatch instead of after the \
+             operator's window"
+        );
+        assert_ne!(
+            dispatcher.pending().transport_losses().budget(),
+            Duration::ZERO,
+            "a ZERO budget is the specific regression this pin exists for: it grants exactly \
+             one re-dispatchable loss and then declares the infrastructure flapping"
+        );
+    }
+
     fn test_tracker() -> HeartbeatTracker {
-        HeartbeatTracker::new(Duration::from_secs(5))
+        HeartbeatTracker::new(TEST_HEARTBEAT_WINDOW)
     }
 
     /// A `greet` dispatch request carrying real (test-synthesized) ids, the
@@ -2144,7 +2222,7 @@ mod tests {
     async fn dispatch_inside_runtime_task_delivers_promptly_and_round_trips()
     -> Result<(), Box<dyn std::error::Error>> {
         let registry = ConnectedWorkerRegistry::default();
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let (worker_tx, mut worker_rx) = tokio::sync::mpsc::channel(32);
         let activity_types = [String::from("greet")];
         let registration = registry.register("default", activity_types.iter(), worker_tx)?;
@@ -2240,7 +2318,7 @@ mod tests {
     async fn dispatch_pinned_to_node_reaches_only_that_node()
     -> Result<(), Box<dyn std::error::Error>> {
         let registry = ConnectedWorkerRegistry::default();
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let activity_types = [String::from("greet")];
         let (n1_tx, mut n1_rx) = tokio::sync::mpsc::channel(32);
         let (n2_tx, mut n2_rx) = tokio::sync::mpsc::channel(32);
@@ -2335,7 +2413,7 @@ mod tests {
     async fn unpinned_dispatch_reaches_a_pooled_worker_regardless_of_node()
     -> Result<(), Box<dyn std::error::Error>> {
         let registry = ConnectedWorkerRegistry::default();
-        let pending = PendingActivities::default();
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
         let activity_types = [String::from("greet")];
         let (n1_tx, mut n1_rx) = tokio::sync::mpsc::channel(32);
         let on_n1 = registry.register_namespaces(
