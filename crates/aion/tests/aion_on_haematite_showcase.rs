@@ -56,7 +56,6 @@ mod gleam_test_support;
 mod example_build;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use aion::EngineBuilder;
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
@@ -234,29 +233,26 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     // real restart releases it at process death (kernel-released flock); this
     // in-process simulation instead has to wait for the first engine's
     // background tasks to finish dropping their store handles after shutdown.
-    // Bounded retry: quiesce is normally milliseconds; ten seconds without
-    // release means teardown leaked a handle and the test MUST fail.
-    let reopened = {
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            match HaematiteStore::open(
-                &store_path,
-                haematite::NodeCacheBudget::Unlimited,
-                aion_store_haematite::LockAcquisitionRuling::from_millis(10_000, 100),
-            ) {
-                Ok(reopened) => break reopened,
-                Err(error) if std::time::Instant::now() < deadline => {
-                    let message = error.to_string();
-                    if message.contains("locked by another live writer") {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        continue;
-                    }
-                    return Err(error.into());
-                }
-                Err(error) => return Err(error.into()),
-            }
-        }
-    };
+    // That wait is the typed acquisition boundary's job and is the ONLY wait
+    // here: the ruling retries the real `Database::open` on its cadence for at
+    // most ten seconds, then returns haematite's own `DataDirLocked`
+    // untouched. Quiesce is normally milliseconds; ten seconds without release
+    // means teardown leaked a handle and the test MUST fail — which it does,
+    // on the error this returns. No string matching on the error text.
+    //
+    // showcase-ruled acquisition patience: ten seconds of cadenced real lock
+    // attempts covers this in-process teardown; not a library default.
+    let acquisition = aion_store_haematite::LockAcquisitionRuling::from_millis(10_000, 100)?;
+    // The acquisition blocks its thread for the whole span, so it runs on a
+    // blocking thread instead of this test's runtime thread.
+    let reopened = tokio::task::spawn_blocking(move || {
+        HaematiteStore::open(
+            &store_path,
+            haematite::NodeCacheBudget::Unlimited,
+            acquisition,
+        )
+    })
+    .await??;
     let reopened_store: Arc<dyn EventStore> = Arc::new(reopened);
     println!("  haematite database REOPENED from disk (fresh handle).");
 
