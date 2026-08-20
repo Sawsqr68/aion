@@ -213,7 +213,7 @@ Exit status: `0`.
 
 ## Scope and walls
 
-No tests or assertions were deleted or weakened. No timeout was inflated. No synchronization sleep, lint suppression, or ignore attribute was added. No `.unwrap()`/`.expect()` was added to library code. The new implementation module is 135 lines, below the 500-line wall. Existing oversized files were not split as part of this acquisition fix; the new logic was deliberately placed in a focused named module rather than adding it to the already-oversized `store.rs`. No live server, listener, or database outside test tempdirs was touched. No files outside `crates/aion*` and `.fleet/reports` were changed.
+No tests or assertions were deleted or weakened. No timeout was inflated. No synchronization sleep, lint suppression, or ignore attribute was added. No `.unwrap()`/`.expect()` was added to library code. The new implementation module is 238 lines after the judge fix round (135 at first authoring), below the 500-line wall. Existing oversized files were not split as part of this acquisition fix; the new logic was deliberately placed in a focused named module rather than adding it to the already-oversized `store.rs`. No live server, listener, or database outside test tempdirs was touched. No files outside `crates/aion*` and `.fleet/reports` were changed.
 
 ## History note — `092de7e51` does not compile standalone (recorded 2026-08-21, judge finding 4)
 
