@@ -94,16 +94,41 @@ ended up correct and unexecuted.\n'
 # Failure direction was already right (the source failed, `|| exit $?` caught
 # it, rc 1) — this makes the file work in both shells instead of documenting a
 # limitation it could close.
+#
+# WHAT "UNDER sh" MEANS HERE, MEASURED — and it is narrower than it sounds.
+# It means bash invoked as `sh`, which is the only `sh` macOS has. Under a
+# genuinely POSIX shell it is still not sourceable, and the blocker is NOT this
+# function: `/bin/dash -c '. scripts/gates/lib.sh'` fails `Bad substitution` on
+# the `${BASH_SOURCE[0]}` at the bottom of this file, and both entry scripts
+# (`scripts/battery.sh`, `scripts/gates/verify-declaration.sh`) compute
+# `REPO_ROOT` from `${BASH_SOURCE[0]}` too, so they would die before reaching
+# this file at all. Fixing it here alone would close nothing.
+# ⇒ A sourced file cannot learn its own path in POSIX sh; the cure is a calling
+# convention (the caller passes the root), which is a change to the whole gate
+# family and needs its own red-first. It is scoped separately rather than
+# smuggled in here — and named rather than left for someone to rediscover.
 select_python3() {
-  local candidate tried="" dir saved_ifs
+  local candidate tried="" dir saved_ifs glob_was_off
   saved_ifs=$IFS
 
   # Split PATH on `:` into the positional parameters. `set -f` because a PATH
   # entry containing a glob character must be taken literally, not expanded.
+  #
+  # The state is SAVED and RESTORED rather than ended with a bare `set +f`.
+  # This file is SOURCED, so `set +f` is not a local cleanup — it reaches into
+  # the caller's shell and turns globbing back on for everything after it. A
+  # caller that deliberately ran `set -f` would have it silently revoked by a
+  # helper it only asked for a path, and the revocation is in the PERMISSIVE
+  # direction, which is the one that fails quietly rather than loudly.
+  case $- in
+    *f*) glob_was_off=1 ;;
+    *)   glob_was_off=0 ;;
+  esac
+
   IFS=:
   set -f
   set -- $PATH
-  set +f
+  [ "$glob_was_off" -eq 1 ] || set +f
   IFS=$saved_ifs
 
   for dir in "$@"; do
