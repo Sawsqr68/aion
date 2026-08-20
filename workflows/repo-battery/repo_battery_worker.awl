@@ -1,0 +1,53 @@
+//! lane_repo_battery serves the repository battery's committed operation scripts.
+//!
+//! Start this worker from the reviewed repository root. Each advertised command
+//! invokes one script under `workflows/repo-battery/bin/`; receipt construction
+//! records sha256 witnesses for those bytes and the subject instruments. That is
+//! an attestation of what ran; it records and proceeds.
+//!
+//! Anticipated refusals exit zero as typed JSON. Battery red, missing contracts,
+//! dead selectors, venue refusals, and verifier mismatches must route in the
+//! workflow rather than becoming retryable activity failures.
+worker lane_repo_battery
+  action provision(subject_repo: String, ref_requested: String, workspace_root: String, workflow_id: String) -> ProvisionProbe
+    run json "bash workflows/repo-battery/bin/provision.sh $subject_repo $ref_requested $workspace_root $workflow_id"
+  action precheck(workspace_root: String, workflow_id: String) -> PrecheckProbe
+    run json "bash workflows/repo-battery/bin/precheck.sh $workspace_root $workflow_id"
+  action battery(workspace_root: String, workflow_id: String) -> BatteryProbe
+    run json "bash workflows/repo-battery/bin/run-battery.sh $workspace_root $workflow_id"
+  action verify(workspace_root: String, workflow_id: String) -> VerifyProbe
+    run json "bash workflows/repo-battery/bin/verify.sh $workspace_root $workflow_id"
+  action receipt(subject_repo: String, ref_requested: String, workspace_root: String, workflow_id: String, waivers: [Waiver]) -> ReceiptProbe
+    run json "bash workflows/repo-battery/bin/receipt.sh $subject_repo $ref_requested $workspace_root $workflow_id $waivers"
+  action teardown(workspace_root: String, workflow_id: String) -> TeardownProbe
+    run json "bash workflows/repo-battery/bin/teardown.sh $workspace_root $workflow_id"
+
+type Waiver { leg: String, reason: String, ruled_by: String }
+type ScriptWitness { path: String, sha256: String }
+type EnvRecord { name: String, present: Bool, secret: Bool, value: String, digest: String }
+type LegRecord { name: String, rc: Int, status: String }
+
+type Receipt {
+  subject_repo: String,
+  ref_requested: String,
+  head_commit: String,
+  tree_path: String,
+  gates_json_sha256: String,
+  battery_sha256: String,
+  script_witnesses: [ScriptWitness],
+  venue: String,
+  environment: [EnvRecord],
+  legs_declared: [String],
+  legs_executed: [String],
+  legs: [LegRecord],
+  verify_verdict: String,
+  waivers: [Waiver],
+  verdict: String,
+}
+
+type ProvisionProbe { ok: Bool, owns_tree: Bool, refusal: String, tree_path: String, head_commit: String }
+type PrecheckProbe { ok: Bool, kind: String, refusal: String, selector_path: String }
+type BatteryProbe { measured: Bool, cancelled: Bool, rc: Int, contended: Bool, log_path: String, refusal: String }
+type VerifyProbe { measured: Bool, exact: Bool, refusal: String }
+type ReceiptProbe { ok: Bool, disposition: String, refusal: String, receipt: Receipt? }
+type TeardownProbe { ok: Bool, removed: String, refusal: String }
