@@ -1,566 +1,476 @@
-# repo_battery — the plan
+# rb-lockfix — the plan
 
-**Run:** `repo-battery-flight1`. **Rig commit:** `856b2a863`, base = landed main `cdde313b3`.
-**Legs:** exactly ONE, id `build`, brief at `.fleet/legs/build.md`.
-**Gate entry:** `.fleet/gate-entry.sh` (already committed at the rig commit; not the builder's to edit).
-**Brief:** `.fleet/BRIEF.md`, revision 3 — rulings ledger settled, Vesper's scope ruling GIVEN,
-Artemis's grill DISCHARGED/ACCEPT with corrections R1–R4 folded at their sites.
+**Run:** `rb-lockfix-flight1`. **Rig commit:** `65f0bcac4`. **Base of the rig:** `b72a5c35`
+(the repo-battery-flight1 leg tree, incl. its red evidence under `.fleet/gates/`).
+**Legs:** exactly ONE, id `fix`, brief at `.fleet/legs/fix.md`. It owns the whole delivery.
+**Gate entry:** `.fleet/gate-entry.sh` (committed at the rig commit; not the builder's to edit).
+**Brief:** `.fleet/BRIEF.md` — R1 RED FIRST, R2 DIAGNOSE AT SOURCE, R3 FIX AT SOURCE, R4 PROVE.
 
-The brief's slices 1, 2 and 3 are **sequential PHASES of the one leg**, in that order, never
-parallel work items: the proofs of phase 3 consume the workflow that phases 1 and 2 build.
-`.fleet/legs/capture.md` and `.fleet/reports/capture.md` are a **prior run's** artifacts
-(`fleet-hardening-1`, inherited through the rig base) and are not this run's work.
+This file replaces repo-battery-flight1's `plan.md`, which is recoverable in full at
+`git show b72a5c35:.fleet/plan.md`. Nothing in that plan governs this wave.
+
+**Status of this document:** every claim below marked **MEASURED** was measured by the planning
+counsel in THIS working tree, at `65f0bcac4`, on this box (16 cores, `ulimit -n 65536`), with the
+result lines quoted verbatim in §8. The builder does not inherit these as fact — R1/R2 are theirs
+to re-measure — but they are the fastest known route to the answer, and one of them (§3) refutes
+the mechanism the brief names.
 
 ---
 
-## 0. Citation re-verification — every brief citation, read at THIS tree
+## 0. The one-paragraph answer
 
-The brief's own rule binds this plan: it was written against `c7fa6adba` and main has moved to
-`cdde313b3`. Every line below was re-read here before anything in this plan leaned on it.
+The brief asks the builder to cure a teardown/lock-release ordering bug in
+`git diff 856b2a863..b72a5c35 -- crates/aion`. **There is no such bug in that diff.** The engine
+change is one line — `crates/aion/src/engine/api.rs:323`, `begin_close()` → `shutdown()` — and
+restoring it to `begin_close()` at this tree leaves the failing test failing, identically
+(**MEASURED**, §3.2). The teardown under test releases everything it owns: at the moment of the
+reopen the store's `Arc` strong count is 1, `Arc::into_inner` yields the value, and no descriptor
+in this process points at the lockfile (**MEASURED**, §3.3). The actual holder of the writer lock
+is **a forked child of a different test in the same binary**, caught in the act: pid 2849898,
+fd 566, `PPid` = the test process, empty `cmdline`, `comm` `worker::workspa` — a
+`posix_spawn`ed child of
+`worker::workspace_root::tests::every_accepted_printable_ascii_root_survives_the_real_parser`
+(`crates/aion-server/src/worker/workspace_root.rs:772-810`, which spawns 95 shells in a loop),
+still between clone and `exec`, holding an inherited copy of the lock's open file description
+(**MEASURED**, §3.4). haematite's writer lock is an advisory `flock` owned by the open file
+description, so the copy holds the lock; the window measured **93–150 ms**. What actually moved
+the test into that window is the leg's OTHER change: `Cargo.toml:125-131` (`[profile.dev]`/
+`[profile.test]`, `debug = 0`), which shrank the test binary that
+`put_worker_deployment` sha256s on **every PUT** (`crates/aion-server/src/api/http/worker_deployments.rs:70`
+→ `:192-208`) from a debuginfo build to 188 MiB — **MEASURED 18.64 s** for that hash at this
+tree, against the 60+ s the brief records at base. The test did not lose an awaited completion.
+It lost sixty seconds of incidental latency that had been hiding a race it never controlled.
 
-| Brief claim | Verified at this tree | Verdict |
+So: R2 is answered on its second branch ("if you conclude the TEST model is wrong instead, prove
+it against base behavior"), R3's literal premise is refused as measurably false (§4), and the cure
+moves to the lock-acquisition boundary (§5), where it fixes 37 call sites' worth of the same
+latent race instead of one test's symptom.
+
+---
+
+## 1. The diff, read at the changed lines
+
+`git diff 856b2a863..b72a5c35 -- crates/aion` is 6 files, +1477/−1453, and **exactly one
+commit**: `0f3aff9d fix(gate): release engine task descriptors on drop`. Its rationale is on the
+record at `.fleet/reports/fix-rounds.md:11-17` — the gate's `aion-server` lib target hit
+`Too many open files (os error 24)` because `Engine::drop` left each engine-task epoch's Tokio
+runtime (and its I/O driver descriptors) owned for the life of the test process.
+
+Line by line, what changed that can touch teardown ordering:
+
+| Anchor (THIS tree) | Before (`856b2a863`) | After (`b72a5c35`) |
 |---|---|---|
-| `gates.json` is the ONE list, 24 legs | `gates.json`, 24 entries, keys `name`/`kind`/`cmd`/`why` | ✅ **24** |
-| "the cure is subtraction, not a checker" — its own header | `scripts/battery.sh:42-45` | ✅ verbatim |
-| battery executes exactly what `gates.json` declares | `scripts/battery.sh:169-179` (reader), `:226-239` (loop) | ✅ |
-| exactly one `EXECUTED_LEGS` line | `scripts/battery.sh:282`; enforced at `scripts/gates/verify-declaration.sh:102-119` | ✅ |
-| verify-declaration "holds no list of its own" | `scripts/gates/verify-declaration.sh:6-18, 93` | ✅ |
-| its red path runs via `AION_BATTERY_SELF_TEST=1` | `scripts/battery.sh:196-199`; `verify-declaration.sh:38-44` | ✅ |
-| `scripts/gates/lib.sh` is bash, process substitution | `scripts/gates/lib.sh:1` (`#!/usr/bin/env bash`), `:91` (`done < <(type -ap python3 …)`) | ✅ |
-| wave-1 closed leg vocabulary in `gate.awl` | `workflows/gate/gate.awl:8-15` | ✅ |
-| "verdict is data" already law in wave 1 | `workflows/gate/gate.awl:28-31` | ✅ |
-| "fmt is never a gate" (STANDING ORDER 9) | `workflows/gate/gate.awl:40-42` | ✅ |
-| aion's `gates.json` nevertheless declares `rust:fmt` | `gates.json` leg 0, `cmd: cargo fmt --all -- --check` | ✅ (G4 tension real) |
-| `gate_worker.awl`'s probe shape is the precedent | `workflows/gate/gate_worker.awl:13-16` (exit-zero-always), `:18-24` (contention at source), `:36-58` | ✅ |
-| F3 parallel-run rule at `workflows/gates/README.md:300-311` | `:300` is the heading, `:302-311` the rule | ✅ **exact** |
-| manual start only, v1 ruling stands | `workflows/gates/README.md:290-293` | ✅ |
-| the investigate `teardown.sh` root-guard precedent | `workflows/investigate/bin/teardown.sh:14-28` | ✅ |
-| ruled queue name matches `lane_gates` | `workflows/gates/worker/src/main.rs:32` (`const TASK_QUEUE: &str = "lane_gates"`) | ✅ |
-| **`docs/design/gate-battery-workflow-v2-20260818.md` "(this repo), at r5"** | **absent from the working tree AND from every ref** (`git log --all --` returns nothing) | ❌ **NOT PRESENT** |
+| `crates/aion/src/engine/api.rs:323` | `self.runtime.engine_tasks().begin_close();` | `self.runtime.engine_tasks().shutdown();` |
+| `crates/aion/src/engine/api.rs:71-83` | doc: drop "gates and aborts, it does not await" | doc: drop closes the epoch with `shutdown`, runtime drop isolated on a joiner thread |
+| `crates/aion/src/engine/api.rs:110-115` | doc: async-context objection justifies `begin_close` | doc: timer-wheel shutdown "remains safe before the joined engine-task shutdown below" |
+| `crates/aion/src/engine/api.rs:131-146` | doc: "an engine released without `shutdown` still holds its runtime" | doc: the scheduler leak stands; the engine-task executor "is joined below so its I/O driver cannot accumulate process descriptors" |
+| `crates/aion/src/engine/api.rs:158-161` | doc: step 1's `begin_close()` silences the detached appender | doc: "the engine-task epoch closure" silences it |
+| `crates/aion/src/runtime/engine_tasks.rs:442-449` | — | **added** `#[cfg(test)] owns_runtime()` |
+| `crates/aion/src/engine/api/api_tests/shutdown.rs:339-356` | — | **added** `engine_drop_releases_the_descriptor_owning_task_runtime` |
+| `crates/aion/src/engine/api.rs:789`, `crates/aion/src/runtime/engine_tasks.rs:630` | inline `mod tests { … }` | extracted to `api/api_tests{,/lifecycle.rs,/shutdown.rs}` and `engine_tasks/tests.rs` |
 
-### The one citation that does not verify, and what follows from it
+Everything else in those 1477/1453 lines is test relocation. `EngineTaskRuntime::shutdown`
+(`crates/aion/src/runtime/engine_tasks.rs:451-476`), `gate_and_abort` (`:500-514`), `begin_close`
+(`:516-526`), `shutdown_runtime_and_join` (`:543-573`) and `Drop for EngineTaskRuntime`
+(`:575-628`) are all **unchanged bodies** — the leg changed which of them `Engine::drop` calls,
+and nothing else.
 
-**The design paper is not in this repository, at this tree or on any ref.** `find`, `git log --all`
-and a `docs/design/` listing all agree. The brief's parenthetical "(this repo)" is wrong at
-`cdde313b3`; the paper lives in the estate docs repo, which this venue does not carry — the same
-place `workflows/investigate/investigate.awl:7-9` puts *its* design paper.
+Read on its own terms, that one line moves teardown in the **safe** direction: `shutdown()` gates,
+aborts, then blocks on a joiner thread until the owned runtime's drop has cancelled every task and
+waited out every in-flight poll (`engine_tasks.rs:451-457`, `:543-573`). `begin_close()` gates and
+aborts and returns (`:516-526`). The brief's hypothesis — "this tree makes teardown return before
+the store writer lock is actually released" — predicts the opposite sign from what the line does.
+That is the first reason to measure before coding, and §3.2 is that measurement.
 
-Consequence, stated rather than papered over: **§2, §5, §9.3, §9.5, §10.2, §10.3, §10.4 and §10.5
-cannot be re-read here.** Their content is not lost, because `.fleet/BRIEF.md` quotes or states
-every load-bearing one inline — §10.5 verbatim, the §10.2/§10.3 scope laws by name, §9.3's
-verdict-is-data ruling, §9.5's run-owned-tree reason, §10.4's positive-control law. **Ruling: at
-this venue `.fleet/BRIEF.md` rev 3 is the operative authority, and a section number is a pointer to
-the brief's own restatement, never to text the builder is expected to fetch.** Nothing in this plan
-or the leg brief depends on unquoted paper text. The builder must not invent a §-reading; if a
-question turns on paper text the brief does not quote, it goes to Artemis (rulings ledger item 2 —
-"answered inside the hour, without reopening the grill"), not to a guess.
+**And there is a second changed file outside `crates/aion` that the brief's diff command never
+shows.** `git diff 856b2a863..b72a5c35 -- Cargo.toml` is the round-1 fix
+(`.fleet/reports/fix-rounds.md:3-9`, commit `70adba5d`):
+
+```
+Cargo.toml:125-131
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false
+```
+
+Everything else in the leg diff is `.fleet/` records and `workflows/repo-battery/**`. So the
+whole causal surface between base and this tree is: **one engine call site, and the build
+profile.** §3 measures both.
 
 ---
 
-## 1. The venue, measured
+## 2. What the failing test actually does
 
-Everything here was measured on this box at plan time, not assumed.
+`crates/aion-server/src/api/http/worker_deployments_tests.rs:127-178`
+(`api::http::worker_deployments::tests::http_put_survives_a_second_server_state_over_the_same_store`):
 
-| Fact | Measurement |
+1. `:129-137` — `tempfile::tempdir()`, then `HaematiteStore::open_or_create(path)` → the **create**
+   branch (`crates/aion-store-haematite/src/store.rs:297-318`), which takes the A4 writer lock.
+2. `:138-139` — `state_with_leaf(first_store.clone())` →
+   `ServerState::from_parts_with_namespace_store` (`crates/aion-server/src/state.rs:343-359`) →
+   `from_parts_with_control_stores` (`:361-371`). Read its own doc line: *"the explicit
+   embedder/test seam for retaining both control-plane contracts from one durable leaf **without
+   constructing the full engine boot**"*. **This state contains no `Engine`.** No `Engine::drop`
+   runs anywhere in this test. That alone should have moved the diagnosis off the engine diff.
+3. `:141-153` — one `PUT /worker-deployments/shells`. The handler
+   (`crates/aion-server/src/api/http/worker_deployments.rs:63-111`) calls `capture_binary_identity()`
+   at `:70`, which at `:192-208` does `std::fs::read(std::env::current_exe())` and `Sha256::digest`
+   over the **entire running test binary**, on every PUT, uncached.
+4. `:155-157` — `drop(first_router); drop(first_state); drop(first_store);`.
+5. `:159-165` — `HaematiteStore::open_or_create(path)` again → the **open** branch → `Database::open`
+   → A4 `try_lock`. This is the line that returns `DataDirLocked`.
+
+The store side of step 5, with anchors in the vendored dependency
+(`~/.cargo/registry/src/index.crates.io-*/haematite-0.9.0/`):
+
+- `src/db/lock.rs:1-27` — the lock is an **advisory OS `flock`** over `<data_dir>/writer.lock`,
+  *"acquired non-blocking"*, *"held exactly as long as this value (and any file descriptions it
+  forked to) lives"*, and *"release happens when the last handle to the open file description
+  closes"*.
+- `src/db/lock.rs:166` — the acquisition is `file.try_lock()`. **There is no wait, no retry and no
+  backoff anywhere on this path.**
+- `src/db.rs:541-559` — `Drop for Database` is synchronous: sync schedulers, executor, router,
+  scheduler, then the fields (the lock `File`) drop.
+- `src/db/error.rs:422-428` — the message the test prints.
+
+That kills the brief's stated base mechanism outright: *"at base the second server state WAITS for
+the first state teardown to release the writer lock, then proceeds"* (`.fleet/BRIEF.md:19-20`).
+haematite cannot wait. It calls `try_lock` once and returns. At base the second open **succeeded on
+its first and only attempt**, because by the time it ran, ~60 s had passed and the lock was free.
+Base did not wait for correctness. Base got lucky, on a clock it did not control.
+
+---
+
+## 3. The measured causal chain
+
+Four experiments, in the order they were run. Verbatim result lines in §8.
+
+### 3.1 Reproduction — the brief's numbers hold
+
+`ulimit -n 65536; cargo test -p aion-server --lib`, clean tree, twice:
+`1155 passed; 1 failed` in **23.31 s**, then `1155 passed; 1 failed` in **22.59 s**. Same test,
+same error, a fresh tempdir path each time. **MEASURED, 2/2.**
+
+### 3.2 Attribution — the engine line is NOT the trigger
+
+`crates/aion/src/engine/api.rs:323` reverted in place to `begin_close()` (base behaviour), full
+rebuild, full lib suite: **`1155 passed; 1 failed` in 22.60 s — the same test, the same error.**
+**MEASURED.** The file was restored with `git checkout --` immediately afterwards; the tree this
+plan is committed from is clean.
+
+That is decisive on its own: *the only engine change between base and this tree does not produce
+the failure and its removal does not cure it.* R3's "cure the ordering" has no ordering to cure.
+
+### 3.3 The teardown under test releases everything it owns
+
+Probe compiled into the test between `:157` and `:159` (then reverted): print
+`Arc::strong_count(&first_store)`, replace `drop(first_store)` with `Arc::into_inner(first_store)`,
+then walk `/proc/self/fd` for any descriptor whose readlink is the lockfile.
+
+```
+PROBE strong_count = 1
+PROBE was_last_reference = true
+(no /proc/self/fd entry for writer.lock)
+```
+
+**MEASURED.** No surviving `Arc`, no surviving descriptor in this process, and `Database::drop`
+(synchronous, `db.rs:541-559`) had therefore already run to completion — **before** the reopen.
+The teardown contract R3 asks to restore is already held at this tree.
+
+### 3.4 The holder is a forked child of a concurrent test
+
+Same probe extended: on each failed `try_lock`, scan `/proc/*/fd` for the lockfile and print the
+holder's `cmdline` and `status`, then retry until acquired.
+
+```
+PROBE holder pid "2849898" fd "566" cmdline [] status ["Name:\tworker::workspa",
+      "State:\tR (running)", "PPid:\t2838586", "Threads:\t1"]
+PROBE lock free after 147.384551ms (3 attempts)
+```
+
+(and, on the previous run, `pid "2838280" fd "565" cmdline []`, `lock free after 149.952797ms`;
+on the run before that, `lock free after 92.941257ms`.) `PPid 2838586` is the test process itself,
+whose own `status` in the same dump reads `Threads: 6757`. The entries the same scan printed for
+`self` / `thread-self` / our own pid were **the probe's own open handle on the lockfile**, held
+across the scan — not a leak; do not misread them.
+
+So the holder is a child process of the test binary, `State: R`, one thread, **empty `cmdline`**
+and a `comm` inherited from the forking thread (`worker::workspa`) — i.e. cloned and not yet
+`exec`ed. `crates/aion-server/src/worker/workspace_root.rs:772-810` runs
+`for code in 0x20u8..=0x7Eu8` and executes a real shell per accepted character through
+`aion_worker::shell::ShellAction` (`crates/aion-worker/src/shell/action.rs:167` →
+`crates/aion-worker/src/process/contained.rs:373-388`, `process_group(0)`, `kill_on_drop`).
+Ninety-five spawns in a burst, concurrent with our test. Each clone copies the parent's descriptor
+table; `flock` ownership is per **open file description**, so every copy holds the lock until the
+child `exec`s (the descriptor is `CLOEXEC`, so `exec` is what frees it) or dies. In a 6757-thread,
+188 MiB process under 16-way test load, that window measured **93–150 ms**.
+
+Corroboration: when the probe simply **waited** for the lock before reopening, the full suite went
+green — `1156 passed; 0 failed` twice, 22.10 s and 22.54 s (**MEASURED**). The contract the test
+asserts is true; it is asserted 100 ms too early.
+
+Counter-check on scale: the same two tests run as a pair
+(`--test-threads=2`, `http_put_survives…` + `every_accepted_printable_ascii…`) pass in 9.45 s
+(**MEASURED**) — in a small, few-thread process the clone→`exec` window is microseconds. The race
+needs the full suite's thread count and load, which is exactly why the brief records
+isolation-green, suite-red.
+
+### 3.5 What moved the test into the window
+
+`capture_binary_identity` (`worker_deployments.rs:192-208`) reads and hashes the whole running
+executable on every PUT. At this tree that binary is **188 MiB** and the isolated hash test
+(`capture_uses_build_identity_and_running_executable_sha256`, the same code path) takes **18.64 s**
+(**MEASURED**; `sha2` is unoptimised in a dev profile). The failing test's reopen therefore lands
+~19 s into a 22 s suite — squarely inside the `workspace_root`/supervisor spawn phase.
+
+At base the same read+hash ran over a **debuginfo** binary, and the brief records the consequence
+directly: *"the test itself runs 60+ seconds (cargo prints the over-60s notice; suite 125s)"*
+(`.fleet/BRIEF.md:18-19`). Sixty-plus seconds of sha256 pushed the reopen past the fork phase.
+`Cargo.toml:125-131` removed the debuginfo, the hash got ~3× cheaper, and the reopen moved into
+the storm.
+
+**The diagnostic signature in the brief is real and its reading was inverted.** The test did get
+faster when it started failing — but the vanished wait was not an awaited completion. It was
+`std::fs::read` + `Sha256` over a debuginfo build. The wait was never the correctness; it was the
+camouflage.
+
+---
+
+## 4. Typed refusal
+
+**REFUSAL — R3, first sentence, as written.** `.fleet/BRIEF.md:47-48` directs: *"Restore the
+teardown contract: teardown-complete must not report before the store writer lock is released."*
+That defect does not exist at this tree and cannot be restored, because it was never lost:
+
+- the state under test builds **no engine** (`crates/aion-server/src/state.rs:361-371`), so no
+  engine teardown runs in the failing test at all;
+- at the instant of the reopen the store's strong count is **1**, `Arc::into_inner` succeeds, and
+  this process holds **no** descriptor on the lockfile (§3.3);
+- reverting the sole engine teardown change (`crates/aion/src/engine/api.rs:323`) leaves the test
+  failing identically (§3.2);
+- the lock is held by **another process** — a not-yet-`exec`ed child forked by a concurrent test
+  (§3.4).
+
+Writing code to "make teardown-complete wait for the lock" would therefore be writing a wait into
+a path that already waits, to compensate for a descriptor this process does not own. It would not
+cure the failure; it would move the sleep.
+
+**What is honoured instead, under the brief's own escape clauses** — `.fleet/BRIEF.md:29-31`
+("Follow the evidence if it points elsewhere; do not follow this brief off a cliff") and R2's
+second branch (`:43-45`, "If you conclude the TEST model is wrong instead, prove it against base
+behavior … and carry the proof"): the proof is §2 and §3, including the correction that base's
+pass is not a wait (haematite `try_lock`s once, `lock.rs:166`) but a coincidence of latency. The
+substitute cure is §5. R1, R2, R4 are honoured as written. R3's remaining clauses — *fix at
+source*, *do not revert the leg wholesale*, and every wall in its list — bind the substitute cure
+unchanged.
+
+---
+
+## 5. The cure
+
+### 5.1 What it must be
+
+A store reopen must be able to survive a **transient** holder of the data-dir lock: a descriptor
+copy that a concurrently-forked child holds for the length of its clone→`exec` window. It must
+still fail loudly against a **genuine** second live writer, which is the invariant the lock exists
+for (haematite `src/db/lock.rs:1-27`; Aion's invariant 3, single writer per workflow, rides on it).
+
+Those two together mean exactly one thing: the acquisition gets a **ruled patience**. Not a sleep,
+not a retry count — a patience: re-attempt the acquire until it succeeds or the ruled span
+elapses, then return the same typed error unchanged.
+
+### 5.2 Where
+
+`crates/aion-store-haematite/src/store.rs`:
+
+- `HaematiteStore::open` — `:337-345` (the `open` branch is where a just-released dir is
+  re-acquired; `crates/aion-server/src/state.rs:2281` is the production boot call);
+- `HaematiteStore::open_or_create` — `:297-318` (routes to `open` when `config.json` exists).
+
+`create` / `create_with_shard_count` are **out of scope**: a directory with no `config.json` has no
+prior lock for a child to have inherited, so there is no transient holder to wait out. Say so in
+the report rather than silently leaving them.
+
+### 5.3 Shape, and the wall it must not break
+
+`NO ARBITRARY LIMITS / NO ASSUMED DEFAULTS` (CLAUDE.md) forbids inventing the value. The crate
+already has the precedent for exactly this shape, in the same file, for the same reason —
+`store.rs:285-291`: *"`node_cache_budget` is REQUIRED and has no default here … the byte ceiling is
+the caller's deployment decision."* Follow it: the patience is a **required parameter**, ruled by
+every caller. Cadence between attempts is part of the same ruling, not a constant the builder
+picks — carry it in the same argument (one required type with both fields, named for what it is)
+so no call site can rule half of it.
+
+- Production boot (`crates/aion-server/src/state.rs:2281`) rules it from the operator config
+  surface, following whatever precedent that config crate already uses for storage knobs. If no
+  precedent-compliant home exists there, **stop and record a typed refusal in the report** rather
+  than inventing a default in a config schema.
+- Tests rule it explicitly at their call sites. A test naming its own patience is explicit, not
+  arbitrary — and it is the opposite of a hidden sleep.
+
+Retry only on `DatabaseError::DataDirLocked`. Every other error returns on the first attempt,
+unchanged. Retrying that one variant is **safe by haematite's own construction**, and cite it:
+`src/db/startup.rs:105-108` (create takes the lock *before* `config.json` is written and skips its
+cleanup when the acquire loses) and `:175` (open takes the lock, *then* starts shards). A failed
+acquire has started nothing and written nothing. `adopt_node_cache_budget`, which
+`HaematiteStore::open` runs first (`store.rs:342`), is idempotent by its own contract
+(`store.rs:320-331`), so re-running it across attempts changes nothing.
+
+### 5.4 Why this and not the smaller-looking options
+
+| Candidate | Verdict |
 |---|---|
-| `aion` binary | `/home/aion/.cargo/bin/aion`, built 2026-08-18 |
-| `cargo` / `rustc` | `/home/aion/.cargo/bin/…`; `rust-toolchain.toml` pins `1.97.1` + rustfmt, clippy |
-| `bash`, `git`, `python3`, `jq` | present (`/usr/bin/…`) |
-| `bun`, `node` | present, at the **transient** path `/tmp/bun-node-0d9b296af/` |
-| `gleam` | **ABSENT** |
-| `uv` | **ABSENT** |
-| `tools/gates/lib/estate-root.sh` | **ABSENT** anywhere on the walk from the repo root to `/` |
-| `ABLATIVE_ESTATE_ROOT` | **unset** |
-| this tree | a plain clone, **not** a git worktree (`--git-dir` == `--git-common-dir` == `.git`) |
-| live aion server / seated worker | **none, and none may be started** (see §1.2) |
+| Revert `api.rs:323` to `begin_close()` | **Forbidden and useless.** Measured not to cure (§3.2); reinstates the descriptor leak `0f3aff9d` fixed (`.fleet/reports/fix-rounds.md:11-17`); R3 forbids reverting the leg's wanted work. |
+| Revert `Cargo.toml:125-131` (restore debuginfo) | **Forbidden.** It cures nothing — it re-hides the race behind a 60-second sha256 — and it re-breaks the round-1 disk failure (98.5 GiB `target/`, `.fleet/reports/fix-rounds.md:3-9`). "Slow and correct" is R4's licence for a *real* wait, not for restoring camouflage. |
+| Narrow the clone→`exec` window at the spawn site | **Unavailable.** `crates/aion-worker/src/process/contained.rs:373-388` already goes through `std`'s `posix_spawn`-eligible path; `CLOEXEC` is already set by `std` on the lockfile. A descriptor copy exists between clone and `exec` no matter what — that is the semantics of `fork`, and it cannot be closed from this repo. |
+| Cache the executable hash in `capture_binary_identity` | **Out of scope, and not a cure** — it makes the reopen *earlier*, not safer. Worth recording as an observed cost (18.6 s per PUT in a dev profile; `worker_deployments.rs:192-208` re-reads and re-hashes the whole binary on every call) and raising separately. Do not fold it into this wave. |
+| Change the test | **Forbidden by R3's walls** — no test deletion, no assertion weakening, no timeout inflation, no added sleeps as synchronization. The test's assertions stay byte-identical; only the patience it hands to the constructor is new, and that is a real acquire, not a sleep. |
 
-### 1.1 What the venue census means
+### 5.5 Blast radius, named up front
 
-aion's own 24-leg battery **cannot go green here** and never could: `gleam:*` (3 legs) and
-`python:*` (2 legs) hit `require_tool` (`scripts/gates/lib.sh:40-52`) and return 127; `estate-guard`
-returns rc 3 by its own declared refusal (`gates.json` leg 23) because the estate root is absent.
-That is a **venue fact, not a code verdict** — which is exactly why `.fleet/gate-entry.sh` names its
-scope in its own header and runs fmt + workspace clippy + workspace tests only.
-
-This is also *why the positive control is buildable here anyway*: the brief already requires
-"a purpose-built positive-control fixture whose committed `gates.json` declares exactly what runs".
-It does not require aion's battery to be green at this venue, and it must not be read that way.
-
-### 1.2 Venue honesty ruling — what phase 3 can and cannot EXECUTE here
-
-Running the workflow end-to-end needs `aion server` (HTTP + gRPC + WebSocket listeners,
-`aion server --help`) and a seated `aion worker awl`. This run is forbidden to touch the live
-estate — no network services, no databases — so **no server is started at this venue and no live
-dispatch happens here.**
-
-**Typed refusal, recorded:** `venue_lacks_engine` — *this box carries the `aion` binary and the full
-shell toolchain, but this run may start no listener, so no workflow instance is created, no activity
-is dispatched, and no engine-side routing or cancellation is observed at this venue.*
-
-That refusal does **not** license a dropped proof, a faked receipt, or a "we'll see at landing"
-shrug. Two things follow, both binding:
-
-1. **Everything that can be executed here, is** — and the receipt is committed now.
-2. **What cannot be executed here ships as a committed, runnable artifact** — a proof script the
-   landing desk runs against a live server with one command — and its **execution receipt is OWED
-   at the landing desk**, named as owed, per proof, in `.fleet/reports/build.md`.
-
-Measured, this splits far better than it first looks, because the `aion` CLI has two offline seams:
-
-- **`aion worker awl --check <doc>`** prints the worker's exact advertised surface as JSON —
-  every action's name, input/output JSON Schema, and **the literal command string it would run** —
-  and **exits 0 without connecting** (measured against `workflows/gate/gate_worker.awl`). A proof
-  harness can therefore read the committed command out of the document and execute **those exact
-  bytes**, with parameters substituted, without any server. That is not a copy of the body; it is
-  the body.
-- **`aion awl emit --target beam`** compiles "through the SAME `aion_awl::compile` seam the server's
-  `POST /awl/deploy` path uses" (its own `--help`) and writes a `<out>.beam.json` sidecar carrying
-  the derived `output_schema`. Measured on a prototype: **per-field `///` docs travel into that
-  sidecar as JSON-Schema `description` strings**, and the `required` array is in **declaration
-  order**. So G2/R1/R2's field docs and R4's field order are *machine-assertable offline*.
-
-What genuinely needs the engine is the **routing and cancellation** half: that a red battery lands on
-a SUCCESS route, that `undeclared` lands on a SUCCESS route, that a mid-battery cancel yields
-CANCELLED MEASUREMENT. Two of those three are also assertable *structurally* offline, from the
-emitted Gleam, which lowers a success route to `Ok(<Outcome>(…))` and a failure route to
-`Error(awl_error.AwlOutcomeFailure(…))` (measured on a prototype). A structural assertion is weaker
-than an execution and is labelled as such wherever it is used — it is never called a receipt.
-
-Full per-proof allocation is the matrix in §6.
+`HaematiteStore::open` / `open_or_create` have **37 call sites across 19 files** outside the
+implementing module (`crates/aion-server/src/{state.rs,cluster.rs,worker/outbox_dispatcher.rs,observability/instrumented_store.rs,api/http/worker_deployments_tests.rs}`,
+`crates/aion-server/tests/*` ×9, `crates/aion/tests/*` ×3, `crates/aion-store-haematite/tests/*` ×2).
+Every one of them must rule the patience. That is mechanical, it is the price of the
+no-assumed-defaults wall, and it is also the point: several of those call sites
+(`deploy_restart_e2e.rs`, `namespace_restart.rs`, `outbox_transport_e2e.rs`,
+`recovery_declared_body_e2e.rs`, `graceful_shutdown_park_e2e.rs`) are the same reopen-after-close
+shape in the same process-spawning binaries, i.e. the same latent race, currently unfired. Curing
+at the acquisition boundary retires all of them at once. Curing at one test's teardown retires
+none.
 
 ---
 
-## 2. Language findings — every construct prototyped against the real binary
+## 6. The leg's work plan
 
-Prototyped in `/tmp/awlproto` with `/home/aion/.cargo/bin/aion`, all checking green. These are
-facts, not preferences, and the leg brief prescribes only constructs that appear here.
+One leg, `fix`. Phases are sequential; each one's evidence is committed before the next begins.
 
-- **L1 — per-field `///` docs are first-class AWL.** `FieldDecl` carries `pub docs: Vec<DocLine>`
-  (`crates/aion-awl/src/ast/document.rs:329-335`); the parser attaches them
-  (`crates/aion-awl/src/parser/types.rs:188,235`) and names fields explicitly in its own diagnostic:
-  "`///` doc lines attach to declarations (types, fields, actions, steps)"
-  (`crates/aion-awl/src/parser/statements.rs:25`). **G2, R1 and R2 can therefore be satisfied
-  literally, in the receipt type's own field documentation, as required — not in a header comment.**
-- **L2 — an action may declare `timeout` with NO `retry` clause.** Checks green. Retry is
-  declaration-owned, and a call site "may pin `node` and `timeout` only — `retry` stays on the
-  declaration" (`crates/aion-awl/src/checker/calls.rs:98-104`). **The no-retry law is expressible by
-  omission, and is not defeasible at a call site.**
-- **L3 — a typed refusal may route to SUCCESS.** `outcome undeclared: type Undeclared, route success`
-  checks green, and lowers to `Ok(UndeclaredOutcome(…))`. **R2 is directly expressible.**
-- **L4 — string and empty-list literals are legal route arguments.** `route undeclared(verdict:
-  "undeclared", …)` and `script_witnesses: []` both check green. **The typed not-a-verdict literal
-  needs no runtime composition** (AWL composes no strings at runtime).
-- **L5 — list-of-record inputs and list-of-record fields check green.** `input waivers: [Waiver]`,
-  `legs: [LegRecord]`, `script_witnesses: [ScriptWitness]`.
-- **L6 — `sequence` iterates an ACTIVITY-BOUND list, not only an input.** `sequence name in
-  c.legs_declared` where `c` is an activity result checks green (5 steps). Available, but §4.3 rules
-  it *out* for the census on purpose.
-- **L7 — the combinator vocabulary is `filter`, `map`, `sort`, `count`, `any`, `all`**
-  (`crates/aion-awl/src/ast/steps.rs:234-247`; `crates/aion-awl/src/checker/stages.rs:1-3`), and a
-  comparison predicate is legal in one: `waivers |> any(.ruled_by == "") -> anonymous` checks green,
-  as does `c.legs_declared |> count -> n` with `when n == 0`. **Proof 6's waiver refusal and R3's
-  zero-leg refusal are both expressible in the workflow, at input, before anything is provisioned.**
-- **L8 — the receipt's serialized field order IS its declaration order.** The emitter writes
-  `receipt_to_json` as `json.object([#("zeta", …), #("alpha", …), #("mid_field", …)])` in
-  declaration order, measured with a deliberately non-alphabetical type. The beam sidecar's
-  `required` array is likewise in declaration order (the `properties` *object* is alphabetised, so
-  `required` is the order witness, not `properties`). **R4 is satisfied by declaring the fields in
-  the ruled order, and it is mechanically checkable.**
-- **L9 — `aion awl fmt` has no `--check` mode.** Its own help says so: "the printer is the single
-  formatter, one rendering, so there is no `--check` mode." It rewrites in place. **It must not be
-  run as an acceptance step; `aion awl check` is the acceptance.**
-- **L10 — worker-document bodies admit no shell variables, so logic beyond one command lives in a
-  script file.** Not a preference — the stated language constraint and the standing first-party
-  precedent: `workflows/investigate/investigate_worker.awl:7-13`, whose actions are
-  `run json "sh /home/aion/fleet/bin/<op>.sh $params"` (`:28`), with the scripts' source of truth in
-  that folder's `bin/`. See §4.2 for the ruling this grounds.
+- **P0 — Reproduce (R1).** Full `aion-server` lib suite at this tree, `ulimit -n 65536`, twice.
+  Commit the failing output verbatim as red evidence, **in its own commit**, and record the
+  isolation-green observation beside it (isolation green is part of the record per R1).
+- **P1 — Diagnose (R2).** Re-run §3.2/§3.3/§3.4 independently. The probes are throwaway
+  instrumentation: they are reverted before P3, and the tree must be clean of them at every commit
+  that is not explicitly a diagnostic-evidence commit. Land the causal chain in
+  `.fleet/reports/lockfix.md`, naming the diff line examined (`crates/aion/src/engine/api.rs:323`),
+  the measurement that clears it, and the holder actually caught.
+- **P2 — Ruling gate.** If P1 confirms §3, adopt §4's refusal and §5's cure and say so in the
+  report. If P1 contradicts §3 — the engine line *does* carry the failure at the builder's hands —
+  abandon §5, cure the ordering as the brief anticipated, and carry the contradicting measurement.
+  Either way the report records which branch was taken and on what evidence. **The plan does not
+  get to be right; the measurement does.**
+- **P3 — Cure (R3).** §5.2/§5.3. Then update all 37 call sites (§5.5).
+- **P4 — Regression proof.** A test that fails without the cure and passes with it, at the
+  acquisition boundary — the honest one holds the lock on a `writer.lock` descriptor from a second
+  descriptor while a reopen runs, and asserts the reopen acquires within its ruled patience and
+  that a holder outliving the patience still returns `DataDirLocked` unchanged. No `#[ignore]`, no
+  runtime-gated skip unless the harness genuinely needs one (and then per CLAUDE.md: env var +
+  `tracing::info!` skip line + `Ok(())`, never `#[ignore]`).
+- **P5 — Prove (R4).** `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D
+  warnings`; full `aion-server` lib suite **green twice consecutively**; one
+  `cargo test --workspace --no-fail-fast` green. All at the builder's hands, result lines committed
+  verbatim in `.fleet/reports/lockfix.md`. R4's licence stands: if the restored behaviour is slower,
+  slow and correct beats fast and lying.
+- **P6 — Report.** `.fleet/reports/lockfix.md` carries: the R1 red lines, the R2 causal chain with
+  the refuted hypothesis named, the P2 branch taken, the cure and its call-site sweep, the P4
+  regression test, the R4 result lines, and any typed refusal.
+
+Gate scope is fixed by `.fleet/gate-entry.sh` and is not the builder's to edit.
 
 ---
 
-## 3. The substrate, measured — five things the builder must not re-derive
+## 7. Walls (they bind the plan and the builder equally)
 
-Measured here at this tree, with real runs, in `/tmp/fixproof`.
+From `.fleet/BRIEF.md:50-55` and CLAUDE.md, restated so no one has to go looking:
 
-**S1 — the source closure of `scripts/battery.sh` is exactly four files.** `battery.sh:66` sources
-`scripts/gates/lib.sh`; `lib.sh:243` sources `scripts/battery-costly-announcements.sh`; the
-estate-root walk (`battery.sh:98-104`) is conditional and finds nothing here. Both `battery.sh:56`
-and `verify-declaration.sh:48` derive `REPO_ROOT` from `BASH_SOURCE` — **script location, not git**.
-So the closure is `scripts/battery.sh`, `scripts/gates/lib.sh`, `scripts/gates/verify-declaration.sh`,
-`scripts/battery-costly-announcements.sh`, and a tree holding those four plus a `gates.json` is a
-runnable subject repo. **Measured: it is.** A two-leg fixture built exactly that way ran green
-(battery rc 0, `EXECUTED_LEGS fixture:reads-tree fixture:true`) and verify-declaration returned
-`VERDICT: exact match`, rc 0.
+1. No test deletion. 2. No assertion weakening. 3. No timeout inflation. 4. No added sleeps as
+synchronization. 5. **No lint suppressions in any spelling** — `#[allow]`, `#[expect]`, `#[deny]`,
+`_var` renames, `#[cfg(any())]` dead-code hiding are bypasses, not fixes. 6. **No ignore
+attributes.** 7. No file over 500 lines of code. 8. `mod.rs` is re-exports and `pub mod` only.
+9. `thiserror` for library errors (`anyhow` only in the binary). 10. **Never `.unwrap()` or
+`.expect()` in library code**; lock poison handled explicitly and mapped to a typed error.
+11. Red evidence as separate commits. 12. No arbitrary limits / no assumed defaults. 13. No
+backwards-compatibility shims — replace, don't add alongside. 14. Do not touch the live estate.
 
-**S2 — the `sh` hazard is real, loud, and early.** `sh ./scripts/battery.sh` → **rc 2**, dying at
-`battery.sh: 56: Bad substitution` (`${BASH_SOURCE[0]}`) and then
-`battery.sh: 66: .: cannot open //scripts/gates/lib.sh`. It never reaches the declaration read and
-emits no `EXECUTED_LEGS`. The brief's rule is confirmed with a file and a line: **invoke these
-scripts so their bash shebang is honoured, or invoke them as `bash <script>` — never `sh <script>`.**
-
-**S3 — a suppressed leg leaves the battery GREEN and only verify-declaration catches it.** Measured:
-`AION_BATTERY_ONLY="fixture:true" ./scripts/battery.sh` → **rc 0**, `0 of 1 gates failed`; the same
-log through `verify-declaration.sh` → **rc 1**, `🔴 DECLARED BUT NOT EXECUTED — the population
-shrank: fixture:reads-tree`. This is the `unproven` discriminator, and it is why §10.5's indictment
-bites: *the battery's own exit code cannot see this.* Proof 3 has its instrument, already committed
-in the subject repo, and the workflow's job is to **invoke** it.
-
-**S4 — a dead selector and a real drift are INDISTINGUISHABLE at the instrument.** Measured: a
-`gates.json` with `"legs": []` run through `verify-declaration.sh` exits **1** with "the declaration
-lists no legs"; a genuine declared-but-not-executed drift also exits **1**. Same code, different
-worlds. This is R3's collision, measured at this tree rather than argued — and it fixes *where* the
-discrimination must live: **in the workflow's own census, as a typed refusal naming the selector
-path, never inferred from an exit code.**
-
-**S5 — `gates.json` declares environment as NAMES ONLY, and exactly one leg does.** Leg 23
-`estate-guard` carries `"environment": ["ABLATIVE_ESTATE_ROOT"]`; the other 23 carry none. So
-Artemis's refinement — *confirm and record the VALUE, not merely that it is set* — is satisfiable:
-the name comes from the declaration, the value from the environment about to fire. Also measured:
-**no leg in aion's `gates.json` carries a literal absolute path.** `estate-guard`'s
-`"$ABLATIVE_ESTATE_ROOT/tools/gates/hooks/check_must_be_claimed.sh"` is **variable-rooted, not
-absolute**, and a checker that reds it would red aion's own honest declaration. §4.5 states the rule
-precisely so the builder does not over-refuse.
+Two of these have teeth in this specific cure: **(4)** — the patience is a real acquire that
+returns the instant the lock frees (measured 93–150 ms), not a fixed sleep, and the report must say
+so at the site; and **(12)** — the patience is a required parameter with no invented default, per
+the `node_cache_budget` precedent at `store.rs:285-291`.
 
 ---
 
-## 4. Design decisions, each ruled here so the builder does not re-open them
+## 8. Evidence appendix — verbatim result lines, planning counsel's hands
 
-### 4.1 The documents
+Box: 16 cores, 31 GiB, `ulimit -n 65536`, this working tree at `65f0bcac4`.
 
-New folder `workflows/repo-battery/`, per `workflows/README.md:45` ("Each directory carries its own
-README with the inputs it takes"):
+```
+# 3.1 clean reproduction, run 1
+test api::http::worker_deployments::tests::http_put_survives_a_second_server_state_over_the_same_store ... FAILED
+Error: Backend("haematite database error: data dir is locked by another live writer (writer lock held at
+  /tmp/.tmpJ5qNsM/worker-deployments.db/writer.lock); a second writer would corrupt the shard WALs — use
+  ReadOnlyDatabase to observe")
+test result: FAILED. 1155 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.31s
 
-| Path | What |
-|---|---|
-| `workflows/repo-battery/repo_battery.awl` | the workflow document — **ruled name `repo_battery`** |
-| `workflows/repo-battery/repo_battery_worker.awl` | the worker document — **ruled queue `lane_repo_battery`** |
-| `workflows/repo-battery/bin/*.sh` | the operation scripts (§4.2) |
-| `workflows/repo-battery/README.md` | inputs, how to run, what a green does not prove |
-| `workflows/repo-battery/proofs/` | phase-3 fixtures, harness, and receipts |
+# 3.1 clean reproduction, run 2
+Error: Backend("haematite database error: data dir is locked by another live writer (writer lock held at
+  /tmp/.tmpvCYy6I/worker-deployments.db/writer.lock); …")
+test result: FAILED. 1155 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.59s
 
-**No edit to `workflows/gate/gate.awl`, `workflows/gates/gates.awl`, or
-`workflows/gates/repo_gates.awl`.** All three verified present and untouched at this tree. v1 stays
-in service; F3 (`workflows/gates/README.md:300-311`) governs cut-over per repo, in a later lane.
+# 3.2 attribution: crates/aion/src/engine/api.rs:323 reverted to begin_close() — STILL RED
+test api::http::worker_deployments::tests::http_put_survives_a_second_server_state_over_the_same_store ... FAILED
+test result: FAILED. 1155 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.60s
 
-### 4.2 Worker document + committed scripts — RULED, with its reason
+# 3.3 the teardown releases what it owns
+PROBE strong_count = 1
+PROBE was_last_reference = true
+   (/proc/self/fd scan for writer.lock: no match)
 
-**Ruling: the mechanical logic lives in committed scripts under `workflows/repo-battery/bin/`,
-invoked by the worker document's bodies.** Not an SDK crate (Vesper's ruling: a crate brings a
-`Cargo.lock` that rots — sixteen out-of-workspace worker projects pinning beamr 0.6.1 through 0.18.2
-while the root moved to 0.19.3). Not 400-character single-quoted `sh -c` bodies carrying python
-either.
+# 3.4 the holder, caught
+PROBE holder pid "2849898" fd "566" cmdline [] status ["Name:\tworker::workspa", "State:\tR (running)",
+  "PPid:\t2838586", "Threads:\t1"]
+PROBE holder pid "2838280" fd "565" cmdline []
+PROBE lock free after 92.941257ms (3 attempts)
+PROBE lock free after 149.952797ms (3 attempts)
+PROBE lock free after 147.384551ms (3 attempts)
+   (test process own status in the same dump: Threads: 6757)
 
-The reason is a language constraint, not taste, and the repo states it:
-`workflows/investigate/investigate_worker.awl:7-13` — *"worker-document run bodies admit no shell
-variables (an AWL parameter is the only `$name` allowed), so any logic beyond one command lives in a
-script file"*. `investigate_ops` is a live first-party workflow built exactly this way.
+# 3.4 waiting for the lock turns the suite green, twice
+test result: ok. 1156 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.10s
+test result: ok. 1156 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.54s
 
-Three things make this consistent with Vesper's "the ONE command stays reviewable text at a sha":
+# 3.4 counter-check: the two tests alone, 2 threads — green, small process, no window
+test worker::workspace_root::tests::every_accepted_printable_ascii_root_survives_the_real_parser ... ok
+test api::http::worker_deployments::tests::http_put_survives_a_second_server_state_over_the_same_store ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1154 filtered out; finished in 9.45s
 
-1. A committed script **is** reviewable text at a sha, and its sha256 is witnessed into the receipt.
-2. The whole-cloth / no-runtime-path law is `gate.awl`'s closed vocabulary (`gate.awl:8-15`), which
-   this work is explicitly forbidden to edit and does not inherit.
-3. This workflow *already* resolves a path at run time by design — the provisioned tree's own
-   `scripts/battery.sh`. That is the reconciliation Vesper accepted and Artemis discharged. A rule
-   the design has deliberately set aside at its centre cannot be reimposed at its edge.
+# 3.5 the vanished latency
+target/debug/deps/aion_server-8f387436cc071bf6 = 188 MiB
+test result: ok. 1 passed; … finished in 18.64s
+  (api::http::worker_deployments::tests::capture_uses_build_identity_and_running_executable_sha256,
+   the same std::fs::read + Sha256 the PUT handler runs at worker_deployments.rs:70)
+```
 
-**Named for the landing desk as a planner's call**, so it is reviewed rather than assumed.
-
-### 4.3 The census is ONE activity, and that is deliberate
-
-L6 proves the workflow *could* iterate `legs_declared` with `sequence`. It must not. The declaration
-is read **once**, in one script, at one site: `bin/census-declaration.sh`.
-
-Reason, and it is R3's: the selector-perturbation arm needs a **single nameable selector site** to
-perturb. A selector smeared across a worker body, a workflow pipe chain and a step guard has three
-places to be right and no address to break. One site, one `file:line`, one arm that can aim at it.
-
-The battery does not need iteration anyway: `scripts/battery.sh` runs the whole declared list itself
-(`:226-239`) and reports per-leg rc in its manifest (`:264-274`). The workflow's job is to invoke,
-census, witness and report — never to re-run a list.
-
-### 4.4 The flow
-
-`admit` → `provision` → `precheck` → `battery` → `verify` → `receipt` → `teardown`.
-
-- **`admit`** — input validation, before anything is provisioned: a waiver missing its author is
-  refused here (`waivers |> any(.ruled_by == "")`, L7). Costs nothing; provisions nothing.
-- **`provision`** — clone/worktree the subject repo at the caller-named ref into a **run-owned tree**
-  under the venue's workspace root, never a person's checkout. Refusals are data, and a leftover
-  destination refuses rather than being deleted — `workflows/investigate/bin/clone.sh:26` is the
-  precedent, verbatim in register.
-- **`precheck`** — venue pre-checks **recorded, not assumed**: toolchain pin vs venue toolchain (with
-  targets), PATH order (rustup shim first), hydration state (G5: a declared refusal, **never an
-  auto-install** — an instrument must not mutate the venue it measures), and the per-leg declared
-  environment confirmed **by value** (§4.6).
-- **`battery`** — ONE whole-cloth command: run **the tree's own** `scripts/battery.sh`,
-  exit-zero-always, rc + log path + contended flag as data — the `gate_worker.awl:13-24` probe shape.
-  **No retry** (L2).
-- **`verify`** — run **the tree's own** `scripts/gates/verify-declaration.sh` against the battery
-  log. Its refusal IS the scope instrument (S3). Never reimplemented; the workflow holds no list.
-- **`receipt`** — the terminal typed report (§5).
-- **`teardown`** — run-owned tree only, root-guarded in the same script that does the `rm`, never a
-  separate command: `workflows/investigate/bin/teardown.sh:3-6,14-28`. Teardown obligations are
-  **surfaced, not assumed**, on every route that owns a tree.
-
-**No child workflows anywhere** — the cancellation contract abandons children. Every long leg under
-process-group containment; a cancelled leg reports **CANCELLED MEASUREMENT**, never a result.
-**The workflow timeout is the one duration**; no per-leg retry ladder.
-
-### 4.5 The absolute-path admission rule, stated precisely
-
-Refuse at admission a declared leg whose **command** contains a **literal absolute path** — a `/`
-beginning a path token, not preceded by a word character or `$`. Keyed on the **path inside the
-command**, never on the leg's name (§10.2: ten of thirteen estate gate lists carry such a leg under
-differing names).
-
-**A variable-rooted path is NOT an absolute path.** `"$ABLATIVE_ESTATE_ROOT/tools/…"` is a declared-
-environment leg (aion's own leg 23) and is handled by the environment pre-check, not by this rule.
-Measured (§S5): a rule that reds it would red aion's honest declaration on its first real run, which
-is how a correct instrument gets switched off.
-
-### 4.6 The environment pre-check, at Artemis's strength
-
-Not "confirmed set". For each name in a leg's declared `environment` block: **confirm and record the
-VALUE** for non-secret variables; **presence plus a digest** for anything secret-shaped. The reason
-is the correction's own: a variable set to a *different* value than the leg's scope assumes is the
-silent scope change itself, and it passes a set-check. The effective environment is **recorded in
-the receipt beside the frozen HEAD**, because receipts whose environments do not travel with their
-verdicts are not comparable — pass counts compare verdicts, not what was asked.
-
-Standing true receipt for the class, carried into the field docs: a leg whose tests read a
-`*_TEST_URL`-style variable and skip when unset measures a **different scope** with and without it,
-while reporting the same green.
+All probe instrumentation was reverted with `git checkout --`; `git status --porcelain` is empty
+apart from this wave's `.fleet/` deliverables.
 
 ---
 
-## 5. The receipt — R4 at full strength, now
+## 9. What would falsify this plan
 
-The terminal payload's fields are declared in **exactly this order**, and the order is load-bearing
-(L8: declaration order is the serialization order, every run):
+Stated so the builder can kill it cheaply rather than inherit it:
 
-1. `subject_repo` · 2. `ref_requested` · 3. `head_commit` · 4. `tree_path` ·
-5. `gates_json_sha256` · 6. `battery_sha256` · 7. `script_witnesses` (`[ScriptWitness]`, sorted by
-`path`) · 8. `venue` · 9. `environment` (`[EnvRecord]`, in declaration order per leg) ·
-10. `legs_declared` · 11. `legs_executed` · 12. `legs` (`[LegRecord]`: name, rc, status) ·
-13. `verify_verdict` · 14. `waivers` · 15. `verdict`.
-
-**R4, verbatim and binding: this stable-shape-and-order requirement is LOAD-BEARING NOW, at full
-strength, even though the drift check that consumes it is out of scope. Comparability cannot be
-retrofitted onto receipts already written, so this phase ships witnesses to the ordering discipline
-on the strength of a consumer that does not exist yet. A builder must not read "drift check out of
-scope" as licence to drop the ordering.**
-
-**Vocabulary, binding everywhere shas are described — in this plan, in both documents, in the field
-docs, in the README, in the reports: witness / record / attest. NEVER seal, NEVER pin.** A seal
-REFUSES on mismatch; this records the sha256 and proceeds — it tells you afterwards which bytes ran.
-And it cannot be a seal: the instrument lives inside the tree it measures, so there is no sha the
-operator can pin the subject repo against that the subject repo cannot also change. Pinning an
-expected sha in the operator's document is the two-lists problem wearing a different hat. Trust sits
-where it actually sits: the subject repo's review and its landing gate.
-*(Note: `gate_worker.awl:1-6` and `investigate_worker.awl:13` say "sealed" — pre-existing text,
-not this work's to edit and not this work's precedent.)*
-
-### The three sentences that must appear in the receipt type's own field docs
-
-Not in the `//!` header. In the **field documentation**, which L1 proves is a first-class AWL
-construct and which the beam sidecar carries as JSON-Schema `description` (§1.2) — because the
-reader who tidies this away will be holding the field docs, not the design paper.
-
-- **G2 — verdict inversion, on `verdict`.** A red gate routes to workflow SUCCESS; `Failed` is
-  reserved for could-not-measure; only `unproven` routes to failure. *With its reason:* the status
-  answers "did I measure?", the receipt answers "what did I measure?" — and a red gate reporting
-  SUCCESS is exactly the shape a later reader tidies away.
-- **R1 — the authority sentence, on the fields that name a ref and a venue.** "No new trust" is true
-  of the CODE and false of the VENUE: pre-existing, the self-gating hazard sat inside aion's own CI
-  under aion's authority; this workflow moves it to a fleet venue that may hold credentials, network
-  reach, and neighbours. Stated plainly: **A BATTERY RUNS WITH THE VENUE'S AUTHORITY, AND NAMING A
-  REF IS THEREFORE AN AUTHORITY-BEARING ACT.**
-- **R2 — `undeclared`'s explicit status, in the same field docs.** Workflow status **SUCCESS** (the
-  workflow measured the tree and found no contract — a determinate census result, not a
-  could-not-measure); receipt verdict the typed literal **`undeclared`**, which consumers **MUST**
-  treat as **not-a-verdict**: never green, never red, never pass-by-omission. A refusal with no
-  assigned status resolves to the runtime's default, and a repo with no `gates.json` must never be
-  able to read as a pass.
-
-Plus **R3**: `legs_declared` resolving to zero legs → **typed refusal naming the selector path**, no
-verdict. A census returns empty when its selector is dead, and that is byte-identical to the thing
-being absent; zero legs is a value that would compare, render, and pass proofs intact (S4 measured
-this at the instrument level).
-
-And: a declared leg that did not run → **`unproven`** — not red, not green. Waivers are per-run, each
-naming leg + reason + who ruled it; a green-with-waivers receipt lists its waived legs, because the
-denominator travels beside the verdict.
-
-**`legs_declared` comes from the provisioned tree's `gates.json`, NEVER from the venue.** Proof 8
-sits on this invariant's path.
-
----
-
-## 6. Requirement → phase map, with the venue split
-
-Phases are sequential. Nothing in phase 3 starts before phase 2 lands.
-
-### Phase 1 — the workflow: provision, invoke, receipt
-
-| # | Requirement | Anchor |
-|---|---|---|
-| P1.1 | `workflows/repo-battery/` created; new document pair; **no edit** to `gate.awl`/`gates.awl`/`repo_gates.awl` | brief §slice 1 |
-| P1.2 | Names: workflow `repo_battery`, queue `lane_repo_battery` | ruled; shape matches `workflows/gates/worker/src/main.rs:32` |
-| P1.3 | Flow `admit → provision → precheck → battery → verify → receipt → teardown` | §4.4 |
-| P1.4 | Battery leg invokes **the tree's own** `scripts/battery.sh`; never reimplemented | `scripts/battery.sh:42-45` |
-| P1.5 | Verify leg invokes **the tree's own** `scripts/gates/verify-declaration.sh`; never reimplemented | `verify-declaration.sh:6-18` |
-| P1.6 | **Never `sh <script>`** — bash shebang honoured or `bash <script>` explicitly | S2, measured rc 2 |
-| P1.7 | Exit-zero-always, refusal as typed data on every anticipated face | `gate_worker.awl:13-16` |
-| P1.8 | **No retry on battery legs**; workflow timeout is the one duration | L2 |
-| P1.9 | **No child workflows anywhere**; process-group containment; cancelled leg = CANCELLED MEASUREMENT | brief §slice 1 |
-| P1.10 | Run-owned tree under the venue workspace root; never a person's checkout | `clone.sh:14-34` |
-| P1.11 | Root-guarded teardown, guard in the same script as the `rm`; obligations surfaced | `teardown.sh:3-6,14-28` |
-| P1.12 | **fmt is never a gate** — and the workflow runs what the repo declares, including aion's `rust:fmt`. G4 is Vesper's to settle separately: build neither around it nor waiting on it | `gate.awl:40-42`; `gates.json` leg 0 |
-| P1.13 | Manual start only — no schedule, no cadence | `workflows/gates/README.md:290-293` |
-| P1.14 | `README.md` for the folder; `//!` header states what it measures and what that does not prove | `workflows/README.md:45,56-59` |
-
-### Phase 2 — the receipt attests its own scope, nothing wider
-
-| # | Requirement | Anchor |
-|---|---|---|
-| P2.1 | **R4** — the 15 fields in the ruled order, at full strength now | §5, L8 |
-| P2.2 | Shas **witnessed**; witness/record/attest vocabulary throughout; never seal, never pin | ruling |
-| P2.3 | **G2** verdict inversion + reason in the `verdict` field's own docs | §5, L1 |
-| P2.4 | **R1** authority sentence in the ref/venue field docs | §5, L1 |
-| P2.5 | **R2** `undeclared` = workflow SUCCESS + typed not-a-verdict literal, documented in the same field docs | §5, L3, L4 |
-| P2.6 | **R3** zero-leg census = typed refusal **naming the selector path**, no verdict | §5, S4, L7 |
-| P2.7 | Declared-but-not-run → `unproven`; only `unproven` routes to workflow failure | brief §slice 2 |
-| P2.8 | Absolute-path admission check keyed on the path **inside the command**; variable-rooted paths exempt | §4.5, S5 |
-| P2.9 | Missing `gates.json` → typed refusal `undeclared`, named reason, no verdict | §5 |
-| P2.10 | Waivers: leg + reason + **who ruled it**; anonymous waiver refused at input | L7 |
-| P2.11 | Venue pre-checks recorded not assumed: toolchain pin + targets, PATH order, hydration | brief §slice 2 |
-| P2.12 | **G5** hydration is a declared rc-3-style refusal, **never auto-install** | ruling 1(G5) |
-| P2.13 | Environment confirmed and recorded **by value** (digest if secret-shaped), beside the frozen HEAD | §4.6, S5 |
-| P2.14 | `legs_declared` from the **provisioned tree**, never the venue; ONE selector site | §4.3 |
-
-### Phase 3 — red-first proofs, positive control load-bearing
-
-Each proof is a committed receipt in the lane. **E** = executed at this venue, receipt committed now.
-**O** = owed at the landing desk: committed runnable artifact, typed refusal `venue_lacks_engine`
-recorded, execution receipt named as owed. **E+O** = the measurement half executes here, the engine
-routing half is owed.
-
-| # | Proof | Class | Instrument |
-|---|---|---|---|
-| 1 | Green end-to-end vs purpose-built positive-control fixture whose committed `gates.json` declares exactly what runs — **"the positive control is the load-bearing half"** | **E+O** | fixture built per S1; measured green here already |
-| 2 | Deliberate red leg → run completes, verdict red, finding carried, **status SUCCESS** | **E+O** | red fixture; status half structural offline, executed at landing |
-| 3 | verify-declaration refusal (a declared leg suppressed) → `unproven` | **E+O** | S3, measured: battery rc 0, verify rc 1 |
-| 4 | Missing `gates.json` → `undeclared` refusal, no verdict, **SUCCESS** | **E+O** | no-declaration fixture |
-| 5 | Absolute-path leg → refused at admission | **E** | admission is a body; no engine needed |
-| 6 | Malformed waiver (no author) → refused at input | **O** | workflow-level (L7); structural offline, executed at landing |
-| 7 | Mid-battery cancel → CANCELLED MEASUREMENT, no `GateResult` from the killed leg, teardown obligations surfaced not assumed | **E+O** | process-group containment measurable at shell level here; engine cancellation owed |
-| **8a** | **POSITIVE** — venue copy of `gates.json` differs from the provisioned tree's; assert the receipt reports the **TREE's**. *Does it read the right one?* | **E** | plant a divergent `gates.json` at the venue |
-| **8b** | **NEGATIVE + R3 selector extension** — prove the guard still **REFUSES** a wrong input (deleting a guard passes every positive arm identically), **and perturb the SELECTOR**: break the path by which `legs_declared` is read and require a **typed refusal, not an empty census**. *Does the assertion still run?* | **E** | one selector site (§4.3) gives the arm an address |
-| **8c** | **SUBSTITUTION** — run the proof with the VENUE ITSELF a git worktree, where path-derived and repo-derived resolution stop agreeing. *Is it right for the right reason, or agreeing by accident of layout?* | **E** | measured here: see below |
-
-**All three proof-8 arms execute at this venue.** That matters, because arm (c) is the one schedule
-pressure will try to drop and Artemis's endorsement is not to be softened by a builder — *redundancy
-pays only when copies differ in POSITION*. **Its premise is measured here, not cited:** inside a git
-worktree, `git rev-parse --show-toplevel` → the worktree, `--git-common-dir` → the original repo's
-`.git`, and a `dirname $0/..` script-derived root → the worktree. Path-derived and repo-derived
-resolution genuinely diverge. (`scripts/battery.sh:56` and `verify-declaration.sh:48` are
-`BASH_SOURCE`-derived and therefore worktree-correct; the hazard is in the *workflow's own*
-provisioning and census code, which is exactly what arm (c) aims at.)
-
-**Fixtures are BUILT, never committed as a second copy of the runner.** A committed builder script
-creates each fixture repo from its own committed `gates.json` plus copies of the four closure files
-(S1) taken **from the tree under test**, recording the source sha256 of each. Committing a second
-`battery.sh` under `proofs/` would be a second runner that rots — the exact defect this whole design
-exists to remove. Fixtures needed: `green` (positive control), `red`, `absolute-path`,
-`no-declaration`, `zero-legs`; proof 3 reuses `green` with `AION_BATTERY_ONLY`, 8a reuses `green`
-with a divergent venue copy, 8c reuses `green` provisioned as a worktree.
-
-**Perturbations are applied to a scratch COPY at proof time, never to the committed tree**, and the
-harness records the source sha of what it copied. Red evidence lands as **its own commit**, per the
-hard walls.
-
----
-
-## 7. Out of scope — the brief's own list, restated so the builder cannot drift into it
-
-Copied from `.fleet/BRIEF.md` "Out of scope, named". **None of these is this leg's work, in any
-phase, however tempting it looks once the workflow exists:**
-
-- **R3 repair loops** (aion#34 shape — its own brief after this lands).
-- **Schedules** — manual start only; the v1 ruling stands.
-- **Replacing v1 by count** — F3 parallel-run governs cut-over per repo, a later lane.
-- **Any edit to wave-1 `gate.awl`'s closed vocabulary.**
-- **Generalizing beyond the first subject repo** — aion is the first customer because block 28 just
-  made its declaration trustworthy; beamr and the rest follow the same shape only after F3 says so.
-
-Two more, from the rulings ledger, that a builder will mistake for in-scope work:
-
-- **The drift check across successive receipts** is the named follow-on and is **out of scope** —
-  but R4's ordering discipline it consumes is **in scope at full strength now** (§5). Out-of-scope
-  consumer, in-scope discipline. Do not collapse those.
-- **G4, the fmt tension** — aion's `gates.json` declares `rust:fmt` while STANDING ORDER 9 says fmt
-  is never a gate. **Hers to settle separately. Build neither around it nor waiting on it.** The
-  workflow runs what the repo declares; if the estate wants aion's fmt leg gone, that is a diff to
-  aion's `gates.json` under its own review, not a workflow opinion. Artemis's endorsement, not to be
-  softened: a suppressed leg is a second list one item long.
-
----
-
-## 8. Hard walls — binding on every commit of this leg
-
-1. **No lint suppressions in any spelling** — `#[allow]`, `#[expect]`, `#[deny]`, `_var` renames,
-   `#[cfg(any())]` dead-code hiding. If clippy fires, fix the code.
-2. **No `#[ignore]` on tests.** A test needing a runtime gates it at runtime: read an env var, emit a
-   `tracing::info!` skip line, return `Ok(())`.
-3. **No file over 500 lines of code** (excluding tests, comments, whitespace).
-4. **`mod.rs` re-exports only** — `pub mod` declarations and re-exports, logic in named files.
-5. **`thiserror` for library errors**; `anyhow` only in the binary.
-6. **Never `.unwrap()` or `.expect()` in library code.** Lock poison handled explicitly, mapped to a
-   typed error.
-7. **Red evidence as separate commits.**
-8. **Do not touch the live estate** — no network services, no databases. Env-gated tests skip where
-   their env is absent.
-9. `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` clean before any
-   commit.
-
----
-
-## 9. Acceptance
-
-1. `aion awl check workflows/repo-battery/repo_battery.awl` → `ok:` , exit 0.
-2. `aion awl check workflows/repo-battery/repo_battery_worker.awl` → `ok: … (worker
-   \`lane_repo_battery\`, N actions)`, exit 0.
-3. `aion worker awl --check workflows/repo-battery/repo_battery_worker.awl` → exit 0, and its JSON
-   surface committed as evidence (the advertised contract and the literal command per action).
-4. `aion awl emit --target beam` clean, and the sidecar asserted: the receipt's `required` array is
-   the 15 fields **in the §5 order** (R4), and the G2/R1/R2 sentences are present as field
-   `description`s (L1, §1.2). This assertion is a committed script, not a reading.
-5. `bash -n` clean on every `workflows/repo-battery/bin/*.sh` and every proofs script.
-6. `sh .fleet/gate-entry.sh` green (fmt + workspace clippy + workspace tests — the venue scope it
-   names in its own header; the full 24-leg battery is the landing desk's).
-7. Every **E** and **E+O** proof executed, its verbatim output committed under
-   `workflows/repo-battery/proofs/receipts/`, and summarised in `.fleet/reports/build.md`.
-8. Every **O** proof committed as a runnable artifact with its one-command invocation documented,
-   its `venue_lacks_engine` refusal recorded, and its execution receipt **named as owed** at the
-   landing desk. **No faked receipt. No silently dropped proof.**
-9. `aion awl fmt` **not** run (L9 — no `--check` mode; it rewrites in place).
-
----
-
-## 10. What this does not prove
-
-- **No live dispatch happened at this venue** (§1.2). The workflow's engine-side behaviour — routing
-  a red to SUCCESS, routing `undeclared` to SUCCESS, refusing an anonymous waiver at input, and
-  CANCELLED MEASUREMENT under a real cancel — is proven **structurally** here and **executably** at
-  the landing desk. Structural is labelled structural everywhere it appears; it is never called a
-  receipt.
-- **aion's own 24-leg battery has never been green at this venue and cannot be** (§1.1): `gleam` and
-  `uv` are absent and the estate root is absent. The positive control is a purpose-built fixture, as
-  the brief requires, and a green from it is a green of *that* declaration.
-- **verify-declaration compares NAMES.** Its own header says so (`verify-declaration.sh:33-36`): a
-  leg named `rust:clippy` whose command is `true` passes it. This workflow inherits that limit
-  exactly and must not be described as closing it.
-- **The receipt witnesses; it does not seal.** It tells you afterwards which bytes ran. It cannot
-  refuse on mismatch, and the reason is structural, not an omission (§5).
-- **The design paper could not be re-read** (§0). The brief's restatement is the operative authority
-  at this venue; that is a recorded venue fact, not a silently accepted citation.
+1. **§3.2 fails to reproduce** — if reverting `api.rs:323` turns the suite green at the builder's
+   hands, the engine line *is* load-bearing and §4's refusal is wrong. Take P2's second branch.
+2. **§3.3 shows `strong_count > 1`** — then something in-process does retain the store and the
+   diagnosis moves back inside this repo's teardown. Name the holder and cure it there.
+3. **The holder scan finds no external process, repeatedly, while the lock stays held** — then the
+   descriptor copy story is wrong and the holder is something neither of us has named; keep
+   scanning (`/proc/*/fd`, `State`, `PPid`) until it has a name. A cure aimed at an unnamed holder
+   is a guess.
+4. **The patience cure does not turn the suite green twice** — then the window is not bounded the
+   way §3.4 measured, and the ruling in §5.3 is the wrong shape. Report it as measured; do not
+   inflate the patience until it passes. An inflated patience is a timeout inflation wearing a
+   different hat, and R3's third wall names it.
