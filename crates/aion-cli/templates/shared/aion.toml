@@ -37,10 +37,20 @@ node_cache_budget = "unlimited"
 # descriptor is refused outright, and how long THIS deployment may wait on that
 # is not something this file can know for you. The values below are a starting
 # point, not a guarantee: 250 ms is roughly twice the 93-150 ms window measured
-# in three samples on a sixteen-core box. A busier machine can hold the lock
-# longer than the patience, and then the boot fails with haematite's "data dir is
-# locked by another live writer" — RAISE THE PATIENCE if you see that. Both spans
-# must be positive and the cadence must not exceed the patience.
+# in three samples on a sixteen-core box.
+#
+# If a boot fails with haematite's "data dir is locked by another live writer",
+# DIAGNOSE BEFORE TUNING. That message has two causes and only one of them is a
+# patience problem:
+#   * ANOTHER SERVER IS ALREADY RUNNING against this data directory. This is the
+#     common cause, and the refusal is protecting you: two live writers would
+#     corrupt the shard WALs. A longer patience only delays a correct refusal.
+#     Find the holder (`lsof <data_dir>/writer.lock`) and stop it.
+#   * THE INHERITED-DESCRIPTOR WINDOW described above, on a machine busier than
+#     the one these values were measured on. Only here is a longer patience the
+#     answer — and raise it to cover the window YOU measure, not by trial until
+#     the symptom stops.
+# Both spans must be positive and the cadence must not exceed the patience.
 lock_acquisition_patience_ms = 250
 lock_acquisition_retry_cadence_ms = 5
 # The database directory defaults to `<AION_HOME>/data`, created on start.
