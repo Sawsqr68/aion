@@ -117,3 +117,15 @@ reqwest = { version = "0.13.4", default-features = false, features = ["json", "r
 cap-std = "4.0.2"
 cap-fs-ext = "4.0.2"
 rustix = { version = "1.1.4", features = ["fs", "process"] }
+
+# The full workspace gate compiles every target, including the server's large
+# integration-test matrix. Debug info and incremental caches multiply that
+# build into tens of gigabytes without affecting what the tests exercise.
+# Keep gate builds compact enough to finish on bounded landing-desk storage.
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false
