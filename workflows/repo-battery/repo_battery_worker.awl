@@ -24,7 +24,7 @@ worker lane_repo_battery
 
 type Waiver { leg: String, reason: String, ruled_by: String }
 type ScriptWitness { path: String, sha256: String }
-type EnvRecord { name: String, present: Bool, secret: Bool, value: String, digest: String }
+type EnvRecord { leg: String, name: String, present: Bool, secret: Bool, value: String, digest: String }
 type LegRecord { name: String, rc: Int, status: String }
 
 type Receipt {

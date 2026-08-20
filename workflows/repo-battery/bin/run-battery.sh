@@ -18,10 +18,21 @@ log_path="$run_dir/battery.log"
 result_path="$run_dir/battery-result.json"
 mkdir -p "$run_dir"
 
-if [[ ! -x "$tree/scripts/battery.sh" ]]; then
+if [[ ! -f "$tree/scripts/battery.sh" || ! -r "$tree/scripts/battery.sh" ]]; then
   jq -cn --arg log_path "$log_path" \
-    '{measured:false, cancelled:false, rc:126, contended:false, log_path:$log_path, refusal:"scripts/battery.sh is absent or not executable"}'
+    '{measured:false, cancelled:false, rc:126, contended:false, log_path:$log_path, refusal:"scripts/battery.sh is absent or unreadable"}'
   exit 0
+fi
+
+if [[ -f "$run_dir/runtime-environment.json" ]]; then
+  while IFS=$'\t' read -r name value; do
+    printf -v "$name" '%s' "$value"
+    export "$name"
+  done < <(jq -r '.[] | [.name, .value] | @tsv' "$run_dir/runtime-environment.json")
+fi
+if only=$(worker_env_value AION_BATTERY_ONLY); then
+  AION_BATTERY_ONLY=$only
+  export AION_BATTERY_ONLY
 fi
 
 child_pid=""

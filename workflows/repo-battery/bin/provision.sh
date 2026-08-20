@@ -27,8 +27,15 @@ mkdir -p "$workspace_root"
 if ! git clone --quiet --no-checkout -- "$subject_repo" "$tree" 2>"$workspace_root/.repo-battery-clone-error"; then
   clone_error=$(cat "$workspace_root/.repo-battery-clone-error")
   rm -f "$workspace_root/.repo-battery-clone-error"
-  jq -cn --arg refusal "clone failed: $clone_error" \
-    '{ok:false, owns_tree:false, refusal:$refusal, tree_path:"", head_commit:""}'
+  owns_tree=false
+  tree_path=""
+  if [[ -e "$run_dir" || -e "$tree" ]]; then
+    owns_tree=true
+    tree_path=$tree
+  fi
+  jq -cn --argjson owns_tree "$owns_tree" --arg tree_path "$tree_path" \
+    --arg refusal "clone failed: $clone_error" \
+    '{ok:false, owns_tree:$owns_tree, refusal:$refusal, tree_path:$tree_path, head_commit:""}'
   exit 0
 fi
 rm -f "$workspace_root/.repo-battery-clone-error"

@@ -275,6 +275,9 @@
               "digest": {
                 "type": "string"
               },
+              "leg": {
+                "type": "string"
+              },
               "name": {
                 "type": "string"
               },
@@ -289,6 +292,7 @@
               }
             },
             "required": [
+              "leg",
               "name",
               "present",
               "secret",

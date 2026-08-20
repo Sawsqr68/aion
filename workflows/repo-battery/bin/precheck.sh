@@ -39,11 +39,12 @@ if [[ -f "$tree/rust-toolchain.toml" ]]; then
   if [[ -n "$toolchain" && "$actual" != "$toolchain" ]]; then
     refusal="rust toolchain mismatch: tree requests $toolchain but venue rustc is $actual"
   fi
+  rustup_path=$(command -v rustup || true)
   cargo_path=$(command -v cargo || true)
-  case "$cargo_path" in
-    "$HOME/.cargo/bin/"*) ;;
-    *) [[ -n "$refusal" ]] || refusal="PATH order refusal: rustup cargo shim is not first (resolved $cargo_path)" ;;
-  esac
+  rustup_dir=${rustup_path%/*}
+  if [[ -z "$rustup_path" || "$cargo_path" != "$rustup_dir/cargo" ]]; then
+    [[ -n "$refusal" ]] || refusal="PATH order refusal: rustup cargo shim is not first (resolved $cargo_path)"
+  fi
   while IFS= read -r target; do
     if ! rustup target list --installed --toolchain "$toolchain" | grep -Fxq "$target"; then
       [[ -n "$refusal" ]] || refusal="rust target missing for $toolchain: $target"
@@ -58,25 +59,29 @@ if [[ -f "$tree/bun.lock" || -f "$tree/bun.lockb" ]]; then
 fi
 
 environment='[]'
-while IFS= read -r name; do
+runtime_environment='[]'
+while IFS=$'\t' read -r leg name; do
   [[ -n "$name" ]] || continue
-  if [[ -v "$name" ]]; then
-    value=${!name}
+  if value=$(worker_env_value "$name"); then
+    runtime_record=$(jq -cn --arg name "$name" --arg value "$value" '{name:$name, value:$value}')
+    runtime_environment=$(jq -c --argjson record "$runtime_record" '. + [$record]' <<<"$runtime_environment")
     if secret_shaped "$name"; then
       digest=$(printf '%s' "$value" | sha256sum | awk '{print $1}')
-      record=$(jq -cn --arg name "$name" --arg digest "$digest" \
-        '{name:$name, present:true, secret:true, value:"", digest:$digest}')
+      record=$(jq -cn --arg leg "$leg" --arg name "$name" --arg digest "$digest" \
+        '{leg:$leg, name:$name, present:true, secret:true, value:"", digest:$digest}')
     else
-      record=$(jq -cn --arg name "$name" --arg value "$value" \
-        '{name:$name, present:true, secret:false, value:$value, digest:""}')
+      record=$(jq -cn --arg leg "$leg" --arg name "$name" --arg value "$value" \
+        '{leg:$leg, name:$name, present:true, secret:false, value:$value, digest:""}')
     fi
   else
-    record=$(jq -cn --arg name "$name" \
-      '{name:$name, present:false, secret:false, value:"", digest:""}')
+    record=$(jq -cn --arg leg "$leg" --arg name "$name" \
+      '{leg:$leg, name:$name, present:false, secret:false, value:"", digest:""}')
     [[ -n "$refusal" ]] || refusal="declared environment variable is absent: $name"
   fi
   environment=$(jq -c --argjson record "$record" '. + [$record]' <<<"$environment")
-done < <(jq -r '.environment_names[]' "$census_path")
+done < <(jq -r '.environment_specs[] | [.leg, .name] | @tsv' "$census_path")
+printf '%s\n' "$runtime_environment" >"$run_dir/runtime-environment.json"
+chmod 600 "$run_dir/runtime-environment.json"
 
 script_witnesses='[]'
 while IFS= read -r script; do

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 proof=${1:-}
+if [[ "$proof" == "3-unproven" && "${AION_BATTERY_ONLY:-}" != "fixture:true" ]]; then
+  exec env AION_BATTERY_ONLY=fixture:true "$0" "$proof"
+fi
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 proof_root="$repo/workflows/repo-battery/proofs"
 surface="$proof_root/evidence/worker-surface.json"
@@ -10,13 +13,33 @@ rm -rf "$scratch"
 mkdir -p "$scratch"
 
 command_for() { jq -r --arg action "$1" '.actions[] | select(.name == $action) | .command' "$surface"; }
+prepare_action() {
+  local action=$1
+  shift
+  local command
+  command=$(command_for "$action")
+  mapfile -d '' -t ACTION_ARGV < <(python3 - "$command" "$@" <<'PY'
+import shlex
+import sys
+
+command = sys.argv[1]
+values = dict(item.split("=", 1) for item in sys.argv[2:])
+for token in shlex.split(command):
+    if token.startswith("$") and token[1:] in values:
+        token = values[token[1:]]
+    sys.stdout.write(token)
+    sys.stdout.write("\0")
+PY
+  )
+}
 run_action() {
   local action=$1
   shift
   local command
   command=$(command_for "$action")
   printf '$ %s\n' "$command"
-  env "$@" bash -c "$command"
+  prepare_action "$action" "$@"
+  env -i PATH="$PATH" "${ACTION_ARGV[@]}"
 }
 build() {
   local fixture=$1
@@ -26,10 +49,11 @@ full_measurement() {
   local only=${1:-}
   run_action provision subject_repo="$scratch/source" ref_requested=HEAD workspace_root="$scratch/work" workflow_id=run
   run_action precheck workspace_root="$scratch/work" workflow_id=run
-  if [[ -n "$only" ]]; then
-    run_action battery workspace_root="$scratch/work" workflow_id=run AION_BATTERY_ONLY="$only"
-  else
+  if [[ -z "$only" || "$AION_BATTERY_ONLY" == "$only" ]]; then
     run_action battery workspace_root="$scratch/work" workflow_id=run
+  else
+    printf 'proof selector did not reach the harness process environment\n' >&2
+    exit 1
   fi
   run_action verify workspace_root="$scratch/work" workflow_id=run
   run_action receipt subject_repo="$scratch/source" ref_requested=HEAD workspace_root="$scratch/work" workflow_id=run waivers='[]'
@@ -66,9 +90,9 @@ case "$proof" in
     git -C "$scratch/source" commit -qm 'proof: slow battery'
     run_action provision subject_repo="$scratch/source" ref_requested=HEAD workspace_root="$scratch/work" workflow_id=run
     run_action precheck workspace_root="$scratch/work" workflow_id=run
-    command=$(command_for battery)
-    printf '$ %s & pid=$!; kill -TERM "$pid"; wait "$pid"\n' "$command"
-    env workspace_root="$scratch/work" workflow_id=run bash -c "$command" >"$scratch/cancel.out" &
+    printf '$ %s & pid=$!; kill -TERM "$pid"; wait "$pid"\n' "$(command_for battery)"
+    prepare_action battery workspace_root="$scratch/work" workflow_id=run
+    env -i PATH="$PATH" "${ACTION_ARGV[@]}" >"$scratch/cancel.out" &
     pid=$!
     sleep 1
     kill -TERM "$pid"
@@ -76,6 +100,12 @@ case "$proof" in
     cat "$scratch/cancel.out"
     printf 'post-cancel result: '
     cat "$scratch/work/run/battery-result.json"
+    if grep -q '^EXECUTED_LEGS ' "$scratch/work/run/battery.log"; then
+      printf 'unexpected completed leg manifest after cancellation\n' >&2
+      exit 1
+    fi
+    printf 'no completed EXECUTED_LEGS manifest after cancellation\n'
+    run_action teardown workspace_root="$scratch/work" workflow_id=run
     ;;
   8a-tree-source)
     build green
@@ -101,11 +131,11 @@ case "$proof" in
     bash "$scratch/census-perturbed.sh" "$scratch/source"
     ;;
   8c-worktree)
-    "$proof_root/build-fixture.sh" green "$repo" "$scratch/base"
-    git -C "$scratch/base" worktree add --detach "$scratch/source" HEAD >/dev/null
-    printf 'show-toplevel %s\n' "$(git -C "$scratch/source" rev-parse --show-toplevel)"
-    printf 'git-common-dir %s\n' "$(git -C "$scratch/source" rev-parse --git-common-dir)"
-    full_measurement
+    git -C "$repo" worktree add --detach "$scratch/venue" HEAD >/dev/null
+    printf 'venue show-toplevel %s\n' "$(git -C "$scratch/venue" rev-parse --show-toplevel)"
+    printf 'venue git-common-dir %s\n' "$(git -C "$scratch/venue" rev-parse --git-common-dir)"
+    printf '$ %s 1-green\n' "$scratch/venue/workflows/repo-battery/proofs/run-offline-proof.sh"
+    "$scratch/venue/workflows/repo-battery/proofs/run-offline-proof.sh" 1-green
     ;;
   *)
     printf 'unknown proof: %s\n' "$proof" >&2

@@ -18,6 +18,12 @@ log_path="$run_dir/battery.log"
 verify_log="$run_dir/verify.log"
 result_path="$run_dir/verify.json"
 
+if [[ ! -f "$log_path" || ! -r "$log_path" ]]; then
+  jq -cn --arg refusal "battery log is absent or unreadable: $log_path" \
+    '{measured:false, exact:false, verify_rc:2, verify_verdict:"", verdict:"", legs_executed:[], legs:[], refusal:$refusal}' | tee "$result_path"
+  exit 0
+fi
+
 set +e
 bash "$tree/scripts/gates/verify-declaration.sh" "$log_path" >"$verify_log" 2>&1
 verify_rc=$?
@@ -36,13 +42,18 @@ done < <(sed -n '/^================ BATTERY MANIFEST ================/,/^=======
 
 measured=true
 exact=false
-verdict="unproven"
-if [[ ! -f "$log_path" ]]; then measured=false; fi
+verdict=""
+refusal=""
 if [[ "$verify_rc" -eq 0 ]]; then
   exact=true
   if jq -e 'all(.[]; .status == "green")' <<<"$legs" >/dev/null; then verdict="green"; else verdict="red"; fi
+elif [[ "$verify_rc" -eq 1 ]]; then
+  verdict="unproven"
+else
+  measured=false
+  refusal="declaration verifier could not measure (rc $verify_rc): $verify_verdict"
 fi
 jq -cn --argjson measured "$measured" --argjson exact "$exact" --argjson verify_rc "$verify_rc" \
   --arg verify_verdict "$verify_verdict" --arg verdict "$verdict" \
-  --argjson legs_executed "$legs_executed" --argjson legs "$legs" \
-  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, refusal:""}' | tee "$result_path"
+  --arg refusal "$refusal" --argjson legs_executed "$legs_executed" --argjson legs "$legs" \
+  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, refusal:$refusal}' | tee "$result_path"

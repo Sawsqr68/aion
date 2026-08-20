@@ -33,6 +33,22 @@ secret_shaped() {
   esac
 }
 
+worker_env_value() {
+  local name=$1
+  local entry
+  if [[ -v "$name" ]]; then
+    printf '%s' "${!name}"
+    return 0
+  fi
+  [[ -r "/proc/$PPID/environ" ]] || return 1
+  while IFS= read -r -d '' entry; do
+    case "$entry" in
+      "$name="*) printf '%s' "${entry#*=}"; return 0 ;;
+    esac
+  done <"/proc/$PPID/environ"
+  return 1
+}
+
 require_directory() {
   local path=$1
   if [[ ! -d "$path" ]]; then

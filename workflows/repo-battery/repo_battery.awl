@@ -25,7 +25,7 @@ workflow repo_battery
 
 type Waiver { leg: String, reason: String, ruled_by: String }
 type ScriptWitness { path: String, sha256: String }
-type EnvRecord { name: String, present: Bool, secret: Bool, value: String, digest: String }
+type EnvRecord { leg: String, name: String, present: Bool, secret: Bool, value: String, digest: String }
 type LegRecord { name: String, rc: Int, status: String }
 
 /// The stable battery receipt. Declaration order is the required wire order.
@@ -147,39 +147,61 @@ step receipt
 
 step teardown_reported
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
   outcome carried: when r.receipt is present, route reported(r.receipt)
   outcome ghost: otherwise,
-    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: "", teardown_ok: cleaned.ok)
+    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
 
 step teardown_unproven
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
   outcome carried: when r.receipt is present, route unproven(r.receipt)
   outcome ghost: otherwise,
-    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: "", teardown_ok: cleaned.ok)
+    route refused(kind: "receipt_missing", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
 
 step teardown_undeclared
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route undeclared(subject_repo: subject_repo, ref_requested: subject_ref,
-    head_commit: p.head_commit, tree_path: p.tree_path, verdict: "undeclared",
-    refusal: c.refusal, teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route undeclared(subject_repo: subject_repo, ref_requested: subject_ref,
+      head_commit: p.head_commit, tree_path: p.tree_path, verdict: "undeclared",
+      refusal: c.refusal, teardown_ok: true)
 
 step teardown_provision_refused
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route refused(kind: "unprovisioned", reason: p.refusal, selector_path: "", teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "unprovisioned", reason: p.refusal, selector_path: p.tree_path, teardown_ok: true)
 
 step teardown_precheck_refused
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route refused(kind: c.kind, reason: c.refusal, selector_path: c.selector_path, teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: c.kind, reason: c.refusal, selector_path: c.selector_path, teardown_ok: true)
 
 step teardown_battery_refused
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route refused(kind: "cancelled_or_unmeasured_battery", reason: b.refusal,
-    selector_path: "", teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "cancelled_or_unmeasured_battery", reason: b.refusal,
+      selector_path: p.tree_path, teardown_ok: true)
 
 step teardown_verify_refused
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route refused(kind: "verify_unmeasured", reason: v.refusal, selector_path: "", teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "verify_unmeasured", reason: v.refusal, selector_path: p.tree_path, teardown_ok: true)
 
 step teardown_receipt_refused
   teardown(workspace_root: workspace_root, workflow_id: workflow.id) -> cleaned
-  route refused(kind: "receipt_unmeasured", reason: r.refusal, selector_path: "", teardown_ok: cleaned.ok)
+  outcome cleanup_refused: when not cleaned.ok,
+    route refused(kind: "teardown_refused", reason: cleaned.refusal, selector_path: p.tree_path, teardown_ok: false)
+  outcome done: otherwise,
+    route refused(kind: "receipt_unmeasured", reason: r.refusal, selector_path: p.tree_path, teardown_ok: true)
