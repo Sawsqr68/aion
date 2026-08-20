@@ -20,7 +20,14 @@ pub mod reopen;
 pub mod start;
 /// A runtime-armed hold between the completion doorbell and terminal registry
 /// reconciliation, used to pin issue #51 deterministically.
-mod terminal_reconcile_gate;
+///
+/// Crate-visible, not module-private: the window has more than one consumer, and
+/// the unload pin check (`engine::reload`) needs the same deterministic hold that
+/// `reopen` does — see aion#94, which is that window reached through the unload
+/// caller. Widening stops at the crate, and `arm` remains `#[cfg(test)]`, so the
+/// property this module's doc rests on is intact: no production caller can arm a
+/// gate even by mistake.
+pub(crate) mod terminal_reconcile_gate;
 /// Terminal workflow transitions: complete, fail, and cancel.
 pub mod terminate;
 /// Runtime suspend and resume transition helpers.
