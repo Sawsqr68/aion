@@ -67,6 +67,7 @@ async fn haematite_store_satisfies_worker_deployment_conformance_suite() -> Resu
                 Ok(Arc::new(HaematiteStore::open(
                     data_dir,
                     haematite::NodeCacheBudget::Unlimited,
+                    aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
                 )?) as Arc<dyn WorkerDeploymentStore>)
             })
         })),

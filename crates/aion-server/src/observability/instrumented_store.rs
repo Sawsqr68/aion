@@ -612,6 +612,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path(name),
                 haematite::NodeCacheBudget::Unlimited,
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
             )
             .await?,
         );
@@ -777,6 +778,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("fires"),
                 haematite::NodeCacheBudget::Unlimited,
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
             )
             .await?,
         );
@@ -820,6 +822,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("empty"),
                 haematite::NodeCacheBudget::Unlimited,
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
             )
             .await?,
         );
@@ -859,6 +862,7 @@ mod tests {
             HaematiteStore::open_or_create(
                 unique_temp_path("failed"),
                 haematite::NodeCacheBudget::Unlimited,
+                aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
             )
             .await?,
         );

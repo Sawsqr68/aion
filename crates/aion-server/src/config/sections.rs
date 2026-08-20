@@ -161,6 +161,12 @@ pub struct StoreConfig {
     ///
     /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`]: super::STORE_NODE_CACHE_BUDGET_REQUIRED
     pub node_cache_budget: Option<haematite::NodeCacheBudget>,
+    /// Maximum time production boot may spend acquiring an existing
+    /// haematite data-directory writer lock. Required for haematite; no default.
+    pub lock_acquisition_patience_ms: Option<u64>,
+    /// Cadence between production writer-lock attempts. Required together with
+    /// `lock_acquisition_patience_ms`; no default.
+    pub lock_acquisition_retry_cadence_ms: Option<u64>,
 }
 
 #[derive(Default, Deserialize)]
@@ -177,6 +183,8 @@ struct StoreConfigWire {
     shard_count: Option<usize>,
     cluster: Option<ClusterConfig>,
     node_cache_budget: Option<haematite::NodeCacheBudget>,
+    lock_acquisition_patience_ms: Option<u64>,
+    lock_acquisition_retry_cadence_ms: Option<u64>,
 }
 
 impl<'de> Deserialize<'de> for StoreConfig {
@@ -208,6 +216,8 @@ impl<'de> Deserialize<'de> for StoreConfig {
         }
         config.cluster = wire.cluster;
         config.node_cache_budget = wire.node_cache_budget;
+        config.lock_acquisition_patience_ms = wire.lock_acquisition_patience_ms;
+        config.lock_acquisition_retry_cadence_ms = wire.lock_acquisition_retry_cadence_ms;
         Ok(config)
     }
 }
@@ -945,6 +955,8 @@ impl Default for StoreConfig {
             // NOT a default: `None` is "the operator has not ruled", which the
             // haematite boot path turns into a refusal to start, not a guess.
             node_cache_budget: None,
+            lock_acquisition_patience_ms: None,
+            lock_acquisition_retry_cadence_ms: None,
             // 64, NOT 4096 (#187): raising the default to 4096 bricked every
             // fresh server — engine boot's scan_prefix materializes every
             // shard, then each haematite 0.4.0 commit fans out one thread +

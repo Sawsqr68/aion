@@ -608,9 +608,12 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     // captures one leaf and casts it to `EventStore` and `OutboxStore`) and what
     // haematite REQUIRES: the data directory carries an exclusive writer lock,
     // so a second `open_or_create` on the same path is refused.
-    let leaf =
-        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
-            .await?;
+    let leaf = HaematiteStore::open_or_create(
+        db_path.clone(),
+        haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+    )
+    .await?;
     let outbox_leaf = leaf.clone();
     let reader = leaf.clone();
     let state = ServerState::build_with_store(leaf, runtime_config(package_path)).await?;
@@ -842,9 +845,12 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     // captures one leaf and casts it to `EventStore` and `OutboxStore`) and what
     // haematite REQUIRES: the data directory carries an exclusive writer lock,
     // so a second `open_or_create` on the same path is refused.
-    let seeder =
-        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
-            .await?;
+    let seeder = HaematiteStore::open_or_create(
+        db_path.clone(),
+        haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+    )
+    .await?;
     let (workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
     // Boot the server over the same store; the terminal workflow is excluded
@@ -965,9 +971,12 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
     // captures one leaf and casts it to `EventStore` and `OutboxStore`) and what
     // haematite REQUIRES: the data directory carries an exclusive writer lock,
     // so a second `open_or_create` on the same path is refused.
-    let seeder =
-        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
-            .await?;
+    let seeder = HaematiteStore::open_or_create(
+        db_path.clone(),
+        haematite::NodeCacheBudget::Unlimited,
+        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5),
+    )
+    .await?;
     let (_workflow_id, dispatch_key) = seed_incident_state(&seeder).await?;
 
     let outbox_leaf = seeder.clone();
