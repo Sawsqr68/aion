@@ -2,11 +2,14 @@
 #
 # Proof of the vacuity scanner (bin/scan-vacuity.sh).
 #
-# 🔴 THIS PROOF NEVER PRINTS A MARKER. The thing under test scans battery logs
-# for an announcement token; if this proof echoed a matched line, that line would
-# land in the battery log of any run that executed this proof, and the next scan
-# would find the gate rather than the defect. Every arm below reports COUNTS,
-# ATTRIBUTION and VERDICTS only. Fixtures live in files, never in this output.
+# 🔴 THIS PROOF NEVER PRINTS A MARKER, AND THAT IS ENFORCED IN CODE. The thing
+# under test scans battery logs for an announcement token; if this proof echoed
+# a matched line, that line would land in the battery log of any run that
+# executed this proof, and the next scan would find the gate rather than the
+# defect. Every arm below reports COUNTS, ATTRIBUTION and VERDICTS only, and
+# every line printed after the markers are loaded passes through `emit`, which
+# refuses the whole proof rather than let a declared marker reach stdout. The
+# guard proves itself live before the arms run (see the self-check below).
 #
 # The arms exist because a scanner has two failure directions and only one of
 # them is loud. Missing an announcement (A, B, C2) ships a false green. Matching
@@ -45,6 +48,44 @@ if [[ -z "$INFRA_MARKER" ]]; then
   exit 1
 fi
 
+# 🔴 THE NO-MARKER OBLIGATION, IN CODE. Every output line of this proof passes
+# through here once the markers are known. A line carrying either declared
+# marker is refused outright: printing it would plant the very finding the
+# scanner exists to detect into the battery log of every run that executes this
+# proof, and the next scan would report the gate as the defect. The refusal text
+# deliberately does not quote the offending line — quoting it would commit the
+# same offence the guard exists to prevent.
+emit() {
+  local line=$1
+  case "$line" in
+    *"$MARKER"* | *"$INFRA_MARKER"*)
+      printf 'NON-VACUITY GUARD FAILED: an output line of this proof carries a declared\n'
+      printf 'marker and was suppressed. A proof that prints the token it scans for\n'
+      printf 'plants the finding into the log of every battery that runs it. Refusing.\n'
+      exit 1
+      ;;
+  esac
+  printf '%s\n' "$line"
+}
+
+# The guard proves itself before anything relies on it. In a subshell, with the
+# output captured and discarded, `emit` is handed a line carrying the marker: it
+# must refuse (non-zero). If it passes the line instead, the guard is dead and
+# this proof refuses to run arms behind it — a dead guard reporting 16 green
+# arms is exactly the false green this whole gate exists to end. The subshell
+# and the capture keep both the probe line and the refusal text out of this
+# proof's real output.
+if (emit "guard probe ${MARKER}guard probe") >/dev/null 2>&1; then
+  printf 'NON-VACUITY GUARD FAILED: the output guard passed a line carrying the\n'
+  printf 'declared vacuity marker. Refusing to run arms behind a dead guard.\n'
+  exit 1
+fi
+if (emit "guard probe ${INFRA_MARKER} guard probe") >/dev/null 2>&1; then
+  printf 'NON-VACUITY GUARD FAILED: the output guard passed a line carrying the\n'
+  printf 'declared infrastructure marker. Refusing to run arms behind a dead guard.\n'
+  exit 1
+fi
+
 failures=0
 checked=0
 
@@ -58,7 +99,7 @@ arm() {
   # one failed in the direction that looks like a finding.
   local marker=${7-$MARKER}
   local legs=${8-$FIXTURES/declared-legs.txt}
-  local out rc total unattr got
+  local out rc total unattr got line
   checked=$((checked + 1))
 
   set +e
@@ -67,21 +108,24 @@ arm() {
   set -e
 
   if [[ "$rc" -ne "$want_rc" ]]; then
-    printf 'ARM FAILED [%s]: exit %d, expected %d\n' "$name" "$rc" "$want_rc"
+    printf -v line 'ARM FAILED [%s]: exit %d, expected %d' "$name" "$rc" "$want_rc"
+    emit "$line"
     failures=$((failures + 1))
     return 0
   fi
   # A refusal has no JSON to read; its exit code IS the assertion.
   if [[ "$want_rc" -ne 0 ]]; then
-    printf '  %-46s refused as required (exit %d)\n' "$name" "$rc"
+    printf -v line '  %-46s refused as required (exit %d)' "$name" "$rc"
+    emit "$line"
     return 0
   fi
 
   total=$(jq -r '.total' <<<"$out")
   unattr=$(jq -r '.unattributed | length' <<<"$out")
   if [[ "$total" -ne "$want_total" || "$unattr" -ne "$want_unattr" ]]; then
-    printf 'ARM FAILED [%s]: total=%s unattributed=%s, expected total=%s unattributed=%s\n' \
+    printf -v line 'ARM FAILED [%s]: total=%s unattributed=%s, expected total=%s unattributed=%s' \
       "$name" "$total" "$unattr" "$want_total" "$want_unattr"
+    emit "$line"
     failures=$((failures + 1))
     return 0
   fi
@@ -93,11 +137,13 @@ arm() {
   # than whose.
   got=$(jq -r '[.legs[].name] | join(",")' <<<"$out")
   if [[ "$got" != "$want_legs" ]]; then
-    printf 'ARM FAILED [%s]: attributed to [%s], expected [%s]\n' "$name" "$got" "$want_legs"
+    printf -v line 'ARM FAILED [%s]: attributed to [%s], expected [%s]' "$name" "$got" "$want_legs"
+    emit "$line"
     failures=$((failures + 1))
     return 0
   fi
-  printf '  %-46s total=%s unattr=%s legs=[%s]\n' "$name" "$total" "$unattr" "$got"
+  printf -v line '  %-46s total=%s unattr=%s legs=[%s]' "$name" "$total" "$unattr" "$got"
+  emit "$line"
 }
 
 # ── A: a gleam-family announcement inside a leg frame is found and attributed.
@@ -190,12 +236,14 @@ arm 'H empty declaration refuses' 2 0 0 '' "$FIXTURES/a-gleam-family.log" "$MARK
 arm 'H2 absent declaration refuses' 2 0 0 '' "$FIXTURES/a-gleam-family.log" "$MARKER" "$FIXTURES/nope.txt"
 
 if [[ "$checked" -eq 0 ]]; then
-  printf 'NON-VACUITY GUARD FAILED: no arms ran, so this proof asserted nothing\n'
-  printf 'while reporting success.\n'
+  emit 'NON-VACUITY GUARD FAILED: no arms ran, so this proof asserted nothing'
+  emit 'while reporting success.'
   exit 1
 fi
 if [[ "$failures" -ne 0 ]]; then
-  printf '%d of %d vacuity arm(s) failed.\n' "$failures" "$checked"
+  printf -v line '%d of %d vacuity arm(s) failed.' "$failures" "$checked"
+  emit "$line"
   exit 1
 fi
-printf 'vacuity scanner ok: %d arms — miss, false match, and MIS-ATTRIBUTION all covered\n' "$checked"
+printf -v line 'vacuity scanner ok: %d arms — miss, false match, and MIS-ATTRIBUTION all covered; no-marker guard live' "$checked"
+emit "$line"
