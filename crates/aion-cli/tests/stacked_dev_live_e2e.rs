@@ -487,7 +487,7 @@ fn deploy_archive(
 /// 🔴 THE PIN (aion#115). The family is legacy zip-packaged, so its package
 /// contract records every activity UNSCOPED (`PackageContract::from_manifest`
 /// "never invents a queue"), and a queue-routed server — the only server
-/// posture — refuses the start with structural NO_QUEUE_DECLARATION.
+/// posture — refuses the start with structural `NO_QUEUE_DECLARATION`.
 /// Packaging and deploying both SUCCEED, so this assertion is the only thing
 /// in the estate that says the family cannot start. The day the family is
 /// re-authored to a scoped contract, the start succeeds, the refusal branch —
