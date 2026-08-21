@@ -859,12 +859,15 @@ retries, heartbeats, and cancellation are covered in the
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
-`aion deploy` has nothing to talk to without it; and three `[store]` fields
-haematite refuses to start without, none of which has a default anywhere:
-`node_cache_budget` (the byte ceiling its node caches may hold is a deployment
-decision), and `lock_acquisition_patience_ms` with
+`aion deploy` has nothing to talk to without it; and five fields the server
+refuses to start without, none of which has a default anywhere: three under
+`[store]` — `node_cache_budget` (the byte ceiling its node caches may hold is
+a deployment decision), and `lock_acquisition_patience_ms` with
 `lock_acquisition_retry_cadence_ms` (how long a node waits for the store lock,
-and how often it retries while waiting — cadence no greater than patience). (
+and how often it retries while waiting — cadence no greater than patience) —
+and two under `[observability]` — `max_batch_events` and `max_batch_hold_ms`
+(one durable commit re-persists the whole containing storage leaf, so the
+transcript batch bounds are a write-amplification decision). (
 `store.data_dir` is optional: omitted, it resolves under the Aion home, as
 described above.) The tuning knobs all have
 defaults and may be omitted — `runtime.query_timeout_ms` (10000),
@@ -894,6 +897,14 @@ lock_acquisition_patience_ms = 250  # REQUIRED, no default: how long this node
                                     # waits for the store lock before giving up
 lock_acquisition_retry_cadence_ms = 5   # REQUIRED, no default: how often it
                                     # retries while waiting; <= patience
+
+[observability]
+max_batch_events = 64               # REQUIRED, no default: most transcript
+                                    # events one durable commit carries (one
+                                    # commit re-persists the whole storage leaf)
+max_batch_hold_ms = 200             # REQUIRED, no default: how long a partial
+                                    # batch may be held open — bounds the
+                                    # transcript a crash can cost
 
 [runtime]
 # Reply deadline for workflow queries, in milliseconds. Optional; 10000 when omitted.

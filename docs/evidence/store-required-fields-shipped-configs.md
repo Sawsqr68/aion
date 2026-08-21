@@ -1,5 +1,22 @@
 # Ruling: required-with-no-defaults stands; the sweep was the failure
 
+> **Addendum, same day (the witness caught the ruling's own author).** The
+> first cut of this branch swept the three `[store]` fields — and the boot
+> witness then died on `observability.max_batch_events`, a fourth required
+> field this document's census never looked for. The census below was
+> originally scoped to the `[store]` section: it swept the CONTAINER the
+> defect was found in, not the CLAIM ("every required-no-default field
+> reaches every hand-written config"). The corrected census is driven by the
+> code — every `is required and has no default` message in
+> `crates/aion-server/src/config/defaults.rs` — and the unconditional set is
+> FIVE fields: the three `[store]` fields plus `observability.
+> max_batch_events` and `observability.max_batch_hold_ms`. (Two more are
+> conditionally required — `outbox.reconcile_*` when reconciliation is
+> enabled, `authoring.project_root` when `authoring.gleam_path` is set — and
+> no shipped config sets either enabler.) The standing rule at the bottom
+> gains its corollary: the sweep's floor is the CODE's required set, never
+> the section the last failure happened to be in.
+
 **Date:** 2026-08-21. **Author:** Vesper Lynd (delegated by Waffles,
 2026-08-21). **Trigger:** the first armed repo battery caught four e2e config
 templates refusing to boot (exit 2) because three `[store]` fields were added

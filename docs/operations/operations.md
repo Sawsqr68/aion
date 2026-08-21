@@ -95,8 +95,11 @@ compatibility mode. **0.17.0 is the last release that can read them** — keep a
 0.17.0 binary to reach an existing libSQL database before upgrading.
 
 Tuning knobs (`runtime.query_timeout_ms`, the websocket capacities, the
-deploy ceilings, the outbox knobs, the observability bounds) default when
-**omitted** but reject an explicit `0`. Validation failures are loud and
+deploy ceilings, the outbox knobs, `observability.max_event_bytes` and
+`observability.max_stream_events`) default when **omitted** but reject an
+explicit `0`. The transcript batch bounds are NOT tuning knobs:
+`observability.max_batch_events` and `observability.max_batch_hold_ms` are
+required and have no defaults, exactly like the three `[store]` fields. Validation failures are loud and
 name both the TOML key and its environment override, e.g.:
 
 ```
@@ -310,6 +313,16 @@ transport = "liminal"                   # default in the stock build (the
                                         # (workers connect in and self-register)
 
 [observability]
+max_batch_events = 64                   # REQUIRED, no default: most transcript
+                                        # events one durable commit carries —
+                                        # one commit re-persists the whole
+                                        # containing storage leaf, so this is
+                                        # a write-amplification decision
+max_batch_hold_ms = 200                 # REQUIRED, no default: how long a
+                                        # partial batch may be held open
+                                        # waiting to fill — bounds how much
+                                        # not-yet-durable transcript a crash
+                                        # can cost (0 = never wait)
 max_event_bytes = 262144                # default (256 KiB); ceiling on one
                                         # persisted transcript event's
                                         # serialized size (oversized events

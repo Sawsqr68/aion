@@ -384,6 +384,10 @@ lock_acquisition_retry_cadence_ms = 5
 [runtime]
 query_timeout_ms = 10000
 
+[observability]
+max_batch_events = 64
+max_batch_hold_ms = 200
+
 [outbox]
 enabled = true
 transport = &quot;liminal&quot;

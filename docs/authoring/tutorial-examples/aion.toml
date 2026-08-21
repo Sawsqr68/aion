@@ -33,6 +33,15 @@ lock_acquisition_retry_cadence_ms = 5
 [runtime]
 query_timeout_ms = 10000
 
+[observability]
+# Both REQUIRED, no defaults. One durable commit re-persists the whole
+# containing storage leaf, so the batch bounds are a write-amplification
+# decision: max_batch_events is the most transcript events one durable
+# commit carries; max_batch_hold_ms is how long a partial batch may be held
+# open (bounds how much not-yet-durable transcript a crash can cost).
+max_batch_events = 64
+max_batch_hold_ms = 200
+
 [outbox]
 # The liminal worker channel the tutorial's worker dials. Without it that
 # listener is never bound, and the worker's dial is refused with nothing on

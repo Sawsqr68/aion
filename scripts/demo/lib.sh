@@ -174,6 +174,10 @@ node_cache_budget = "unlimited"
 lock_acquisition_patience_ms = 250
 lock_acquisition_retry_cadence_ms = 5
 
+[observability]
+max_batch_events = 64
+max_batch_hold_ms = 200
+
 [store.cluster]
 node_id = "node-$i@$self_host"
 bind_address = "$self_host:$h_bind"
