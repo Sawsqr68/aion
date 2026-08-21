@@ -5,7 +5,25 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
-## 0.18.2 — 2026-08-21
+## 0.19.0 — 2026-08-21
+
+**Breaking.** This release moves public surfaces in six crates
+(cargo-semver-checks: 23 findings against 0.18.1), all deliberate:
+`HaematiteStore::open`/`open_or_create` now take the ruled lock-acquisition
+patience and cadence; the run-scoped read arc adds `RunSummary.started_seq`,
+`DescribeWorkflowResponse.generations`, and `EngineError::RunNotInHistory`;
+the server config family gains `jit_threshold` and the required
+store/observability fields; the MCP server's task and dispatch signatures
+are reworked; `DeclaredCommandDispatcher::new` and
+`cancel_in_flight_activities` grow a parameter; `ServerError` gains
+variants. Consumers upgrade by taking the new surfaces — this line ships no
+compatibility shims by ruling.
+
+*Release record:* a 0.18.2 cut of this same tree was partially published on
+2026-08-21 (17 of 21 crates) before the semver gate's verdict was ruled to
+mean what it said — these changes are a major step, not a patch. Every
+0.18.2 crate was yanked within minutes; 0.18.2 was never a release, and no
+tag exists for it.
 
 - **Haematite writer-lock acquisition is ruled and retried** (the rb-lockfix
   arc, PR #113): a node opening a busy store retries on an explicit

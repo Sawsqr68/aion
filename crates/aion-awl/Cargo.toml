@@ -16,7 +16,7 @@ categories = ["development-tools"]
 workspace = true
 
 [dependencies]
-aion-package = { version = "0.18.2", path = "../aion-package" }
+aion-package = { version = "0.19.0", path = "../aion-package" }
 beamr = { workspace = true }
 gleam-types = "0.4.3"
 serde_json.workspace = true
@@ -29,7 +29,7 @@ thiserror.workspace = true
 # accepts a command the executor would refuse, and that both bind exactly
 # the same parameter names. `aion-worker` does not depend on `aion-awl`, so
 # this creates no cycle, and nothing in `src/` may ever import it.
-aion-worker = { version = "0.18.2", path = "../aion-worker" }
+aion-worker = { version = "0.19.0", path = "../aion-worker" }
 flate2 = "1.1"
 # TEST ONLY: `tests/editor_assets.rs` digests the grammar sources that the
 # published mirror carries, so the Zed rev pin cannot silently name a mirror

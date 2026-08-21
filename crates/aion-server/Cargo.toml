@@ -16,45 +16,45 @@ categories = ["asynchronous", "development-tools"]
 workspace = true
 
 [dependencies]
-aion = { package = "aion-rs", version = "0.18.2", path = "../aion" }
-aion-proto = { version = "0.18.2", path = "../aion-proto", features = ["generated"] }
-aion-store = { version = "0.18.2", path = "../aion-store" }
+aion = { package = "aion-rs", version = "0.19.0", path = "../aion" }
+aion-proto = { version = "0.19.0", path = "../aion-proto", features = ["generated"] }
+aion-store = { version = "0.19.0", path = "../aion-store" }
 # The transcript serving boundary reconstructs the compacted provider envelopes
 # the harness adapters persist, so the neutral integration SDK — which owns that
 # format and both halves of its codec — is linked by a default build. It also
 # provides the `AgentHarness`/`AgentSession` seam the NOI-6 intervention e2e
 # drives an in-proc fake session through.
-aion-integrations = { version = "0.18.2", path = "../aion-integrations" }
+aion-integrations = { version = "0.19.0", path = "../aion-integrations" }
 # Haematite is the server's durable store in every build.
-aion-store-haematite = { version = "0.18.2", path = "../aion-store-haematite" }
+aion-store-haematite = { version = "0.19.0", path = "../aion-store-haematite" }
 # `store.node_cache_budget` is typed as haematite's own `NodeCacheBudget` and is
 # parsed through haematite's own serde repr, so there is exactly one parser for
 # that value.
 haematite = { workspace = true }
-aion-package = { version = "0.18.2", path = "../aion-package" }
+aion-package = { version = "0.19.0", path = "../aion-package" }
 # The declared-command executor (`aion_worker::shell`): the server runs an
 # action whose body is declared in its deployed contract WITHOUT a connected
 # worker, through the same argv-substitution/process-group containment the
 # worker SDK uses. Runtime dependency deliberately — the executor must be one
 # implementation, not a server-side copy that can drift from the SDK's.
-aion-worker = { version = "0.18.2", path = "../aion-worker" }
+aion-worker = { version = "0.19.0", path = "../aion-worker" }
 # Server-side authoring toolchain. It embeds NO Gleam compiler — it only
 # spawns the external `gleam` binary — so depending on it adds no compiler to
 # aion-server (CN7/C15). The authoring endpoints stay dark unless
 # `[authoring].gleam_path` is configured.
-aion-toolchain = { version = "0.18.2", path = "../aion-toolchain" }
+aion-toolchain = { version = "0.19.0", path = "../aion-toolchain" }
 # In-process AWL checker, semantic index, canonical printer, and stopgap emitter
 # used by the browser authoring facade.
-aion-awl = { version = "0.18.2", path = "../aion-awl" }
-aion-awl-package = { version = "0.18.2", path = "../aion-awl-package" }
+aion-awl = { version = "0.19.0", path = "../aion-awl" }
+aion-awl-package = { version = "0.19.0", path = "../aion-awl-package" }
 tokio = { workspace = true, features = ["full"] }
 axum = { workspace = true, features = ["ws"] }
 tonic = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-aion-core = { version = "0.18.2", path = "../aion-core" }
-aion-mcp = { version = "0.18.2", path = "../aion-mcp" }
+aion-core = { version = "0.19.0", path = "../aion-core" }
+aion-mcp = { version = "0.19.0", path = "../aion-mcp" }
 # Validates the MCP tool schemas the catalog tests pin; `default-features =
 # false` keeps the network/file schema resolvers out, exactly as the admission
 # path does.
@@ -124,7 +124,7 @@ signal-hook = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 # Audited owned-value wrapper that decodes every native ACL entry field from one
 # snapshot; keeps the server crate itself under the unsafe-code denial.
-aion-darwin-acl = { version = "0.18.2", path = "../aion-darwin-acl" }
+aion-darwin-acl = { version = "0.19.0", path = "../aion-darwin-acl" }
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 # Install ACL fixtures for the Darwin integration proofs; production decoding is
@@ -139,11 +139,11 @@ users = { version = "0.11.0", default-features = false }
 # feature. A default (non-test) build never pulls this; the worker feature is OFF
 # in the production dependency graph.
 aion-worker = { path = "../aion-worker", features = ["liminal-transport"] }
-aion-core = { version = "0.18.2", path = "../aion-core" }
+aion-core = { version = "0.19.0", path = "../aion-core" }
 # The SS-5b auto-failover test reuses the aion-rs SS-5 example-build helper,
 # which rebuilds the `hello-world` archive from source and advisory-locks the
 # build dir; these dev-deps back that helper for the haematite test build.
-aion-package = { version = "0.18.2", path = "../aion-package", features = ["test-support"] }
+aion-package = { version = "0.19.0", path = "../aion-package", features = ["test-support"] }
 fs4 = { workspace = true }
 # The dead-man-switch refusal pin registers a contract-CARRYING activity on a real
 # worker (`register_activity_with_contract`), which derives its wire schema from
@@ -158,7 +158,7 @@ tokio-tungstenite = { workspace = true }
 zip = { workspace = true }
 # Enable the aion-store recording test doubles (ShardSeamSpy) for the
 # decorator forwarding regression tests.
-aion-store = { version = "0.18.2", path = "../aion-store", features = ["test-support"] }
+aion-store = { version = "0.19.0", path = "../aion-store", features = ["test-support"] }
 
 [features]
 # Haematite is linked in every server build; only optional transports and the
