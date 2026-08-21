@@ -64,8 +64,7 @@ pub(super) fn await_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
             ctx.request_suspend(None);
             Ok(Term::NIL)
         }
-        Err(message) => Ok(error_result_term(ctx, &format!("await_child:{message}"))
-            .unwrap_or_else(|_| Term::NIL)),
+        Err(message) => error_result_term(ctx, &format!("await_child:{message}")),
     }
 }
 

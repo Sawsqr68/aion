@@ -48,8 +48,7 @@ pub(super) fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Resu
 
 /// Build a workflow refusal for a deliberate raise, or use the allocation reason.
 pub(super) fn raise_reason(ctx: &mut ProcessContext, message: &str) -> Term {
-    let Ok(term) = error_result_term(ctx, message) else {
-        return Term::NIL;
-    };
-    term
+    match error_result_term(ctx, message) {
+        Ok(term) | Err(term) => term,
+    }
 }
