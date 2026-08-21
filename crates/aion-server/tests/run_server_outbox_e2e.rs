@@ -299,7 +299,9 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
 /// shard, and `ReadOnlyDatabase` routes by the key itself, so today's observer
 /// cannot read these rows at all, let alone write one) — or a server-side test
 /// seam that can age a claim in place. Both are product decisions, not
-/// something this lane may invent; see the aion#35 report.
+/// something this lane may invent; tracked as aion#114 (the citation once read
+/// "the aion#35 report" — a report attached to the libsql-retirement umbrella,
+/// which closed 2026-08-18 and took the pointer with it).
 ///
 /// Left in its ORIGINAL single-boot form deliberately: that form is the honest
 /// statement of the contract. Runtime-gated (house convention) rather than
@@ -316,9 +318,10 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
             stderr,
             "SKIP (PROVES NOTHING): live reconciliation of a stale claim — not \
              established by this run. Needs a haematite concurrent seam with ROUTED \
-             reads, or a server-side claim-aging seam (haematite observer-capability \
-             item on Tom's docket, via aion#35). Set {CONCURRENT_SEAM_ENV} once the \
-             capability exists."
+             reads, or a server-side claim-aging seam (aion#114). No pinnable \
+             surface exists today — the absent capability IS the absence — so this \
+             announcement stands unpinned until #114 ships a surface. Set \
+             {CONCURRENT_SEAM_ENV} once the capability exists."
         );
         return Ok(());
     }

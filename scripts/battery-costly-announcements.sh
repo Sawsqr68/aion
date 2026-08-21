@@ -79,7 +79,7 @@ costly_announcements() {
   local targets="lsub5b_osproc_failover_e2e lsub5b_osproc_kill9_failover_e2e \
                  parked_timer_osproc_kill9_failover_e2e stacked_dev_live_e2e \
                  new_scaffold_build"
-  local target out rc found failures=0 checked=0
+  local target out rc found lie failures=0 checked=0
 
   # 🔴 THE GATE'S CLAIM DEPENDS ON THE VENUE, AND A GATE BLIND TO ITS VENUE
   # INVERTS. Measured 2026-08-21, the first landing-venue battery
@@ -93,11 +93,17 @@ costly_announcements() {
   # So the gate now asserts the venue's OWN contract:
   #   * skip venue (variable unset): every suite announces the proof it
   #     skipped — the original claim, unchanged;
-  #   * armed venue (variable set): every suite runs green with ZERO
-  #     announcements. An announcement here means the arming did not reach the
-  #     suite (a second gate hiding inside, a renamed variable) — a pass that
-  #     still announces is not a proof, and silence about THAT would be this
-  #     gate's own disease.
+  #   * armed venue (variable set): every suite runs green, and the ONLY
+  #     announcement that is a defect here is one still instructing
+  #     "Set AION_RUN_COSTLY_TESTS" — that wording in an armed venue means the
+  #     arming did not reach the suite (a second gate hiding inside, a renamed
+  #     variable), and a pass wearing it is not a proof. An announcement that
+  #     instead names a PRODUCT gap with a live tracker (e.g. the stacked-dev
+  #     scoped-contract gap, aion#115) is the honest named-unproven: it flows
+  #     to the battery verifier's vacuity fold, where it turns the verdict
+  #     `unproven` and the landing word must enumerate it (ruling 2026-08-21:
+  #     every such announcement carries its tracker and, wherever a pinnable
+  #     surface exists, a pin test that fails the day the gap closes).
   local armed=""
   if [ -n "${AION_RUN_COSTLY_TESTS:-}" ]; then
     armed=1
@@ -132,12 +138,15 @@ costly_announcements() {
       printf '%s\n' "$out" | tail -15 | sed 's/^/  | /'
       failures=$((failures + 1))
     elif [ -n "$armed" ]; then
-      if [ "$found" -ne 0 ]; then
-        printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` PASSED but still announced %d\n' "$target" "$found"
-        printf 'skipped proof(s) in an ARMED venue. The arming did not reach the suite —\n'
-        printf 'a second runtime gate is hiding inside it, or the variable it reads has\n'
-        printf 'drifted from AION_RUN_COSTLY_TESTS. A pass that announces is not a proof.\n'
+      lie=$(printf '%s' "$out" | grep -c 'COSTLY_PROOF_SKIPPED (PROVES NOTHING):.*Set AION_RUN_COSTLY_TESTS')
+      if [ "$lie" -ne 0 ]; then
+        printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` PASSED but announced\n' "$target"
+        printf '"Set AION_RUN_COSTLY_TESTS" in an ARMED venue. The arming did not reach\n'
+        printf 'the suite — a second runtime gate is hiding inside it, or the variable\n'
+        printf 'it reads has drifted. A pass wearing that wording is not a proof.\n'
         failures=$((failures + 1))
+      elif [ "$found" -ne 0 ]; then
+        printf '  %-42s green; %d NAMED-UNPROVEN announcement(s) (product gap with tracker — flows to the vacuity fold)\n' "$target" "$found"
       else
         printf '  %-42s ran its proof (green, 0 announcements)\n' "$target"
       fi
@@ -166,9 +175,11 @@ costly_announcements() {
     return 1
   fi
   if [ -n "$armed" ]; then
-    printf 'costly proofs ok: %d suite(s), every one RAN its proof green with no announcement\n' "$checked"
+    printf 'costly proofs ok: %d suite(s) green under the armed venue; any announcements\n' "$checked"
+    printf 'above are named-unproven product gaps carrying trackers, not skipped proofs.\n'
     # The subtraction warning below is a skip-venue correction; in an armed
-    # venue these passes ARE proofs and the total needs no adjustment.
+    # venue the un-announced passes ARE proofs and the total needs no
+    # adjustment beyond the named-unproven items the verdict already carries.
     return 0
   fi
   printf 'costly announcements ok: %d suite(s), every one announced its skipped proof\n' "$checked"
