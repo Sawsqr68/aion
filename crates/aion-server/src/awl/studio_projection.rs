@@ -1,4 +1,4 @@
-use aion_awl::{Document, TypeBody, TypeRef};
+use aion_awl::{Document, TypeBody, TypeRef, builtins::BUILTIN_TYPES};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -46,7 +46,7 @@ pub struct StudioAction {
 
 pub(super) fn build(document: &Document) -> StudioProjection {
     StudioProjection {
-        builtins: &["Bool", "Int", "Float", "String", "Nil", "Dir"],
+        builtins: &BUILTIN_TYPES,
         types: document
             .types
             .iter()
