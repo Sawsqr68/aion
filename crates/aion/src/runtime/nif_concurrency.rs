@@ -214,3 +214,55 @@ pub(super) fn collect_race_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
 pub(super) fn collect_map_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
     run_collect(args, ctx, CollectKind::All, "collect_map")
 }
+
+#[cfg(test)]
+mod allocation_failure_control {
+    use super::encoded_results;
+    use beamr::atom::Atom;
+    use beamr::native::ProcessContext;
+    use beamr::process::Process;
+    use beamr::term::Term;
+    use beamr::term::binary_ref::BinaryRef;
+    use beamr::term::boxed::Tuple;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn decode_result(term: Term) -> Result<(Term, String), Box<dyn std::error::Error>> {
+        let tuple = Tuple::new(term).ok_or("result should be a tuple")?;
+        let tag = tuple.get(0).ok_or("result should have a tag")?;
+        let payload = tuple.get(1).ok_or("result should have a payload")?;
+        let binary = BinaryRef::new(payload).ok_or("payload should be a binary")?;
+        let text = String::from_utf8(binary.as_bytes().to_vec())?;
+        Ok((tag, text))
+    }
+
+    #[test]
+    fn control_empty_results_encode_successfully() -> TestResult {
+        let mut ctx = ProcessContext::new();
+
+        let result = encoded_results(&mut ctx, &[]);
+        let (tag, payload) = decode_result(result)?;
+
+        println!("CONTROL healthy empty: tag=ok payload={payload}");
+        assert_eq!(tag, Term::atom(Atom::OK));
+        assert_eq!(payload, "[]");
+        Ok(())
+    }
+
+    #[test]
+    fn control_allocation_failure_is_the_empty_list_value() {
+        let mut process = Process::new(1, 0);
+        process.heap_mut().set_max_capacity(0);
+        let mut ctx = ProcessContext::new();
+        ctx.attach_process(&mut process, 0);
+
+        let failed_result = encoded_results(&mut ctx, &[]);
+        let legitimate_empty_result = Term::NIL;
+
+        println!(
+            "CONTROL failed allocation: returned={failed_result:?} legitimate_empty={legitimate_empty_result:?} equal={}",
+            failed_result == legitimate_empty_result
+        );
+        assert_eq!(failed_result, legitimate_empty_result);
+    }
+}
