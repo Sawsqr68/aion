@@ -470,4 +470,5 @@ async fn dispatch_via_seam(
     .map_err(test_error)
 }
 
+#[path = "bridge_liminal_dispatch_e2e/bridge_liminal_dispatch_cases.rs"]
 mod bridge_liminal_dispatch_cases;
