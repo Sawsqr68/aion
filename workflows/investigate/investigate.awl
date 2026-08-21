@@ -80,6 +80,26 @@ workflow investigate
   outcome unreported:          type Unreported,         route failure
   outcome unfiled:             type Unfiled,            route failure
 
+const report_contract = """
+
+REPORT CONTRACT — write exactly one JSON object to repo/.investigation/report.json with these fields:
+- `schema_version`: required String.
+- `issue`: required String.
+- `repo`: required String.
+- `head_commit`: required String.
+- `verdict`: required Verdict, exactly one bare string: Reproduced, NotReproduced, AlreadyFixed, NeedsInfo, or WrongRepo.
+- `summary`: required String.
+- `evidence`: required list of Evidence objects; the list may be empty. Every Evidence object has required `path` (String), `line` (Int — a JSON integer literal, not a float), and `excerpt` (String).
+- `repro`: optional String. OMIT the field when absent; if present it must be a prose string, never an object, array, or null.
+- `proposed_fix`: optional String. OMIT the field when absent; if present it must be a prose string, never an object, array, or null.
+- `confidence`: required String.
+An absent optional field conforms; an explicit null does not. Do not turn `repro` or `proposed_fix` into structured JSON.
+
+The derived machine-readable schema follows:
+"""
+
+const report_contract_full = report_contract + schema of InvestigationReport
+
 /// The issue under investigation. `tracker` names the seam: v1 serves
 /// `github` and refuses anything else by name. `number` is a string because
 /// it is an argument to the tracker's CLI, never arithmetic.
@@ -242,7 +262,7 @@ step prove
   outcome broken: otherwise, route teardown_unmeasured
 
 step investigation
-  investigate(repo: cloned.path, prompt: investigate_prompt) -> reply
+  investigate(repo: cloned.path, prompt: investigate_prompt + report_contract_full) -> reply
   outcome answered: when reply.stop_reason == "end_turn", route harvest
   outcome broken: otherwise, route teardown_unanswered
 

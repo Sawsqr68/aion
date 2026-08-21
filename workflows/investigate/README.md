@@ -42,13 +42,13 @@ aion worker agent workflows/investigate/investigate.awl \
 
 ## Dispatch
 
-The dispatcher builds two prompts (AWL composes no strings at runtime):
-`control_prompt` — quote a literal at a known path in the clone, reply
-exactly; `investigate_prompt` — the issue, the threshold that fired, the
-deliverable path `repo/.investigation/report.json` RELATIVE TO THE SESSION
-CWD (the clone), and the report schema (derive it:
-`aion awl schema workflows/investigate/investigate.awl --type
-InvestigationReport`; `verdict` is one of the bare enum strings).
+The dispatcher builds two prompts: `control_prompt` — quote a literal at a
+known path in the clone, reply exactly; `investigate_prompt` — the issue, the
+threshold that fired, and the deliverable path
+`repo/.investigation/report.json` RELATIVE TO THE SESSION CWD (the clone).
+The workflow appends the complete prose contract and the derived
+`InvestigationReport` schema to `investigate_prompt` at compile time, so the
+dispatcher does not carry or reproduce the field contract.
 
 Deterministic-id idempotency is NOT expressible on today's start surface
 (stated gap in the document header): carry
