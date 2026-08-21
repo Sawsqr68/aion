@@ -267,22 +267,6 @@ mod tests {
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-    fn started(run: u128) -> TestResult<Event> {
-        Ok(Event::WorkflowStarted {
-            envelope: EventEnvelope {
-                seq: 1,
-                recorded_at: Utc::now(),
-                workflow_id: WorkflowId::new(Uuid::nil()),
-            },
-            workflow_type: "wf".to_owned(),
-            input: Payload::from_json(&json!(null))?,
-            run_id: RunId::new(Uuid::from_u128(run)),
-            parent_run_id: None,
-            parent_workflow_id: None,
-            package_version: aion_core::PackageVersion::new("a".repeat(64)),
-        })
-    }
-
     #[test]
     fn parse_mock_reads_every_explicit_kind() -> TestResult {
         assert!(matches!(

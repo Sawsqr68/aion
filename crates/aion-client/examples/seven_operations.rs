@@ -102,7 +102,10 @@ async fn run() -> Result<(), ClientError> {
     println!("listed {} workflow(s)", summaries.len());
 
     let description = handle.describe().await?;
-    println!("described {} event(s)", description.history.len());
+    println!(
+        "described through history sequence {}",
+        description.history_head_seq
+    );
 
     handle
         .cancel("seven-operations example requested cancellation")

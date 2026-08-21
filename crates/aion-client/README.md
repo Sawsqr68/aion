@@ -154,7 +154,7 @@ let summaries = client
 
 ```rust
 let description = handle.describe().await?;
-println!("history events: {}", description.history.len());
+println!("history head sequence: {}", description.history_head_seq);
 println!(
     "display name: {}",
     description.summary.display_name.as_deref().unwrap_or("(unnamed)")

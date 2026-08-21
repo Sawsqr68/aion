@@ -596,6 +596,16 @@ async fn execute_describe(
     let wf_id = workflow_id(input_str(input, "workflowId").unwrap_or_default())?;
     let run_id = optional_run_id(input_str(input, "runId"))?;
     let description = client.describe(&wf_id, run_id.as_ref()).await?;
+    let mut history = Vec::new();
+    let mut from_seq = Some(1);
+    loop {
+        let page = client.read_history(&wf_id, from_seq, None).await?;
+        history.extend(page.events);
+        let Some(next) = page.next_from_seq else {
+            break;
+        };
+        from_seq = Some(next);
+    }
     Ok(json!({
         "kind": "workflowDescription",
         "workflowId": description.summary.workflow_id.to_string(),
@@ -606,7 +616,7 @@ async fn execute_describe(
         // the server recorded, must diverge here rather than pass quietly.
         // `null` is the observable for an unnamed workflow.
         "displayName": description.summary.display_name,
-        "history": description.history.iter().map(normalize_event).collect::<Vec<_>>()
+        "history": history.iter().map(normalize_event).collect::<Vec<_>>()
     }))
 }
 

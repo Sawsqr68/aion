@@ -266,7 +266,7 @@ Caller-side error semantics:
 |---|---|
 | `unknown_query` | No handler registered under that name — wrong name, or the workflow has not reached its registration code yet. |
 | `query_timeout` | No reply within `runtime.query_timeout_ms` — the workflow is busy between yield points. |
-| `not_running` | The run is terminal (completed/failed/cancelled/timed out) or otherwise unable to answer live. **Querying a completed run is an error by design** — inspect terminal runs with `aion describe`, which reads history. |
+| `not_running` | The run is terminal (completed/failed/cancelled/timed out) or otherwise unable to answer live. **Querying a completed run is an error by design** — inspect terminal runs with `aion describe`, which reports bounded current and terminal facts; `aion inspect` reads history through a cursor. |
 | `query_failed` | The handler ran and reported an application-level failure. |
 
 See the [errors reference](../operations/errors.md) for the full taxonomy.

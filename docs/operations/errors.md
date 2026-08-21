@@ -67,7 +67,7 @@ Once a run reaches a terminal status — `Completed`, `Failed`, `Cancelled`,
 | Operation on a terminal run | Result |
 |---|---|
 | `aion query <id> <name>` | `error[not_running]` — **expected**, not a bug. Queries are live reads answered by the running workflow; a terminal run answers nothing. Read its recorded state with `describe`. |
-| `aion describe <id>` | Works — describe reads recorded history and works forever. |
+| `aion describe <id>` | Works — describe returns bounded summary and terminal facts and works at any history length. |
 | `aion list` | The run appears with its terminal status. |
 | `aion signal <id> <name>` | Refused — a terminal run rejects signals; nothing is appended after the terminal event. |
 | `aion cancel <id>` | No effect — the run already has its terminal event, and status is a projection of history. |
