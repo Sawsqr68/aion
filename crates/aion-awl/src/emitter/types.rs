@@ -18,6 +18,7 @@ use serde_json::Value;
 
 use crate::Span;
 use crate::ast::{Document, TypeBody, TypeRef};
+use crate::builtins::RESERVED_NAMES;
 
 use super::error::EmitError;
 use super::names::{UpperNames, snake};
@@ -242,7 +243,7 @@ pub(crate) fn type_ref_to_g(ty: &TypeRef) -> GType {
 /// and enum variant constructors), then schema-door projections.
 pub(crate) fn build_env(document: &Document, root: Option<&Path>) -> Result<TypeEnv, EmitError> {
     let mut env = TypeEnv::default();
-    for builtin in ["Bool", "Int", "Float", "String", "Nil", "True", "False"] {
+    for builtin in RESERVED_NAMES {
         env.names.claim(builtin);
     }
     register_declared(document, &mut env)?;

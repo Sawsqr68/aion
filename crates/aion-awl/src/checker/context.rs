@@ -167,9 +167,6 @@ pub(super) struct Ctx<'a> {
     pub(super) errors: Vec<CheckError>,
 }
 
-/// Builtin type names, reserved against redeclaration.
-pub(super) const BUILTIN_TYPES: [&str; 6] = ["Bool", "Int", "Float", "String", "Nil", "Dir"];
-
 impl<'a> Ctx<'a> {
     pub(super) fn new(doc: &'a Document, root: Option<&'a Path>) -> Self {
         Self {

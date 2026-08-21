@@ -2,16 +2,8 @@
 
 use std::error::Error;
 
+use aion_awl::builtins::RESERVED_NAMES;
 use aion_awl::{CheckError, EmitError, check, emit, parse};
-
-// Red-first inventory. The fix replaces this temporary test copy with the
-// crate's single public authority so production and test readers cannot drift.
-const RESERVED_NAMES: [&str; 8] = [
-    "Bool", "Int", "Float", "String", "Nil", "Dir", "True", "False",
-];
-const ROUND_TRIP_NAMES: [&str; 9] = [
-    "Bool", "Int", "Float", "String", "Nil", "Dir", "True", "False", "Foo",
-];
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -49,6 +41,36 @@ fn schema_probe(name: &str) -> String {
     )
 }
 
+fn synthesis_probe(name: &str) -> String {
+    format!(
+        "//! Emitter reservation probe.\n\
+         workflow synthesis_probe\n\
+         \x20 input envelope: Envelope\n\
+         \x20 outcome done: type String, route success\n\
+         \n\
+         type Envelope = schema {{\n\
+         \x20 \"type\": \"object\",\n\
+         \x20 \"required\": [\"payload\"],\n\
+         \x20 \"properties\": {{\n\
+         \x20   \"payload\": {{ \"$ref\": \"#/$defs/{name}\" }}\n\
+         \x20 }},\n\
+         \x20 \"$defs\": {{\n\
+         \x20   \"{name}\": {{\n\
+         \x20     \"type\": \"object\",\n\
+         \x20     \"required\": [\"value\"],\n\
+         \x20     \"properties\": {{ \"value\": {{ \"type\": \"string\" }} }}\n\
+         \x20   }}\n\
+         \x20 }}\n\
+         }}\n\
+         \n\
+         worker synthesis_probe\n\
+         \x20 action render(envelope: Envelope) -> String\n\
+         \n\
+         step run\n\
+         \x20 envelope |> render |> route done\n"
+    )
+}
+
 fn check_reason(errors: &[CheckError]) -> Option<&str> {
     errors.first().map(|error| error.message.as_str())
 }
@@ -78,8 +100,30 @@ fn every_reserved_name_is_refused_by_both_surfaces_for_the_same_reason() -> Test
 }
 
 #[test]
+fn emitter_preclaims_every_name_the_checker_reserves() -> TestResult {
+    for name in RESERVED_NAMES {
+        let document = parse(&synthesis_probe(name))?;
+        assert!(
+            check(&document).is_empty(),
+            "synthesis probe for `{name}` must check cleanly"
+        );
+        let emitted = emit(&document)?;
+        assert!(
+            emitted.contains(&format!("pub type {name}2 {{")),
+            "emitter did not pre-claim reserved name `{name}`"
+        );
+    }
+    let foo = emit(&parse(&synthesis_probe("Foo"))?)?;
+    assert!(
+        foo.contains("pub type Foo {"),
+        "unreserved control must keep the unsuffixed name `Foo`"
+    );
+    Ok(())
+}
+
+#[test]
 fn checker_and_emitter_acceptance_round_trip_for_reserved_names_and_control() -> TestResult {
-    for name in ROUND_TRIP_NAMES {
+    for name in RESERVED_NAMES.into_iter().chain(["Foo"]) {
         let document = parse(&declaration_probe(name))?;
         let check_accepts = check(&document).is_empty();
         let emit_accepts = emit(&document).is_ok();
@@ -108,7 +152,10 @@ fn schema_of_keeps_referenceable_and_reserved_roles_distinct() -> TestResult {
     }
     for name in ["True", "Foo"] {
         let document = parse(&schema_probe(name))?;
-        assert!(!check(&document).is_empty(), "schema of {name} must fail check");
+        assert!(
+            !check(&document).is_empty(),
+            "schema of {name} must fail check"
+        );
         assert!(emit(&document).is_err(), "schema of {name} must fail emit");
     }
     Ok(())

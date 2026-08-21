@@ -16,14 +16,12 @@
 
 use std::collections::BTreeSet;
 
+use aion_awl::builtins::BUILTIN_TYPES;
 use aion_awl::guide::GrammarPosition;
 use aion_awl::{Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, Token, TokenKind};
 use lsp_types::{CompletionItem, CompletionItemKind, Position};
 
 use crate::analysis::byte_offset_at;
-
-/// The built-in leaf types an author can write without declaring anything.
-const BUILTIN_TYPES: [&str; 4] = ["String", "Int", "Float", "Bool"];
 
 // What the cursor is positioned to receive — decided from the text before
 // the cursor, never from a syntax tree; see the module note. The positions

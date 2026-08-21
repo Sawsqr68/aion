@@ -4,8 +4,9 @@
 use std::rc::Rc;
 
 use crate::ast::{ParamDecl, TypeBody, TypeDecl, TypeRef};
+use crate::builtins::RESERVED_NAMES;
 
-use super::context::{BUILTIN_TYPES, Callable, Ctx, Param};
+use super::context::{Callable, Ctx, Param};
 use super::project::project_door;
 use super::types::{EnumTy, FieldTy, RecordTy, Ty};
 
@@ -52,10 +53,13 @@ pub(super) fn run(ctx: &mut Ctx<'_>) {
 fn register_type_names(ctx: &mut Ctx<'_>) {
     let doc = ctx.doc;
     for decl in &doc.types {
-        if BUILTIN_TYPES.contains(&decl.name.as_str()) {
+        if RESERVED_NAMES.contains(&decl.name.as_str()) {
             ctx.error(
                 decl.name_span,
-                format!("`{}` is a builtin type and cannot be redeclared", decl.name),
+                format!(
+                    "`{}` is reserved and cannot be declared as a type",
+                    decl.name
+                ),
             );
             continue;
         }

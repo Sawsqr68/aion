@@ -7,6 +7,7 @@
 //! `parse ∘ print = id`, `print ∘ parse ∘ print = print`.
 
 mod ast;
+pub mod builtins;
 mod checker;
 mod compile;
 mod emitter;

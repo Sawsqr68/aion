@@ -1,3 +1,5 @@
+use aion_awl::builtins::GLEAM_RESERVED;
+
 use super::edit::{
     ActionDefinition, ActionParameter, EditOperation, EditRequest, EditResponse, RefusalCode,
     RenameKind, RouteArgument, RouteGuard, TypeField, edit_source,
@@ -300,6 +302,18 @@ fn workflow_id_does_not_count_as_an_unrelated_schema_field_use() -> Result<(), S
 
 #[test]
 fn studio_operations_return_specific_typed_refusals() -> Result<(), String> {
+    for name in GLEAM_RESERVED {
+        assert_refusal(
+            apply(
+                STUDIO,
+                EditOperation::AddType {
+                    name: name.to_owned(),
+                    fields: Vec::new(),
+                },
+            ),
+            &RefusalCode::NameCollision,
+        )?;
+    }
     assert_refusal(
         apply(
             STUDIO,

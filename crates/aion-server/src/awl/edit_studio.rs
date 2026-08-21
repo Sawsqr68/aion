@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use aion_awl::{
     Document, Expr, ForkHeader, Guard, PipeEnd, PipeStage, Statement, Step, TypeBody, TypeRef,
+    builtins::{BUILTIN_TYPES, RESERVED_NAMES},
     semantic,
 };
 
@@ -9,8 +10,6 @@ use super::edit::{parse_fragment, refusal};
 use super::edit_types::{
     ActionDefinition, ActionParameter, EditResult, RefusalCode, RenameMapping, TypeField,
 };
-
-const BUILTIN_TYPES: [&str; 6] = ["Bool", "Int", "Float", "String", "Nil", "Dir"];
 
 type StudioResult = EditResult<Option<RenameMapping>>;
 
@@ -275,7 +274,7 @@ fn render_parameters(params: &[ActionParameter]) -> String {
 }
 
 fn ensure_type_name_available(document: &Document, name: &str) -> EditResult<()> {
-    if BUILTIN_TYPES.contains(&name) || document.types.iter().any(|item| item.name == name) {
+    if RESERVED_NAMES.contains(&name) || document.types.iter().any(|item| item.name == name) {
         return Err(refusal(
             RefusalCode::NameCollision,
             "type name already exists",

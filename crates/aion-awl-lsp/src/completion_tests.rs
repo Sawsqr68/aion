@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use aion_awl::Keyword;
+use aion_awl::builtins::BUILTIN_TYPES;
 use aion_awl::guide::{GrammarPosition, words_offered_at};
 use lsp_types::{CompletionItemKind, Position};
 
@@ -120,7 +121,13 @@ fn wait_offers_signals_only() {
 #[test]
 fn a_type_position_offers_declared_and_builtin_types() {
     let labels = labels(&at_end_of(DOCUMENT, "\n  input reason: "));
-    for expected in ["String", "Int", "Float", "Bool", "PageAck", "Resolved"] {
+    for expected in BUILTIN_TYPES {
+        assert!(
+            labels.contains(expected),
+            "a type position must offer `{expected}`: {labels:?}"
+        );
+    }
+    for expected in ["PageAck", "Resolved"] {
         assert!(
             labels.contains(expected),
             "a type position must offer `{expected}`: {labels:?}"

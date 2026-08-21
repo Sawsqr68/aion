@@ -11,9 +11,10 @@ use std::rc::Rc;
 
 use crate::Span;
 use crate::ast::{BinaryOp, ConstDecl, Expr};
+use crate::builtins::BUILTIN_TYPES;
 use crate::spanned::Spanned;
 
-use super::context::{BUILTIN_TYPES, ConstInfo, Ctx};
+use super::context::{ConstInfo, Ctx};
 use super::decls::is_snake_case;
 use super::types::{Ty, assignable, resolve};
 
