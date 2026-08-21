@@ -156,9 +156,6 @@ fn timer_fired_seq(history: &[aion_core::Event], timer_id: &TimerId) -> Option<u
 
 /// NIF backing `aion_flow_ffi:with_timeout/2`.
 pub(super) fn with_timeout_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         return error_result_term(
             ctx,

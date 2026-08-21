@@ -132,17 +132,14 @@ impl RuntimeHandle {
 
 fn test_activity_answer(
     args: &[Term],
-    _: &mut beamr::native::ProcessContext,
+    context: &mut beamr::native::ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::small_int(0));
-    }
+    let _ = args;
+    context.ensure_heap_space(0)?;
     Ok(Term::small_int(42))
 }
 
 fn test_activity_fail(args: &[Term], _: &mut beamr::native::ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Ok(Term::NIL);
-    }
+    let _ = args;
     Err(Term::atom(beamr::atom::Atom::ERROR))
 }

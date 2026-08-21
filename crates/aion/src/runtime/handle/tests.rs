@@ -14,17 +14,15 @@ use crate::runtime::{
     Determinism, Mfa, NifEntry, NifRegistration, RuntimeConfig, SignalDeliveryConfig,
 };
 
-fn forty_two(args: &[Term], _: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::small_int(0));
-    }
+fn forty_two(args: &[Term], context: &mut ProcessContext) -> Result<Term, Term> {
+    let _ = args;
+    context.ensure_heap_space(0)?;
     Ok(Term::small_int(42))
 }
 
-fn thirteen(args: &[Term], _: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::small_int(0));
-    }
+fn thirteen(args: &[Term], context: &mut ProcessContext) -> Result<Term, Term> {
+    let _ = args;
+    context.ensure_heap_space(0)?;
     Ok(Term::small_int(13))
 }
 

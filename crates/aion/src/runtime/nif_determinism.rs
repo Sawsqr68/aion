@@ -97,9 +97,6 @@ fn ok_term(ctx: &mut ProcessContext, value: &str) -> Result<Term, Term> {
 
 /// NIF backing `aion_flow_ffi:workflow_id/0`.
 pub(crate) fn workflow_id_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if !args.is_empty() {
         return error_term(
             ctx,
@@ -115,9 +112,6 @@ pub(crate) fn workflow_id_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
 
 /// NIF backing `aion_flow_ffi:now/0`.
 pub(crate) fn now_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if !args.is_empty() {
         return error_term(
             ctx,
@@ -133,9 +127,6 @@ pub(crate) fn now_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, 
 
 /// NIF backing `aion_flow_ffi:random/0`.
 pub(crate) fn random_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if !args.is_empty() {
         return error_term(
             ctx,
@@ -151,9 +142,6 @@ pub(crate) fn random_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
 
 /// NIF backing `aion_flow_ffi:random_int/2`.
 pub(crate) fn random_int_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         return error_term(
             ctx,

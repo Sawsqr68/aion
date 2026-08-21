@@ -239,9 +239,6 @@ fn timer_call<F>(
 where
     F: FnOnce(&EngineNifState, NifContext, &[Term]) -> Result<NifResult, NifTimerError>,
 {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != arity {
         return error_result_term(
             process_context,

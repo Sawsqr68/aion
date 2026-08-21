@@ -15,9 +15,6 @@ pub(super) fn report_query_diagnostic(
     args: &[Term],
     ctx: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > u8::MAX.into() {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         let message = format!(
             "report_query_diagnostic: expected 2 arguments, got {}",

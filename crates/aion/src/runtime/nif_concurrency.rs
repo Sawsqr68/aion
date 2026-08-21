@@ -112,9 +112,6 @@ fn run_collect(
     kind: CollectKind,
     label: &str,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     let specs = match decode_concurrency_args(ctx, args, label) {
         Ok(specs) => specs,
         Err(refusal) => return refusal.into_nif_result(),

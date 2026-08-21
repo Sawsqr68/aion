@@ -19,9 +19,6 @@ pub(super) fn dispatch_activity_impl(
     args: &[Term],
     ctx: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     let Ok((name, input, config)) = decode_dispatch_args(args) else {
         return error_result_term(
             ctx,
@@ -95,9 +92,6 @@ pub(super) fn await_activity_result_impl(
     args: &[Term],
     ctx: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 1 {
         return error_result_term(
             ctx,

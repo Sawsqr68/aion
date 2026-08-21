@@ -52,9 +52,6 @@ pub(super) fn dispatch_activity_in_vm_impl(
     args: &[Term],
     ctx: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     // Decode (and validate the thunk's shape) BEFORE any ordinal allocation or
     // resolve: a malformed wire records nothing.
     let (name, input, config) = match decode_in_vm_args(args) {

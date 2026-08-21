@@ -54,10 +54,8 @@ fn collect_map(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
 
 #[cfg(test)]
 fn not_yet_implemented(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
+    let _ = args;
     let _ = ctx.pid();
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
 
     error_result_term(ctx, NOT_YET_IMPLEMENTED)
 }

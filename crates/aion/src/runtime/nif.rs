@@ -91,10 +91,8 @@ pub(crate) fn test_native_zero(
     args: &[beamr::term::Term],
     context: &mut beamr::native::ProcessContext,
 ) -> Result<beamr::term::Term, beamr::term::Term> {
-    let _ = context;
-    if args.len() > 255 {
-        return Err(beamr::term::Term::small_int(0));
-    }
+    let _ = args;
+    context.ensure_heap_space(0)?;
     Ok(beamr::term::Term::small_int(0))
 }
 

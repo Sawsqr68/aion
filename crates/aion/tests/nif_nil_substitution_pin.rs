@@ -161,24 +161,23 @@ fn no_allocation_failure_path_returns_a_success_domain_value()
             .then(left.property.cmp(right.property))
     });
 
-    if !offenses.is_empty() {
-        let listing = offenses
-            .iter()
-            .map(|offense| {
-                format!(
-                    "{}:{}: {}",
-                    offense.path.display(),
-                    offense.line,
-                    offense.property
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        panic!(
-            "no allocation-failure path may return a success-domain value; found {} offenses:\n{}",
-            offenses.len(),
-            listing
-        );
-    }
+    let listing = offenses
+        .iter()
+        .map(|offense| {
+            format!(
+                "{}:{}: {}",
+                offense.path.display(),
+                offense.line,
+                offense.property
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        offenses.is_empty(),
+        "no allocation-failure path may return a success-domain value; found {} offenses:\n{}",
+        offenses.len(),
+        listing
+    );
     Ok(())
 }

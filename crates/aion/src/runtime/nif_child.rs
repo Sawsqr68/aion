@@ -44,9 +44,6 @@ pub(crate) fn install_child_nif_bridge(
 
 /// NIF backing `aion_flow_ffi:spawn_child/3`.
 pub(super) fn spawn_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     match run_spawn_child(args, ctx) {
         Ok(term) => Ok(term),
         Err(refusal) => refusal.into_nif_result(),
@@ -58,9 +55,6 @@ pub(super) fn spawn_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
 /// Runs on the normal schedulers: it parks via `request_suspend` instead of
 /// blocking, so a dirty thread is never held for the child's lifetime.
 pub(super) fn await_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     match run_await_child(args, ctx) {
         Ok(AwaitChildOutcome::Resolved(term)) => term,
         Ok(AwaitChildOutcome::Suspend) => {

@@ -342,9 +342,6 @@ fn dispatch_engine(
 }
 
 pub(crate) fn register_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         let message = format!("register_query: expected 2 arguments, got {}", args.len());
         return error_result_term(ctx, &message);
@@ -382,9 +379,6 @@ fn decode_reply_args(name: &str, args: &[Term]) -> Result<(String, String), Stri
 }
 
 pub(crate) fn reply_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     let (query_id, response) = match decode_reply_args("reply_query", args) {
         Ok(parts) => parts,
         Err(error) => return error_result_term(ctx, &error),
@@ -400,9 +394,6 @@ pub(crate) fn reply_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
 }
 
 pub(crate) fn reply_query_error(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     let (query_id, message) = match decode_reply_args("reply_query_error", args) {
         Ok(parts) => parts,
         Err(error) => return error_result_term(ctx, &error),
@@ -418,9 +409,6 @@ pub(crate) fn reply_query_error(args: &[Term], ctx: &mut ProcessContext) -> Resu
 }
 
 pub(crate) fn dispatch_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         let message = format!("dispatch_query: expected 2 arguments, got {}", args.len());
         return error_result_term(ctx, &message);

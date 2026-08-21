@@ -20,9 +20,6 @@ pub(crate) fn continue_as_new_impl(
     args: &[Term],
     process_context: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 1 {
         return error_result_term(
             process_context,

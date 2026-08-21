@@ -447,9 +447,6 @@ fn send_signal_impl(
 }
 
 pub(super) fn receive_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 2 {
         return error_result_term(
             ctx,
@@ -506,9 +503,6 @@ pub(super) fn receive_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<
 }
 
 pub(super) fn send_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    if args.len() > 255 {
-        return Err(Term::NIL);
-    }
     if args.len() != 3 {
         return error_result_term(
             ctx,
