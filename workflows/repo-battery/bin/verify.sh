@@ -102,6 +102,39 @@ if [[ -z "$vacuity_refusal" ]]; then
             else $leg end)' <<<"$legs")
 fi
 
+# ── Infrastructure failures: a red that proves nothing about the code ────────
+#
+# Some suites classify their own failure as an outage rather than a defect —
+# `gleam build` dying in its dependency layer because the Hex registry was
+# unreachable, for instance. The run 3 log of the rb-lockfix landing carries
+# exactly one such line and the leg it belongs to went red on it.
+#
+# 🔴 THIS DOES NOT DOWNGRADE THE RED, and the earlier proposal that it should
+# (gate-logs/rb-lockfix/RESULT.md) is withdrawn here on measurement. Turning a
+# red into `unproven` on a text match is a hardening that fails OPEN: the phrase
+# is emitted by code that believes the dependency layer died, and a genuinely
+# broken build can believe that too. The reader's problem was never the
+# severity — it was the misdiagnosis, being sent to hunt a code defect that was
+# not there. So the classification is REPORTED next to the red, and the red
+# stands.
+infrastructure_marker=$(jq -r '.infrastructure_marker // empty' "$tree/gates.json" 2>/dev/null || true)
+infrastructure='{"scanned":false,"total":0,"legs":[],"unattributed":[]}'
+infra_refusal=""
+if [[ -n "$infrastructure_marker" && -n "${declared_legs_file:-}" ]]; then
+  set +e
+  infra_out=$(bash "$SCRIPT_DIR/scan-vacuity.sh" "$log_path" "$infrastructure_marker" "$declared_legs_file" 2>&1)
+  infra_rc=$?
+  set -e
+  if [[ "$infra_rc" -eq 0 ]]; then
+    infrastructure=$infra_out
+  else
+    # 🔴 Its own variable, merged into `refusal` further down. Assigning
+    # `refusal` here would be wiped by the `refusal=""` initialisation that
+    # follows — a refusal that erases itself is worse than one never raised.
+    infra_refusal="infrastructure scanner refused (rc $infra_rc): $infra_out"
+  fi
+fi
+
 measured=true
 exact=false
 verdict=""
@@ -126,6 +159,9 @@ fi
 
 # A vacuity refusal never upgrades a verdict, and never hides behind one: it
 # cannot make a red green, and it must not let a green read as established.
+if [[ -n "$infra_refusal" ]]; then
+  refusal="${refusal:+$refusal | }$infra_refusal"
+fi
 if [[ -n "$vacuity_refusal" ]]; then
   refusal="${refusal:+$refusal | }$vacuity_refusal"
   # 🔴 An `if`, not `[[ … ]] && …`. Under `set -e` a failing test at the end of
@@ -139,5 +175,5 @@ fi
 jq -cn --argjson measured "$measured" --argjson exact "$exact" --argjson verify_rc "$verify_rc" \
   --arg verify_verdict "$verify_verdict" --arg verdict "$verdict" \
   --arg refusal "$refusal" --argjson legs_executed "$legs_executed" --argjson legs "$legs" \
-  --argjson vacuity "$vacuity" \
-  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, vacuity:$vacuity, refusal:$refusal}' | tee "$result_path"
+  --argjson vacuity "$vacuity" --argjson infrastructure "$infrastructure" \
+  '{measured:$measured, exact:$exact, verify_rc:$verify_rc, verify_verdict:$verify_verdict, verdict:$verdict, legs_executed:$legs_executed, legs:$legs, vacuity:$vacuity, infrastructure:$infrastructure, refusal:$refusal}' | tee "$result_path"

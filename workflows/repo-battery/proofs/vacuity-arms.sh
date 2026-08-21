@@ -20,8 +20,30 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SCANNER="$SCRIPT_DIR/../bin/scan-vacuity.sh"
-MARKER='(PROVES NOTHING): '
 FIXTURES="$SCRIPT_DIR/fixtures/vacuity"
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../../.." && pwd)
+
+# 🔴 THE MARKER IS READ FROM THE DECLARATION, NOT HARDCODED HERE, and that is
+# the arm nobody would think to write. The fixtures below hold announcement
+# lines copied verbatim from real runs; taking the marker from `gates.json`
+# turns every arm into a check that THE DECLARED MARKER STILL MATCHES WHAT THE
+# SUITES ACTUALLY EMIT. A typo in the declaration cannot then pass as a clean
+# scan — it fails here by name, with the fixture that stopped matching.
+#
+# A hardcoded copy would have been a second source of truth for the same string,
+# and the two would agree right up until the moment the answer depended on it.
+MARKER=$(jq -r '.vacuity_marker // empty' "$REPO_ROOT/gates.json")
+INFRA_MARKER=$(jq -r '.infrastructure_marker // empty' "$REPO_ROOT/gates.json")
+if [[ -z "$MARKER" ]]; then
+  printf 'NON-VACUITY GUARD FAILED: %s/gates.json declares no vacuity_marker, so\n' "$REPO_ROOT"
+  printf 'every arm below would be testing the empty string. Refusing.\n'
+  exit 1
+fi
+if [[ -z "$INFRA_MARKER" ]]; then
+  printf 'NON-VACUITY GUARD FAILED: %s/gates.json declares no infrastructure_marker,\n' "$REPO_ROOT"
+  printf 'so arm J would be testing the empty string. Refusing.\n'
+  exit 1
+fi
 
 failures=0
 checked=0
@@ -100,12 +122,20 @@ arm 'C rustc diagnostic is not an announcement' 0 0 0 '' "$FIXTURES/c-rustc-diag
 #       pattern misses this; 5 of 198 real lines had this shape.
 arm 'C2 mid-line fusion, no anchor' 0 1 0 'rust:test' "$FIXTURES/c2-midline-fusion.log"
 
-# ── D: THE NON-VACUITY GUARD. A marker the log cannot contain must not produce a
-#      clean scan — the self-check refuses first, because a zero from a broken
-#      scanner is indistinguishable from a zero from a clean run.
-arm 'D self-check refuses a broken marker' 2 0 0 '' "$FIXTURES/a-gleam-family.log" 'NOT-A-REAL-MARKER'
+# ── D: THE NON-VACUITY GUARD. The scanner proves its own matcher before reading
+#      a log — a positive line it must match and a rustc-framed line it must not
+#      — and refuses rather than reporting a comfortable zero when either fails.
+#      That guard cannot be armed from here (a wrong marker is a legitimate clean
+#      scan, not a broken matcher); it is held by the mutation record instead:
+#      disabling the exclusion or the match kills 9 of these arms outright.
+#      What CAN be armed from here are the inputs the scanner must refuse.
 arm 'D2 empty marker refuses' 2 0 0 '' "$FIXTURES/a-gleam-family.log" ''
 arm 'D3 absent log refuses' 2 0 0 '' "$FIXTURES/does-not-exist.log"
+
+# ── D4: a marker that is genuinely absent from the log is a CLEAN scan, not a
+#       refusal. A repository with no skipped proofs must be able to be green,
+#       or the verdict stops meaning anything.
+arm 'D4 absent marker is clean, not a refusal' 0 0 0 '' "$FIXTURES/a-gleam-family.log" 'NO-SUCH-MARKER-IN-THIS-LOG'
 
 # ── E: an announcement outside any leg frame is reported as UNATTRIBUTED, so the
 #      verifier can refuse rather than silently attributing it to nothing.
@@ -145,6 +175,14 @@ arm 'G2 forged frame, no closer (guard arm)' 0 1 0 'estate-guard' "$FIXTURES/g2-
 #      swap is an EQUIVALENT mutant by construction, which is a different thing
 #      from an untested one, and worth saying so plainly.
 arm 'I closer/opener mismatch is unattributed' 0 1 1 '' "$FIXTURES/i-frame-mismatch.log"
+
+# ── J: THE INFRASTRUCTURE MARKER, read from the declaration like the vacuity one
+#      and exercised against a line copied from the run that hit a real Hex
+#      registry outage. The fixture deliberately also contains the two test-NAME
+#      lines carrying the lowercase word `infrastructure`: 102 such lines appear
+#      in the real log, and a marker that matched them would classify every run
+#      as an outage. Exactly one line here is the classification.
+arm 'J infrastructure marker, not test names' 0 1 0 'rust:test-all-features' "$FIXTURES/j-infrastructure.log" "$INFRA_MARKER"
 
 # ── H: an empty declaration refuses rather than turning every real frame into a
 #      forgery. Loud for the wrong reason is still the wrong reason.

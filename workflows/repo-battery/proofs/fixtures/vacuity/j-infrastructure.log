@@ -1,0 +1,6 @@
+=== rust:test-all-features ===
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test external_package_cannot_dispatch_without_await_but_public_run_compiles ... FAILED
+Error: "INFRASTRUCTURE FAILURE, NOT AN SDK BOUNDARY DEFECT: `gleam build` died in its dependency layer (the Hex registry) for the probe at /x/negative, so the boundary was never compiled and this run proves nothing"
+--- rust:test-all-features exit 101 ---

@@ -106,10 +106,6 @@ set -euo pipefail
 # the repository declares none.
 marker=${2:-}
 
-# A real announcement, kept verbatim from the archived run, and a real rustc
-# diagnostic quoting a real source line. These are the scanner's own control.
-readonly SELF_CHECK_POSITIVE='test x ... okSKIPPED (PROVES NOTHING): `gleam` is not available on PATH'
-readonly SELF_CHECK_NEGATIVE='198 |         "SKIPPED (PROVES NOTHING): `gleam` is not available on PATH, so the \'
 readonly DIAGNOSTIC_SHAPE='^[[:space:]]*[0-9]+[[:space:]]*\|'
 
 usage() {
@@ -205,6 +201,20 @@ is_announcement() {
 }
 
 # ── Prove the channel before using it ────────────────────────────────────────
+#
+# The two control lines are BUILT FROM THE MARKER rather than hardcoded, so this
+# scanner works for any marker a repository declares. That derivation is safe
+# here and it is worth saying why, because a baseline derived from the thing it
+# audits is normally the defect: these lines do not encode the ANSWER (how many
+# announcements the log holds), they exercise the MATCHER. The marker is the
+# input, not the expectation.
+#
+# Both are shaped after lines actually observed in real runs: the positive is
+# fused mid-line onto libtest's `ok`, exactly as 5 of 198 archived announcements
+# were; the negative wears rustc's `NNN | <source>` quoting frame, which is how
+# a compiler diagnostic once inflated this estate's other announcement gate.
+SELF_CHECK_POSITIVE="test x ... ok${marker}the announcement text"
+SELF_CHECK_NEGATIVE="198 |         \"${marker}the quoted source line\""
 if ! is_announcement "$SELF_CHECK_POSITIVE"; then
   printf 'SELF-CHECK FAILED: the scanner did not match a KNOWN announcement.\n' >&2
   printf 'A zero from this run would mean nothing. Refusing rather than\n' >&2
