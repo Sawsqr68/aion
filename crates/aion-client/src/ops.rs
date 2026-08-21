@@ -8,9 +8,10 @@ use aion_core::{
 };
 use aion_proto::{
     ProtoCancelRequest, ProtoDescribeWorkflowRequest, ProtoListWorkflowsRequest, ProtoPauseRequest,
-    ProtoPayload, ProtoQueryRequest, ProtoReopenRequest, ProtoResumeRequest, ProtoRunId,
-    ProtoSignalRequest, ProtoWorkflowId, ProtoWorkflowStatus, WireError, decode_core_value,
-    decode_event, decode_workflow_summary, encode_core_value, proto_query_response,
+    ProtoPayload, ProtoQueryRequest, ProtoReadHistoryRequest, ProtoReopenRequest,
+    ProtoResumeRequest, ProtoRunId, ProtoSignalRequest, ProtoWorkflowId, ProtoWorkflowStatus,
+    WireError, decode_core_value, decode_event, decode_workflow_summary, encode_core_value,
+    proto_query_response,
 };
 use aion_store::visibility::ListWorkflowsFilter;
 
@@ -42,8 +43,23 @@ pub struct ListPage {
 pub struct WorkflowDescription {
     /// Lightweight workflow summary reused from `aion-core`.
     pub summary: WorkflowSummary,
-    /// Optional event history when the server includes it.
-    pub history: Vec<Event>,
+    /// Concrete run resolved by the describe read.
+    pub run_id: RunId,
+    /// Sequence number at the head of the history snapshot.
+    pub history_head_seq: u64,
+    /// Current lease's terminal workflow event, when present.
+    pub terminal_event: Option<Event>,
+}
+
+/// One bounded page returned by [`Client::read_history`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistoryPage {
+    /// Events in this page, ordered by workflow sequence.
+    pub events: Vec<Event>,
+    /// First sequence number for the next page, absent at the history head.
+    pub next_from_seq: Option<u64>,
+    /// Sequence number at the head of the server snapshot.
+    pub head_seq: u64,
 }
 
 /// Outcome of [`Client::reopen`]: the reopened run and its projected status.
@@ -374,7 +390,7 @@ impl Client {
                 namespace: self.namespace().to_owned(),
                 workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
                 run_id: run_id.cloned().map(ProtoRunId::from),
-                include_history: true,
+                include_history: false,
             })
             .await?;
         let summary = response
@@ -384,13 +400,56 @@ impl Client {
             .and_then(|summary| {
                 decode_workflow_summary(summary).map_err(ClientError::from_wire_error)
             })?;
-        let history = response
-            .history
+        let run_id = response
+            .run_id
+            .ok_or_else(|| ClientError::server("describe response run_id is missing"))?
+            .try_into()
+            .map_err(ClientError::from_wire_error)?;
+        let terminal_event = response
+            .terminal_event
+            .as_ref()
+            .map(decode_event)
+            .transpose()
+            .map_err(ClientError::from_wire_error)?;
+        Ok(WorkflowDescription {
+            summary,
+            run_id,
+            history_head_seq: response.history_head_seq,
+            terminal_event,
+        })
+    }
+
+    /// Reads one bounded page of workflow history.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClientError`] when transport, server, or event conversion fails.
+    pub async fn read_history(
+        &self,
+        workflow_id: &WorkflowId,
+        from_seq: Option<u64>,
+        limit: Option<u32>,
+    ) -> Result<HistoryPage, ClientError> {
+        let response = self
+            .transport
+            .read_history(ProtoReadHistoryRequest {
+                namespace: self.namespace().to_owned(),
+                workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
+                from_seq,
+                limit,
+            })
+            .await?;
+        let events = response
+            .events
             .iter()
             .map(decode_event)
             .map(|result| result.map_err(ClientError::from_wire_error))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(WorkflowDescription { summary, history })
+        Ok(HistoryPage {
+            events,
+            next_from_seq: response.next_from_seq,
+            head_seq: response.head_seq,
+        })
     }
 
     /// Subscribes to events for a workflow.
@@ -689,6 +748,20 @@ mod tests {
                         .map_err(ClientError::from_wire_error)?,
                 ),
                 history: Vec::new(),
+                run_id: Some(ProtoRunId::from(run_id())),
+                history_head_seq: 0,
+                terminal_event: None,
+            })
+        }
+
+        async fn read_history(
+            &self,
+            _: aion_proto::ProtoReadHistoryRequest,
+        ) -> Result<aion_proto::ProtoReadHistoryResponse, ClientError> {
+            Ok(aion_proto::ProtoReadHistoryResponse {
+                events: Vec::new(),
+                next_from_seq: None,
+                head_seq: 0,
             })
         }
 
@@ -715,7 +788,7 @@ mod tests {
     }
 
     fn run_id() -> aion_core::RunId {
-        aion_core::RunId::new_v4()
+        aion_core::RunId::new(uuid::Uuid::from_u128(1))
     }
 
     fn payload(label: &str) -> Payload {
@@ -1333,9 +1406,11 @@ mod tests {
             .clone()
             .ok_or_else(|| ClientError::server("missing describe"))?;
         assert!(describe.run_id.is_none());
-        assert!(describe.include_history);
+        assert!(!describe.include_history);
         assert_eq!(listed.len(), 1);
-        assert_eq!(described.history.len(), 0);
+        assert_eq!(described.run_id, run);
+        assert_eq!(described.history_head_seq, 0);
+        assert!(described.terminal_event.is_none());
         Ok(())
     }
 

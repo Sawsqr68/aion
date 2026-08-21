@@ -240,6 +240,7 @@ impl WorkflowTransport for EmbeddedWorkflowTransport {
         request: aion_proto::ProtoDescribeWorkflowRequest,
     ) -> Result<aion_proto::ProtoDescribeWorkflowResponse, ClientError> {
         let workflow_id = decode_required_workflow_id(request.workflow_id)?;
+        let run_id = self.resolve_run_id(&workflow_id, request.run_id).await?;
         let history = self
             .engine
             .store()
@@ -260,6 +261,11 @@ impl WorkflowTransport for EmbeddedWorkflowTransport {
             aion_proto::encode_workflow_summary(request.namespace.clone(), None, &summary)
                 .map_err(ClientError::from_wire_error)?,
         );
+        let history_head_seq = history.last().map_or(0, aion_core::Event::seq);
+        let terminal_event = aion_core::current_lease_terminal(&history)
+            .map(|event| aion_proto::encode_event(request.namespace.clone(), None, event))
+            .transpose()
+            .map_err(ClientError::from_wire_error)?;
         let history = if request.include_history {
             history
                 .iter()
@@ -269,7 +275,44 @@ impl WorkflowTransport for EmbeddedWorkflowTransport {
         } else {
             Vec::new()
         };
-        Ok(aion_proto::ProtoDescribeWorkflowResponse { summary, history })
+        Ok(aion_proto::ProtoDescribeWorkflowResponse {
+            summary,
+            history,
+            run_id: Some(run_id.into()),
+            history_head_seq,
+            terminal_event,
+        })
+    }
+
+    async fn read_history(
+        &self,
+        request: aion_proto::ProtoReadHistoryRequest,
+    ) -> Result<aion_proto::ProtoReadHistoryResponse, ClientError> {
+        let workflow_id = decode_required_workflow_id(request.workflow_id)?;
+        let from_seq = request.from_seq.unwrap_or(0);
+        let mut events = self
+            .engine
+            .store()
+            .read_history_from(&workflow_id, from_seq)
+            .await
+            .map_err(|error| store_error_class(&error, error.to_string()))?;
+        let head_seq = events.last().map_or(0, aion_core::Event::seq);
+        let next_from_seq = request
+            .limit
+            .and_then(|limit| events.get(limit as usize).map(aion_core::Event::seq));
+        if let Some(limit) = request.limit {
+            events.truncate(limit as usize);
+        }
+        let events = events
+            .iter()
+            .map(|event| aion_proto::encode_event(request.namespace.clone(), None, event))
+            .map(|result| result.map_err(ClientError::from_wire_error))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(aion_proto::ProtoReadHistoryResponse {
+            events,
+            next_from_seq,
+            head_seq,
+        })
     }
 
     async fn subscribe(

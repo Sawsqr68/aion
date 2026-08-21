@@ -380,6 +380,13 @@ mod tests {
             Err(ClientError::unavailable("stub transport"))
         }
 
+        async fn read_history(
+            &self,
+            _: aion_proto::ProtoReadHistoryRequest,
+        ) -> Result<aion_proto::ProtoReadHistoryResponse, ClientError> {
+            Err(ClientError::unavailable("stub transport"))
+        }
+
         async fn subscribe(
             &self,
             _: aion_proto::SubscriptionRequest,

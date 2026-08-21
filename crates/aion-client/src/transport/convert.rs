@@ -247,5 +247,29 @@ pub(crate) fn decode_describe_response(
     aion_proto::ProtoDescribeWorkflowResponse {
         summary: value.summary.map(decode_envelope),
         history: value.history.into_iter().map(decode_envelope).collect(),
+        run_id: value.run_id.map(decode_run_id),
+        history_head_seq: value.history_head_seq,
+        terminal_event: value.terminal_event.map(decode_envelope),
+    }
+}
+
+pub(crate) fn encode_read_history_request(
+    value: aion_proto::ProtoReadHistoryRequest,
+) -> aion_proto::generated::ReadHistoryRequest {
+    aion_proto::generated::ReadHistoryRequest {
+        namespace: value.namespace,
+        workflow_id: value.workflow_id.map(encode_workflow_id),
+        from_seq: value.from_seq,
+        limit: value.limit,
+    }
+}
+
+pub(crate) fn decode_read_history_response(
+    value: aion_proto::generated::ReadHistoryResponse,
+) -> aion_proto::ProtoReadHistoryResponse {
+    aion_proto::ProtoReadHistoryResponse {
+        events: value.events.into_iter().map(decode_envelope).collect(),
+        next_from_seq: value.next_from_seq,
+        head_seq: value.head_seq,
     }
 }

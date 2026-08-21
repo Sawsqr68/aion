@@ -65,6 +65,12 @@ pub trait WorkflowTransport: Send + Sync {
         request: aion_proto::ProtoDescribeWorkflowRequest,
     ) -> Result<aion_proto::ProtoDescribeWorkflowResponse, ClientError>;
 
+    /// Reads one page of workflow history.
+    async fn read_history(
+        &self,
+        request: aion_proto::ProtoReadHistoryRequest,
+    ) -> Result<aion_proto::ProtoReadHistoryResponse, ClientError>;
+
     /// Opens an event subscription attempt.
     ///
     /// `resume_from_sequence` is the wire resume cursor (`resume_from_seq`,

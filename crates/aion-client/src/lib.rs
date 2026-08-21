@@ -43,7 +43,9 @@ pub mod transport;
 pub use client::{Client, ClientAuth, ClientBuilder, TlsOptions};
 pub use error::{ClientError, ErrorDetail};
 pub use handle::WorkflowHandle;
-pub use ops::{ListPage, PauseOutcome, ReopenOutcome, ResumeOutcome, WorkflowDescription};
+pub use ops::{
+    HistoryPage, ListPage, PauseOutcome, ReopenOutcome, ResumeOutcome, WorkflowDescription,
+};
 pub use payload::{from_payload, to_payload};
 pub use start::{DisplayNameNotApplied, StartOptions, StartOutcome};
 pub use stream::{EventStream, ResumingEventStream, SubscribeTarget};
