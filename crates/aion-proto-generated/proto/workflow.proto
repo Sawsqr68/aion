@@ -17,6 +17,7 @@ service WorkflowService {
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
   rpc CountWorkflows(CountWorkflowsRequest) returns (CountWorkflowsResponse);
   rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
+  rpc ReadHistory(ReadHistoryRequest) returns (ReadHistoryResponse);
   rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
   rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse);
   rpc PauseSchedule(ScheduleIdRequest) returns (PauseScheduleResponse);
@@ -223,6 +224,22 @@ message DescribeWorkflowRequest {
 message DescribeWorkflowResponse {
   WireEnvelope summary = 1;
   repeated WireEnvelope history = 2;
+  RunId run_id = 3;
+  uint64 history_head_seq = 4;
+  WireEnvelope terminal_event = 5;
+}
+
+message ReadHistoryRequest {
+  string namespace = 1;
+  WorkflowId workflow_id = 2;
+  optional uint64 from_seq = 3;
+  optional uint32 limit = 4;
+}
+
+message ReadHistoryResponse {
+  repeated WireEnvelope events = 1;
+  optional uint64 next_from_seq = 2;
+  uint64 head_seq = 3;
 }
 
 message CreateScheduleRequest {

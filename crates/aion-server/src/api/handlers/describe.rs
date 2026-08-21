@@ -1,9 +1,9 @@
 //! Describe-workflow handler.
 
-use aion_core::{Event, WorkflowSummary};
+use aion_core::{Event, WorkflowSummary, current_lease_terminal};
 use aion_proto::{
     ProtoDescribeWorkflowRequest, ProtoDescribeWorkflowResponse, WireError,
-    convert::encode_workflow_summary,
+    convert::{encode_event, encode_workflow_summary},
 };
 
 use super::error::workflow_not_found_error;
@@ -50,7 +50,7 @@ pub async fn describe(
         .await
         .map_err(|error| error.to_wire_error())?;
     let engine = scoped.engine().map_err(|error| error.to_wire_error())?;
-    resolve_run_id(engine.as_ref(), &workflow_id, request.run_id.clone()).await?;
+    let run_id = resolve_run_id(engine.as_ref(), &workflow_id, request.run_id.clone()).await?;
 
     let history = engine
         .store()
@@ -62,11 +62,18 @@ pub async fn describe(
     let namespace = scoped.namespace().to_owned();
     let summary = encode_workflow_summary(namespace.clone(), None, &summary)?;
     let encoded_history = encode_history(request.include_history, &namespace, &history)?;
+    let history_head_seq = history.last().map_or(0, Event::seq);
+    let terminal_event = current_lease_terminal(&history)
+        .map(|event| encode_event(namespace.clone(), None, event))
+        .transpose()?;
 
     Ok(DescribeOutcome {
         response: ProtoDescribeWorkflowResponse {
             summary: Some(summary),
             history: encoded_history,
+            run_id: Some(run_id.into()),
+            history_head_seq,
+            terminal_event,
         },
         namespace,
         workflow_id,

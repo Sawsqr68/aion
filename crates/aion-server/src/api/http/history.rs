@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use aion::Engine;
 use aion_core::{Event, PayloadElision, WorkflowId};
-use aion_proto::{ProtoDescribeWorkflowRequest, ProtoWorkflowId, WireError};
+use aion_proto::{
+    ProtoDescribeWorkflowRequest, ProtoReadHistoryRequest, ProtoWorkflowId, WireError,
+};
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -14,8 +16,6 @@ use super::auth::HttpCaller;
 use super::error::HttpWireError;
 use crate::{NamespaceOperation, ServerError, ServerState, WorkflowTarget};
 
-const DEFAULT_HISTORY_LIMIT: u32 = 500;
-const MAX_WINDOW_LIMIT: u32 = 2_000;
 const DEFAULT_PAYLOAD_LIMIT_BYTES: u32 = 2_048;
 
 /// Request for one ascending workflow-history window.
@@ -59,57 +59,34 @@ pub(crate) async fn fetch_history(
     HttpCaller(caller): HttpCaller,
     Json(request): Json<HistoryFetchRequest>,
 ) -> Result<Json<HistoryFetchResponse>, HttpWireError> {
-    let workflow_id = parse_workflow_id(&request.workflow_id)?;
-    let engine = scoped_engine(
-        &state,
+    parse_workflow_id(&request.workflow_id)?;
+    let window = crate::api::handlers::history_window(
+        state.namespace_guard(),
         &caller,
-        &request.namespace,
-        &request.workflow_id,
-        &workflow_id,
+        ProtoReadHistoryRequest {
+            namespace: request.namespace,
+            workflow_id: Some(ProtoWorkflowId {
+                uuid: request.workflow_id,
+            }),
+            from_seq: request.from_seq,
+            limit: request.limit,
+        },
     )
-    .await?;
-    let from_seq = request.from_seq.map_or(0, |seq| seq);
-    let limit = request
-        .limit
-        .map_or(DEFAULT_HISTORY_LIMIT, |limit| limit)
-        .clamp(1, MAX_WINDOW_LIMIT) as usize;
+    .await
+    .map_err(HttpWireError)?;
     let payload_limit = request
         .payload_limit_bytes
         .map_or(DEFAULT_PAYLOAD_LIMIT_BYTES, |limit| limit);
-    let ranged = engine
-        .store()
-        .read_history_from(&workflow_id, from_seq)
-        .await
-        .map_err(store_error)?;
-
-    // A ranged read beyond the head cannot report the head. Fall back to the
-    // complete snapshot only for that empty-tail edge, and project the range
-    // from the same snapshot so a concurrent append cannot create a gap.
-    let (mut tail, head_seq) = if ranged.is_empty() {
-        let mut history = engine
-            .store()
-            .read_history(&workflow_id)
-            .await
-            .map_err(store_error)?;
-        let head_seq = history.last().map_or(0, Event::seq);
-        history.retain(|event| event.seq() >= from_seq);
-        (history, head_seq)
-    } else {
-        let head_seq = ranged.last().map_or(0, Event::seq);
-        (ranged, head_seq)
-    };
-
-    let next_from_seq = tail.get(limit).map(Event::seq);
-    tail.truncate(limit);
-    let events = tail
+    let events = window
+        .events
         .into_iter()
         .map(|event| project_event(event, payload_limit))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(HistoryFetchResponse {
         events,
-        next_from_seq,
-        head_seq,
+        next_from_seq: window.next_from_seq,
+        head_seq: window.head_seq,
     }))
 }
 

@@ -12,11 +12,12 @@ use aion_proto::{
     ProtoDeleteScheduleResponse, ProtoDescribeScheduleResponse, ProtoDescribeWorkflowRequest,
     ProtoDescribeWorkflowResponse, ProtoListSchedulesRequest, ProtoListSchedulesResponse,
     ProtoListWorkflowsRequest, ProtoListWorkflowsResponse, ProtoPauseRequest, ProtoPauseResponse,
-    ProtoPauseScheduleResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoRenameRequest,
-    ProtoRenameResponse, ProtoReopenRequest, ProtoReopenResponse, ProtoResumeRequest,
-    ProtoResumeResponse, ProtoResumeScheduleResponse, ProtoScheduleIdRequest, ProtoSignalRequest,
-    ProtoSignalResponse, ProtoStartWorkflowRequest, ProtoStartWorkflowResponse,
-    ProtoUpdateScheduleRequest, ProtoUpdateScheduleResponse, ProtoWireError, generated,
+    ProtoPauseScheduleResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoReadHistoryRequest,
+    ProtoReadHistoryResponse, ProtoRenameRequest, ProtoRenameResponse, ProtoReopenRequest,
+    ProtoReopenResponse, ProtoResumeRequest, ProtoResumeResponse, ProtoResumeScheduleResponse,
+    ProtoScheduleIdRequest, ProtoSignalRequest, ProtoSignalResponse, ProtoStartWorkflowRequest,
+    ProtoStartWorkflowResponse, ProtoUpdateScheduleRequest, ProtoUpdateScheduleResponse,
+    ProtoWireError, generated,
 };
 
 pub(super) fn decode_workflow_id(value: generated::WorkflowId) -> aion_proto::ProtoWorkflowId {
@@ -294,6 +295,30 @@ pub(super) fn encode_describe_response(
     generated::DescribeWorkflowResponse {
         summary: value.summary.map(encode_envelope),
         history: value.history.into_iter().map(encode_envelope).collect(),
+        run_id: value.run_id.map(encode_run_id),
+        history_head_seq: value.history_head_seq,
+        terminal_event: value.terminal_event.map(encode_envelope),
+    }
+}
+
+pub(super) fn decode_read_history_request(
+    value: generated::ReadHistoryRequest,
+) -> ProtoReadHistoryRequest {
+    ProtoReadHistoryRequest {
+        namespace: value.namespace,
+        workflow_id: value.workflow_id.map(decode_workflow_id),
+        from_seq: value.from_seq,
+        limit: value.limit,
+    }
+}
+
+pub(super) fn encode_read_history_response(
+    value: ProtoReadHistoryResponse,
+) -> generated::ReadHistoryResponse {
+    generated::ReadHistoryResponse {
+        events: value.events.into_iter().map(encode_envelope).collect(),
+        next_from_seq: value.next_from_seq,
+        head_seq: value.head_seq,
     }
 }
 

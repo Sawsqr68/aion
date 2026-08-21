@@ -363,6 +363,13 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         plain_rpcs::describe_workflow(&self.state, request).await
     }
 
+    async fn read_history(
+        &self,
+        request: Request<generated::ReadHistoryRequest>,
+    ) -> Result<Response<generated::ReadHistoryResponse>, Status> {
+        plain_rpcs::read_history(&self.state, request).await
+    }
+
     async fn create_schedule(
         &self,
         request: Request<generated::CreateScheduleRequest>,

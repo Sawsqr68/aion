@@ -332,17 +332,6 @@ pub struct ProtoDescribeWorkflowRequest {
     pub include_history: bool,
 }
 
-/// Proto representation of `DescribeWorkflowResponse`.
-#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
-pub struct ProtoDescribeWorkflowResponse {
-    /// Serde-encoded `aion_core::WorkflowSummary` envelope.
-    #[prost(message, optional, tag = "1")]
-    pub summary: Option<WireEnvelope>,
-    /// Optional serde-encoded `aion_core::Event` envelopes.
-    #[prost(message, repeated, tag = "2")]
-    pub history: Vec<WireEnvelope>,
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

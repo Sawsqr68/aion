@@ -15,6 +15,7 @@
 pub mod deploy;
 mod describe;
 mod error;
+mod history;
 /// The one managed-worker projection and failure mapping both transports use.
 pub(crate) mod managed_workers;
 mod payload;
@@ -26,6 +27,7 @@ pub(crate) mod workflows;
 mod test_support;
 
 pub use describe::describe;
+pub(crate) use history::{history_window, read_history};
 pub use visibility::{count, list};
 pub use workflows::{
     cancel, pause, query, rename, reopen, resume, signal, start, start_with_placement,

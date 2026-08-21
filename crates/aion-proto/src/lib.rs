@@ -29,6 +29,8 @@ pub mod deploy;
 pub mod error;
 /// Event-stream subscription and streamed-event contracts.
 pub mod events;
+/// Describe facts and windowed workflow-history wire contracts.
+pub mod history;
 /// Schedule management wire contracts.
 pub mod schedule;
 /// Remote-worker protocol wire contracts.
@@ -60,6 +62,9 @@ pub use events::{
     StreamedActivityEvent, StreamedClusterEvent, StreamedClusterSnapshot, StreamedEvent,
     SubscriptionRequest, TranscriptSubscription, encode_streamed_event, subscription_request,
 };
+pub use history::{
+    ProtoDescribeWorkflowResponse, ProtoReadHistoryRequest, ProtoReadHistoryResponse,
+};
 pub use schedule::{
     ProtoCreateScheduleRequest, ProtoCreateScheduleResponse, ProtoDeleteScheduleResponse,
     ProtoDescribeScheduleResponse, ProtoListSchedulesRequest, ProtoListSchedulesResponse,
@@ -74,10 +79,10 @@ pub use worker::{
 };
 pub use workflow::{
     ProtoCancelRequest, ProtoCancelResponse, ProtoCountWorkflowsRequest,
-    ProtoCountWorkflowsResponse, ProtoDescribeWorkflowRequest, ProtoDescribeWorkflowResponse,
-    ProtoListWorkflowsRequest, ProtoListWorkflowsResponse, ProtoPauseRequest, ProtoPauseResponse,
-    ProtoQueryRequest, ProtoQueryResponse, ProtoRenameRequest, ProtoRenameResponse,
-    ProtoReopenRequest, ProtoReopenResponse, ProtoResumeRequest, ProtoResumeResponse,
-    ProtoSignalRequest, ProtoSignalResponse, ProtoStartWorkflowRequest, ProtoStartWorkflowResponse,
+    ProtoCountWorkflowsResponse, ProtoDescribeWorkflowRequest, ProtoListWorkflowsRequest,
+    ProtoListWorkflowsResponse, ProtoPauseRequest, ProtoPauseResponse, ProtoQueryRequest,
+    ProtoQueryResponse, ProtoRenameRequest, ProtoRenameResponse, ProtoReopenRequest,
+    ProtoReopenResponse, ProtoResumeRequest, ProtoResumeResponse, ProtoSignalRequest,
+    ProtoSignalResponse, ProtoStartWorkflowRequest, ProtoStartWorkflowResponse,
     proto_query_response,
 };

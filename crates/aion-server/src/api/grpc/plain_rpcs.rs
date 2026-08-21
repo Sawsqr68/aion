@@ -20,11 +20,12 @@ use crate::api::{handlers, schedule_handlers};
 use super::auth::caller_from_metadata;
 use super::convert::{
     decode_count_request, decode_create_schedule_request, decode_describe_request,
-    decode_list_request, decode_list_schedules_request, decode_schedule_id_request,
-    decode_update_schedule_request, encode_count_response, encode_create_schedule_response,
-    encode_delete_schedule_response, encode_describe_response, encode_describe_schedule_response,
-    encode_list_response, encode_list_schedules_response, encode_pause_schedule_response,
-    encode_resume_schedule_response, encode_update_schedule_response,
+    decode_list_request, decode_list_schedules_request, decode_read_history_request,
+    decode_schedule_id_request, decode_update_schedule_request, encode_count_response,
+    encode_create_schedule_response, encode_delete_schedule_response, encode_describe_response,
+    encode_describe_schedule_response, encode_list_response, encode_list_schedules_response,
+    encode_pause_schedule_response, encode_read_history_response, encode_resume_schedule_response,
+    encode_update_schedule_response,
 };
 use super::status::status_from_wire_error;
 
@@ -71,6 +72,21 @@ pub(super) async fn describe_workflow(
     .await
     .map_err(status_from_wire_error)?;
     Ok(Response::new(encode_describe_response(outcome.response)))
+}
+
+pub(super) async fn read_history(
+    state: &ServerState,
+    request: Request<generated::ReadHistoryRequest>,
+) -> Result<Response<generated::ReadHistoryResponse>, Status> {
+    let caller = caller_from_metadata(request.metadata(), state).await?;
+    let response = handlers::read_history(
+        state.namespace_guard(),
+        &caller,
+        decode_read_history_request(request.into_inner()),
+    )
+    .await
+    .map_err(status_from_wire_error)?;
+    Ok(Response::new(encode_read_history_response(response)))
 }
 
 pub(super) async fn create_schedule(
