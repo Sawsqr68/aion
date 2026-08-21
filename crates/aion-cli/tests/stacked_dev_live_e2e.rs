@@ -484,9 +484,81 @@ fn deploy_archive(
     }
 }
 
-// Ignored only because it is slow: it does a real `cargo build` of the
-// out-of-workspace `norn-worker` crate against the published `aion-worker`
-// SDK, boots a real `aion server`, and drives real worker + shim processes.
+/// 🔴 THE PIN (aion#115). The family is legacy zip-packaged, so its package
+/// contract records every activity UNSCOPED (`PackageContract::from_manifest`
+/// "never invents a queue"), and a queue-routed server — the only server
+/// posture — refuses the start with structural NO_QUEUE_DECLARATION.
+/// Packaging and deploying both SUCCEED, so this assertion is the only thing
+/// in the estate that says the family cannot start. The day the family is
+/// re-authored to a scoped contract, the start succeeds, the refusal branch —
+/// announcement and all — becomes unreachable, and the caller's live-loop
+/// proof arms automatically in its place: the announcement cannot outlive its
+/// own truth.
+///
+/// Returns `true` when the refusal held (the live loop is unprovable and the
+/// named-unproven announcement has been made); `false` when the start
+/// succeeded and the live loop must now run.
+fn pin_start_refusal(project: &Path, endpoint: &str, input: &str) -> Result<bool, TestError> {
+    let pin = run_cli(
+        project,
+        &[
+            "--endpoint",
+            endpoint,
+            "start",
+            "stacked_dev",
+            "--input",
+            input,
+        ],
+    )?;
+    if pin.status.success() {
+        return Ok(false);
+    }
+    let stderr = String::from_utf8_lossy(&pin.stderr);
+    if !stderr.contains("NO_QUEUE_DECLARATION") {
+        return Err(format!(
+            "start of the legacy-packaged family must refuse with structural \
+             NO_QUEUE_DECLARATION (aion#115); it failed differently: {stderr}"
+        )
+        .into());
+    }
+    for activity in [
+        "dev_resume",
+        "enrich_brief",
+        "land",
+        "provision_workspace",
+        "request_review",
+        "teardown_workspace",
+    ] {
+        if !stderr.contains(activity) {
+            return Err(format!(
+                "the NO_QUEUE_DECLARATION refusal must name `{activity}` among the \
+                 unscoped activities (aion#115); got: {stderr}"
+            )
+            .into());
+        }
+    }
+    // The pin held, so the live-loop proof is genuinely unprovable in ANY
+    // venue until aion#115 lands. Announce on the raw stderr handle, in the
+    // shape the battery's scanner reads, carrying the tracker. Deliberately
+    // NOT the "Set AION_RUN_COSTLY_TESTS" wording: an armed venue's costly
+    // gate reads that wording as the arming-didn't-reach lie.
+    let mut raw = std::io::stderr();
+    let _announced = writeln!(
+        raw,
+        "{} (PROVES NOTHING): a stacked-dev change landing through a REAL worker \
+         process and returning a review signal — not established by this run. The \
+         shipped stacked-dev family is legacy zip-packaged and a queue-routed \
+         server refuses its start (NO_QUEUE_DECLARATION, pinned above); provable \
+         again once the family carries a scoped contract (aion#115).",
+        costly_gate::SKIP_TOKEN
+    );
+    Ok(true)
+}
+
+// Runtime-gated rather than `#[ignore]`d, and costly: it does a real
+// `cargo build` of the out-of-workspace `norn-worker` crate against the
+// published `aion-worker` SDK, boots a real `aion server`, and drives real
+// worker + shim processes.
 #[test]
 fn stacked_dev_lands_through_the_real_worker_and_review_signal() -> Result<(), TestError> {
     // Runtime-gated, never `#[ignore]`d: costly (cargo-builds the
@@ -529,77 +601,14 @@ fn stacked_dev_lands_through_the_real_worker_and_review_signal() -> Result<(), T
         deploy_archive(&example, &endpoint, "brief-dev.aion", "brief_dev")?;
         deploy_archive(&example, &endpoint, "gate.aion", "gate")?;
 
-        // 🔴 THE PIN (aion#115). The family is legacy zip-packaged, so its
-        // package contract records every activity UNSCOPED
-        // (`PackageContract::from_manifest` "never invents a queue"), and a
-        // queue-routed server — the only server posture — refuses the start
-        // with structural NO_QUEUE_DECLARATION. Packaging and deploying both
-        // SUCCEED, so this assertion is the only thing in the estate that
-        // says the family cannot start. The day the family is re-authored to
-        // a scoped contract, this start succeeds, the refusal branch below —
-        // announcement and all — becomes unreachable, and the live-loop
-        // proof arms automatically in its place: the announcement cannot
-        // outlive its own truth.
-        let pin = run_cli(
-            &project,
-            &[
-                "--endpoint",
-                endpoint.as_str(),
-                "start",
-                "stacked_dev",
-                "--input",
-                input.as_str(),
-            ],
-        )?;
-        if !pin.status.success() {
-            let stderr = String::from_utf8_lossy(&pin.stderr);
-            if !stderr.contains("NO_QUEUE_DECLARATION") {
-                return Err(format!(
-                    "start of the legacy-packaged family must refuse with structural \
-                     NO_QUEUE_DECLARATION (aion#115); it failed differently: {stderr}"
-                )
-                .into());
-            }
-            for activity in [
-                "dev_resume",
-                "enrich_brief",
-                "land",
-                "provision_workspace",
-                "request_review",
-                "teardown_workspace",
-            ] {
-                if !stderr.contains(activity) {
-                    return Err(format!(
-                        "the NO_QUEUE_DECLARATION refusal must name `{activity}` among \
-                         the unscoped activities (aion#115); got: {stderr}"
-                    )
-                    .into());
-                }
-            }
-            // The pin held, so the live-loop proof is genuinely unprovable in
-            // ANY venue until aion#115 lands. Announce on the raw stderr
-            // handle, in the shape the battery's scanner reads, carrying the
-            // tracker. Deliberately NOT the "Set AION_RUN_COSTLY_TESTS"
-            // wording: this venue DID arm the costly proofs, and the
-            // armed-venue costly gate reads that wording as the
-            // arming-didn't-reach lie.
-            let mut raw = std::io::stderr();
-            let _announced = writeln!(
-                raw,
-                "{} (PROVES NOTHING): a stacked-dev change landing through a REAL \
-                 worker process and returning a review signal — not established by \
-                 this run. The shipped stacked-dev family is legacy zip-packaged and \
-                 a queue-routed server refuses its start (NO_QUEUE_DECLARATION, \
-                 pinned above); provable again once the family carries a scoped \
-                 contract (aion#115).",
-                costly_gate::SKIP_TOKEN
-            );
+        // The pin (aion#115): the refusal branch announces and ends the test
+        // honestly; a successful start means the scoped-contract era arrived,
+        // the announcement can no longer print, and the live loop below runs
+        // for real. The pin's own run raced ahead with no worker connected
+        // and is left to the temp server's teardown.
+        if pin_start_refusal(&project, &endpoint, &input)? {
             return Ok(());
         }
-        // The start SUCCEEDED: the scoped-contract era arrived (aion#115).
-        // The announcement above can no longer print; run the live loop for
-        // real. The pin's own run raced ahead with no worker connected and is
-        // left to the temp server's teardown.
 
         // The worker's entire PATH is the shim directory: the handlers really
         // shell out, the shims intercept, and anything unshimmed is genuinely
