@@ -250,19 +250,14 @@ mod allocation_failure_control {
     }
 
     #[test]
-    fn control_allocation_failure_is_the_empty_list_value() {
+    fn allocation_failure_refuses_with_beamrs_exact_reason() {
         let mut process = Process::new(1, 0);
         process.heap_mut().set_max_capacity(0);
         let mut ctx = ProcessContext::new();
         ctx.attach_process(&mut process, 0);
 
         let failed_result = encoded_results(&mut ctx, &[]);
-        let legitimate_empty_result = Term::NIL;
 
-        println!(
-            "CONTROL failed allocation: returned={failed_result:?} legitimate_empty={legitimate_empty_result:?} equal={}",
-            failed_result == legitimate_empty_result
-        );
-        assert_eq!(failed_result, legitimate_empty_result);
+        assert_eq!(failed_result, Term::atom(Atom::BADARG));
     }
 }
