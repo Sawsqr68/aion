@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn describe_output_decodes_terminal_payload_and_carries_identity() -> anyhow::Result<()> {
         let terminal =
-            json!({"event_type":"WorkflowCompleted","result":payload(r#"{\"done\":true}"#)});
+            json!({"event_type":"WorkflowCompleted","result":payload(r#"{"done":true}"#)});
         let output = describe_output(
             json!({"workflow_id":"wf"}),
             "run",
