@@ -1829,18 +1829,30 @@ mod lsub_prod_xnode_e2e {
     /// named the fact and withheld the cause.
     async fn wait_for_registration(
         registry: &crate::worker::ConnectedWorkerRegistry,
+        heartbeat: &crate::worker::HeartbeatTracker,
         listen_address: SocketAddr,
         patience: Duration,
     ) -> Result<(), TestError> {
         let deadline = Instant::now() + patience;
         loop {
-            let ready = FAN_ACTIVITY_TYPES.iter().all(|activity_type| {
-                registry
+            let now = Instant::now();
+            let mut ready = true;
+            for activity_type in FAN_ACTIVITY_TYPES {
+                let Some(worker) = registry
                     .select_worker(NAMESPACE, TASK_QUEUE, activity_type, None)
-                    .ok()
-                    .flatten()
-                    .is_some()
-            });
+                    .map_err(test_error)?
+                else {
+                    ready = false;
+                    break;
+                };
+                if !heartbeat
+                    .is_dispatch_reachable(worker.id(), now)
+                    .map_err(test_error)?
+                {
+                    ready = false;
+                    break;
+                }
+            }
             if ready {
                 return Ok(());
             }
@@ -2018,7 +2030,14 @@ mod lsub_prod_xnode_e2e {
         // Wait until the in-band registration landed in the SAME registry the
         // dispatch path selects from (every fan-out activity type is eligible).
         let registry = state.worker_registry().clone();
-        if let Err(error) = wait_for_registration(&registry, listen_address, patience).await {
+        if let Err(error) = wait_for_registration(
+            &registry,
+            state.heartbeat_tracker(),
+            listen_address,
+            patience,
+        )
+        .await
+        {
             worker.stop();
             return Err(error);
         }
@@ -2493,7 +2512,13 @@ mod lsub_prod_xnode_e2e {
         listen_address: SocketAddr,
         patience: Duration,
     ) -> Result<(), TestError> {
-        wait_for_registration(state.worker_registry(), listen_address, patience).await?;
+        wait_for_registration(
+            state.worker_registry(),
+            state.heartbeat_tracker(),
+            listen_address,
+            patience,
+        )
+        .await?;
 
         let router = http_router(state.clone()).map_err(test_error)?;
         let workflow_id = start_over_http(&router).await?;
