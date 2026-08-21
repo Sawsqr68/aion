@@ -355,7 +355,7 @@
     <pre class="cmd"><code>cargo install aion-cli
 
 aion --version</code></pre>
-    <pre class="out"><code>aion 0.15.0</code></pre>
+    <pre class="out"><code>aion 0.18.1</code></pre>
     <ul class="points">
       <li>That one binary is the server, the client, and the authoring tools.</li>
       <li>The final agent-worker chapter also uses the norn CLI; that dependency is called out again where the worker starts.</li>
@@ -377,6 +377,9 @@ grpc_address = &quot;127.0.0.1:50099&quot;
 [store]
 backend = &quot;haematite&quot;
 data_dir = &quot;$HOME/my-first-flow/aion-data&quot;
+node_cache_budget = &quot;unlimited&quot;
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 query_timeout_ms = 10000

@@ -27,6 +27,14 @@ grpc_address = "127.0.0.1:50051"
 # ephemeral local run that loses all state on stop.
 backend = "haematite"
 data_dir = "aion-data"
+# REQUIRED, no default: the byte ceiling the haematite node caches may hold.
+# "unlimited" is the pre-budget behaviour stated out loud; write a bound once
+# you know your box, e.g. { bytes = 1073741824 }.
+node_cache_budget = "unlimited"
+# REQUIRED, no defaults: how long this node waits for the store lock before
+# giving up, and how often it retries while waiting (cadence <= patience).
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 # REQUIRED, no default: engine reply deadline for /workflows/query, in

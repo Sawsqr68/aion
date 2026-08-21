@@ -859,9 +859,12 @@ retries, heartbeats, and cancellation are covered in the
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
-`aion deploy` has nothing to talk to without it; and `store.node_cache_budget`,
-which haematite refuses to start without and which has no default anywhere —
-the byte ceiling its node caches may hold is a deployment decision. (
+`aion deploy` has nothing to talk to without it; and three `[store]` fields
+haematite refuses to start without, none of which has a default anywhere:
+`node_cache_budget` (the byte ceiling its node caches may hold is a deployment
+decision), and `lock_acquisition_patience_ms` with
+`lock_acquisition_retry_cadence_ms` (how long a node waits for the store lock,
+and how often it retries while waiting — cadence no greater than patience). (
 `store.data_dir` is optional: omitted, it resolves under the Aion home, as
 described above.) The tuning knobs all have
 defaults and may be omitted — `runtime.query_timeout_ms` (10000),
@@ -887,6 +890,10 @@ data_dir = "aion-data"              # opened when present, created on first star
 node_cache_budget = "unlimited"     # REQUIRED, no default: the byte ceiling the
                                     # node caches may hold. Write a bound once you
                                     # know your box, e.g. { bytes = 1073741824 }
+lock_acquisition_patience_ms = 250  # REQUIRED, no default: how long this node
+                                    # waits for the store lock before giving up
+lock_acquisition_retry_cadence_ms = 5   # REQUIRED, no default: how often it
+                                    # retries while waiting; <= patience
 
 [runtime]
 # Reply deadline for workflow queries, in milliseconds. Optional; 10000 when omitted.

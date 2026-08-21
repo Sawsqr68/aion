@@ -170,6 +170,9 @@ backend = "haematite"
 data_dir = "$out_dir/data$i"
 shard_count = $count
 owned_shards = [$i]
+node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 
 [store.cluster]
 node_id = "node-$i@$self_host"
