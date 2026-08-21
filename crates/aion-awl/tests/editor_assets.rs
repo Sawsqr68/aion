@@ -25,6 +25,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use aion_awl::builtins::BUILTIN_TYPES;
 use sha2::{Digest, Sha256};
 
 /// Repository root, from this crate's manifest directory.
@@ -163,6 +164,35 @@ fn no_query_names_a_node_the_grammar_does_not_produce() {
              through, or the names are typos."
         );
     }
+}
+
+/// The tree-sitter builtin token rule stays aligned with AWL's builtin types.
+#[test]
+fn grammar_builtin_types_match_the_awl_authority() {
+    let grammar = read("tools/tree-sitter-awl/grammar.js");
+    let rules: Vec<&str> = grammar
+        .lines()
+        .filter(|line| line.trim_start().starts_with("builtin_type:"))
+        .collect();
+    let [rule] = rules.as_slice() else {
+        unreachable!(
+            "tools/tree-sitter-awl/grammar.js must contain exactly one `builtin_type:` rule; found {}",
+            rules.len()
+        )
+    };
+    let grammar_builtins: Vec<&str> = rule
+        .split('\'')
+        .enumerate()
+        .filter_map(|(index, part)| (index % 2 == 1).then_some(part))
+        .collect();
+
+    assert_eq!(
+        grammar_builtins.as_slice(),
+        BUILTIN_TYPES.as_slice(),
+        "tools/tree-sitter-awl/grammar.js builtin_type names drifted from \
+         crates/aion-awl/src/builtins.rs BUILTIN_TYPES; grammar={grammar_builtins:?}, \
+         authority={BUILTIN_TYPES:?}"
+    );
 }
 
 /// The grammar sources the mirror publishes, in the order they are digested.
