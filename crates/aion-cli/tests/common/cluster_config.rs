@@ -78,6 +78,11 @@ grpc_address = "127.0.0.1:{grpc_port}"
 
 [store]
 backend = "haematite"
+# Required, no defaults. Unlimited: this failover gate measures kill-9 shard
+# adoption, never caching; patience/cadence mirror the estate's other e2e nodes.
+node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 data_dir = "{data_dir}"
 shard_count = {node_count}
 owned_shards = [{index}]

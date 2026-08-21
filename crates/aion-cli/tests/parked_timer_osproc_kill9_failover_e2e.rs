@@ -53,11 +53,13 @@
 //!
 //! ## CURRENT STATUS — GREEN positive failover regression guard (#148, fixed by #157)
 //!
-//! This gate PASSES end to end (exactly-once resume, ~15s). It once REPRODUCED a
-//! real kill-9 failover quorum bug (the symptom below), which #157 FIXED; the
-//! gate now stands as a positive regression guard that the hard-kill parked-timer
-//! resume keeps working. It is `#[ignore]`d only because it is slow (spins up a
-//! 3-node cluster + a hard kill), so the DEFAULT `cargo test` suite is unaffected.
+//! This gate once REPRODUCED a real kill-9 failover quorum bug (the symptom
+//! below), which #157 FIXED; the gate now stands as a positive regression guard
+//! that the hard-kill parked-timer resume keeps working (exactly-once resume,
+//! ~15s). It is runtime-gated behind `AION_RUN_COSTLY_TESTS` because it is slow
+//! (spins up a 3-node cluster + a hard kill) — never `#[ignore]`d, and it
+//! announces itself loudly when skipped, so an unset venue reads `unproven`
+//! rather than green.
 //!
 //! ### The bug this once reproduced, and the #157 fix
 //!
@@ -324,33 +326,31 @@ fn http_get_live(http_port: u16) -> Option<String> {
     Some(response)
 }
 
-/// Drain a child's piped stdout+stderr (best effort) for failure diagnostics.
-fn captured_output(child: &mut Child) -> String {
-    let mut combined = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let mut buffer = String::new();
-        if stdout.read_to_string(&mut buffer).is_ok() {
-            combined.push_str(&buffer);
+/// The node's redirected log, for boot-failure diagnostics. `boot_node` sends
+/// the child's stdout AND stderr to this file, so the child's own pipe handles
+/// are `None` by construction and the FILE is the only place the server's
+/// refusal lands. (An earlier version of this harness drained the pipes here
+/// and reported `output:` as the empty string on every boot failure — the real
+/// config-refusal text sat in this file and died with the temp dir.)
+fn node_log(log_path: &Path) -> String {
+    match std::fs::read_to_string(log_path) {
+        Ok(contents) if contents.is_empty() => {
+            format!("<{} exists but is empty>", log_path.display())
         }
+        Ok(contents) => contents,
+        Err(error) => format!("<no readable log at {}: {error}>", log_path.display()),
     }
-    if let Some(mut stderr) = child.stderr.take() {
-        let mut buffer = String::new();
-        if stderr.read_to_string(&mut buffer).is_ok() {
-            combined.push_str(&buffer);
-        }
-    }
-    combined
 }
 
 /// Block until `http_get_live` answers 200 or the boot deadline elapses. Surfaces
-/// the child's output if it exits during boot.
-fn wait_for_liveness(child: &mut Child, http_port: u16) -> Result<(), TestError> {
+/// the node's log file if it exits during boot.
+fn wait_for_liveness(child: &mut Child, http_port: u16, log_path: &Path) -> Result<(), TestError> {
     let started = Instant::now();
     loop {
         if let Some(status) = child.try_wait()? {
             return Err(format!(
-                "server exited during boot with {status}; output:\n{}",
-                captured_output(child)
+                "server exited during boot with {status}; log:\n{}",
+                node_log(log_path)
             )
             .into());
         }
@@ -362,8 +362,8 @@ fn wait_for_liveness(child: &mut Child, http_port: u16) -> Result<(), TestError>
         }
         if started.elapsed() > BOOT_DEADLINE {
             return Err(format!(
-                "server did not answer /health/live within {BOOT_DEADLINE:?}; output:\n{}",
-                captured_output(child)
+                "server did not answer /health/live within {BOOT_DEADLINE:?}; log:\n{}",
+                node_log(log_path)
             )
             .into());
         }
@@ -444,6 +444,12 @@ grpc_address = "127.0.0.1:{grpc_port}"
 
 [store]
 backend = "haematite"
+# Required, no defaults. Unlimited: this gate measures a parked timer surviving
+# kill-9 failover, never caching; patience/cadence mirror the estate's other
+# e2e nodes.
+node_cache_budget = "unlimited"
+lock_acquisition_patience_ms = 250
+lock_acquisition_retry_cadence_ms = 5
 data_dir = "{data_dir}"
 shard_count = {node_count}
 owned_shards = [{index}]
@@ -538,8 +544,10 @@ fn boot_cluster(dir: &Path, package: &Path, ports: &[(u16, u16)]) -> Result<Vec<
     }
 
     for index in 0..nodes.len() {
-        let http_port = nodes[index].http_port;
-        if let Err(error) = wait_for_liveness(&mut nodes[index].child, http_port) {
+        let node = &mut nodes[index];
+        let http_port = node.http_port;
+        let log_path = node.log_path.clone();
+        if let Err(error) = wait_for_liveness(&mut node.child, http_port, &log_path) {
             reap_all(nodes);
             return Err(format!("node {index} failed to boot: {error}").into());
         }

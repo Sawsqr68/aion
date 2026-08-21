@@ -81,6 +81,31 @@ costly_announcements() {
                  new_scaffold_build"
   local target out rc found failures=0 checked=0
 
+  # 🔴 THE GATE'S CLAIM DEPENDS ON THE VENUE, AND A GATE BLIND TO ITS VENUE
+  # INVERTS. Measured 2026-08-21, the first landing-venue battery
+  # (`AION_RUN_COSTLY_TESTS=1` inherited from the battery's environment): the
+  # suites ran their proofs for REAL, announced nothing — which is exactly
+  # right — and this gate reported all five as "skipped silently", turning the
+  # venue doing its job into a red. `new_scaffold_build` ran its full hex.pm
+  # scaffold proof, PASSED, and was failed by the gate for not announcing a
+  # skip that did not happen.
+  #
+  # So the gate now asserts the venue's OWN contract:
+  #   * skip venue (variable unset): every suite announces the proof it
+  #     skipped — the original claim, unchanged;
+  #   * armed venue (variable set): every suite runs green with ZERO
+  #     announcements. An announcement here means the arming did not reach the
+  #     suite (a second gate hiding inside, a renamed variable) — a pass that
+  #     still announces is not a proof, and silence about THAT would be this
+  #     gate's own disease.
+  local armed=""
+  if [ -n "${AION_RUN_COSTLY_TESTS:-}" ]; then
+    armed=1
+    printf 'venue: AION_RUN_COSTLY_TESTS is set — asserting the proofs RUN (green, zero announcements)\n'
+  else
+    printf 'venue: AION_RUN_COSTLY_TESTS is unset — asserting every skipped proof ANNOUNCES\n'
+  fi
+
   for target in $targets; do
     out=$(cargo test -q -p aion-cli --test "$target" 2>&1)
     rc=$?
@@ -94,12 +119,28 @@ costly_announcements() {
     # cannot say WHICH failure it saw is measuring one thing and reporting
     # another.
     if [ "$rc" -ne 0 ]; then
-      printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` did not RUN (cargo exit %d).\n' "$target" "$rc"
-      printf 'This is NOT a missing announcement — the suite never got far enough\n'
-      printf 'to announce anything. Fix the build or the failing test first; the\n'
-      printf 'announcement claim is unmeasured until this target runs. Last lines:\n'
+      if [ -n "$armed" ]; then
+        printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` RAN its proof and FAILED (cargo exit %d).\n' "$target" "$rc"
+        printf 'This venue armed the costly proofs, so this is a real red in the proof\n'
+        printf 'itself (or its build), not an announcement defect. Last lines:\n'
+      else
+        printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` did not RUN (cargo exit %d).\n' "$target" "$rc"
+        printf 'This is NOT a missing announcement — the suite never got far enough\n'
+        printf 'to announce anything. Fix the build or the failing test first; the\n'
+        printf 'announcement claim is unmeasured until this target runs. Last lines:\n'
+      fi
       printf '%s\n' "$out" | tail -15 | sed 's/^/  | /'
       failures=$((failures + 1))
+    elif [ -n "$armed" ]; then
+      if [ "$found" -ne 0 ]; then
+        printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` PASSED but still announced %d\n' "$target" "$found"
+        printf 'skipped proof(s) in an ARMED venue. The arming did not reach the suite —\n'
+        printf 'a second runtime gate is hiding inside it, or the variable it reads has\n'
+        printf 'drifted from AION_RUN_COSTLY_TESTS. A pass that announces is not a proof.\n'
+        failures=$((failures + 1))
+      else
+        printf '  %-42s ran its proof (green, 0 announcements)\n' "$target"
+      fi
     elif [ "$found" -eq 0 ]; then
       printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` announced NOTHING.\n' "$target"
       printf 'Its costly proof is being skipped silently — the exact invisibility\n'
@@ -117,8 +158,18 @@ costly_announcements() {
     return 1
   fi
   if [ "$failures" -ne 0 ]; then
-    printf '%d of %d costly suite(s) failed to announce.\n' "$failures" "$checked"
+    if [ -n "$armed" ]; then
+      printf '%d of %d costly suite(s) failed under the armed venue.\n' "$failures" "$checked"
+    else
+      printf '%d of %d costly suite(s) failed to announce.\n' "$failures" "$checked"
+    fi
     return 1
+  fi
+  if [ -n "$armed" ]; then
+    printf 'costly proofs ok: %d suite(s), every one RAN its proof green with no announcement\n' "$checked"
+    # The subtraction warning below is a skip-venue correction; in an armed
+    # venue these passes ARE proofs and the total needs no adjustment.
+    return 0
   fi
   printf 'costly announcements ok: %d suite(s), every one announced its skipped proof\n' "$checked"
   # 🔴 SAY THE DIRECTION OUT LOUD. A gated skip PASSES, so converting these off
