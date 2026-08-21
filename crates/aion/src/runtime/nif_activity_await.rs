@@ -2,15 +2,14 @@
 
 use std::sync::Arc;
 
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term, raise_reason};
 use aion_core::{ActivityId, Payload};
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 
 use crate::durability::{Command, CorrelationKey, Resolution, ResolveOutcome};
 use crate::error::EngineError;
-use crate::runtime::nif_activity::{
-    activity_error, activity_id_from_correlation, error_result_term, ok_result_term,
-};
+use crate::runtime::nif_activity::{activity_error, activity_id_from_correlation};
 use crate::runtime::nif_activity_dispatch::FIRST_DELIVERY_ATTEMPT;
 use crate::runtime::nif_context::NifContext;
 
@@ -28,7 +27,7 @@ pub(super) fn await_activity_result_with_context(
         context.pid(),
         "await_activity_result",
     ) {
-        return Ok(error_result_term(process_context, &error).unwrap_or(Term::NIL));
+        return error_result_term(process_context, &error);
     }
     // Queries first (Q6), and deliberately BEFORE the recorded-resolution
     // fast path below: a tight replay loop whose awaits all resolve from
@@ -36,26 +35,23 @@ pub(super) fn await_activity_result_with_context(
     if let Some(sentinel) =
         crate::runtime::nif_query_pump::take_pending_query_sentinel(state, context.pid())
     {
-        return Ok(error_result_term(process_context, &sentinel).unwrap_or(Term::NIL));
+        return error_result_term(process_context, &sentinel);
     }
-    let activity_id = activity_id_from_correlation(process_context, correlation)?;
+    let activity_id = match activity_id_from_correlation(process_context, correlation) {
+        Ok(activity_id) => activity_id,
+        Err(refusal) => return refusal.into_nif_result(),
+    };
     let step = await_activity_step(state, &mut context, runtime, &activity_id, || {
         super::nif_wake::consume_wake_marker(process_context, runtime);
     });
     match step {
-        Ok(ActivityAwaitStep::Completed(bytes)) => {
-            Ok(ok_result_term(process_context, &bytes).unwrap_or(Term::NIL))
-        }
-        Ok(ActivityAwaitStep::Failed(message)) => {
-            Ok(error_result_term(process_context, &message).unwrap_or(Term::NIL))
-        }
+        Ok(ActivityAwaitStep::Completed(bytes)) => ok_result_term(process_context, &bytes),
+        Ok(ActivityAwaitStep::Failed(message)) => error_result_term(process_context, &message),
         Ok(ActivityAwaitStep::Suspend) => {
             process_context.request_suspend(None);
             Ok(Term::NIL)
         }
-        Err(error) => {
-            Err(error_result_term(process_context, &error.to_string()).unwrap_or(Term::NIL))
-        }
+        Err(error) => Err(raise_reason(process_context, &error.to_string())),
     }
 }
 

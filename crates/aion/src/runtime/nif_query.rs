@@ -12,8 +12,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{ContentType, Payload, WorkflowId};
-use beamr::atom::Atom;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
@@ -347,33 +347,27 @@ pub(crate) fn register_query(args: &[Term], ctx: &mut ProcessContext) -> Result<
     }
     if args.len() != 2 {
         let message = format!("register_query: expected 2 arguments, got {}", args.len());
-        return Ok(error_result_term(ctx, &message).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &message);
     }
     let name = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("register_query name: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("register_query name: {error}"));
         }
     };
     let config = match decode_string_arg(args[1]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("register_query config: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("register_query config: {error}"));
         }
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     match register_query_impl(&state, &name, &config, ctx.pid()) {
-        Ok(value) => Ok(ok_result_term(ctx, &value).unwrap_or(Term::NIL)),
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Ok(value) => ok_result_term(ctx, value.as_bytes()),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 
@@ -393,15 +387,15 @@ pub(crate) fn reply_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
     }
     let (query_id, response) = match decode_reply_args("reply_query", args) {
         Ok(parts) => parts,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     match reply_query_impl(&state, &query_id, &response, ctx.pid()) {
-        Ok(value) => Ok(ok_result_term(ctx, &value).unwrap_or(Term::NIL)),
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Ok(value) => ok_result_term(ctx, value.as_bytes()),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 
@@ -411,15 +405,15 @@ pub(crate) fn reply_query_error(args: &[Term], ctx: &mut ProcessContext) -> Resu
     }
     let (query_id, message) = match decode_reply_args("reply_query_error", args) {
         Ok(parts) => parts,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     match reply_query_error_impl(&state, &query_id, &message, ctx.pid()) {
-        Ok(value) => Ok(ok_result_term(ctx, &value).unwrap_or(Term::NIL)),
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Ok(value) => ok_result_term(ctx, value.as_bytes()),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 
@@ -429,33 +423,27 @@ pub(crate) fn dispatch_query(args: &[Term], ctx: &mut ProcessContext) -> Result<
     }
     if args.len() != 2 {
         let message = format!("dispatch_query: expected 2 arguments, got {}", args.len());
-        return Ok(error_result_term(ctx, &message).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &message);
     }
     let name = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("dispatch_query name: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("dispatch_query name: {error}"));
         }
     };
     let config = match decode_string_arg(args[1]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("dispatch_query config: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("dispatch_query config: {error}"));
         }
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     match dispatch_query_impl(&state, &name, &config, ctx.pid()) {
-        Ok(value) => Ok(ok_result_term(ctx, &value).unwrap_or(Term::NIL)),
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Ok(value) => ok_result_term(ctx, value.as_bytes()),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 
@@ -556,30 +544,6 @@ fn query_error_reason(error: &QueryError) -> String {
         QueryError::InvalidArguments { reason } => format!("invalid_arguments:{reason}"),
         QueryError::Engine(error) => format!("engine:{error}"),
     }
-}
-
-/// Build `{ok, <<value>>}` on the calling process heap.
-///
-/// Result terms are allocated through the [`ProcessContext`] allocators:
-/// attached (normal-scheduler) calls get GC-traced process-heap terms, and
-/// detached (dirty) calls get owned blocks the dirty-result bridge copies
-/// onto the process heap. Nothing is parked in thread-locals — beamr's
-/// moving GC never traces out-of-heap pointers, so a parked heap either
-/// leaks for the scheduler thread's lifetime or dangles once cleared while
-/// workflow code still references the term (N-6).
-///
-/// Allocation may collect on attached calls: decode every argument `Term`
-/// before the first result allocation.
-fn ok_result_term(ctx: &mut ProcessContext, value: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(value.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::OK), value_term]).ok()
-}
-
-/// Build `{error, <<message>>}` on the calling process heap (see
-/// [`ok_result_term`] for the allocation contract).
-fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(message.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::ERROR), value_term]).ok()
 }
 
 fn decode_string_arg(term: Term) -> Result<String, String> {

@@ -39,6 +39,7 @@ mod nif_query;
 mod nif_query_diagnostic;
 mod nif_query_mailbox;
 mod nif_query_pump;
+mod nif_result_term;
 mod nif_signal;
 pub(crate) mod nif_state;
 #[cfg(test)]

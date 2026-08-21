@@ -15,8 +15,8 @@
 
 use std::sync::Arc;
 
+use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 use aion_core::{ContentType, Payload, WorkflowError, WorkflowId};
-use beamr::atom::Atom;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
@@ -47,8 +47,10 @@ pub(super) fn spawn_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
     if args.len() > 255 {
         return Err(Term::NIL);
     }
-    let result = run_spawn_child(args, ctx);
-    Ok(checked_child_result(ctx, result, "spawn_child"))
+    match run_spawn_child(args, ctx) {
+        Ok(term) => Ok(term),
+        Err(refusal) => refusal.into_nif_result(),
+    }
 }
 
 /// NIF backing `aion_flow_ffi:await_child/1`.
@@ -60,7 +62,7 @@ pub(super) fn await_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
         return Err(Term::NIL);
     }
     match run_await_child(args, ctx) {
-        Ok(AwaitChildOutcome::Resolved(term)) => Ok(term),
+        Ok(AwaitChildOutcome::Resolved(term)) => term,
         Ok(AwaitChildOutcome::Suspend) => {
             // Park the process; the next mailbox wake re-invokes this native
             // from the top with the await identity pinned. The NIL return is
@@ -68,25 +70,36 @@ pub(super) fn await_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
             ctx.request_suspend(None);
             Ok(Term::NIL)
         }
-        Err(message) => {
-            Ok(error_result_term(ctx, &format!("await_child:{message}")).unwrap_or(Term::NIL))
-        }
+        Err(message) => error_result_term(ctx, &format!("await_child:{message}")),
     }
 }
 
-fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, String> {
-    require_arity("spawn_child", args, 3)?;
-    let workflow_type =
-        decode_string_arg(args[0]).map_err(|error| format!("workflow_type:{error}"))?;
-    let input = decode_payload_arg(args[1]).map_err(|error| format!("input:{error}"))?;
-    decode_string_arg(args[2]).map_err(|error| format!("options:{error}"))?;
-    let bridge = child_bridge(ctx)?;
-    let pid = ctx.pid().ok_or_else(|| "missing_caller_pid".to_owned())?;
+fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, NifRefusal> {
+    require_arity("spawn_child", args, 3)
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    let workflow_type = decode_string_arg(args[0])
+        .map_err(|error| format!("workflow_type:{error}"))
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    let input = decode_payload_arg(args[1])
+        .map_err(|error| format!("input:{error}"))
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    decode_string_arg(args[2])
+        .map_err(|error| format!("options:{error}"))
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    let bridge =
+        child_bridge(ctx).map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    let pid = ctx
+        .pid()
+        .ok_or_else(|| "missing_caller_pid".to_owned())
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
     // spawn_child records `ChildWorkflowStarted`; a query handler must stay
     // read-only.
-    let state = super::nif_state::engine_nif_state(ctx)?;
-    super::nif_query_pump::ensure_not_servicing_query(&state, pid, "spawn_child")?;
-    let mut nif = new_context(&bridge, pid)?;
+    let state = super::nif_state::engine_nif_state(ctx)
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    super::nif_query_pump::ensure_not_servicing_query(&state, pid, "spawn_child")
+        .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
+    let nif =
+        new_context(&bridge, pid).map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
     let key = next_child_key(&nif);
     let command = Command::SpawnChild {
         key,
@@ -94,6 +107,17 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
         input: input.clone(),
     };
 
+    resolve_spawn_child(ctx, &bridge, nif, workflow_type, input, command)
+}
+
+fn resolve_spawn_child(
+    ctx: &mut ProcessContext,
+    bridge: &Arc<ChildNifBridge>,
+    mut nif: NifContext,
+    workflow_type: String,
+    input: Payload,
+    command: Command,
+) -> Result<Term, NifRefusal> {
     // OBSERVED seam. The recorded `ChildWorkflowStarted` IS the answer this
     // call returns to workflow code — the child's identity, recorded
     // nondeterminism replayed from history. Live parity: the live branch
@@ -101,21 +125,35 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
     // returning the same id.
     match nif
         .resolve_command_observed(command)
-        .map_err(|error| context_error(&error))?
+        .map_err(|error| child_refusal(ctx, "spawn_child", &context_error(&error)))?
     {
         ResolveOutcome::Recorded(Resolution::ChildStarted(child_id)) => {
-            term_or_encoding_error(ok_result_term(ctx, &child_id.to_string()))
+            ok_result_term(ctx, child_id.to_string().as_bytes()).map_err(NifRefusal::Unbuildable)
         }
-        ResolveOutcome::Recorded(other) => {
-            Err(format!("unexpected_child_spawn_resolution:{other:?}"))
-        }
+        ResolveOutcome::Recorded(other) => Err(child_refusal(
+            ctx,
+            "spawn_child",
+            &format!("unexpected_child_spawn_resolution:{other:?}"),
+        )),
         ResolveOutcome::ResumeLive => {
             // Resolve within the parent's exact package version. The durable
             // record carries that pin through retry, recovery, and adoption.
             let package_version = bridge
                 .package_version_for_child(&workflow_type, nif.workflow_handle().loaded_version())
-                .map_err(|error| format!("child_version_resolution:{error}"))?
-                .ok_or_else(|| format!("child_workflow_type_not_loaded:{workflow_type}"))?;
+                .map_err(|error| {
+                    child_refusal(
+                        ctx,
+                        "spawn_child",
+                        &format!("child_version_resolution:{error}"),
+                    )
+                })?
+                .ok_or_else(|| {
+                    child_refusal(
+                        ctx,
+                        "spawn_child",
+                        &format!("child_workflow_type_not_loaded:{workflow_type}"),
+                    )
+                })?;
             // Record-then-spawn (#56): the id is recorded nondeterminism —
             // drawn once here, durably recorded before any observable use,
             // returned from history on every replay.
@@ -138,7 +176,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                         .await
                 })
             })
-            .map_err(|error| context_error(&error))?;
+            .map_err(|error| child_refusal(ctx, "spawn_child", &context_error(&error)))?;
             // Live half of the OBSERVED spawn seam: this is the event a
             // replayed spawn resolves at this position.
             nif.observe_recorded_at(recorded_at);
@@ -149,7 +187,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
             // live path must report success too — a start failure here is
             // recovered in the background (or by the next epoch's startup
             // sweep), exactly like the crash-in-the-window case.
-            let engine = NifChildEngine::new(Arc::clone(&bridge), nif.workflow_handle().clone());
+            let engine = NifChildEngine::new(Arc::clone(bridge), nif.workflow_handle().clone());
             let request = ChildWorkflowSpawnRequest {
                 parent_workflow_id: nif.workflow_id().clone(),
                 child_workflow_id: child_workflow_id.clone(),
@@ -171,7 +209,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                         "engine invariant violation: child start echoed a different workflow id"
                     );
                     recover_spawn_in_background(
-                        &bridge,
+                        bridge,
                         &nif,
                         &child_workflow_id,
                         workflow_type,
@@ -187,7 +225,7 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                         "recorded child start failed; recovering in the background"
                     );
                     recover_spawn_in_background(
-                        &bridge,
+                        bridge,
                         &nif,
                         &child_workflow_id,
                         workflow_type,
@@ -196,7 +234,8 @@ fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Stri
                     );
                 }
             }
-            term_or_encoding_error(ok_result_term(ctx, &child_workflow_id.to_string()))
+            ok_result_term(ctx, child_workflow_id.to_string().as_bytes())
+                .map_err(NifRefusal::Unbuildable)
         }
     }
 }
@@ -244,7 +283,7 @@ fn recover_spawn_in_background(
 /// Outcome of one `await_child` invocation.
 enum AwaitChildOutcome {
     /// A complete `{ok, _}`/`{error, _}` result term for workflow code.
-    Resolved(Term),
+    Resolved(Result<Term, Term>),
     /// Park the calling process; a mailbox wake re-invokes the native.
     Suspend,
 }
@@ -276,13 +315,14 @@ fn run_await_child(args: &[Term], ctx: &mut ProcessContext) -> Result<AwaitChild
     super::nif_wake::consume_wake_marker(ctx, &bridge.runtime());
     match await_child_step(&state, &bridge, pid, &child_workflow_id)? {
         AwaitChildStep::QuerySentinel(sentinel) => Ok(AwaitChildOutcome::Resolved(
-            error_result_term(ctx, &sentinel).unwrap_or(Term::NIL),
+            error_result_term(ctx, &sentinel),
         )),
-        AwaitChildStep::ChildResolved(envelope) => Ok(AwaitChildOutcome::Resolved(
-            term_or_encoding_error(ok_result_term(ctx, &envelope))?,
-        )),
+        AwaitChildStep::ChildResolved(envelope) => Ok(AwaitChildOutcome::Resolved(ok_result_term(
+            ctx,
+            envelope.as_bytes(),
+        ))),
         AwaitChildStep::ScopeExpired(message) => Ok(AwaitChildOutcome::Resolved(
-            error_result_term(ctx, &message).unwrap_or(Term::NIL),
+            error_result_term(ctx, &message),
         )),
         AwaitChildStep::Suspend => Ok(AwaitChildOutcome::Suspend),
     }
@@ -532,15 +572,8 @@ fn ensure_awaitable_child(
     Err(format!("unknown_child_workflow:{child_workflow_id}"))
 }
 
-fn checked_child_result(
-    ctx: &mut ProcessContext,
-    result: Result<Term, String>,
-    name: &str,
-) -> Term {
-    match result {
-        Ok(term) => term,
-        Err(message) => error_result_term(ctx, &format!("{name}:{message}")).unwrap_or(Term::NIL),
-    }
+fn child_refusal(ctx: &mut ProcessContext, name: &str, message: &str) -> NifRefusal {
+    NifRefusal::reported(error_result_term(ctx, &format!("{name}:{message}")))
 }
 
 fn child_bridge(ctx: &ProcessContext) -> Result<Arc<ChildNifBridge>, String> {
@@ -593,10 +626,6 @@ fn decode_payload_arg(term: Term) -> Result<Payload, String> {
     decode_string_arg(term).map(|value| Payload::new(ContentType::Json, value.into_bytes()))
 }
 
-fn term_or_encoding_error(term: Option<Term>) -> Result<Term, String> {
-    term.ok_or_else(|| "failed_to_encode_child_nif_result".to_owned())
-}
-
 fn decode_string_arg(term: Term) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
     String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
@@ -622,30 +651,6 @@ fn workflow_error_text(error: &WorkflowError) -> String {
         Some(details) => payload_text(details).unwrap_or_else(|_| error.message.clone()),
         None => error.message.clone(),
     }
-}
-
-/// Build `{ok, <<value>>}` on the calling process heap.
-///
-/// Result terms are allocated through the [`ProcessContext`] allocators:
-/// attached (normal-scheduler) calls get GC-traced process-heap terms, and
-/// detached (dirty) calls get owned blocks the dirty-result bridge copies
-/// onto the process heap. Nothing is parked in thread-locals — beamr's
-/// moving GC never traces out-of-heap pointers, so a parked heap either
-/// leaks for the scheduler thread's lifetime or dangles once cleared while
-/// workflow code still references the term (N-6).
-///
-/// Allocation may collect on attached calls: decode every argument `Term`
-/// before the first result allocation.
-fn ok_result_term(ctx: &mut ProcessContext, value: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(value.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::OK), value_term]).ok()
-}
-
-/// Build `{error, <<message>>}` on the calling process heap (see
-/// [`ok_result_term`] for the allocation contract).
-fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(message.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::ERROR), value_term]).ok()
 }
 
 #[cfg(test)]

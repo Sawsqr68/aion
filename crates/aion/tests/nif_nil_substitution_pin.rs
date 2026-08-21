@@ -1,3 +1,5 @@
+//! Structural pin preventing NIF allocation failures from becoming success-domain values.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

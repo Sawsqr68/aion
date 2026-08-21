@@ -4,7 +4,6 @@
 //! in the Gleam `aion_flow` SDK. Activity dispatch is split into a normal
 //! dispatch NIF plus a selective-receive await NIF.
 
-use beamr::atom::Atom;
 use beamr::native::{NativeFn, ProcessContext};
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
@@ -17,33 +16,12 @@ use super::nif_signal;
 use super::nif_timeout;
 use super::nif_timer;
 
+#[cfg(test)]
+use crate::runtime::nif_result_term::error_result_term;
+
 const FFI_MODULE: &str = "aion_flow_ffi";
 #[cfg(test)]
 const NOT_YET_IMPLEMENTED: &str = "not_yet_implemented";
-
-/// Build `{ok, <<value>>}` on the calling process heap.
-///
-/// Result terms are allocated through the [`ProcessContext`] allocators:
-/// attached (normal-scheduler) calls get GC-traced process-heap terms, and
-/// detached (dirty) calls get owned blocks the dirty-result bridge copies
-/// onto the process heap. Nothing is parked in thread-locals — beamr's
-/// moving GC never traces out-of-heap pointers, so a parked heap either
-/// leaks for the scheduler thread's lifetime or dangles once cleared while
-/// workflow code still references the term (N-6).
-///
-/// Allocation may collect on attached calls: decode every argument `Term`
-/// before the first result allocation.
-pub(super) fn ok_result_term(ctx: &mut ProcessContext, value: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(value.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::OK), value_term]).ok()
-}
-
-/// Build `{error, <<message>>}` on the calling process heap (see
-/// [`ok_result_term`] for the allocation contract).
-pub(super) fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(message.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::ERROR), value_term]).ok()
-}
 
 pub(super) fn decode_string_arg(term: Term) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
@@ -81,7 +59,7 @@ fn not_yet_implemented(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, 
         return Err(Term::NIL);
     }
 
-    Ok(error_result_term(ctx, NOT_YET_IMPLEMENTED).unwrap_or(Term::NIL))
+    error_result_term(ctx, NOT_YET_IMPLEMENTED)
 }
 
 fn pure(function: &str, arity: u8, native: NativeFn) -> NifEntry {

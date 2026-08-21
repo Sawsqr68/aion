@@ -16,6 +16,7 @@
 
 use std::sync::atomic::Ordering;
 
+use crate::runtime::nif_result_term::error_result_term;
 use aion_core::TimerId;
 use beamr::atom::Atom;
 use beamr::native::stdlib_stubs::maps_bifs::ContinuationStep;
@@ -23,7 +24,6 @@ use beamr::native::{AionTimeoutContinuation, NativeContinuation, ProcessContext}
 use beamr::term::Term;
 
 use crate::durability::{Resolution, ResolveOutcome};
-use crate::runtime::engine_nifs::error_result_term;
 use crate::runtime::nif_context::NifContext;
 use crate::runtime::nif_state::EngineNifState;
 use crate::runtime::nif_timer::{
@@ -160,28 +160,24 @@ pub(super) fn with_timeout_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
         return Err(Term::NIL);
     }
     if args.len() != 2 {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             &format!("with_timeout: expected 2 arguments, got {}", args.len()),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let Some(pid) = ctx.pid() else {
-        return Ok(
-            error_result_term(ctx, "with_timeout: missing calling process pid")
-                .unwrap_or(Term::NIL),
-        );
+        return error_result_term(ctx, "with_timeout: missing calling process pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     // with_timeout records its durable deadline timer; a query handler must
     // stay read-only.
     if let Err(error) =
         super::nif_query_pump::ensure_not_servicing_query(&state, pid, "with_timeout")
     {
-        return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &error);
     }
     match arm_scope(&state, args, pid) {
         Ok((fun, state_id)) => {
@@ -199,7 +195,7 @@ pub(super) fn with_timeout_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
             );
             Ok(Term::NIL)
         }
-        Err(message) => Ok(error_result_term(ctx, &message).unwrap_or(Term::NIL)),
+        Err(message) => error_result_term(ctx, &message),
     }
 }
 
@@ -271,15 +267,14 @@ fn resume_with_timeout(
     let engine_state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
         Err(error) => {
-            return Ok(ContinuationStep::Done(
-                error_result_term(ctx, &error).unwrap_or(Term::NIL),
-            ));
+            return Ok(ContinuationStep::Done(error_result_term(ctx, &error)?));
         }
     };
     let Some((_, scope)) = engine_state.timeout_scopes.remove(&state_id) else {
-        return Ok(ContinuationStep::Done(
-            error_result_term(ctx, "with_timeout: scope state missing").unwrap_or(Term::NIL),
-        ));
+        return Ok(ContinuationStep::Done(error_result_term(
+            ctx,
+            "with_timeout: scope state missing",
+        )?));
     };
     if let Some(mut stack) = engine_state.timeout_scope_stacks.get_mut(&scope.pid) {
         stack.retain(|entry| *entry != state_id);
@@ -289,16 +284,15 @@ fn resume_with_timeout(
         None => match settle_live_scope(&engine_state, &scope) {
             Ok(timed_out) => timed_out,
             Err(message) => {
-                return Ok(ContinuationStep::Done(
-                    error_result_term(ctx, &message).unwrap_or(Term::NIL),
-                ));
+                return Ok(ContinuationStep::Done(error_result_term(ctx, &message)?));
             }
         },
     };
     if timed_out {
-        Ok(ContinuationStep::Done(
-            error_result_term(ctx, SCOPE_EXPIRED_MESSAGE).unwrap_or(Term::NIL),
-        ))
+        Ok(ContinuationStep::Done(error_result_term(
+            ctx,
+            SCOPE_EXPIRED_MESSAGE,
+        )?))
     } else {
         let wrapped = ctx.alloc_tuple(&[Term::atom(Atom::OK), closure_result])?;
         Ok(ContinuationStep::Done(wrapped))

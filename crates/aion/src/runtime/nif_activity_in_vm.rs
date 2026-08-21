@@ -36,11 +36,12 @@ use std::sync::Arc;
 
 use crate::durability::{Command, CorrelationKey, ResolveOutcome};
 use crate::runtime::nif_activity::{
-    ScheduledActivity, context_error_term, correlation_id, decode_string_arg, error_result_term,
-    json_payload, ok_result_term, record_started, runtime_context,
+    ScheduledActivity, context_error_term, correlation_id, decode_string_arg, json_payload,
+    record_started, runtime_context,
 };
 use crate::runtime::nif_activity_dispatch::FIRST_DELIVERY_ATTEMPT;
 use crate::runtime::nif_context::NifContext;
+use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 use aion_core::ActivityId;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
@@ -58,29 +59,26 @@ pub(super) fn dispatch_activity_in_vm_impl(
     // resolve: a malformed wire records nothing.
     let (name, input, config) = match decode_in_vm_args(args) {
         Ok(parts) => parts,
-        Err(reason) => return Ok(error_result_term(ctx, &reason).unwrap_or(Term::NIL)),
+        Err(reason) => return error_result_term(ctx, &reason),
     };
     let thunk = args[3];
     let Some(pid) = ctx.pid() else {
-        return Ok(
-            error_result_term(ctx, "dispatch_activity_in_vm: missing calling process pid")
-                .unwrap_or(Term::NIL),
-        );
+        return error_result_term(ctx, "dispatch_activity_in_vm: missing calling process pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     // dispatch_activity_in_vm records `ActivityScheduled`; a query handler
     // must stay read-only.
     if let Err(error) =
         super::nif_query_pump::ensure_not_servicing_query(&state, pid, "dispatch_activity_in_vm")
     {
-        return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &error);
     }
     let runtime = match runtime_context(&state) {
         Ok(runtime) => runtime,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
     let context = match NifContext::new(
         pid,
@@ -89,16 +87,19 @@ pub(super) fn dispatch_activity_in_vm_impl(
         runtime.runtime.signal_delivery(),
     ) {
         Ok(context) => context,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
-    dispatch_in_vm_with_context(
+    match dispatch_in_vm_with_context(
         ctx,
         context,
         &runtime.runtime,
         &runtime.tokio_handle,
         (name, input, config),
         thunk,
-    )
+    ) {
+        Ok(term) => Ok(term),
+        Err(refusal) => refusal.into_nif_result(),
+    }
 }
 
 /// Decode the three string arguments and validate the fourth is a zero-arity
@@ -144,7 +145,7 @@ fn dispatch_in_vm_with_context(
     tokio_handle: &tokio::runtime::Handle,
     (name, input, config): (String, String, String),
     thunk: Term,
-) -> Result<Term, Term> {
+) -> Result<Term, NifRefusal> {
     let input_payload = json_payload(ctx, &input, "dispatch_activity_in_vm", "input")?;
     let ordinal = context.next_activity_ordinal();
     let key = CorrelationKey::Activity(ordinal);
@@ -162,7 +163,7 @@ fn dispatch_in_vm_with_context(
         .map_err(|error| context_error_term(ctx, &error))?
     {
         ResolveOutcome::Recorded(_) => {
-            Ok(ok_result_term(ctx, correlation.as_bytes()).unwrap_or(Term::NIL))
+            ok_result_term(ctx, correlation.as_bytes()).map_err(NifRefusal::Unbuildable)
         }
         ResolveOutcome::ResumeLive => {
             // Stamp the SAME resolved task queue / node / attempt a remote
@@ -196,7 +197,7 @@ fn dispatch_in_vm_with_context(
                 }
                 Err(error) => retain_spawn_failure(runtime, context.pid(), &correlation, &error),
             }
-            Ok(ok_result_term(ctx, correlation.as_bytes()).unwrap_or(Term::NIL))
+            ok_result_term(ctx, correlation.as_bytes()).map_err(NifRefusal::Unbuildable)
         }
     }
 }

@@ -5,10 +5,11 @@ use std::sync::Arc;
 use crate::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use crate::durability::{Command, CorrelationKey, ResolveOutcome};
 use crate::runtime::nif_activity::{
-    context_error_term, correlation_id, decode_string_arg, error_result_term, json_payload,
-    labels_from_config, ok_result_term, record_started, runtime_context,
+    context_error_term, correlation_id, decode_string_arg, json_payload, labels_from_config,
+    record_started, runtime_context,
 };
 use crate::runtime::nif_context::NifContext;
+use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 use aion_core::ActivityId;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
@@ -22,47 +23,42 @@ pub(super) fn dispatch_activity_impl(
         return Err(Term::NIL);
     }
     let Ok((name, input, config)) = decode_dispatch_args(args) else {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             &format!(
                 "dispatch_activity: expected 3 arguments, got {}",
                 args.len()
             ),
-        )
-        .unwrap_or(Term::NIL));
+        );
     };
     // Defense: an in-VM selection must cross the arity-4 wire that carries the
     // runner thunk. Refused BEFORE any ordinal allocation or resolve, so
     // nothing is recorded.
     if super::nif_activity::config_tier(&config).as_deref() == Some(super::nif_activity::IN_VM_TIER)
     {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             "dispatch_activity: tier in_vm cannot cross the remote dispatch wire — \
              in-VM dispatch requires dispatch_activity_in_vm/4 carrying the runner thunk",
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let Some(pid) = ctx.pid() else {
-        return Ok(
-            error_result_term(ctx, "dispatch_activity: missing calling process pid")
-                .unwrap_or(Term::NIL),
-        );
+        return error_result_term(ctx, "dispatch_activity: missing calling process pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     // dispatch_activity records `ActivityScheduled`; a query handler must
     // stay read-only.
     if let Err(error) =
         super::nif_query_pump::ensure_not_servicing_query(&state, pid, "dispatch_activity")
     {
-        return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &error);
     }
     let runtime = match runtime_context(&state) {
         Ok(runtime) => runtime,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
     let context = match NifContext::new(
         pid,
@@ -71,11 +67,11 @@ pub(super) fn dispatch_activity_impl(
         runtime.runtime.signal_delivery(),
     ) {
         Ok(context) => context,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
     let dispatcher = state.activity_dispatcher();
     let advisory_catalog = state.installed_workflow_catalog();
-    dispatch_activity_with_context(
+    match dispatch_activity_with_context(
         ctx,
         context,
         dispatcher,
@@ -88,7 +84,10 @@ pub(super) fn dispatch_activity_impl(
             config,
             attempt: FIRST_DELIVERY_ATTEMPT,
         },
-    )
+    ) {
+        Ok(term) => Ok(term),
+        Err(refusal) => refusal.into_nif_result(),
+    }
 }
 
 /// NIF backing `aion_flow_ffi:await_activity_result/1`.
@@ -100,37 +99,30 @@ pub(super) fn await_activity_result_impl(
         return Err(Term::NIL);
     }
     if args.len() != 1 {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             &format!(
                 "await_activity_result: expected 1 argument, got {}",
                 args.len()
             ),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let correlation = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("await_activity_result id: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("await_activity_result id: {error}"));
         }
     };
     let Some(pid) = ctx.pid() else {
-        return Ok(
-            error_result_term(ctx, "await_activity_result: missing calling process pid")
-                .unwrap_or(Term::NIL),
-        );
+        return error_result_term(ctx, "await_activity_result: missing calling process pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     let runtime = match runtime_context(&state) {
         Ok(runtime) => runtime,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
     let context = match NifContext::new(
         pid,
@@ -139,7 +131,7 @@ pub(super) fn await_activity_result_impl(
         runtime.runtime.signal_delivery(),
     ) {
         Ok(context) => context,
-        Err(error) => return Ok(context_error_term(ctx, &error)),
+        Err(error) => return context_error_term(ctx, &error).into_nif_result(),
     };
     await_activity_result_with_context(&state, context, &runtime.runtime, ctx, &correlation)
 }
@@ -204,7 +196,7 @@ fn record_superseded_attempt(
     context: &NifContext,
     activity_id: &ActivityId,
     superseded: u32,
-) -> Result<(), Term> {
+) -> Result<(), NifRefusal> {
     context
         .record_activity_failed(
             chrono::Utc::now(),
@@ -262,7 +254,7 @@ fn open_this_delivery(
     context: &NifContext,
     catalog: Option<&crate::loader::WorkflowCatalog>,
     opening: Opening<'_>,
-) -> Result<u32, Term> {
+) -> Result<u32, NifRefusal> {
     let Opening {
         activity_id,
         activity_type,
@@ -320,7 +312,7 @@ fn dispatch_activity_with_context(
     tokio_handle: &tokio::runtime::Handle,
     catalog: Option<&crate::loader::WorkflowCatalog>,
     call: ActivityCall,
-) -> Result<Term, Term> {
+) -> Result<Term, NifRefusal> {
     let input_payload = json_payload(ctx, &call.input, "dispatch_activity", "input")?;
     let ordinal = context.next_activity_ordinal();
     let key = CorrelationKey::Activity(ordinal);
@@ -343,15 +335,15 @@ fn dispatch_activity_with_context(
         .map_err(|error| context_error_term(ctx, &error))?
     {
         ResolveOutcome::Recorded(_) => {
-            Ok(ok_result_term(ctx, correlation.as_bytes()).unwrap_or(Term::NIL))
+            ok_result_term(ctx, correlation.as_bytes()).map_err(NifRefusal::Unbuildable)
         }
         ResolveOutcome::ResumeLive => {
             let Some(dispatcher) = dispatcher else {
-                return Ok(error_result_term(
+                return error_result_term(
                     ctx,
                     "no activity dispatcher configured — set one via EngineBuilder::activity_dispatcher",
                 )
-                .unwrap_or(Term::NIL));
+                .map_err(NifRefusal::Unbuildable);
             };
             // NSTQ-4 (+#144): resolve the dispatch's task queue once at this
             // schedule seam (activity override > workflow declared default >
@@ -422,7 +414,7 @@ fn dispatch_activity_with_context(
                 correlation.clone(),
                 request,
             );
-            Ok(ok_result_term(ctx, correlation.as_bytes()).unwrap_or(Term::NIL))
+            ok_result_term(ctx, correlation.as_bytes()).map_err(NifRefusal::Unbuildable)
         }
     }
 }

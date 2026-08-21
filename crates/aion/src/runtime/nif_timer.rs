@@ -2,13 +2,14 @@
 
 use std::time::Duration;
 
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{Event, TimerId};
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use chrono::{DateTime, Utc};
 
 use crate::durability::{Command, CorrelationKey, DurabilityError, Resolution, ResolveOutcome};
-use crate::runtime::engine_nifs::{decode_string_arg, error_result_term, ok_result_term};
+use crate::runtime::engine_nifs::decode_string_arg;
 use crate::runtime::nif_context::{NifContext, NifContextError};
 use crate::runtime::nif_state::{EngineNifState, PendingAwait};
 use crate::runtime::nif_timer_bridge::{run_blocking, timer_bridge};
@@ -34,11 +35,11 @@ pub(super) fn sleep_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term
     {
         if let Err(error) = super::nif_query_pump::ensure_not_servicing_query(&state, pid, "sleep")
         {
-            return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+            return error_result_term(ctx, &error);
         }
         consume_one_wake_marker(ctx);
         if let Some(sentinel) = super::nif_query_pump::take_pending_query_sentinel(&state, pid) {
-            return Ok(error_result_term(ctx, &sentinel).unwrap_or(Term::NIL));
+            return error_result_term(ctx, &sentinel);
         }
     } else {
         consume_one_wake_marker(ctx);
@@ -242,30 +243,25 @@ where
         return Err(Term::NIL);
     }
     if args.len() != arity {
-        return Ok(error_result_term(
+        return error_result_term(
             process_context,
             &format!("{name}: expected {arity} arguments, got {}", args.len()),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let state = match super::nif_state::engine_nif_state(process_context) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(process_context, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(process_context, &error),
     };
     // Every timer NIF records durable timer events; refuse while the caller
     // is servicing a query so handler misuse never writes history.
     if let Some(pid) = process_context.pid()
         && let Err(error) = super::nif_query_pump::ensure_not_servicing_query(&state, pid, name)
     {
-        return Ok(error_result_term(process_context, &error).unwrap_or(Term::NIL));
+        return error_result_term(process_context, &error);
     }
     match build_context(&state, process_context).and_then(|context| f(&state, context, args)) {
-        Ok(NifResult::Ok(value)) => {
-            Ok(ok_result_term(process_context, &value).unwrap_or(Term::NIL))
-        }
-        Ok(NifResult::Error(message)) => {
-            Ok(error_result_term(process_context, &message).unwrap_or(Term::NIL))
-        }
+        Ok(NifResult::Ok(value)) => ok_result_term(process_context, value.as_bytes()),
+        Ok(NifResult::Error(message)) => error_result_term(process_context, &message),
         Ok(NifResult::Suspend) => {
             // Park the process; the next mailbox wake re-invokes this
             // native from the top with the await identity pinned in
@@ -274,9 +270,7 @@ where
             process_context.request_suspend(None);
             Ok(Term::NIL)
         }
-        Err(error) => {
-            Ok(error_result_term(process_context, &error.to_string()).unwrap_or(Term::NIL))
-        }
+        Err(error) => error_result_term(process_context, &error.to_string()),
     }
 }
 

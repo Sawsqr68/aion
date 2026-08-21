@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{Event, Payload, WorkflowId};
-use beamr::atom::Atom;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
@@ -62,30 +62,6 @@ fn signal_bridge(ctx: &ProcessContext) -> Result<Arc<SignalNifBridge>, String> {
         Err(poisoned) => poisoned.into_inner().clone(),
     };
     slot.ok_or_else(|| "signal NIF bridge is not configured".to_owned())
-}
-
-/// Build `{ok, <<value>>}` on the calling process heap.
-///
-/// Result terms are allocated through the [`ProcessContext`] allocators:
-/// attached (normal-scheduler) calls get GC-traced process-heap terms, and
-/// detached (dirty) calls get owned blocks the dirty-result bridge copies
-/// onto the process heap. Nothing is parked in thread-locals — beamr's
-/// moving GC never traces out-of-heap pointers, so a parked heap either
-/// leaks for the scheduler thread's lifetime or dangles once cleared while
-/// workflow code still references the term (N-6).
-///
-/// Allocation may collect on attached calls: decode every argument `Term`
-/// before the first result allocation.
-fn ok_result_term(ctx: &mut ProcessContext, value: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(value.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::OK), value_term]).ok()
-}
-
-/// Build `{error, <<message>>}` on the calling process heap (see
-/// [`ok_result_term`] for the allocation contract).
-fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(message.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::ERROR), value_term]).ok()
 }
 
 fn decode_string_arg(term: Term) -> Result<String, String> {
@@ -475,49 +451,40 @@ pub(super) fn receive_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<
         return Err(Term::NIL);
     }
     if args.len() != 2 {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             &format!("receive_signal: expected 2 arguments, got {}", args.len()),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let name = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("receive_signal name: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("receive_signal name: {error}"));
         }
     };
     let config = match decode_string_arg(args[1]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("receive_signal config: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("receive_signal config: {error}"));
         }
     };
     let Some(pid) = ctx.pid() else {
-        return Ok(
-            error_result_term(ctx, "receive_signal: missing caller pid").unwrap_or(Term::NIL)
-        );
+        return error_result_term(ctx, "receive_signal: missing caller pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     let bridge = match signal_bridge(ctx) {
         Ok(bridge) => bridge,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     // A query handler must not nest into another await (and must not record
     // a signal receive); refuse before any marker is consumed.
     if let Err(error) =
         super::nif_query_pump::ensure_not_servicing_query(&state, pid, "receive_signal")
     {
-        return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &error);
     }
     // One wake marker is consumed per invocation; leaving it queued would
     // insta-rewake the suspend below into a busy spin.
@@ -526,17 +493,15 @@ pub(super) fn receive_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<
     // own resolution, so operator queries are never starved by a workflow
     // whose awaits keep resolving immediately.
     if let Some(sentinel) = super::nif_query_pump::take_pending_query_sentinel(&state, pid) {
-        return Ok(error_result_term(ctx, &sentinel).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &sentinel);
     }
     match receive_signal_impl(&state, &bridge, &name, &config, pid) {
-        Ok(SignalReceiveOutcome::Payload(result)) => {
-            Ok(ok_result_term(ctx, &result).unwrap_or(Term::NIL))
-        }
+        Ok(SignalReceiveOutcome::Payload(result)) => ok_result_term(ctx, result.as_bytes()),
         Ok(SignalReceiveOutcome::Suspend) => {
             ctx.request_suspend(None);
             Ok(Term::NIL)
         }
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 
@@ -545,58 +510,49 @@ pub(super) fn send_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
         return Err(Term::NIL);
     }
     if args.len() != 3 {
-        return Ok(error_result_term(
+        return error_result_term(
             ctx,
             &format!("send_signal: expected 3 arguments, got {}", args.len()),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
     let target = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("send_signal target: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("send_signal target: {error}"));
         }
     };
     let name = match decode_string_arg(args[1]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("send_signal name: {error}")).unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("send_signal name: {error}"));
         }
     };
     let payload = match decode_string_arg(args[2]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(
-                error_result_term(ctx, &format!("send_signal payload: {error}"))
-                    .unwrap_or(Term::NIL),
-            );
+            return error_result_term(ctx, &format!("send_signal payload: {error}"));
         }
     };
     let Some(pid) = ctx.pid() else {
-        return Ok(error_result_term(ctx, "send_signal: missing caller pid").unwrap_or(Term::NIL));
+        return error_result_term(ctx, "send_signal: missing caller pid");
     };
     let state = match super::nif_state::engine_nif_state(ctx) {
         Ok(state) => state,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     // send_signal records `SignalSent`; a query handler must stay read-only.
     if let Err(error) =
         super::nif_query_pump::ensure_not_servicing_query(&state, pid, "send_signal")
     {
-        return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL));
+        return error_result_term(ctx, &error);
     }
     let bridge = match signal_bridge(ctx) {
         Ok(bridge) => bridge,
-        Err(error) => return Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Err(error) => return error_result_term(ctx, &error),
     };
     match send_signal_impl(&bridge, &target, &name, &payload, pid) {
-        Ok(result) => Ok(ok_result_term(ctx, &result).unwrap_or(Term::NIL)),
-        Err(error) => Ok(error_result_term(ctx, &error).unwrap_or(Term::NIL)),
+        Ok(result) => ok_result_term(ctx, result.as_bytes()),
+        Err(error) => error_result_term(ctx, &error),
     }
 }
 

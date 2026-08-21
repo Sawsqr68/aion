@@ -8,10 +8,10 @@ use chrono::Utc;
 use crate::durability::{DurabilityError, Recorder};
 use crate::runtime::engine_tasks::EngineTaskRuntime;
 use crate::runtime::nif_activity::{
-    context_error_term, decode_string_arg, error_result_term, json_payload, ok_result_term,
-    runtime_context,
+    context_error_term, decode_string_arg, json_payload, runtime_context,
 };
 use crate::runtime::nif_context::{NifContext, NifContextError};
+use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 
 /// Record `WorkflowContinuedAsNew` through the current workflow recorder and
 /// terminate the current workflow process so the lifecycle monitor can start the
@@ -24,33 +24,34 @@ pub(crate) fn continue_as_new_impl(
         return Err(Term::NIL);
     }
     if args.len() != 1 {
-        return Ok(error_result_term(
+        return error_result_term(
             process_context,
             &format!("continue_as_new: expected 1 arguments, got {}", args.len()),
-        )
-        .unwrap_or(Term::NIL));
+        );
     }
 
     let result = continue_as_new(args, process_context);
     match result {
-        Ok(()) => Ok(ok_result_term(process_context, b"continued_as_new").unwrap_or(Term::NIL)),
-        Err(term) => Ok(term),
+        Ok(()) => ok_result_term(process_context, b"continued_as_new"),
+        Err(refusal) => refusal.into_nif_result(),
     }
 }
 
-fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Result<(), Term> {
+fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Result<(), NifRefusal> {
     let state = crate::runtime::nif_state::engine_nif_state(process_context)
-        .map_err(|error| error_result_term(process_context, &error).unwrap_or(Term::NIL))?;
+        .map_err(|error| NifRefusal::reported(error_result_term(process_context, &error)))?;
     let runtime =
         runtime_context(&state).map_err(|error| context_error_term(process_context, &error))?;
     let pid = process_context.pid().ok_or_else(|| {
-        error_result_term(process_context, "continue_as_new: missing calling pid")
-            .unwrap_or(Term::NIL)
+        NifRefusal::reported(error_result_term(
+            process_context,
+            "continue_as_new: missing calling pid",
+        ))
     })?;
     // continue_as_new records a terminal event; a query handler must stay
     // read-only.
     crate::runtime::nif_query_pump::ensure_not_servicing_query(&state, pid, "continue_as_new")
-        .map_err(|error| error_result_term(process_context, &error).unwrap_or(Term::NIL))?;
+        .map_err(|error| NifRefusal::reported(error_result_term(process_context, &error)))?;
     let context = NifContext::new(
         pid,
         runtime.registry.as_ref(),
@@ -59,8 +60,10 @@ fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Resul
     )
     .map_err(|error| context_error_term(process_context, &error))?;
     let input_text = decode_string_arg(args[0]).map_err(|error| {
-        error_result_term(process_context, &format!("continue_as_new input: {error}"))
-            .unwrap_or(Term::NIL)
+        NifRefusal::reported(error_result_term(
+            process_context,
+            &format!("continue_as_new input: {error}"),
+        ))
     })?;
     let input = json_payload(process_context, &input_text, "continue_as_new", "input")?;
     let parent_run_id = context.run_id().clone();
@@ -148,15 +151,14 @@ fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Resul
         }
 
         runtime.runtime.cancel_pid(context.pid()).map_err(|error| {
-            error_result_term(
+            NifRefusal::reported(error_result_term(
                 process_context,
                 &format!(
                     "continue_as_new termination failed: {error}. This process was to be ended \
                      because {cause}; it is still runnable, and every durable NIF it goes on to \
                      call writes into history this engine may no longer own"
                 ),
-            )
-            .unwrap_or(Term::NIL)
+            ))
         })?;
     }
 
@@ -168,11 +170,12 @@ fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Resul
         // distinguishes it from a clean transition, but the account that
         // MATTERS was emitted through `tracing` above: this process has already
         // been cancelled, so nothing receives this term.
-        Ok(ContinuationOutcome::TerminalOnly(error)) => Err(error_result_term(
-            process_context,
-            &terminal_only_account(context.run_id(), &error),
-        )
-        .unwrap_or(Term::NIL)),
+        Ok(ContinuationOutcome::TerminalOnly(error)) => {
+            Err(NifRefusal::reported(error_result_term(
+                process_context,
+                &terminal_only_account(context.run_id(), &error),
+            )))
+        }
         Err(error) => Err(context_error_term(process_context, &error)),
     }
 }

@@ -3,7 +3,8 @@
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 
-use super::engine_nifs::{decode_string_arg, error_result_term, ok_result_term};
+use super::engine_nifs::decode_string_arg;
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 
 // Pump diagnostics are already bounded before crossing the FFI. These limits
 // also bound direct calls to the NIF before data reaches the tracing subscriber.
@@ -22,7 +23,7 @@ pub(super) fn report_query_diagnostic(
             "report_query_diagnostic: expected 2 arguments, got {}",
             args.len()
         );
-        return Ok(result_or_nil(error_result_term(ctx, &message)));
+        return error_result_term(ctx, &message);
     }
 
     // Decode both terms before allocating a result because attached calls may
@@ -30,19 +31,13 @@ pub(super) fn report_query_diagnostic(
     let category = match decode_string_arg(args[0]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(result_or_nil(error_result_term(
-                ctx,
-                &format!("report_query_diagnostic category: {error}"),
-            )));
+            return error_result_term(ctx, &format!("report_query_diagnostic category: {error}"));
         }
     };
     let message = match decode_string_arg(args[1]) {
         Ok(value) => value,
         Err(error) => {
-            return Ok(result_or_nil(error_result_term(
-                ctx,
-                &format!("report_query_diagnostic message: {error}"),
-            )));
+            return error_result_term(ctx, &format!("report_query_diagnostic message: {error}"));
         }
     };
 
@@ -53,14 +48,7 @@ pub(super) fn report_query_diagnostic(
         "workflow query pump diagnostic"
     );
 
-    Ok(result_or_nil(ok_result_term(ctx, "reported")))
-}
-
-fn result_or_nil(term: Option<Term>) -> Term {
-    match term {
-        Some(value) => value,
-        None => Term::NIL,
-    }
+    ok_result_term(ctx, b"reported")
 }
 
 fn bounded_text(value: &str, max_bytes: usize) -> &str {

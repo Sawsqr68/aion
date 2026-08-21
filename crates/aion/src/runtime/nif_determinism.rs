@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{RunId, WorkflowId};
 use aion_store::EventStore;
-use beamr::atom::Atom;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
@@ -67,30 +67,6 @@ pub(crate) fn install_nif_context_source(state: &EngineNifState, source: Arc<Nif
     }
 }
 
-/// Build `{ok, <<value>>}` on the calling process heap.
-///
-/// Result terms are allocated through the [`ProcessContext`] allocators:
-/// attached (normal-scheduler) calls get GC-traced process-heap terms, and
-/// detached (dirty) calls get owned blocks the dirty-result bridge copies
-/// onto the process heap. Nothing is parked in thread-locals — beamr's
-/// moving GC never traces out-of-heap pointers, so a parked heap either
-/// leaks for the scheduler thread's lifetime or dangles once cleared while
-/// workflow code still references the term (N-6).
-///
-/// Allocation may collect on attached calls: decode every argument `Term`
-/// before the first result allocation.
-fn ok_result_term(ctx: &mut ProcessContext, value: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(value.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::OK), value_term]).ok()
-}
-
-/// Build `{error, <<message>>}` on the calling process heap (see
-/// [`ok_result_term`] for the allocation contract).
-fn error_result_term(ctx: &mut ProcessContext, message: &str) -> Option<Term> {
-    let value_term = ctx.alloc_binary(message.as_bytes()).ok()?;
-    ctx.alloc_tuple(&[Term::atom(Atom::ERROR), value_term]).ok()
-}
-
 fn decode_string_arg(term: Term) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
     String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
@@ -111,12 +87,12 @@ fn context_from_process(ctx: &ProcessContext) -> Result<NifContext, String> {
     source.context_for_pid(pid)
 }
 
-fn error_term(ctx: &mut ProcessContext, message: &str) -> Term {
-    error_result_term(ctx, message).unwrap_or(Term::NIL)
+fn error_term(ctx: &mut ProcessContext, message: &str) -> Result<Term, Term> {
+    error_result_term(ctx, message)
 }
 
-fn ok_term_or_nil(ctx: &mut ProcessContext, value: &str) -> Term {
-    ok_result_term(ctx, value).unwrap_or(Term::NIL)
+fn ok_term(ctx: &mut ProcessContext, value: &str) -> Result<Term, Term> {
+    ok_result_term(ctx, value.as_bytes())
 }
 
 /// NIF backing `aion_flow_ffi:workflow_id/0`.
@@ -125,15 +101,15 @@ pub(crate) fn workflow_id_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
         return Err(Term::NIL);
     }
     if !args.is_empty() {
-        return Ok(error_term(
+        return error_term(
             ctx,
             &format!("workflow_id: expected 0 arguments, got {}", args.len()),
-        ));
+        );
     }
 
     match context_from_process(ctx) {
-        Ok(context) => Ok(ok_term_or_nil(ctx, &context.workflow_id().to_string())),
-        Err(error) => Ok(error_term(ctx, &error)),
+        Ok(context) => ok_term(ctx, &context.workflow_id().to_string()),
+        Err(error) => error_term(ctx, &error),
     }
 }
 
@@ -143,15 +119,15 @@ pub(crate) fn now_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, 
         return Err(Term::NIL);
     }
     if !args.is_empty() {
-        return Ok(error_term(
+        return error_term(
             ctx,
             &format!("now: expected 0 arguments, got {}", args.len()),
-        ));
+        );
     }
 
     match context_from_process(ctx) {
-        Ok(context) => Ok(now_from_context(ctx, &context)),
-        Err(error) => Ok(error_term(ctx, &error)),
+        Ok(context) => now_from_context(ctx, &context),
+        Err(error) => error_term(ctx, &error),
     }
 }
 
@@ -161,15 +137,15 @@ pub(crate) fn random_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
         return Err(Term::NIL);
     }
     if !args.is_empty() {
-        return Ok(error_term(
+        return error_term(
             ctx,
             &format!("random: expected 0 arguments, got {}", args.len()),
-        ));
+        );
     }
 
     match context_from_process(ctx) {
-        Ok(context) => Ok(random_from_context(ctx, &context)),
-        Err(error) => Ok(error_term(ctx, &error)),
+        Ok(context) => random_from_context(ctx, &context),
+        Err(error) => error_term(ctx, &error),
     }
 }
 
@@ -179,30 +155,30 @@ pub(crate) fn random_int_impl(args: &[Term], ctx: &mut ProcessContext) -> Result
         return Err(Term::NIL);
     }
     if args.len() != 2 {
-        return Ok(error_term(
+        return error_term(
             ctx,
             &format!("random_int: expected 2 arguments, got {}", args.len()),
-        ));
+        );
     }
 
     let min = match parse_i64_arg(args[0], "random_int min") {
         Ok(value) => value,
-        Err(message) => return Ok(error_term(ctx, &message)),
+        Err(message) => return error_term(ctx, &message),
     };
     let max = match parse_i64_arg(args[1], "random_int max") {
         Ok(value) => value,
-        Err(message) => return Ok(error_term(ctx, &message)),
+        Err(message) => return error_term(ctx, &message),
     };
     if min > max {
-        return Ok(error_term(
+        return error_term(
             ctx,
             "Invalid deterministic random_int range: min is greater than max",
-        ));
+        );
     }
 
     match context_from_process(ctx) {
-        Ok(context) => Ok(random_int_from_context(ctx, &context, min, max)),
-        Err(error) => Ok(error_term(ctx, &error)),
+        Ok(context) => random_int_from_context(ctx, &context, min, max),
+        Err(error) => error_term(ctx, &error),
     }
 }
 
@@ -222,17 +198,17 @@ fn parse_i64_arg(term: Term, label: &str) -> Result<i64, String> {
 /// self-measured elapsed span collapsed to zero. The position now comes from
 /// [`NifContext::workflow_now`], which advances only on outcomes the workflow
 /// has actually consumed.
-fn now_from_context(ctx: &mut ProcessContext, context: &NifContext) -> Term {
+fn now_from_context(ctx: &mut ProcessContext, context: &NifContext) -> Result<Term, Term> {
     let Some(recorded_at) = context.workflow_now() else {
         return error_term(ctx, "now: workflow history is empty");
     };
-    ok_term_or_nil(ctx, &recorded_at.timestamp_millis().to_string())
+    ok_term(ctx, &recorded_at.timestamp_millis().to_string())
 }
 
-fn random_from_context(ctx: &mut ProcessContext, context: &NifContext) -> Term {
+fn random_from_context(ctx: &mut ProcessContext, context: &NifContext) -> Result<Term, Term> {
     let sequence = context.next_deterministic_sequence();
     let value = deterministic_float(context.workflow_id(), context.run_id(), sequence);
-    ok_term_or_nil(ctx, &value.to_string())
+    ok_term(ctx, &value.to_string())
 }
 
 fn random_int_from_context(
@@ -240,10 +216,10 @@ fn random_int_from_context(
     context: &NifContext,
     min: i64,
     max: i64,
-) -> Term {
+) -> Result<Term, Term> {
     let sequence = context.next_deterministic_sequence();
     let value = deterministic_i64(context.workflow_id(), context.run_id(), sequence, min, max);
-    ok_term_or_nil(ctx, &value.to_string())
+    ok_term(ctx, &value.to_string())
 }
 
 fn deterministic_u64(workflow_id: &WorkflowId, run_id: &RunId, sequence: u64) -> u64 {
@@ -340,12 +316,12 @@ fn seed_from_ids_and_sequence(workflow_id: &WorkflowId, run_id: &RunId, sequence
 
 #[cfg(test)]
 mod tests {
+    use beamr::atom::Atom;
     use std::sync::Arc;
 
     use aion_core::{Event, EventEnvelope, Payload, WorkflowStatus};
     use aion_package::ContentHash;
     use aion_store::{EventStore, InMemoryStore, WriteToken};
-    use beamr::atom::Atom;
     use beamr::native::ProcessContext;
     use beamr::term::Term;
     use beamr::term::binary_ref::BinaryRef;
@@ -559,8 +535,24 @@ mod tests {
         Ok(context_fixture_with_history(runtime, pid, workflow_id, run_id, history)?.context)
     }
 
-    fn decode_result_tuple(term: Term) -> TestResult<(String, String)> {
-        let tuple = Tuple::new(term).ok_or("result should be a tuple")?;
+    trait IntoTestTerm {
+        fn into_test_term(self) -> TestResult<Term>;
+    }
+
+    impl IntoTestTerm for Term {
+        fn into_test_term(self) -> TestResult<Term> {
+            Ok(self)
+        }
+    }
+
+    impl IntoTestTerm for Result<Term, Term> {
+        fn into_test_term(self) -> TestResult<Term> {
+            self.map_err(|reason| format!("result allocation failed: {reason:?}").into())
+        }
+    }
+
+    fn decode_result_tuple(term: impl IntoTestTerm) -> TestResult<(String, String)> {
+        let tuple = Tuple::new(term.into_test_term()?).ok_or("result should be a tuple")?;
         let tag = tuple.get(0).ok_or("missing tag element")?;
         let value = tuple.get(1).ok_or("missing value element")?;
         let tag_name = if tag == Term::atom(Atom::OK) {
