@@ -5,6 +5,47 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
+## 0.18.2 — 2026-08-21
+
+- **Haematite writer-lock acquisition is ruled and retried** (the rb-lockfix
+  arc, PR #113): a node opening a busy store retries on an explicit
+  operator-ruled patience and cadence instead of dying on first contention.
+  The ruling (`store.lock_acquisition_patience_ms` /
+  `store.lock_acquisition_retry_cadence_ms`) is required with no defaults,
+  transient writer-lock inheritance is retried, and generated configs state
+  the ruling. The estate's flake carriers were diagnosed and cured at their
+  causes, not waived.
+- **Run-scoped read surfaces resolve exactly the run they name.** The query
+  seam resolves a workflow's CURRENT run, never a stale predecessor;
+  reconcile projects exactly the named run and an absent run is an error,
+  pinned at the raise and both wire halves (#94); `list_runs` decodes the
+  summary actually on the wire (#83); reopen admits by handle identity (#51).
+- **Costly proofs announce or run — never silently skip.** The five
+  `#[ignore]` costly suites are runtime-gated (`AION_RUN_COSTLY_TESTS=1`) and
+  each announces, on the real stderr handle, which proof did not happen; the
+  battery consumes the announcements through a venue-aware gate plus a
+  vacuity scanner that attributes every announcement to the leg that
+  produced it. Armed, all five run green — the cross-node kill-9 failover,
+  parked-timer exactly-once, and hex.pm scaffold proofs are now real battery
+  passes. Two named-unproven gaps are tracked loudly in the run output
+  itself: the outbox seam (#114) and the stacked-dev start refusal, which is
+  pinned as a test that fails the day the gap closes (#115).
+- **The battery runs exactly what it declares** (line 28): one gate list —
+  the runner executes `gates.json` verbatim, verified after every run by
+  `scripts/gates/verify-declaration.sh`, and the gate library sources
+  cleanly under plain `sh`.
+- **The release ceremony and the repo battery are workflows in the tree.**
+  `release_ceremony` makes standing order 4 structural — the tag step's
+  input is the per-crate index-confirmation set, so tag-without-publish is
+  inexpressible; changelog dating, the semver surface, the declared publish
+  order, and idempotent per-crate resume are all legs. `repo_battery` runs
+  the declared gate list with typed receipts, offline and live proof
+  harnesses, and honored worker-environment and teardown refusals. The
+  issue-investigation and fleet-dev workflows ship alongside.
+- Package file IO failures are classified in the toolchain; engine task
+  descriptors release on drop; all-target build artifacts are bounded; the
+  transport-loss budget is a constructor parameter (#100).
+
 ## 0.18.1 — 2026-08-19
 
 - **The beamr >=0.19.2 floor lands across the workspace** (closes #70, the
