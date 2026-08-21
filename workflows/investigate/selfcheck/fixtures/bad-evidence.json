@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "issue": "116",
+  "repo": "ablative-io/aion",
+  "head_commit": "8ad2e6ce",
+  "verdict": "Reproduced",
+  "summary": "Evidence contains two structural faults.",
+  "evidence": [
+    {"path": "somewhere", "line": 1.0, "excerpt": "A whole float is not an Int."},
+    "not an evidence object"
+  ],
+  "confidence": "High"
+}

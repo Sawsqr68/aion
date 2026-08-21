@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "issue": "116",
+  "repo": "ablative-io/aion",
+  "head_commit": "8ad2e6ce",
+  "verdict": "Reproduced",
+  "evidence": [],
+  "confidence": "High"
+}

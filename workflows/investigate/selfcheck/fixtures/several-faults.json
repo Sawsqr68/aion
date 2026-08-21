@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "repo": false,
+  "head_commit": "8ad2e6ce",
+  "verdict": "Unknown",
+  "summary": [],
+  "evidence": [
+    {"path": 7, "line": "twelve", "excerpt": null}
+  ],
+  "repro": {},
+  "confidence": 0
+}

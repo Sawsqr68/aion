@@ -1,0 +1,125 @@
+{
+  "schema_version": "1",
+  "issue": "90",
+  "repo": "ablative-io/aion",
+  "head_commit": "7ab28fdf6a9d41ff34540d51777ff8eab5d616ab",
+  "verdict": "Reproduced",
+  "summary": "A local worker-document `run json` action returned valid JSON missing the declared `count` field. The run failed terminally and durable history stored exactly `activity output decode failed: Expected Field, found Nothing`, without the field path, action name, or declared type. The code preserves the decoder path in `DecodeError`, but the AWL activity-error renderer discards it; the action name is omitted from the post-dispatch carrier, and the declared type is reduced to a function-only codec before the generic renderer is called.",
+  "evidence": [
+    {
+      "path": "gleam/aion_flow/src/aion/codec.gleam",
+      "line": 18,
+      "excerpt": "/// `reason` describes the failing expectation and `path` points at the nested\n/// JSON field or index when the underlying decoder can provide one.\npub type DecodeError {\n  DecodeError(reason: String, path: List(String))\n}"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/codec.gleam",
+      "line": 75,
+      "excerpt": "fn dynamic_decode_error(errors: List(decode.DecodeError)) -> DecodeError {\n  case errors {\n    [] -> DecodeError(\"Unable to decode value\", [])\n    [decode.DecodeError(expected: expected, found: found, path: path), ..] ->\n      DecodeError(\"Expected \" <> expected <> \", found \" <> found, path)\n  }\n}"
+    },
+    {
+      "path": "crates/aion-cli/src/worker_awl/serve.rs",
+      "line": 219,
+      "excerpt": "        RunCapture::Json => serde_json::from_str(&outcome.stdout).map_err(|error| {\n            ActivityFailure::terminal(format!(\n                \"action `{}` declares a `run json` body and its command printed output that \\\n                 is not valid JSON: {error}\",\n                served.name\n            ))\n        }),"
+    },
+    {
+      "path": "crates/aion-awl/src/emitter/wrappers.rs",
+      "line": 28,
+      "excerpt": "            let returns = type_ref_to_g(&action.returns);"
+    },
+    {
+      "path": "crates/aion-awl/src/emitter/wrappers.rs",
+      "line": 59,
+      "excerpt": "                this.line(\"activity.new(\");\n                this.indented(|this| {\n                    this.line(&format!(\"\\\"{action_name}\\\",\"));"
+    },
+    {
+      "path": "crates/aion-awl/src/emitter/wrappers.rs",
+      "line": 74,
+      "excerpt": "                    let input_codec = snake(&input_name);\n                    let return_codec = this.codec_fn(&returns);\n                    this.line(&format!(\"{input_codec}_codec(),\"));\n                    this.line(&format!(\"{return_codec}(),\"));"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/codec.gleam",
+      "line": 12,
+      "excerpt": "pub type Codec(a) {\n  Codec(encode: fn(a) -> String, decode: fn(String) -> Result(a, DecodeError))\n}"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/activity.gleam",
+      "line": 69,
+      "excerpt": "pub opaque type Activity(i, o) {\n  Activity(\n    name: String,\n    input: i,\n    input_codec: codec.Codec(i),\n    output_codec: codec.Codec(o),"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/internal/activity_dispatch.gleam",
+      "line": 15,
+      "excerpt": "@internal\npub opaque type Dispatched(o) {\n  Dispatched(correlation_id: String, output_codec: codec.Codec(o))\n}"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/internal/activity_dispatch.gleam",
+      "line": 84,
+      "excerpt": "  case dispatched {\n    Ok(correlation_id) ->\n      Ok(Dispatched(correlation_id, activity.output_codec(activity_value)))\n    Error(raw_error) -> Error(parse_error(raw_error))\n  }"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/internal/activity_dispatch.gleam",
+      "line": 92,
+      "excerpt": "fn await(dispatched: Dispatched(o)) -> Result(o, error.ActivityError) {\n  let Dispatched(correlation_id, output_codec) = dispatched"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/internal/activity_dispatch.gleam",
+      "line": 97,
+      "excerpt": "    Ok(payload) ->\n      case output_codec.decode(payload) {\n        Ok(output) -> Ok(output)\n        Error(decode_error) -> Error(error.ActivityDecodeFailed(decode_error))\n      }"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/awl/error.gleam",
+      "line": 150,
+      "excerpt": "pub fn map_activity_error(\n  result: Result(a, error.ActivityError),\n) -> Result(a, AwlError) {\n  case result {\n    Ok(value) -> Ok(value)\n    Error(activity_error) ->\n      Error(AwlActivityFailed(describe_activity_error(activity_error)))\n  }\n}"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/awl/error.gleam",
+      "line": 164,
+      "excerpt": "    error.ActivityDecodeFailed(codec.DecodeError(reason, _)) ->\n      \"activity output decode failed: \" <> reason"
+    },
+    {
+      "path": "gleam/aion_flow/src/aion/internal/activity_dispatch.gleam",
+      "line": 189,
+      "excerpt": "    error.ActivityDecodeFailed(codec.DecodeError(reason: reason, path: path)) ->\n      \"terminal:activity output decode failed at \"\n      <> string.join(path, \".\")\n      <> \": \"\n      <> reason"
+    },
+    {
+      "path": "crates/aion-awl/src/mir/lower/activity.rs",
+      "line": 157,
+      "excerpt": "    let mapped = call_rt(\n        ctx,\n        RuntimeFn::MapActivityError,\n        vec![Value::Var(ran)],\n        stmts,\n        call.name_span,\n    );"
+    }
+  ],
+  "repro": {
+    "scope": "Entirely local. Built with `cargo build --workspace`. Started only processes from this clone, bound to 127.0.0.1 ports 18090, 50190, and 50191, using `/tmp/aion-issue90-repro/home`; both worker and server were killed before report creation.",
+    "fixture": {
+      "workflow": "A workflow `issue90_missing` declared `type Probe { ok: Bool, count: Int, note: String }`, called zero-argument action `probe() -> Probe`, and routed the result.",
+      "worker": "A separate worker document for queue `issue90_local` served `probe` with `run json` and printed `{\"ok\":true,\"note\":\"local\"}` (valid JSON with `count` absent).",
+      "checks": [
+        "ok: /tmp/aion-issue90-repro/workflow.awl (1 step)",
+        "ok: /tmp/aion-issue90-repro/worker.awl (worker `issue90_local`, 1 action)"
+      ]
+    },
+    "run_command_result": {
+      "exit_code": 1,
+      "stderr": "error: workflow run failed: workflow 1 returned error\n  details: {\"tag\":\"AwlActivityFailed\",\"message\":\"activity output decode failed: Expected Field, found Nothing\"}"
+    },
+    "durable_history": {
+      "workflow_id": "e09da838-3b53-4903-be39-0e42decbc32c",
+      "activity_scheduled": "activity_type was `probe` and task_queue was `issue90_local`",
+      "activity_completed_result": {
+        "ok": true,
+        "note": "local"
+      },
+      "workflow_failed_details": {
+        "tag": "AwlActivityFailed",
+        "message": "activity output decode failed: Expected Field, found Nothing"
+      }
+    }
+  },
+  "proposed_fix": {
+    "field_path": "Change `gleam/aion_flow/src/aion/awl/error.gleam::describe_activity_error` so `ActivityDecodeFailed` binds and formats `path` instead of matching `_`. Reuse or extract the existing path formatting already present in `gleam/aion_flow/src/aion/internal/activity_dispatch.gleam` and define an explicit root-path rendering.",
+    "action_name": "Preserve the activity name past dispatch. `Activity` already contains `name` beside `output_codec`, but `Dispatched` carries only correlation ID and codec. Extend `Dispatched` with the name and enrich `ActivityDecodeFailed`, or introduce a contextual decode-failure variant before `await` returns it.",
+    "declared_type": "Add printable type metadata at code generation. `crates/aion-awl/src/emitter/wrappers.rs` has both `action_name` and `action.returns`, but `Codec` contains only encode/decode functions and `map_activity_error` receives only the result. Either add a display type label to `Codec`/`Activity`, or emit a contextual mapping call that receives action name and rendered return type. Apply the same scheme to ordinary calls and fan-out paths so per-action context is not lost.",
+    "multiple_errors": "If the smaller issue is included, replace the `[first, ..]` collapse in `dynamic_decode_error` with a representation that retains all decoder errors; this is separable from the headline fix and should have dedicated ordering/format tests.",
+    "tests": "Add an activity-output runtime test whose valid JSON omits a nested required field and assert that durable `AwlActivityFailed` text includes action, declared type, path, and `Expected Field, found Nothing`; also cover wrong-type, root-path, fan-out, and malformed-JSON controls."
+  },
+  "confidence": "High. I built the entire workspace successfully, ran an independently constructed worker-document reproduction against an isolated loopback server from this HEAD, observed the exact terminal text, and confirmed the same context-free message in durable `aion describe` history. I traced each loss point in source by hand. I did not implement or test a patch, and I did not test aggregation of multiple simultaneous decoder errors."
+}

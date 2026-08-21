@@ -1,0 +1,14 @@
+{
+  "schema_version": "1",
+  "issue": "116",
+  "repo": "ablative-io/aion",
+  "head_commit": "8ad2e6ce",
+  "verdict": "Reproduced",
+  "summary": "The guard must validate the declared shape.",
+  "evidence": [
+    {"path": "workflows/investigate/bin/read-report.sh", "line": 21, "excerpt": "jq validates JSON syntax"}
+  ],
+  "repro": "Write an object where a prose string is declared.",
+  "proposed_fix": "Validate before returning the report.",
+  "confidence": "High"
+}
