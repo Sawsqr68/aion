@@ -265,6 +265,13 @@ impl WorkflowService for MockWorkflowService {
         off_scope()
     }
 
+    async fn read_history(
+        &self,
+        _: Request<generated::ReadHistoryRequest>,
+    ) -> Result<Response<generated::ReadHistoryResponse>, Status> {
+        off_scope()
+    }
+
     async fn create_schedule(
         &self,
         _: Request<generated::CreateScheduleRequest>,

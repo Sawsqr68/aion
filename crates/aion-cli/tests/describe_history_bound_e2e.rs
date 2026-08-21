@@ -164,24 +164,33 @@ async fn serve_history(
     Ok((client, server))
 }
 
-fn assert_summary_identity(description: &aion_client::WorkflowDescription) {
+fn assert_description_identity(
+    description: &aion_client::WorkflowDescription,
+    expected_head_seq: u64,
+) {
     assert_eq!(description.summary.workflow_id, workflow_id());
     assert_eq!(description.summary.workflow_type, "describe_control");
     assert_eq!(description.summary.status, WorkflowStatus::Running);
+    assert_eq!(description.run_id, run_id());
+    assert_eq!(description.history_head_seq, expected_head_seq);
+    assert_eq!(description.terminal_event, None);
 }
 
 #[tokio::test]
 async fn short_history_describe_is_unchanged() -> Result<(), TestError> {
     let (client, server) = serve_history(0).await?;
     let description = client.describe(&workflow_id(), Some(&run_id())).await?;
-    assert_summary_identity(&description);
-    assert_eq!(description.history.len(), 1);
+    assert_description_identity(&description, 1);
+    let page = client.read_history(&workflow_id(), Some(1), None).await?;
+    assert_eq!(page.head_seq, 1);
+    assert_eq!(page.next_from_seq, None);
+    assert_eq!(page.events.len(), 1);
     let Some(Event::WorkflowStarted {
         workflow_type,
         run_id: described_run_id,
         input,
         ..
-    }) = description.history.first()
+    }) = page.events.first()
     else {
         return Err("short describe did not return its WorkflowStarted identity".into());
     };
@@ -197,10 +206,7 @@ async fn describe_answers_for_histories_of_arbitrary_size() -> Result<(), TestEr
     for event_count in [LARGE_HISTORY_EVENTS, MUCH_LARGER_HISTORY_EVENTS] {
         let (client, server) = serve_history(event_count).await?;
         let description = client.describe(&workflow_id(), Some(&run_id())).await?;
-        assert_summary_identity(&description);
-        assert_eq!(description.history.len(), event_count + 1);
-        assert_eq!(description.history.first(), Some(&started()));
-        assert_eq!(description.history.last(), Some(&signal(event_count - 1)));
+        assert_description_identity(&description, (event_count + 1) as u64);
         server.abort();
     }
     Ok(())

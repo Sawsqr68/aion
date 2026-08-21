@@ -178,7 +178,7 @@ pub(crate) async fn await_result(
             .describe()
             .await
             .context("failed while awaiting workflow result")?;
-        for event in &description.history {
+        if let Some(event) = description.terminal_event.as_ref() {
             match event {
                 Event::WorkflowCompleted { result, .. } => {
                     return Ok(json!({

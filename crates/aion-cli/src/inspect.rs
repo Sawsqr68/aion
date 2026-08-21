@@ -18,9 +18,7 @@ use aion::durability::{
     StepProjection, WhatIfOutcome, inspect_run, what_if_from,
 };
 use aion_client::Client;
-use aion_core::{
-    ActivityError, ActivityErrorKind, Event, Payload, RunId, WorkflowError, WorkflowId,
-};
+use aion_core::{ActivityError, ActivityErrorKind, Event, Payload, RunId, WorkflowError};
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
 
@@ -47,8 +45,12 @@ pub(crate) async fn run(
     let workflow_id = crate::payload::parse_workflow_id(workflow_id)?;
     let requested_run_id = run_id.map(parse_run_id).transpose()?;
 
-    let history = fetch_history(client, &workflow_id, requested_run_id.as_ref()).await?;
-    let run_id = resolve_run_id(&history, requested_run_id)?;
+    let description = client
+        .describe(&workflow_id, requested_run_id.as_ref())
+        .await
+        .context("failed to resolve workflow run")?;
+    let run_id = requested_run_id.unwrap_or(description.run_id);
+    let history = crate::history::read_all(client, &workflow_id).await?;
 
     match (from, mock) {
         (None, None) => render_inspection(history, &run_id),
@@ -56,35 +58,6 @@ pub(crate) async fn run(
         (Some(_), None) => bail!("--from requires --mock: a what-if never defaults its outcome"),
         (None, Some(_)) => bail!("--mock requires --from: a what-if never defaults its fork point"),
     }
-}
-
-async fn fetch_history(
-    client: &Client,
-    workflow_id: &WorkflowId,
-    run_id: Option<&RunId>,
-) -> Result<Vec<Event>> {
-    let description = client
-        .describe(workflow_id, run_id)
-        .await
-        .context("failed to read workflow history")?;
-    Ok(description.history)
-}
-
-/// Resolves the run to inspect: the explicit `--run-id`, or the latest recorded
-/// `WorkflowStarted` in history. `WorkflowSummary` carries no run id, so the run
-/// identity is read from history (the same source replay segments from).
-fn resolve_run_id(history: &[Event], requested: Option<RunId>) -> Result<RunId> {
-    if let Some(run_id) = requested {
-        return Ok(run_id);
-    }
-    history
-        .iter()
-        .rev()
-        .find_map(|event| match event {
-            Event::WorkflowStarted { run_id, .. } => Some(run_id.clone()),
-            _ => None,
-        })
-        .ok_or_else(|| anyhow!("workflow history has no WorkflowStarted to resolve a run from"))
 }
 
 fn render_inspection(history: Vec<Event>, run_id: &RunId) -> Result<Value> {
@@ -285,9 +258,7 @@ fn optional_details(value: &Value) -> Result<Option<Payload>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        RANDOM_SAMPLE_ORDINALS, inspection_to_json, parse_mock, resolve_run_id, what_if_to_json,
-    };
+    use super::{RANDOM_SAMPLE_ORDINALS, inspection_to_json, parse_mock, what_if_to_json};
     use aion::durability::{MockOutcome, ReplayTerminal, Resolution, WhatIfOutcome, inspect_run};
     use aion_core::{ActivityErrorKind, Event, EventEnvelope, Payload, RunId, WorkflowId};
     use chrono::Utc;
@@ -310,33 +281,6 @@ mod tests {
             parent_workflow_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         })
-    }
-
-    #[test]
-    fn resolve_run_id_prefers_explicit_request() -> TestResult {
-        let requested = RunId::new(Uuid::from_u128(7));
-        let resolved = resolve_run_id(&[started(1)?], Some(requested.clone()))?;
-        assert_eq!(resolved, requested);
-        Ok(())
-    }
-
-    #[test]
-    fn resolve_run_id_falls_back_to_latest_started() -> TestResult {
-        let mut history = vec![started(1)?];
-        let mut later = started(2)?;
-        if let Event::WorkflowStarted { envelope, .. } = &mut later {
-            envelope.seq = 3;
-        }
-        history.push(later);
-
-        let resolved = resolve_run_id(&history, None)?;
-        assert_eq!(resolved, RunId::new(Uuid::from_u128(2)));
-        Ok(())
-    }
-
-    #[test]
-    fn resolve_run_id_errors_without_a_start() {
-        assert!(resolve_run_id(&[], None).is_err());
     }
 
     #[test]

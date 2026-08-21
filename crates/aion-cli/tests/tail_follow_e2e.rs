@@ -104,6 +104,11 @@ impl_describe_fixture!(
         generated::CountWorkflowsResponse
     ),
     (
+        read_history,
+        generated::ReadHistoryRequest,
+        generated::ReadHistoryResponse
+    ),
+    (
         create_schedule,
         generated::CreateScheduleRequest,
         generated::CreateScheduleResponse
@@ -498,8 +503,11 @@ fn describe_response() -> Result<generated::DescribeWorkflowResponse, Box<dyn st
         summary: Some(generated_envelope(aion_proto::encode_core_value(
             "default", None, &summary,
         )?)),
-        history: vec![generated_envelope(aion_proto::encode_event(
-            "default", None, &started,
-        )?)],
+        history: Vec::new(),
+        run_id: Some(generated::RunId {
+            uuid: uuid::Uuid::from_u128(PARENT_RUN).to_string(),
+        }),
+        history_head_seq: 1,
+        terminal_event: None,
     })
 }

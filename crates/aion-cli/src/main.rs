@@ -30,6 +30,7 @@ mod deploy;
 mod dev;
 mod generate;
 mod harness;
+mod history;
 mod input;
 mod inspect;
 mod launch;
@@ -1208,7 +1209,13 @@ async fn describe_workflow(
         .describe(&workflow_id, run_id.as_ref())
         .await
         .context("failed to describe workflow")?;
-    describe_output(description.summary, description.history, raw)
+    describe_output(
+        description.summary,
+        description.run_id,
+        description.history_head_seq,
+        description.terminal_event,
+        raw,
+    )
 }
 
 /// The refusal `aion server` owes an operator who passed `--endpoint`, or

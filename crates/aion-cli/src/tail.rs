@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use aion_client::{Client, ClientAuth, ClientBuilder};
-use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, Event, RunId, WorkflowId};
+use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, RunId, WorkflowId};
 use aion_server::config::{DEFAULT_HTTP_ADDRESS, MAX_TRANSCRIPT_WINDOW_LIMIT};
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
@@ -161,9 +161,7 @@ async fn discover_sources(
         .describe(workflow_id, requested_run.as_ref())
         .await
         .context("failed to resolve workflow run for tail")?;
-    let parent_run = requested_run
-        .or_else(|| latest_run(&description.history))
-        .ok_or_else(|| anyhow!("workflow history contains no WorkflowStarted run"))?;
+    let parent_run = requested_run.unwrap_or(description.run_id);
     let mut sources = vec![Source {
         workflow_id: workflow_id.clone(),
         run_id: parent_run.clone(),
@@ -373,13 +371,6 @@ fn backfill_notice(
     Some(format!(
         "retained backfill begins at durable seq {first_store_seq}; showing {event_count} events through durable seq {last_store_seq} (earlier records may be unavailable because of retention or the CLI's {MAX_TRANSCRIPT_WINDOW_LIMIT}-event request bound; durable seq {first_store_seq}..{last_store_seq})"
     ))
-}
-
-fn latest_run(history: &[Event]) -> Option<RunId> {
-    history.iter().rev().find_map(|event| match event {
-        Event::WorkflowStarted { run_id, .. } => Some(run_id.clone()),
-        _ => None,
-    })
 }
 
 fn mark_superseded(targets: &mut [Target]) {

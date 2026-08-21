@@ -42,9 +42,11 @@ pub(crate) struct ReopenOutput {
 }
 
 #[derive(Serialize)]
-pub(crate) struct DescribeOutput<TSummary, THistory> {
+pub(crate) struct DescribeOutput<TSummary, TRunId, TTerminal> {
     pub(crate) summary: TSummary,
-    pub(crate) history: THistory,
+    pub(crate) run_id: TRunId,
+    pub(crate) history_head_seq: u64,
+    pub(crate) terminal_event: Option<TTerminal>,
 }
 
 pub(crate) fn start_output(outcome: &StartOutcome) -> StartOutput {
@@ -106,28 +108,31 @@ where
     serde_json::to_value(value).context("failed to encode command output")
 }
 
-pub(crate) fn describe_output<TSummary, THistory>(
+pub(crate) fn describe_output<TSummary, TRunId, TTerminal>(
     summary: TSummary,
-    history: THistory,
+    run_id: TRunId,
+    history_head_seq: u64,
+    terminal_event: Option<TTerminal>,
     raw: bool,
 ) -> Result<Value>
 where
     TSummary: Serialize,
-    THistory: Serialize,
+    TRunId: Serialize,
+    TTerminal: Serialize,
 {
-    let mut value = to_value(DescribeOutput { summary, history })?;
-    if !raw {
-        decode_payloads_in_history(&mut value);
+    let mut value = to_value(DescribeOutput {
+        summary,
+        run_id,
+        history_head_seq,
+        terminal_event,
+    })?;
+    if !raw
+        && let Value::Object(object) = &mut value
+        && let Some(terminal_event) = object.get_mut("terminal_event")
+    {
+        decode_payloads_in_value(terminal_event);
     }
     Ok(value)
-}
-
-fn decode_payloads_in_history(value: &mut Value) {
-    if let Value::Object(object) = value
-        && let Some(history) = object.get_mut("history")
-    {
-        decode_payloads_in_value(history);
-    }
 }
 
 fn decode_payloads_in_value(value: &mut Value) {
@@ -210,62 +215,40 @@ mod tests {
     use super::{decode_payloads_in_value, describe_output};
 
     #[test]
-    fn describe_output_decodes_json_payloads_recursively() -> anyhow::Result<()> {
-        let history = json!([
-            {
-                "event_type": "ActivityScheduled",
-                "input": payload(r#"{"activity":"sync","nested":{"count":2}}"#)
-            },
-            {
-                "event_type": "ActivityCompleted",
-                "result": payload(r#"[true,{"done":false}]"#)
-            },
-            {
-                "event_type": "WorkflowCompleted",
-                "result": payload(r#""finished""#)
-            }
-        ]);
-
-        let output = describe_output(json!({ "workflow_id": "wf" }), history, false)?;
-
-        assert_eq!(
-            output["history"][0]["input"],
-            json!({"activity": "sync", "nested": {"count": 2}})
-        );
-        assert_eq!(
-            output["history"][1]["result"],
-            json!([true, {"done": false}])
-        );
-        assert_eq!(output["history"][2]["result"], json!("finished"));
+    fn describe_output_decodes_terminal_payload_and_carries_identity() -> anyhow::Result<()> {
+        let terminal =
+            json!({"event_type":"WorkflowCompleted","result":payload(r#"{\"done\":true}"#)});
+        let output = describe_output(
+            json!({"workflow_id":"wf"}),
+            "run",
+            42,
+            Some(terminal),
+            false,
+        )?;
         assert_eq!(output["summary"]["workflow_id"], json!("wf"));
+        assert_eq!(output["run_id"], json!("run"));
+        assert_eq!(output["history_head_seq"], json!(42));
+        assert_eq!(output["terminal_event"]["result"], json!({"done":true}));
+        assert!(output.get("history").is_none());
         Ok(())
     }
 
     #[test]
-    fn raw_describe_output_preserves_payload_byte_arrays() -> anyhow::Result<()> {
-        let history = json!([{ "input": payload(r#"{"value":1}"#) }]);
-
-        let output = describe_output(json!({ "workflow_id": "wf" }), history, true)?;
-
-        assert_eq!(output["history"][0]["input"], payload(r#"{"value":1}"#));
-        Ok(())
-    }
-
-    #[test]
-    fn describe_output_only_decodes_payloads_inside_history() -> anyhow::Result<()> {
-        let summary = json!({
-            "workflow_id": "wf",
-            "metadata": payload(r#"{"should":"remain raw"}"#)
-        });
-        let history = json!([{ "input": payload(r#"{"should":"decode"}"#) }]);
-
-        let output = describe_output(summary, history, false)?;
-
+    fn raw_describe_output_preserves_terminal_payload_bytes() -> anyhow::Result<()> {
+        let terminal = json!({"result":payload(r#"{\"value\":1}"#)});
+        let output = describe_output(json!({"workflow_id":"wf"}), "run", 2, Some(terminal), true)?;
         assert_eq!(
-            output["summary"]["metadata"],
-            payload(r#"{"should":"remain raw"}"#)
+            output["terminal_event"]["result"],
+            payload(r#"{\"value\":1}"#)
         );
-        assert_eq!(output["history"][0]["input"], json!({ "should": "decode" }));
+        Ok(())
+    }
+
+    #[test]
+    fn describe_output_does_not_decode_summary_payload_shapes() -> anyhow::Result<()> {
+        let summary = json!({"workflow_id":"wf","metadata":payload(r#"{\"raw\":true}"#)});
+        let output = describe_output(summary, "run", 1, Option::<serde_json::Value>::None, false)?;
+        assert_eq!(output["summary"]["metadata"], payload(r#"{\"raw\":true}"#));
         Ok(())
     }
 
