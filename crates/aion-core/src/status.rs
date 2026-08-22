@@ -85,6 +85,8 @@ pub fn status_from_events(events: &[Event]) -> WorkflowStatus {
             // The advisory warning says a SIDE CHANNEL failed; it says
             // nothing about the run's outcome, so it projects no status.
             | Event::ActivityAdvisoryExhausted { .. }
+            // A fallback hop is an open-trail routing fact, not a run outcome.
+            | Event::ActivityFallbackRouted { .. }
             | Event::ActivityCancelled { .. }
             | Event::TimerStarted { .. }
             | Event::TimerFired { .. }
@@ -144,6 +146,8 @@ pub fn current_lease_terminal(events: &[Event]) -> Option<&Event> {
             // The advisory warning says a SIDE CHANNEL failed; it says
             // nothing about the run's outcome, so it projects no status.
             | Event::ActivityAdvisoryExhausted { .. }
+            // A fallback hop is an open-trail routing fact, not a run outcome.
+            | Event::ActivityFallbackRouted { .. }
             | Event::ActivityCancelled { .. }
             | Event::TimerStarted { .. }
             | Event::TimerFired { .. }

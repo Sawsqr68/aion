@@ -336,7 +336,9 @@ fn recorded_terminal_event(history: &[Event], ordinal: u64) -> Option<&Event> {
         | Event::ActivityCancelled { activity_id, .. } => *activity_id == target,
         Event::ActivityFailed {
             activity_id, error, ..
-        } => *activity_id == target && !error.is_retryable(),
+        // A refusal is not this member's terminal: stopping at the first one
+        // would shadow the genuine terminal after its fallback execution.
+        } => *activity_id == target && error.is_settled(),
         _ => false,
     })
 }
@@ -427,7 +429,9 @@ fn recorded_race_winner(
             }
             Event::ActivityFailed {
                 activity_id, error, ..
-            } if in_range(activity_id) && !error.is_retryable() => {
+            // A refusal cannot win the race; it remains an open trail until
+            // a later execution records a genuine terminal disposition.
+            } if in_range(activity_id) && error.is_settled() => {
                 return Ok(Some((
                     activity_id.sequence_position(),
                     Err(error.message.clone()),

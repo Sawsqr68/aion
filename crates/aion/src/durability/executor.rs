@@ -274,11 +274,13 @@ async fn execute_live_and_record(
 }
 
 fn ensure_terminal_activity_error(error: &ActivityError) -> Result<(), DurabilityError> {
-    if error.is_retryable() {
+    if !error.is_settled() {
         return Err(DurabilityError::HistoryShape {
-            reason: "live activity failure must be terminal before AD can record a terminal \
-                     resolution"
-                .to_owned(),
+            reason: format!(
+                "live activity failure must be terminal before AD can record a terminal \
+                 resolution; got {:?}",
+                error.kind
+            ),
         });
     }
     Ok(())

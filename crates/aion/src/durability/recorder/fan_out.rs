@@ -336,7 +336,9 @@ fn ordinal_is_resolved(history: &[Event], activity_id: &ActivityId) -> bool {
             activity_id: recorded,
             error,
             ..
-        } => recorded == activity_id && !error.is_retryable(),
+        // A policy refusal does not resolve the ordinal; its fallback trail
+        // still owes the durable terminal event that clears pending work.
+        } => recorded == activity_id && error.is_settled(),
         _ => false,
     })
 }

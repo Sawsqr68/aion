@@ -759,6 +759,35 @@ impl Recorder {
         .await
     }
 
+    /// Records a durable post-refusal fallback queue hop.
+    ///
+    /// Retry routing calls this only through the workflow recorder held by
+    /// `RetryRecorderSeam`; no routing component appends this event directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DurabilityError`] if the event store rejects the append or the
+    /// sequence tracker cannot advance after a successful append.
+    pub async fn record_activity_fallback_routed(
+        &mut self,
+        recorded_at: DateTime<Utc>,
+        activity_id: ActivityId,
+        attempt: u32,
+        from_task_queue: String,
+        to_task_queue: String,
+        fallback_index: u32,
+    ) -> Result<(), DurabilityError> {
+        self.append_with(recorded_at, |envelope| Event::ActivityFallbackRouted {
+            envelope,
+            activity_id,
+            attempt,
+            from_task_queue,
+            to_task_queue,
+            fallback_index,
+        })
+        .await
+    }
+
     /// Records activity cancellation.
     ///
     /// # Errors

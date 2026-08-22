@@ -32,6 +32,8 @@
 //! - [`Event::ActivityAdvisoryExhausted`] is deliberately NOT a terminal: it
 //!   ACCOMPANIES an `ActivityFailed` and never replaces it, so treating it as
 //!   one would retire an ordinal that its own failure already retired.
+//! - [`Event::ActivityFallbackRouted`] advances nothing. The hop does not open
+//!   a step; the following [`Event::ActivityStarted`] records the next execution.
 //! - [`Event::WorkflowReopened`] SUPERSEDES the recorded terminal of every
 //!   activity it names, which is the whole point of the event — those
 //!   activities resolve to live re-dispatch on replay. The fold re-opens them

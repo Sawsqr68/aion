@@ -282,6 +282,17 @@ const VARIANT_FIXTURES: Record<string, Event> = {
       attempt: 2,
     },
   },
+  ActivityFallbackRouted: {
+    type: 'ActivityFallbackRouted',
+    data: {
+      envelope: envelope(1),
+      activity_id: 7,
+      attempt: 2,
+      from_task_queue: 'norn',
+      to_task_queue: 'claude',
+      fallback_index: 0,
+    },
+  },
   ActivityAdoptionOffered: {
     type: 'ActivityAdoptionOffered',
     data: { envelope: envelope(1), activity_id: 7, attempt: 2 },
@@ -377,6 +388,7 @@ const LANE_VARIANTS: Record<string, string> = {
   ActivityCompleted: 'activity',
   ActivityFailed: 'activity',
   ActivityAdvisoryExhausted: 'activity',
+  ActivityFallbackRouted: 'activity',
   ActivityAdoptionOffered: 'activity',
   ActivityCancelled: 'activity',
   TimerStarted: 'timer',
