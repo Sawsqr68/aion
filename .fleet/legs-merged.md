@@ -1,4 +1,4 @@
-# legs merged — policyref-l3-route
+# legs merged — policyref-l3-pin
 
 Recorded by fleet-fanin.sh at merge time: the branch refs the run tree held.
 Teardown discards the branches, so this file is how the exact pre-merge state
@@ -6,4 +6,4 @@ of every leg stays recoverable from the result branch alone.
 
 | leg | branch | leg head at merge | merge commit |
 |---|---|---|---|
-| l3-route | leg/l3-route | acbb079059e2cf8e786ec6d16d05b546eff52434 | 8def25b0b8b4f386539f0a84ef83e3576bc7a9d4 |
+| l3-pin | leg/l3-pin | a478ecf127ea72231e17b601aeae682fe360c02b | 5e38b5d160d98987576346ec5ca9de94021336b7 |
