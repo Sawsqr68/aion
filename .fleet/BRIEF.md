@@ -26,6 +26,51 @@ demonstrably cleared on attempt 2 deterministic. Full verdict with the
 event-by-event reads: `docs/evidence/policy-refused-census-20260822.md`
 in the flight base (`fleet/policyrefused-base` = `8709317ba`).
 
+### 🔴 RECONCILIATION — read this before you read `.fleet/plan.md` §0
+
+The flight1 planning counsel found (b) and (d) still stating the refuted
+premise INLINE in the body, and named them in `.fleet/plan.md` §0 as
+"MISSED SITE 1 — `.fleet/BRIEF.md:86-87`" and "MISSED SITE 2 —
+`.fleet/BRIEF.md:116-118`". **That finding was correct and it has now been
+acted on: both sites are corrected INLINE in this document.**
+
+⇒ Those two line numbers are HISTORICAL. Do not expect to find the refuted
+text at them — the text there now reads correctly, and a line number still
+resolves after the text moves, which is exactly how a positional reference
+fails silently.
+
+**The "unswept site" claim is repeated in five documents and every one of
+them is now historical on this point.** They were written before the sweep
+and have deliberately been left byte-identical, because they are the
+counsel's rescued record and the evidence for the correction:
+
+- `.fleet/plan.md` §0 (MISSED SITE 1 / MISSED SITE 2) and its index rows
+  M1/M2 (`:473-474`)
+- `.fleet/legs/l1-design.md` `:15-17`, `:85-86`, `:193`, `:259-260`
+- `.fleet/legs/l2-classify.md` `:44-45`
+- `.fleet/legs/l3-route.md` `:97-99`
+
+Wherever any of them says a site is "refuted **and unswept**", read
+"refuted, and **since corrected in the body**". The RULING each one draws
+is UNCHANGED and still binding: the `is_deterministic()` arm is OPEN with a
+measured default of `false` and a `true` answer must name its mechanism;
+the no-chain path KEEPS a bounded same-provider retry whose bound is
+configured, never minted.
+
+🔴 **`.fleet/legs/l1-design.md:259-260` is an acceptance criterion** — "the
+artifact states, in its own words, that it supersedes `.fleet/BRIEF.md
+:86-87` and `:116-118`, and why". Discharge it against the PROPOSITIONS,
+not the line numbers: the artifact must state that it supersedes the
+original (b) "deterministic — will refuse this content every time" and the
+original (d) "fail FAST … no in-place retries", and why the measurement
+refutes them. Citing the correction is the right citation; the two line
+numbers are not, any more.
+
+Nothing else in the plan is superseded. Its seam re-derivations (§1), the
+load-bearing-fact verdict (§2) and findings F-1..F-4 (§3) are all live and
+authoritative, and F-1 in particular still blocks R1(c)'s "either is
+acceptable" — the choice is not symmetric on this tree.
+
 Tom's ruling, 2026-08-22 09:50 his time, governs this flight: a provider
 rejecting an act under its safety policy must not be a flight-killer.
 "If there's an error like that, it can automatically retry with a
@@ -82,8 +127,11 @@ Seam provenance: exploration of tree `89ab967a` (branch regate/inv87r2)
 - (b) **The new class**: `HarnessError::PolicyRefused` (enum at
   `error.rs:16-113`, `#[non_exhaustive]`). The exhaustive
   `is_deterministic()` match gets its arm decided ON PURPOSE (the
-  crate's own doc :190-194 demands exactly this): deterministic — this
-  provider will refuse this content every time. Sweep the listed match
+  crate's own doc :190-194 demands exactly this) — and per the
+  correction above, the arm is ARGUED against Exhibits A and B, never
+  assumed: a refusal is stochastic, so the arm's duty is
+  stop-mislabelling-as-transient plus route-first semantics, not a
+  determinism claim. Sweep the listed match
   sites: `agent.rs:244-248`, `:327-331` (catch-alls that would swallow
   it silently), `advice.rs:138-155`, and the stale-able doc at
   `agent.rs:335-364`.
@@ -114,8 +162,10 @@ Seam provenance: exploration of tree `89ab967a` (branch regate/inv87r2)
   same-provider retry attempts (`failure_stand_down` :194 must not
   count it retry-eligible). Chain exhausted ⇒ the act fails as
   `policy_refused:` with every refusing queue named. No chain declared
-  ⇒ today's behavior minus the waste: fail FAST as `policy_refused:`
-  (no in-place retries), not after N identical attempts.
+  ⇒ a bounded same-provider retry REMAINS (measurement: refusals
+  sometimes clear on retry — Exhibits A and B), the bound CONFIGURED by
+  the act's own retry declaration, never minted here; on exhaustion the
+  act fails `policy_refused:` with the attempts accounted.
 - (e) **Replay determinism**: the re-dispatch must be recorded in
   history such that replay re-derives the same queue sequence
   (`resolve_task_queue` precedence + `start_time_task_queue` replay
