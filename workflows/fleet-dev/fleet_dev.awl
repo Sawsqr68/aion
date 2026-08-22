@@ -26,7 +26,10 @@
 //! round. A committed plan has a hash: it can be cited, diffed, and audited.
 //! The law also pays mechanically — `git worktree add` carries only
 //! committed state, so fan-out needs no copying, and fan-in is ordered
-//! merges, because the reports ride the leg branches home.
+//! merges, because the reports ride the leg branches home. Legs fan out IN
+//! PARALLEL from one base; this harness cannot express a sequential split.
+//! Sequential work is staged as one flight per leg, each dispatched from the
+//! previous flight's result head.
 //!
 //! CHECKS RUN IN CODE; EXACT FEEDBACK ROUTES BACK; DECISIONS THAT CAN BE
 //! RULES ARE RULES (Tom's three clauses, binding). `plan_check` and
@@ -60,6 +63,9 @@ workflow fleet_dev
   input base_ref: String
   input result_branch: String
   input repo: String
+  // The dispatch-fixed id list. `legs` is the same truth with one authored
+  // prompt per id, so downstream planning cannot invent or re-decide the
+  // split: an invented id would have no prompt to run.
   input leg_ids_csv: String
   input gate_entry: String
   input counsel_control_prompt: String
@@ -75,6 +81,7 @@ workflow fleet_dev
   outcome unprovisioned: type Unprovisioned,  route failure
   outcome unmeasured:    type Refused,        route failure
   outcome unplanned:     type PlanRefused,    route failure
+  outcome plan_mismatch: type PlanRefused,    route failure
   outcome unforked:      type Unforked,       route failure
   outcome unmerged:      type Unmerged,       route failure
   outcome unreported:    type Unreported,     route failure
@@ -87,7 +94,9 @@ workflow fleet_dev
 /// report file the builder must commit, plus the standing register (floors
 /// not ceilings, hard walls restated). `repo` is the leg's OWN isolated
 /// worktree at the deterministic address `<root>/legs/<id>` — the
-/// dispatcher composes it, and `fanout` cuts it there or refuses.
+/// dispatcher composes it, and `fanout` cuts it there or refuses. The `id`
+/// and its prompt are dispatch-authored together; planning authors the brief
+/// under that id, never a replacement topology.
 type Leg { id: String, prompt: String, repo: String }
 
 /// The canonical agent-outcome record every dispatch of an agent seam
@@ -146,8 +155,11 @@ type Unprovisioned { refusal: String, kept_root: String }
 /// pass: a control seat answered something other than the known answer.
 type Refused { control_expect: String, control_reply: String, reason: String, kept_root: String }
 
-/// The planner answered but its promised deliverable is not committed at
-/// HEAD. Carries the planner's account beside the check's own streams.
+/// The planner answered but the committed deliverable is refused as either
+/// `unplanned` (`check_exit` 1: absent/incomplete plan) or `plan_mismatch`
+/// (`check_exit` 3: committed briefs use names other than dispatch-fixed
+/// ids). The check's stdout carries the human-readable distinction beside
+/// the planner's account.
 type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String, kept_root: String }
 
 /// The leg worktrees could not be cut, so no builder was spent. The fanout
@@ -293,15 +305,24 @@ step dev_control
       reason: "the builder control did not return the expected reply, so the delegation pipeline cannot be shown to read the tree or follow instructions — nothing was planned or built",
       kept_root: cloned.root)
 
+/// Leg ids are FIXED AT DISPATCH because each id has a dispatch-authored
+/// builder prompt. The counsel writes `.fleet/legs/<id>.md` for exactly those
+/// declared ids; it does not choose the split. The dispatcher's `plan_prompt`
+/// must name the ids and say they are fixed.
 step plan_legs
   plan(repo: repo, prompt: plan_prompt) -> planned
 
 /// The planner's answer is a claim; HEAD is the fact. The check verifies
 /// the plan and every leg brief exist, are non-empty, and are COMMITTED —
 /// a loose working-tree plan is a red, by the blackboard-is-committed law.
+/// Committed briefs under different names are a separate mismatch outcome,
+/// because dispatch-fixed naming disagreement is not plan absence.
 step check_plan
   plan_check(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv) -> plan_checked
   outcome written: when plan_checked.exit_code == 0, route cut_trees
+  outcome mismatched: when plan_checked.exit_code == 3,
+    route plan_mismatch(plan: planned.text, check_exit: plan_checked.exit_code,
+      stdout: plan_checked.stdout, stderr: plan_checked.stderr, kept_root: cloned.root)
   outcome missing: otherwise,
     route unplanned(plan: planned.text, check_exit: plan_checked.exit_code,
       stdout: plan_checked.stdout, stderr: plan_checked.stderr, kept_root: cloned.root)

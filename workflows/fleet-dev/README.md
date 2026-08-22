@@ -24,10 +24,11 @@ sequential v1 — see the first entry under recorded trade-offs.
    writes its deliverables INTO THE TREE: `.fleet/plan.md` plus one complete
    builder brief per leg at `.fleet/legs/<id>.md`, each requirement anchored
    file:line.
-3. **`check_plan`** — a server-run script verifies every promised leg brief
-   exists and is non-empty. The planner's reply is a claim; the tree is the
-   fact. A planner that answered eloquently and wrote nothing routes to
-   `unplanned` instead of starving every builder downstream.
+3. **`check_plan`** — a fleet-worker script verifies every dispatch-fixed leg
+   brief exists, is non-empty, and is committed. The planner's reply is a
+   claim; the tree is the fact. An absent/incomplete plan routes to
+   `unplanned`; committed briefs under different ids route separately to
+   `plan_mismatch`, whose payload lists DECLARED ids versus FOUND files.
 4. **`cut_trees`** — the server runs the fanout script: one isolated
    worktree and one branch per leg, cut from the planned tree, each carrying
    the planner's `.fleet/` briefs. It refuses loudly rather than deleting
@@ -140,11 +141,14 @@ at the operator's desk, after this workflow returns.
   declared-actions dispatch). Both workers can share the queue; the server
   spreads dispatches across them.
 - **The planner plans the what-and-where, not the how-many.** The leg
-  topology is fixed by the dispatcher in `legs` before the run starts; the
-  planner authors the CONTENT of each leg's brief and its file:line
-  grounding. That keeps the run list at the dispatcher's desk and is the
-  right v1 given the language — but read "planner" as brief-author, not
-  decomposer.
+  topology is fixed by the dispatcher in `legs` before the run starts, with
+  one dispatch-authored prompt per id. A planner cannot invent an id because
+  no prompt exists to run it; it authors the CONTENT of exactly those briefs
+  and their file:line grounding. A dispatcher's plan prompt therefore names
+  the ids and says they are fixed. Legs fan out only IN PARALLEL from one
+  base: this harness cannot express a sequential split. Sequential work is
+  staged as one flight per leg on the previous flight's result head. Read
+  "planner" here as brief-author, not decomposer.
 - **Queue `dev` is reused byte-compatibly** with `norn_dev`'s declaration —
   RATIFIED: the dev queue is a capability class, not a document namespace;
   same contract, same seated worker, and a second queue would buy isolation
@@ -173,20 +177,25 @@ at the operator's desk, after this workflow returns.
 - **`judge_pass` is an input**, not a constant: the token the judge is
   instructed to reply with and the token the document matches against must be
   one truth, and both live at the dispatcher's hand.
-- **The red-routing `otherwise` arms are UNREACHABLE on this server — RULED
-  for the v3 rev (2026-08-14, from the first dispatch's live finding).** A
+- **The red-routing `otherwise` arms were judged UNREACHABLE in the
+  server-declared-command design — SUPERSEDED 2026-08-22.** The 2026-08-14
+  live finding was correct for that former serving path: a
   non-zero exit of a declared command is a retryable activity ERROR
   (DECLARED-COMMANDS.md:368), so a `RunOutcome` never carries a non-zero
   `exit_code` and every red arm that routes on one
   (`unplanned`/`unforked`/`unmerged`/`unreported`/`gates_red`) cannot fire:
   a red script ends the run terminally at that step instead of routing. Two
-  things follow, both ruled. The degradation is FAIL-LOUD, not silent — a
+  things followed, both ruled. The degradation was FAIL-LOUD, not silent — a
   red gate still kills the run before judge spend and leaves the tree
-  inspectable — so v2 stands as dispatched. And the v3 rev makes the whole
+  inspectable — so v2 stood as dispatched. The proposed v3 rev made the whole
   document ONE oracle grammar: declared scripts always exit 0 and emit a
   single stdout token, with every routing decision reading stdout equality —
-  exactly the register the controls already use. The exit status is not an
-  oracle; the document's own lesson, now applied to its own scripts.
+  exactly the register the controls already used. The current design instead
+  serves sealed scripts through the `fleet_ops` worker with EXIT ZERO ALWAYS,
+  INNER CODE AS DATA: `OpProbe.exit_code` carries each anticipated face and
+  the workflow routes it. That is why `unplanned` fired in flight `f3d6f20a`,
+  and why `plan_mismatch` can now distinguish committed briefs under the
+  wrong names from genuine absence.
 
 ## What this does not prove
 

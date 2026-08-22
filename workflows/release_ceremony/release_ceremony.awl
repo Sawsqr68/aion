@@ -29,7 +29,10 @@
 //! absent is a typed refusal, never a silent pass) or `attest` (Hermes's
 //! delta-publish shape: when the code delta off a battery-proven tree is a
 //! version string, the publisher ATTESTS with a citation — named, recorded
-//! in history, never silent). An unknown mode refuses.
+//! in history, never silent). In check mode the probe carries the full log's
+//! hash and its per-crate verdict lines as values, so the durable record stays
+//! readable after the overwritten blackboard referent is gone. An unknown
+//! mode refuses.
 //!
 //! ORDER IS DECLARED, THE INDEX ENFORCES IT: `publish_order` is the
 //! operator's declared full-graph topological order (release-set membership
@@ -51,7 +54,10 @@
 //! it travels as `install_green: false` for the parent to route on.
 //!
 //! Logs live in the tree at `<tree>/.release/` — the tree is the
-//! blackboard; `.release/` never rides a commit (explicit-pathspec law).
+//! blackboard; `.release/` never rides a commit (explicit-pathspec law). The
+//! semver log also lands at the durable tracked
+//! `docs/evidence/semver-<version>-check.log` address; the blackboard copy
+//! remains overwritten and uncommitted.
 //!
 //! REPO-AGNOSTIC: every leg, the changelog gate included. Each repo declares
 //! its own changelog embed pairs in `<tree>/release-ceremony.json`; an absent
@@ -104,7 +110,10 @@ type ChangelogProbe {
 
 /// The public-surface gate: green from a real `cargo semver-checks` run, or
 /// green by recorded attestation (`attested: true`, `citation` naming the
-/// battery-proven tree the delta rides on). The tool being absent is a red
+/// battery-proven tree the delta rides on). `log_sha256` binds the full log
+/// content and `findings` carries the bounded per-crate Checking/Summary
+/// verdict lines, so the durable value remains readable when the overwritten
+/// `.release/` pointer's referent is gone. The tool being absent is a red
 /// refusal, never a silent pass.
 type SemverProbe {
   green: Bool,
@@ -113,6 +122,8 @@ type SemverProbe {
   rc: Int,
   log_path: String,
   refusal: String,
+  log_sha256: String,
+  findings: String,
 }
 
 /// One crate's whole publish fact: skipped (already at the index), or

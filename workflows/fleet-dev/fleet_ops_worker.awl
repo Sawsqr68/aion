@@ -16,9 +16,12 @@ worker fleet_ops
   /// gate script's findings commits are attributable to the fleet.
   action clone(repo_url: String, base_ref: String, workspace_root: String, run_name: String) -> CloneProbe
     run json "sh /home/aion/fleet/bin/fleet-clone.sh $repo_url $base_ref $workspace_root $run_name"
-  /// The plan and every leg brief exist, are non-empty, and are COMMITTED
-  /// at HEAD — a loose working-tree plan is a red, by the
-  /// blackboard-is-committed law.
+  /// Check the plan and dispatch-fixed leg ids at committed HEAD: inner code
+  /// 0 is complete; 1 is an absent/incomplete plan (including loose `.fleet`
+  /// state); 3 is a dispatch-vs-plan naming mismatch where committed briefs
+  /// exist but declared names are missing. Code 2 remains the shared script
+  /// guard face. A mismatch is not an absent plan: its stdout carries
+  /// DECLARED versus FOUND ids for the refusal payload.
   action plan_check(workspace_root: String, run_name: String, leg_ids_csv: String) -> OpProbe
     run json "sh /home/aion/fleet/bin/fleet-plan-check.sh $workspace_root $run_name $leg_ids_csv"
   /// One isolated worktree and one branch per leg, cut from the planned
