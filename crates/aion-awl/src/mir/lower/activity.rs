@@ -188,8 +188,7 @@ pub(super) fn declared_advisory(emitter: &crate::emitter::Emitter<'_>, name: &st
 }
 
 /// Apply config in the reference's per-key merge and order
-/// (`stmts.rs:84-104`): `site.retry.or(decl.retry)`, then
-/// `site.timeout.or(decl.timeout)`, then `task_queue` (always), then
+/// (`stmts.rs:84-104`): `site.retry.or(decl.retry)`, then the declaration's authored `fallback`, then `site.timeout.or(decl.timeout)`, then `task_queue` (always), then
 /// `site.node.or(decl.node)`. Returns the final activity value to hand to
 /// `workflow.run`.
 fn apply_action_config(
@@ -211,6 +210,25 @@ fn apply_action_config(
             ctx,
             RuntimeFn::ActRetry,
             vec![Value::Var(current), Value::Var(policy)],
+            stmts,
+            span,
+        );
+    }
+    if let Some(fallback) = decl.and_then(|config| config.fallback.as_ref()) {
+        let queues = ctx.fresh_var();
+        stmts.push(Stmt::ListNew {
+            dst: queues,
+            items: fallback
+                .entries
+                .iter()
+                .map(|entry| Value::Lit(ctx.binary(&entry.name)))
+                .collect(),
+            span: Span::from_source(fallback.span),
+        });
+        current = call_rt(
+            ctx,
+            RuntimeFn::ActFallback,
+            vec![Value::Var(current), Value::Var(queues)],
             stmts,
             span,
         );

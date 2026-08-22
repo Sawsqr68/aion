@@ -89,7 +89,12 @@ fn is_config_key(kind: &TokenKind) -> bool {
     matches!(
         kind,
         TokenKind::Keyword(
-            Keyword::Node | Keyword::Timeout | Keyword::Retry | Keyword::Advisory | Keyword::Agent,
+            Keyword::Node
+                | Keyword::Timeout
+                | Keyword::Retry
+                | Keyword::Fallback
+                | Keyword::Advisory
+                | Keyword::Agent,
         )
     )
 }

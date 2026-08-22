@@ -81,6 +81,22 @@ step build
   route done(built)",
 ];
 
+/// `fallback`: an authored queue chain after policy refusal.
+pub(crate) const FALLBACK: &[&str] = &[
+    r"//! Route policy refusals through the declared queue chain.
+workflow route_provider
+  input prompt: String
+  outcome done: type String, route success
+
+worker agents
+  action run(prompt: String) -> String
+    fallback norn, claude
+
+step run
+  run(prompt: prompt) -> answer
+  route done(answer)",
+];
+
 /// `retry`: the fixed-interval form, and the growing backoff form.
 pub(crate) const RETRY: &[&str] = &[
     r"//! Retry the flaky pull three times before the step faults.

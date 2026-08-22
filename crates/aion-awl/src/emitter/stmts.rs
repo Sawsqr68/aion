@@ -88,6 +88,9 @@ fn activity_value_form(
     if let Some(retry) = retry {
         let _ = write!(value, " |> activity.retry({})", retry_policy(retry));
     }
+    if let Some(fallback) = action_config.and_then(|config| config.fallback.as_ref()) {
+        let _ = write!(value, " |> activity.fallback({})", fallback_chain(fallback));
+    }
     let timeout = site_config
         .and_then(|config| config.timeout.as_ref())
         .or_else(|| action_config.and_then(|config| config.timeout.as_ref()));
@@ -160,6 +163,18 @@ fn ordered_args<'c>(
 /// (`attempt < max_attempts`), so the declared count is translated here — and
 /// only here — as `N + 1`. The direct lowering's twin is
 /// `mir::lower::activity::total_attempts`; the two must stay in step.
+pub(super) fn fallback_chain(fallback: &crate::ast::FallbackSpec) -> String {
+    format!(
+        "[{}]",
+        fallback
+            .entries
+            .iter()
+            .map(|entry| string_lit(&entry.name))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
 pub(super) fn retry_policy(retry: &RetrySpec) -> String {
     match retry {
         RetrySpec::Every { count, every, .. } => format!(

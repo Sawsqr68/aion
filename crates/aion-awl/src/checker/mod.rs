@@ -21,6 +21,7 @@ mod entry;
 mod error;
 mod exhaustive;
 mod exprs;
+mod fallbacks;
 mod family;
 mod graph;
 mod harness;

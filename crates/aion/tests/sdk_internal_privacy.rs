@@ -134,9 +134,12 @@ import gleam/json
 
 pub fn run_public_activity() {
   let wire = codec.json_codec(json.string, decode.string)
+  // `fallback` is intentionally public authored routing configuration; unlike
+  // raw dispatch, external workflow packages must be able to attach it.
   let invocation = activity.new("probe", "input", wire, wire, fn(input) {
     Ok(input)
   })
+  |> activity.fallback(["norn", "claude"])
   workflow.run(invocation)
 }
 "#,

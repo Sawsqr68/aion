@@ -8,7 +8,7 @@ use crate::semantic::SemanticAnalysis;
 
 use super::context::{Ctx, Flow};
 use super::error::CheckError;
-use super::{consts, decls, durations, family, graph, harness, queries, subflows, walk};
+use super::{consts, decls, durations, fallbacks, family, graph, harness, queries, subflows, walk};
 
 /// Typecheck a parsed document with no document directory: schema imports
 /// (`type X = schema("file")`) cannot resolve and are reported as errors.
@@ -80,6 +80,7 @@ fn workflow_passes<'a>(ctx: &mut Ctx<'a>, document: &'a Document) {
         ctx.error(timeout.span, "workflow `timeout` is too large");
     }
     durations::run(ctx);
+    fallbacks::run(ctx);
     decls::run(ctx);
     consts::run(ctx);
     queries::check_declared_answers(ctx);
@@ -106,6 +107,7 @@ fn workflow_passes<'a>(ctx: &mut Ctx<'a>, document: &'a Document) {
 /// workflow that the file never claimed to be.
 fn worker_passes(ctx: &mut Ctx<'_>) {
     durations::run(ctx);
+    fallbacks::run(ctx);
     decls::run(ctx);
     consts::run(ctx);
     family::run(ctx);

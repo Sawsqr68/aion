@@ -34,7 +34,7 @@ const keywords = [
   'workflow', 'input', 'signal', 'outcome', 'type', 'schema', 'worker',
   'action', 'child', 'step', 'subflow', 'after', 'fork', 'join', 'loop',
   'counting', 'until', 'max', 'visits', 'sequential', 'spawn', 'wait',
-  'sleep', 'timeout', 'retry', 'every', 'backoff', 'node', 'on', 'failure',
+  'sleep', 'timeout', 'retry', 'fallback', 'every', 'backoff', 'node', 'on', 'failure',
   'when', 'otherwise', 'route', 'success', 'filter', 'map', 'sort', 'count',
   'any', 'all', 'is', 'empty', 'present', 'absent', 'not', 'and', 'or', 'in',
   'const', 'json', 'of', 'distribute', 'sequence', 'collect',

@@ -95,6 +95,11 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
                  prompt in, the canonical agent-outcome record out — `text: String` and \
                  `stop_reason: String`), which one call site cannot change",
             );
+        } else if let Some(fallback) = &config.fallback {
+            w.err(
+                fallback.span,
+                "a call site may pin `node` and `timeout` only — `fallback` stays on the action declaration; the chain is the action's declared routing, which one call site cannot change.",
+            );
         } else if let Some(retry) = &config.retry {
             let span = match retry {
                 RetrySpec::Every { span, .. } | RetrySpec::Backoff { span, .. } => *span,
