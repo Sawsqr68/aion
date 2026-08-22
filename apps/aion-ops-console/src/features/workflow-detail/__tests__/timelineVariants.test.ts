@@ -44,6 +44,7 @@ test('classifyKnownEvent assigns the expected families', () => {
     ActivityCompleted: 'activity',
     ActivityFailed: 'activity',
     ActivityAdvisoryExhausted: 'activity',
+    ActivityFallbackRouted: 'activity',
     ActivityAdoptionOffered: 'activity',
     ActivityCancelled: 'activity',
     TimerStarted: 'timer',
