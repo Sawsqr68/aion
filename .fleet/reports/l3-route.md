@@ -86,3 +86,30 @@ The required command output is pasted verbatim below after the final report-bear
 .fleet/reports/l2-classify.md
 .fleet/reports/l3-route.md
 ```
+
+## FIX ROUND 2 — 2026-08-22
+
+### Attribution before mutation
+
+- **MEASURED IN SCOPE** — `RED-LATEST.md` contains exactly one failed target: `aion-awl --test editor_assets::the_zed_pin_names_a_mirror_commit_carrying_this_grammar`. The test passes unchanged on the immutable pre-leg base `c0c04142e66184a19a8602774914e6f88e30d624` in detached worktree `/tmp/policyref-l3-base-measure` with independent `CARGO_TARGET_DIR=/tmp/policyref-l3-base-target` (1 passed, 0 failed), and fails on the L3 tree (0 passed, 1 failed). It is therefore caused by the in-scope AWL fallback grammar change, not pre-existing.
+- **MEASURED EXTERNAL PUBLICATION BLOCKER** — anonymous `git ls-remote https://github.com/tomWhiting/tree-sitter-awl.git refs/heads/main` still reports `8d4d63e398bf765dd51772b60555b9dae8ebc106`. The committed Zed pin truthfully records that mirror revision and its grammar digest `eb61fb429719c7666618a7dc841266119db320ee9a8cf8557d4364dcb993691e`, while this tree's generated grammar digest is `5c659cfa6ced3154ad5a69173b320591b83886f80972ed44f42b5d7db405f859`. Clearing the red requires synchronizing, committing, and pushing the generated grammar to that shared external mirror, then anonymously verifying the new revision before changing the local pin. No digest or revision was falsified, and no unauthorized shared-state push was attempted.
+- **VENUE** — no memory-shaped anomaly was observed. The known aion#54 shard-actor timeout battery was not run or retried.
+
+### Fix disposition
+
+- **REPORT-ONLY** — there is no legitimate branch-local code fix while the public mirror remains unpublished. Weakening/suppressing the test, changing only `grammar-sha256`, or pinning an unpublished revision would violate the publish-before-pin contract and the lane walls. No production or test code was changed.
+- No match on `HarnessError` or `ActivityErrorKind` was touched. No catch-all arm, lint suppression, `#[ignore]`, library `.unwrap()`/`.expect()`, dependency, or generated-file hand edit was introduced.
+
+### Verification
+
+- **PASS ON BASE** — `CARGO_TARGET_DIR=/tmp/policyref-l3-base-target cargo test -p aion-awl --test editor_assets the_zed_pin_names_a_mirror_commit_carrying_this_grammar -- --exact --nocapture`: 1 passed, 0 failed.
+- **EXPECTED RED ON L3** — the same exact test on the current tree reproduces the digest mismatch: actual `5c659cfa6ced3154ad5a69173b320591b83886f80972ed44f42b5d7db405f859`, recorded/published `eb61fb429719c7666618a7dc841266119db320ee9a8cf8557d4364dcb993691e`.
+- **GATE SCOPE** — the verbatim no-fail-fast gate transcript completes the workspace and ends with exactly one failed target, `-p aion-awl --test editor_assets`; no second red is present.
+
+### FIX ROUND 2 receipt
+
+```text
+.fleet/reports/l1-design.md
+.fleet/reports/l2-classify.md
+.fleet/reports/l3-route.md
+```
