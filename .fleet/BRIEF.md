@@ -1,226 +1,87 @@
-# BRIEF — aion: PolicyRefused error class + declared provider fallback
+# BRIEF — PolicyRefused L3: authored fallback and routing (leg 3 of 3, staged)
 
-## 🔴 CORRECTION — 2026-08-22, binding, outranks the text below where they
-## disagree (refutation by Vesper Lynd, ratified by Waffles)
+You are standing on L2's ratified result (fleet/policyref-l2-result =
+68568af4d). L1 designed, L2 classified. L3 ROUTES. The authoritative design is
+the artifact IN THIS TREE: `docs/design/policy-refused-fallback.md` — read it
+whole before anything; sections R1-d (declared fallback semantics), R1-e
+(history-derived replay), "Why the authored list is immutable for a run", and
+"Implementation boundaries and gates" are your specification. Where this brief
+and the artifact disagree, the artifact wins and you SAY SO in your report.
 
-Two of this brief's proposals are CONTRADICTED by measured engine history
-and must NOT be implemented as written: (b)'s claim that a policy refusal
-is **deterministic-for-this-content**, and (d)'s **fail-fast after ONE
-attempt** when no chain is declared. Exhibit A: workflow `4ddee56c`
-(aion84_dev, 2026-08-19) — seq 9 ActivityFailed on a `cyber_policy`
-refusal, seq 11 ActivityCompleted, SAME act, attempt 2: the retry cleared
-it. Exhibit B: aion#65 round 3's leg — attempt 1 died at 22m44s on
-`cyber_policy`; attempt 2, same prompt and tree, delivered the leg whole.
-(Exhibit B was this author's own banked evidence, not consulted when (b)
-was written — the refutation stands on data I already held.) A refusal is
-**stochastic, not deterministic**. What replaces the refuted parts:
-`PolicyRefused` remains its own class and must still never burn a
-same-provider retry budget mislabelled as transient; the declared chain is
-consulted FIRST (hop first, retry second — a hop is cheaper and likelier
-than a same-provider retry); with NO chain declared, a bounded
-same-provider retry REMAINS, its bound a CONFIGURED value defaulting to
-what the act already declares — minting "1" or "2" here is the
-no-assumed-defaults violation this estate refuses. If R1 still argues
-determinism it must name the mechanism that makes a refusal which
-demonstrably cleared on attempt 2 deterministic. Full verdict with the
-event-by-event reads: `docs/evidence/policy-refused-census-20260822.md`
-in the flight base (`fleet/policyrefused-base` = `8709317ba`).
+## Scope (artifact: "L3 owns only authored fallback and routing")
 
-### 🔴 RECONCILIATION — read this before you read `.fleet/plan.md` §0
+AWL `fallback` syntax/lowering, queue-chain configuration, route recording
+(`Event::ActivityFallbackRouted` + recorder method), retry-loop consultation,
+recovery/replay cursor handling, and E2E coverage. L3 CONSUMES L2's committed
+class (`HarnessError::PolicyRefused`, `ActivityErrorKind::PolicyRefused`, the
+`policy_refused:` reason vocabulary) — never duplicates recognition.
 
-The flight1 planning counsel found (b) and (d) still stating the refuted
-premise INLINE in the body, and named them in `.fleet/plan.md` §0 as
-"MISSED SITE 1 — `.fleet/BRIEF.md:86-87`" and "MISSED SITE 2 —
-`.fleet/BRIEF.md:116-118`". **That finding was correct and it has now been
-acted on: both sites are corrected INLINE in this document.**
+## Binding counsel findings — carried verbatim, non-negotiable
 
-⇒ Those two line numbers are HISTORICAL. Do not expect to find the refuted
-text at them — the text there now reads correctly, and a line number still
-resolves after the text moves, which is exactly how a positional reference
-fails silently.
+1. 🔴 THE SETTLEMENT TERMINAL PREDICATE (L2 counsel OPEN-2, ruled):
+   "L2 must not implement it; L3 cannot omit it."
+   Five sites read `!error.is_retryable()` as "settled" (audit-time
+   coordinates — RE-DERIVE each by symbol on this tree):
+   `crates/aion/src/durability/cursor.rs:343`,
+   `crates/aion/src/runtime/nif_collect_settlement.rs:339` and `:430`,
+   `crates/aion/src/runtime/fan_out.rs:339`,
+   `crates/aion/src/runtime/nif_activity_retry.rs:349`.
+   A `policy_refused:` reason is NOT retryable — but with a live fallback
+   chain it is NOT SETTLED either. Every one of those five sites must decide
+   the three-valued question on purpose; leaving any on the two-valued read
+   silently settles a mid-chain refusal.
+2. 🔴 CONFIRMED BY L2's JUDGE (hand-off note): `is_retryable_reason`
+   (`nif_activity_retry.rs:96-98` audit-time) still tests only the
+   `retryable:` prefix, so on the tree you stand on a `policy_refused:`
+   reason settles without retry or hop. Artifact R1-d step 5 ("no-chain →
+   existing configured retry policy, refusal stays nonterminal while budget
+   remains, terminal on exhaustion with `policy_refused:` reason — never
+   relabeled") plus hop-first-retry-second is YOURS to make true.
 
-**The "unswept site" claim is repeated in five documents and every one of
-them is now historical on this point.** They were written before the sweep
-and have deliberately been left byte-identical, because they are the
-counsel's rescued record and the evidence for the correction:
+## Hard walls, from the artifact
 
-- `.fleet/plan.md` §0 (MISSED SITE 1 / MISSED SITE 2) and its index rows
-  M1/M2 (`:473-474`)
-- `.fleet/legs/l1-design.md` `:15-17`, `:85-86`, `:193`, `:259-260`
-- `.fleet/legs/l2-classify.md` `:44-45`
-- `.fleet/legs/l3-route.md` `:97-99`
+- **Single writer**: `ActivityFallbackRouted` is appended ONLY through the
+  workflow's existing Recorder held by `RetryRecorderSeam`. NEVER
+  `EventStore::append` directly. The recorder guard re-reads the run segment
+  under the recorder lock (settled ordinal / closed epoch / already-recorded
+  hop stands the task down).
+- **Immutability premise**: the authored fallback list is read from THE RUN'S
+  OWN BOUND MODULE VERSION, never the currently deployed package (artifact
+  §"Why the authored list is immutable" — current-deploy reading is a
+  long-lived-workflow replay break invisible in every test).
+- **Hop ordering is durable** (artifact R1-e order 1-5); replay after a crash
+  at EACH boundary chooses the same recorded queue — tested.
+- **No numeric retry bound minted anywhere** — the design deliberately has
+  none; the no-chain path uses the act's existing resolved `RetrySpec`.
+- **`resolve_task_queue` gains NO fourth precedence level** — fallback is a
+  post-failure override of the recorded initial choice.
+- Terminal `policy_refused:` reason lists queues by RECORDED sequence.
+- Duplicate fallback entries rejected at AWL check; an entry equal to the
+  current queue is skipped at runtime and the original authored index is what
+  history records.
+- Known artifact erratum (L1 counsel OPEN-1, ruled "report, do not stop"):
+  the norn secondary-site name `outcome_into_payload` does not exist; the
+  referent is `run_result_to_outcome`. Not an L3 work item — recorded so you
+  do not re-derive the confusion.
 
-Wherever any of them says a site is "refuted **and unswept**", read
-"refuted, and **since corrected in the body**". The RULING each one draws
-is UNCHANGED and still binding: the `is_deterministic()` arm is OPEN with a
-measured default of `false` and a `true` answer must name its mechanism;
-the no-chain path KEEPS a bounded same-provider retry whose bound is
-configured, never minted.
+## Tests (artifact list, binding)
 
-🔴 **`.fleet/legs/l1-design.md:259-260` is an acceptance criterion** — "the
-artifact states, in its own words, that it supersedes `.fleet/BRIEF.md
-:86-87` and `:116-118`, and why". Discharge it against the PROPOSITIONS,
-not the line numbers: the artifact must state that it supersedes the
-original (b) "deterministic — will refuse this content every time" and the
-original (d) "fail FAST … no in-place retries", and why the measurement
-refutes them. Citing the correction is the right citation; the two line
-numbers are not, any more.
+- A declared chain records refusal then hop and succeeds WITHOUT a same-queue
+  retry; the E2E claim auditable from history: one refusal, one hop, zero
+  same-queue retries, empty final failure reason on success.
+- No-chain behavior preserves the configured retry policy, attempts no hop,
+  terminates with policy-refused classification WITHOUT asserting a
+  particular attempt count.
+- Replay after each crash boundary chooses the same recorded queue.
+- Live-seat tests runtime-gated (env var, logged skip, return Ok) — never
+  `#[ignore]`. No blocking sleep sized to a duration; poll + total deadline +
+  timeout-as-distinct-outcome.
 
-Nothing else in the plan is superseded. Its seam re-derivations (§1), the
-load-bearing-fact verdict (§2) and findings F-1..F-4 (§3) are all live and
-authoritative, and F-1 in particular still blocks R1(c)'s "either is
-acceptable" — the choice is not symmetric on this tree.
+## Process walls
 
-Tom's ruling, 2026-08-22 09:50 his time, governs this flight: a provider
-rejecting an act under its safety policy must not be a flight-killer.
-"If there's an error like that, it can automatically retry with a
-different one." Today the refusal arrives as `Retryable`, the engine
-re-asks the SAME provider the SAME content four times (~25 min), and the
-flight dies. Four flights died this way 08-20→08-21 (both #68
-investigates, inv73-harness-flight2, beamr flight1). The cure is two
-halves: (1) classify the refusal as its own class — never mislabelled as
-a transient error, never burning the same-provider retry budget as if it
-were one; (2) route around it: consult the declared chain FIRST (hop
-first, retry second), any same-provider retry bounded by the act's
-CONFIGURED budget.
-
-Seam provenance: exploration of tree `89ab967a` (branch regate/inv87r2)
-— re-derive every line number on your tree; the SEAMS are the contract.
-
-## The defect chain, precisely (all five seams cited)
-
-1. norn adapter wraps the provider error verbatim:
-   `crates/aion-integration-norn/src/session.rs:289` →
-   `HarnessError::Harness` (`crates/aion-integrations/src/error.rs:78`).
-   The provider's structured refusal (openai sse error event, code
-   `cyber_policy`) is flattened to prose and never inspected.
-2. `HarnessError::is_deterministic()` (`error.rs:223-233`) returns false
-   for `Harness` ⇒ `harness_error_to_outcome()`
-   (`crates/aion-worker/src/runtime/agent.rs:366-378`) marks it
-   RETRYABLE.
-3. The retry loop
-   (`crates/aion/src/runtime/nif_activity_retry_dispatch.rs:247-330`)
-   clones the request mutating ONLY `delivery.attempt` (:264-265) —
-   per-attempt provider variation is foreclosed by design (negative test
-   `crates/aion-integration-norn/src/harness.rs:639-645`).
-4. `failure_stand_down()` (:183-203) wraps exhaustion:
-   "exhausted: spent N of N attempts; last refusal: retryable:…".
-5. The Gleam grammar (`gleam/aion_flow/src/aion/internal/
-   activity_dispatch.gleam:134-160`) has no arm for `exhausted:` — it
-   falls through to `ActivityEngineFailure`, so a content refusal
-   presents to the operator as an ENGINE fault.
-
-## R1 — THE DESIGN ARTIFACT. Committed before implementation:
-`docs/design/policy-refused-fallback.md` in-repo, deciding with rationale:
-
-- (a) **Detection seam**: where the provider's policy refusal is
-  recognized. The template is the one existing text-inspection decorator
-  `crates/aion-integration-norn/src/advice.rs` (`AdvisingHarness`,
-  composition root `crates/aion-cli/src/harness/compose.rs:54-59`) — but
-  today it only rewrites messages; RE-CLASSIFICATION is new capability.
-  Prefer the provider's STRUCTURED code (`cyber_policy` in the sse error
-  event) over substring matching wherever the adapter still holds the
-  structured object; name where that object is last available. Cover the
-  ACP adapter's equivalent surface
-  (`crates/aion-integration-acp/src/outcome.rs:180-204`) or state with
-  evidence why ACP cannot express a policy refusal.
-- (b) **The new class**: `HarnessError::PolicyRefused` (enum at
-  `error.rs:16-113`, `#[non_exhaustive]`). The exhaustive
-  `is_deterministic()` match gets its arm decided ON PURPOSE (the
-  crate's own doc :190-194 demands exactly this) — and per the
-  correction above, the arm is ARGUED against Exhibits A and B, never
-  assumed: a refusal is stochastic, so the arm's duty is
-  stop-mislabelling-as-transient plus route-first semantics, not a
-  determinism claim. Sweep the listed match
-  sites: `agent.rs:244-248`, `:327-331` (catch-alls that would swallow
-  it silently), `advice.rs:138-155`, and the stale-able doc at
-  `agent.rs:335-364`.
-- (c) **The reason vocabulary**: new `policy_refused:` prefix beside
-  `retryable:`/`terminal:`/`timeout:`
-  (`crates/aion/src/runtime/nif_activity_retry.rs:31-96`, render sites
-  `crates/aion-server/src/worker/bridge.rs:474-480` +
-  `declared_body.rs:481-486`). DESIGN DECISION, argued in the artifact:
-  whether `ActivityErrorKind` (`crates/aion-core/src/error.rs:8-14`)
-  gains a variant — that is a wire + TS-codegen event
-  (`generated_types.rs:222`) — or stays binary with `policy_refused:`
-  carried in the prefixed reason. Either is acceptable; silent
-  mislabelling is not.
-- (d) **The fallback chain**: AWL-declarable, at the same altitude as
-  `retry` (`ConfigLine`, `crates/aion-awl/src/ast/document.rs:540-541`;
-  lowering twins `emitter/stmts.rs:154-180` +
-  `mir/lower/activity.rs:274-285`) — e.g. `fallback <queue>[, <queue>…]`
-  naming task queues, since a queue IS the provider-flavour selector
-  (`PoolAddress`, `registry.rs:117-123`) and AWL has NO model field
-  (model lives in the worker binary; that stays true — this flight does
-  not invent one). Measured constraint (Vesper, 08-22, at the boxes):
-  norn is structurally ChatGPT-only (`norn auth login` offers ChatGPT
-  alone) — a provider change is NECESSARILY a queue/harness hop; the
-  chain design must not assume any in-harness model rotation. Semantics to pin down in the artifact: a
-  PolicyRefused outcome consults the chain and re-dispatches the act on
-  the next queue; chain hops are their own budget (the chain's length),
-  DISTINCT from the retry budget — a policy refusal never burns
-  same-provider retry attempts (`failure_stand_down` :194 must not
-  count it retry-eligible). Chain exhausted ⇒ the act fails as
-  `policy_refused:` with every refusing queue named. No chain declared
-  ⇒ a bounded same-provider retry REMAINS (measurement: refusals
-  sometimes clear on retry — Exhibits A and B), the bound CONFIGURED by
-  the act's own retry declaration, never minted here; on exhaustion the
-  act fails `policy_refused:` with the attempts accounted.
-- (e) **Replay determinism**: the re-dispatch must be recorded in
-  history such that replay re-derives the same queue sequence
-  (`resolve_task_queue` precedence + `start_time_task_queue` replay
-  note, `crates/aion/src/runtime/nif_activity.rs:77-113` — the design
-  says how the fallback hop composes with that).
-
-## R2 — IMPLEMENTATION, per the committed design only
-
-Both halves land together: classification (adapter → `PolicyRefused` —
-its own class, never mislabelled transient) and routing (chain consulted
-first, honored end-to-end; same-provider retry only under the act's
-configured bound). The Gleam grammar gains its arms — `parse_error/1`,
-`encode_error/1` (`activity_dispatch.gleam:134-195`),
-`describe_activity_error/1` (`awl/error.gleam:160-175`), `mock.gleam:80-90`
-— so `policy_refused:` presents as itself, never as "activity engine
-failure". While there, do NOT widen scope to the pre-existing
-`exhausted:`/`infrastructure:` fallthrough mislabelling — REPORT it as a
-named finding (it deserves its own item), don't fix it silently.
-
-## R3 — GREEN, DEFINED PRECISELY
-
-1. Unit: a synthetic provider policy refusal (structured code) classifies
-   `PolicyRefused`; an ordinary harness error still classifies `Harness`
-   retryable — both directions tested.
-2. E2E (env-gated per house rules if it needs live seats): an act whose
-   worker refuses by policy re-dispatches to the declared fallback queue
-   and COMPLETES there; history shows one refusal + one hop, zero
-   same-queue retries; `failure_reason` empty (the run succeeded).
-3. E2E negative: no chain declared ⇒ the act exhausts its CONFIGURED
-   retry bound and fails `policy_refused:` — assert the CLASSIFICATION
-   and that NO chain hop was attempted, with attempt accounting in the
-   record; assert no particular attempt count (the invariant, not the
-   enumeration).
-4. The Gleam surface: a `policy_refused:` failure presents with that
-   prefix, not "activity engine failure" (assertion on the projected
-   `failure_reason`, `crates/aion-core/src/filter.rs:176-206` path).
-5. Full workspace gates green, two-instrument protocol per venue config.
-
-## Process walls — binding
-
-- No lint suppressions in any spelling; no `#[ignore]` in any spelling;
-  runtime env-gates only. No file over 500 lines. `thiserror` errors;
-  never `.unwrap()`/`.expect()` in library code. Wire/TS changes, if the
-  design chooses them, regenerate — never hand-edit — generated types.
-- ⛔ Never one blocking sleep sized to expected duration; poll + total
-  deadline + timeout-as-distinct-outcome.
-- Report path per the workflow's injected wire contract; `git ls-tree`
-  receipt before the leg declares done.
-- Measured red = success outcome under the F6 wall: if the design pass
-  concludes the fallback hop cannot be made replay-deterministic without
-  restructuring beyond this scope, that conclusion with evidence is the
-  deliverable — committed, reported, no heroics.
-
-## The sentence to hold on to
-
-A policy refusal is a routing fact before it is a retry candidate.
-**Classify it once, and route around the wall before grinding against
-it.**
+No lint suppressions in any spelling. No hand-edited generated types
+(regenerate; `aion-proto/src/worker.rs` and the `.proto` are hand-authored
+surfaces by design). No new dependencies. Files already over 500 lines at
+base may gain only what the compiler demands, disclosed in the report (L2's
+precedent). Report at the workflow's injected wire path with the
+`git ls-tree` receipt PASTED INTO the report body.
