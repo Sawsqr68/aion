@@ -114,6 +114,7 @@ pub fn describe_child_error(child_error: error.ChildError(String)) -> String {
 pub fn describe_activity_error(activity_error: error.ActivityError) -> String {
   case activity_error {
     error.Retryable(message: message, details: _) -> message
+    error.PolicyRefused(message: message) -> message
     error.Terminal(message: message, details: _) -> message
     error.ActivityDecodeFailed(_) -> "activity result could not be decoded"
     error.ActivityTimedOut(error.TimedOut(message: message)) -> message

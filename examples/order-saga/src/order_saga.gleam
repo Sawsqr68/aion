@@ -274,6 +274,7 @@ fn compensation_result_decoder() -> decode.Decoder(CompensationResult) {
 fn activity_error_message(activity_error: error.ActivityError) -> String {
   case activity_error {
     error.Retryable(message: message, details: _) -> message
+    error.PolicyRefused(message: message) -> message
     error.Terminal(message: message, details: _) -> message
     error.ActivityDecodeFailed(_) -> "activity result could not be decoded"
     error.ActivityTimedOut(error.TimedOut(message: message)) -> message
