@@ -214,6 +214,10 @@ pub fn config(
   json.object([
     #("retry", retry_config(activity.retry_policy(activity_value))),
     #(
+      "fallback",
+      fallback_config(activity.selected_fallback(activity_value)),
+    ),
+    #(
       "timeout_ms",
       optional_duration(activity.timeout_duration(activity_value)),
     ),
@@ -237,6 +241,13 @@ pub fn config(
     ),
   ])
   |> json.to_string
+}
+
+fn fallback_config(queues: List(String)) -> json.Json {
+  case queues {
+    [] -> json.null()
+    queues -> json.array(queues, json.string)
+  }
 }
 
 fn optional_string(value: option.Option(String)) -> json.Json {

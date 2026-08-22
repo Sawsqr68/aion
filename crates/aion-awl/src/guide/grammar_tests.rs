@@ -75,7 +75,8 @@ fn offered_words_compose_keywords_then_positional_words() {
     assert_eq!(
         words_offered_at(GrammarPosition::WorkerBlock),
         vec![
-            "action", "node", "timeout", "retry", "every", "backoff", "advisory", "agent", "run"
+            "action", "node", "timeout", "retry", "fallback", "every", "backoff", "advisory",
+            "agent", "run"
         ]
     );
 }

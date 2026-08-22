@@ -164,6 +164,7 @@ pub const fn keywords_offered_at(position: GrammarPosition) -> &'static [Keyword
             K::Node,
             K::Timeout,
             K::Retry,
+            K::Fallback,
             K::Every,
             K::Backoff,
             K::Advisory,

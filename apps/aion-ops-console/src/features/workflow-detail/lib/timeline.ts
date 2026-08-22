@@ -61,6 +61,7 @@ export function projectTimeline(events: readonly Event[]): TimelineEntry[] {
       case 'ActivityCompleted':
       case 'ActivityFailed':
       case 'ActivityAdvisoryExhausted':
+      case 'ActivityFallbackRouted':
       case 'ActivityAdoptionOffered':
       case 'ActivityCancelled':
         patchActivity(entries, activities, event);
@@ -137,6 +138,9 @@ function patchActivity(
     entry.failures.push(activityAttempt(event));
   } else if (event.type === 'ActivityAdvisoryExhausted') {
     entry.advisoryExhausted = event;
+  } else if (event.type === 'ActivityFallbackRouted') {
+    // A durable routing fact stays on the activity lane but advances no
+    // terminal/current-step role; the following ActivityStarted does that.
   } else if (event.type === 'ActivityAdoptionOffered') {
     // Recorded on the activity's own lane (it names an `activity_id` and an
     // `attempt`), but it sets NO role field: an offer to re-adopt a dangling
@@ -466,6 +470,7 @@ function stringifyTimerId(timerId: TimerId): string {
 type ActivityType =
   | `Activity${'Scheduled' | 'Started' | 'Completed' | 'Failed' | 'Cancelled'}`
   | 'ActivityAdvisoryExhausted'
+  | 'ActivityFallbackRouted'
   | 'ActivityAdoptionOffered';
 type TimerType = 'TimerStarted' | 'TimerFired' | 'TimerCancelled' | 'WithTimeoutCompleted';
 type ChildType = `ChildWorkflow${'Started' | 'Completed' | 'Failed' | 'Cancelled'}`;

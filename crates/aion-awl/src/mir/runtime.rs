@@ -39,6 +39,7 @@ pub enum RuntimeFn {
     ActNew,
     ActTaskQueue,
     ActRetry,
+    ActFallback,
     ActTimeout,
     ActNode,
     // aion@awl@error
@@ -159,6 +160,7 @@ impl RuntimeFn {
             Self::ActNew => ("aion@activity", "new", 5),
             Self::ActTaskQueue => ("aion@activity", "task_queue", 2),
             Self::ActRetry => ("aion@activity", "retry", 2),
+            Self::ActFallback => ("aion@activity", "fallback", 2),
             Self::ActTimeout => ("aion@activity", "timeout", 2),
             Self::ActNode => ("aion@activity", "node", 2),
             Self::ErrCodec => ("aion@awl@error", "codec", 0),
@@ -230,6 +232,7 @@ impl RuntimeFn {
             | Self::ActNew
             | Self::ActTaskQueue
             | Self::ActRetry
+            | Self::ActFallback
             | Self::ActTimeout
             | Self::ActNode => Some(DurableFamily::Activities),
             Self::WfSpawn | Self::WfSpawnAndWait | Self::ChildAwait => {
@@ -269,6 +272,7 @@ fn all_runtime_fns() -> Vec<RuntimeFn> {
         RuntimeFn::ActNew,
         RuntimeFn::ActTaskQueue,
         RuntimeFn::ActRetry,
+        RuntimeFn::ActFallback,
         RuntimeFn::ActTimeout,
         RuntimeFn::ActNode,
         RuntimeFn::ErrCodec,
@@ -434,6 +438,7 @@ mod tests {
             RuntimeFn::LeafCodec(leaf) => 68 + 3 * leaf_ordinal(leaf),
             RuntimeFn::LeafToJson(leaf) => 69 + 3 * leaf_ordinal(leaf),
             RuntimeFn::LeafDecoder(leaf) => 70 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::ActFallback => 83,
         }
     }
 
@@ -448,12 +453,12 @@ mod tests {
         }
     }
 
-    /// `all_runtime_fns` enumerates every variant exactly once: 68 plain
+    /// `all_runtime_fns` enumerates every variant exactly once: 69 plain
     /// variants plus 3 leaf-parametrised rows over the 5 leaves.
     #[test]
     fn enumeration_covers_every_variant_exactly_once() {
         let all = all_runtime_fns();
-        let expected = 68 + 3 * ALL_LEAVES.len();
+        let expected = 69 + 3 * ALL_LEAVES.len();
         assert_eq!(all.len(), expected);
         let mut seen = vec![false; expected];
         for function in all {

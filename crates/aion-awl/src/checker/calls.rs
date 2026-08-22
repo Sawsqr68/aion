@@ -63,6 +63,15 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
             callable.returns
         }
     };
+    check_call_config(w, call, name);
+    check_advisory_call(w, call, name);
+    if let Some(bind) = &call.bind {
+        insert_binding(w, scope, &bind.name, returns.clone(), bind.span);
+    }
+    returns
+}
+
+fn check_call_config(w: &mut Walker<'_, '_>, call: &CallStmt, name: &str) {
     if let Some(config) = &call.config {
         if w.ctx.children.contains_key(name) {
             w.err(
@@ -95,6 +104,11 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
                  prompt in, the canonical agent-outcome record out — `text: String` and \
                  `stop_reason: String`), which one call site cannot change",
             );
+        } else if let Some(fallback) = &config.fallback {
+            w.err(
+                fallback.span,
+                "a call site may pin `node` and `timeout` only — `fallback` stays on the action declaration; the chain is the action's declared routing, which one call site cannot change.",
+            );
         } else if let Some(retry) = &config.retry {
             let span = match retry {
                 RetrySpec::Every { span, .. } | RetrySpec::Backoff { span, .. } => *span,
@@ -106,11 +120,6 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
             );
         }
     }
-    check_advisory_call(w, call, name);
-    if let Some(bind) = &call.bind {
-        insert_binding(w, scope, &bind.name, returns.clone(), bind.span);
-    }
-    returns
 }
 
 /// An ADVISORY action never faults its calling step (RUNTIME-OPERATIONS.md

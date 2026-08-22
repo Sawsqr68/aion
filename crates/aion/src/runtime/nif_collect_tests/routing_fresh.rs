@@ -7,7 +7,7 @@ use super::*;
 fn fresh_fan_out_item_carries_the_selected_task_queue() -> TestResult {
     let claude = spec_with_task_queue("work", Some("claude"), None);
     let members = [(0u64, &claude)];
-    let items = fan_out_items(&members, "remote", None, "fanout")
+    let items = fan_out_items(&members, "remote", None, &[], "fanout")
         .map_err(|reason| -> Box<dyn std::error::Error> { reason.into() })?;
 
     assert_eq!(items.len(), 1);
@@ -29,7 +29,7 @@ fn fresh_fan_out_items_resolve_precedence_per_member() -> TestResult {
     let defaulted = spec_with_task_queue("b", None, Some("gpu"));
     let plain = spec_with_task_queue("c", None, None);
     let members = [(0u64, &overridden), (1u64, &defaulted), (2u64, &plain)];
-    let items = fan_out_items(&members, "remote", None, "fanout")
+    let items = fan_out_items(&members, "remote", None, &[], "fanout")
         .map_err(|reason| -> Box<dyn std::error::Error> { reason.into() })?;
 
     let queues: Vec<&str> = items.iter().map(|i| i.task_queue.as_str()).collect();
@@ -52,7 +52,7 @@ fn fresh_fan_out_items_fall_back_to_the_start_time_queue() -> TestResult {
     let defaulted = spec_with_task_queue("b", None, Some("gpu"));
     let plain = spec_with_task_queue("c", None, None);
     let members = [(0u64, &overridden), (1u64, &defaulted), (2u64, &plain)];
-    let items = fan_out_items(&members, "remote", Some("started-on"), "fanout")
+    let items = fan_out_items(&members, "remote", Some("started-on"), &[], "fanout")
         .map_err(|reason| -> Box<dyn std::error::Error> { reason.into() })?;
 
     let queues: Vec<&str> = items.iter().map(|i| i.task_queue.as_str()).collect();
@@ -73,7 +73,7 @@ fn fresh_fan_out_item_carries_the_selected_node() -> TestResult {
     let pinned = spec_with_node("a", Some("box-7"));
     let unpinned = spec_with_node("b", None);
     let members = [(0u64, &pinned), (1u64, &unpinned)];
-    let items = fan_out_items(&members, "remote", None, "fanout")
+    let items = fan_out_items(&members, "remote", None, &[], "fanout")
         .map_err(|reason| -> Box<dyn std::error::Error> { reason.into() })?;
 
     assert_eq!(items.len(), 2);

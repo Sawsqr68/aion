@@ -311,6 +311,14 @@ impl HistoryCursor {
                 } if event_activity_id == &activity_id => {
                     matched.push(index);
                 }
+                Event::ActivityFallbackRouted {
+                    activity_id: event_activity_id,
+                    ..
+                } if event_activity_id == &activity_id => {
+                    // The durable hop belongs to this activity span; consuming it
+                    // prevents a straggler routing fact matching a later command.
+                    matched.push(index);
+                }
                 Event::ActivityScheduled {
                     activity_id: event_activity_id,
                     ..
@@ -340,7 +348,9 @@ impl HistoryCursor {
                     // re-dispatches live.
                     let superseded_by_reopen =
                         self.activity_reopened_after(index + 1, &activity_id);
-                    if !error.is_retryable()
+                    // A policy refusal is also one execution in this open
+                    // trail. Only Terminal settles the activity here.
+                    if error.is_settled()
                         && !superseded_by_reopen
                         && !self.has_later_activity_attempt_or_outcome(index + 1, &activity_id)
                     {
@@ -633,6 +643,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
         Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",
+        Event::ActivityFallbackRouted { .. } => "ActivityFallbackRouted",
         Event::ActivityCancelled { .. } => "ActivityCancelled",
         Event::TimerStarted { .. } => "TimerStarted",
         Event::TimerFired { .. } => "TimerFired",

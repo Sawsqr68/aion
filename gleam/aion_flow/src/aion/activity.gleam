@@ -74,6 +74,7 @@ pub opaque type Activity(i, o) {
     output_codec: codec.Codec(o),
     runner: fn(i) -> Result(o, error.ActivityError),
     retry_policy: Option(RetryPolicy),
+    fallback: List(String),
     timeout: Option(duration.Duration),
     heartbeat: Option(duration.Duration),
     labels: List(#(String, String)),
@@ -102,6 +103,7 @@ pub fn new(
     output_codec: output_codec,
     runner: run,
     retry_policy: None,
+    fallback: [],
     timeout: None,
     heartbeat: None,
     labels: [],
@@ -123,6 +125,29 @@ pub fn retry(activity: Activity(i, o), policy: RetryPolicy) -> Activity(i, o) {
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: Some(policy),
+    fallback: activity.fallback,
+    timeout: activity.timeout,
+    heartbeat: activity.heartbeat,
+    labels: activity.labels,
+    task_queue: activity.task_queue,
+    node: activity.node,
+    tier: activity.tier,
+  )
+}
+
+/// Attach the ordered task queues consulted after a provider policy refusal.
+///
+/// An empty list explicitly declares no fallback chain. Later calls replace the
+/// complete authored chain; the SDK does not merge or deduplicate queues.
+pub fn fallback(activity: Activity(i, o), queues: List(String)) -> Activity(i, o) {
+  Activity(
+    name: activity.name,
+    input: activity.input,
+    input_codec: activity.input_codec,
+    output_codec: activity.output_codec,
+    runner: activity.runner,
+    retry_policy: activity.retry_policy,
+    fallback: queues,
     timeout: activity.timeout,
     heartbeat: activity.heartbeat,
     labels: activity.labels,
@@ -144,6 +169,7 @@ pub fn timeout(
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: Some(timeout_duration),
     heartbeat: activity.heartbeat,
     labels: activity.labels,
@@ -165,6 +191,7 @@ pub fn heartbeat(
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: activity.timeout,
     heartbeat: Some(heartbeat_interval),
     labels: activity.labels,
@@ -194,6 +221,7 @@ pub fn label(
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: activity.timeout,
     heartbeat: activity.heartbeat,
     labels: list.append(activity.labels, [#(key, value)]),
@@ -223,6 +251,7 @@ pub fn task_queue(activity: Activity(i, o), name: String) -> Activity(i, o) {
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: activity.timeout,
     heartbeat: activity.heartbeat,
     labels: activity.labels,
@@ -252,6 +281,7 @@ pub fn node(activity: Activity(i, o), name: String) -> Activity(i, o) {
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: activity.timeout,
     heartbeat: activity.heartbeat,
     labels: activity.labels,
@@ -283,6 +313,7 @@ pub fn execution_tier(activity: Activity(i, o), tier: Tier) -> Activity(i, o) {
     output_codec: activity.output_codec,
     runner: activity.runner,
     retry_policy: activity.retry_policy,
+    fallback: activity.fallback,
     timeout: activity.timeout,
     heartbeat: activity.heartbeat,
     labels: activity.labels,
@@ -347,6 +378,11 @@ pub fn heartbeat_interval(
 /// dispatch to the workflow-level default, else the named `"default"` queue.
 pub fn selected_task_queue(activity: Activity(i, o)) -> Option(String) {
   activity.task_queue
+}
+
+/// Return the authored fallback task queues in declaration order.
+pub fn selected_fallback(activity: Activity(i, o)) -> List(String) {
+  activity.fallback
 }
 
 /// Return the explicitly pinned per-activity node affinity, if one exists.

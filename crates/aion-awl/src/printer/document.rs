@@ -501,6 +501,17 @@ pub(super) fn print_config_line(printer: &mut Printer, indent: usize, config: &C
     if let Some(retry) = &config.retry {
         parts.push(retry_text(retry));
     }
+    if let Some(fallback) = &config.fallback {
+        parts.push(format!(
+            "fallback {}",
+            fallback
+                .entries
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     printer.line(indent, &parts.join(", "), config.trailing.as_ref());
 }
 

@@ -183,19 +183,27 @@ fn stood_down_on_closed_epoch(request: &ActivityDispatch, attempt: u32) -> Retry
 fn failure_stand_down(
     policy: Option<&super::nif_activity_retry::RetryPolicy>,
     reason: &str,
-    attempt: u32,
+    same_provider_attempt: u32,
     expired: bool,
+    policy_refused: bool,
 ) -> Option<RetryLoopTerminal> {
     use super::nif_activity_retry::{is_parked_reason, is_retryable_reason};
 
     if is_parked_reason(reason) {
         return Some(RetryLoopTerminal::Parked);
     }
-    let retry_eligible = expired || is_retryable_reason(reason);
+    let retry_eligible = expired || policy_refused || is_retryable_reason(reason);
     match policy {
-        Some(policy) if retry_eligible && attempt < policy.max_attempts => None,
+        Some(policy) if retry_eligible && same_provider_attempt < policy.max_attempts => None,
+        Some(policy) if retry_eligible && policy_refused => {
+            Some(RetryLoopTerminal::Failed(format!(
+                "policy_refused: spent {same_provider_attempt} of {} configured attempts; last \
+                 refusal: {reason}",
+                policy.max_attempts
+            )))
+        }
         Some(policy) if retry_eligible => Some(RetryLoopTerminal::Failed(format!(
-            "exhausted: spent {attempt} of {} attempts; last refusal: {reason}",
+            "exhausted: spent {same_provider_attempt} of {} attempts; last refusal: {reason}",
             policy.max_attempts
         ))),
         _ => Some(RetryLoopTerminal::Failed(reason.to_owned())),
@@ -249,127 +257,297 @@ pub(super) async fn dispatch_with_retries(
     seam: &RetryRecorderSeam,
     request: &ActivityDispatch,
 ) -> RetryLoopOutcome {
-    use super::nif_activity_retry::{activity_timeout_from_config, retry_policy_from_config};
+    let history = retry_history(seam).await.unwrap_or_default();
+    let mut state = RetryLoopState::new(request, &history);
 
-    let policy = retry_policy_from_config(&request.config);
-    // #223: the AUTHORED per-attempt bound, or `None` for unbounded. The
-    // engine imposes no deadline of its own — an activity whose document
-    // declares no `timeout` waits exactly as long as it always has.
-    let bound = activity_timeout_from_config(&request.config);
-    let mut attempt = request.attempt;
+    if let Some((refused_attempt, reason)) =
+        super::nif_activity_fallback::trailing_policy_refusal(&history, &request.activity_id)
+    {
+        state.attempt = refused_attempt;
+        state.same_provider_attempt = refused_attempt
+            .saturating_sub(state.recorded_hop_count)
+            .max(1);
+        if let Some(outcome) = handle_policy_refusal(seam, request, &mut state, &reason, true).await
+        {
+            return outcome;
+        }
+    }
+
     loop {
         let mut delivery = request.clone();
-        delivery.attempt = attempt;
-        let (reason, expired) = match deliver_one_attempt(dispatcher, delivery, bound).await {
-            Ok(payload) => return dispatch_completed(attempt, payload),
+        delivery.attempt = state.attempt;
+        delivery.task_queue = state.current_queue.clone();
+        let (reason, expired) = match deliver_one_attempt(dispatcher, delivery, state.bound).await {
+            Ok(payload) => return dispatch_completed(state.attempt, payload),
             Err(failure) => failure,
         };
-        // TRANSPORT-domain worker loss: the activity never executed to a result,
-        // so it is re-dispatched at the SAME attempt with NOTHING recorded —
-        // attempt-neutral. The prior behaviour delivered this as a terminal
-        // failure whenever the activity carried no authored retry policy (the
-        // SDK's run-exactly-once default), so every infrastructure death read to
-        // the operator as a red action.
-        //
-        // The loop cannot spin: the re-dispatch goes through the same
-        // unserved-queue park a first dispatch does, so it waits for a worker
-        // rather than failing fast, and the server stops sending this class once
-        // its transport-loss budget is spent (a `transport-exhausted:` reason
-        // that no arm here recognises, so it falls through to the terminal
-        // below). A terminal recorded elsewhere mid-loop still wins — checked
-        // before every re-dispatch, because this arm records nothing and would
-        // otherwise never notice.
         if super::nif_activity_retry::is_worker_lost_reason(&reason) {
-            match worker_loss_stand_down(seam, request, &reason, attempt).await {
-                Some(terminal) => return RetryLoopOutcome { attempt, terminal },
+            match worker_loss_stand_down(seam, request, &reason, state.attempt).await {
+                Some(terminal) => {
+                    return RetryLoopOutcome {
+                        attempt: state.attempt,
+                        terminal,
+                    };
+                }
                 None => continue,
             }
         }
-        if let Some(terminal) = failure_stand_down(policy.as_ref(), &reason, attempt, expired) {
-            if matches!(terminal, RetryLoopTerminal::Failed(_)) {
-                record_advisory_exhaustion(seam, request, &reason, attempt).await;
+        if super::nif_activity_retry::is_policy_refused_reason(&reason) {
+            if let Some(outcome) =
+                handle_policy_refusal(seam, request, &mut state, &reason, false).await
+            {
+                return outcome;
             }
-            return RetryLoopOutcome { attempt, terminal };
+            continue;
         }
-        // The stand-down above returns `Failed` whenever no policy is present,
-        // so a `None` here is structurally unreachable — kept as the honest
-        // failure terminal rather than an unwrap.
-        let Some(policy) = policy.as_ref() else {
+        if let Some(terminal) = failure_stand_down(
+            state.policy.as_ref(),
+            &reason,
+            state.same_provider_attempt,
+            expired,
+            false,
+        ) {
+            if matches!(terminal, RetryLoopTerminal::Failed(_)) {
+                record_advisory_exhaustion(seam, request, &reason, state.attempt).await;
+            }
             return RetryLoopOutcome {
-                attempt,
+                attempt: state.attempt,
+                terminal,
+            };
+        }
+        let Some(policy) = state.policy.as_ref() else {
+            return RetryLoopOutcome {
+                attempt: state.attempt,
                 terminal: RetryLoopTerminal::Failed(reason),
             };
         };
-        // Record the failed attempt durably as a NON-terminal (Retryable)
-        // `ActivityFailed` — the observable retry record the history cursor
-        // walks past to the eventual terminal. Recording failures abort the
-        // loop into an honest terminal failure: an unrecorded retry is a
-        // silent retry.
-        match record_retry_event(
+        if let Err(outcome) = record_required(
             seam,
             request,
             RetryRecord::AttemptFailed {
-                attempt,
+                attempt: state.attempt,
                 reason: reason.clone(),
+                kind: aion_core::ActivityErrorKind::Retryable,
             },
+            state.attempt,
+            &reason,
+            "retryable activity failure",
         )
         .await
         {
-            RetryRecordOutcome::Recorded => {}
-            RetryRecordOutcome::Settled => {
-                return RetryLoopOutcome {
-                    attempt,
-                    terminal: RetryLoopTerminal::SettledElsewhere,
-                };
-            }
-            RetryRecordOutcome::EpochClosed => {
-                return stood_down_on_closed_epoch(request, attempt);
-            }
-            RetryRecordOutcome::RecordFailed(record_error) => {
-                tracing::warn!(
-                    workflow_id = %request.workflow_id,
-                    activity_id = %request.activity_id,
-                    attempt,
-                    error = %record_error,
-                    "failed to record a retryable activity failure; failing the activity instead \
-                     of retrying unrecorded"
-                );
-                return RetryLoopOutcome {
-                    attempt,
-                    terminal: RetryLoopTerminal::Failed(reason),
-                };
-            }
+            return outcome;
         }
-        announce_and_back_off(policy, request, &reason, attempt).await;
-        attempt += 1;
-        // Record the retry delivery's `ActivityStarted` before it goes on the
-        // wire, so history and the worker wire agree on the attempt (NOI-0) —
-        // re-guarded, because the backoff sleep is a settle-race window.
-        match record_retry_event(seam, request, RetryRecord::AttemptStarted { attempt }).await {
-            RetryRecordOutcome::Recorded => {}
-            RetryRecordOutcome::Settled => {
-                return RetryLoopOutcome {
-                    attempt,
-                    terminal: RetryLoopTerminal::SettledElsewhere,
-                };
-            }
-            RetryRecordOutcome::EpochClosed => {
-                return stood_down_on_closed_epoch(request, attempt);
-            }
-            RetryRecordOutcome::RecordFailed(record_error) => {
-                tracing::warn!(
-                    workflow_id = %request.workflow_id,
-                    activity_id = %request.activity_id,
-                    attempt,
-                    error = %record_error,
-                    "failed to record a retry attempt start; failing the activity instead of \
-                     dispatching unrecorded"
-                );
-                return RetryLoopOutcome {
-                    attempt,
-                    terminal: RetryLoopTerminal::Failed(reason),
-                };
-            }
+        announce_and_back_off(policy, request, &reason, state.same_provider_attempt).await;
+        state.same_provider_attempt = state.same_provider_attempt.saturating_add(1);
+        state.attempt = state.attempt.saturating_add(1);
+        if let Err(outcome) = record_required(
+            seam,
+            request,
+            RetryRecord::AttemptStarted {
+                attempt: state.attempt,
+            },
+            state.attempt,
+            &reason,
+            "retry attempt start",
+        )
+        .await
+        {
+            return outcome;
+        }
+    }
+}
+
+struct RetryLoopState {
+    policy: Option<super::nif_activity_retry::RetryPolicy>,
+    fallback_chain: Vec<String>,
+    initial_queue: String,
+    current_queue: String,
+    consumed_fallback: usize,
+    refused_queues: Vec<String>,
+    bound: Option<std::time::Duration>,
+    attempt: u32,
+    same_provider_attempt: u32,
+    recorded_hop_count: u32,
+}
+
+impl RetryLoopState {
+    fn new(request: &ActivityDispatch, history: &[aion_core::Event]) -> Self {
+        use super::nif_activity_retry::{activity_timeout_from_config, retry_policy_from_config};
+
+        let initial_queue = request.task_queue.clone();
+        let recorded_hops =
+            super::nif_activity_fallback::recorded_hops(history, &request.activity_id);
+        let recorded_hop_count = u32::try_from(recorded_hops.len()).unwrap_or(u32::MAX);
+        let current_queue =
+            super::nif_activity_fallback::recorded_hop_queue(history, &request.activity_id)
+                .unwrap_or_else(|| initial_queue.clone());
+        Self {
+            policy: retry_policy_from_config(&request.config),
+            fallback_chain: super::nif_activity_fallback::fallback_chain_from_config(
+                &request.config,
+            ),
+            initial_queue: initial_queue.clone(),
+            current_queue,
+            consumed_fallback: super::nif_activity_fallback::consumed_fallback_position(
+                history,
+                &request.activity_id,
+            ),
+            refused_queues: super::nif_activity_fallback::refused_queue_sequence(
+                history,
+                &request.activity_id,
+                &initial_queue,
+            ),
+            bound: activity_timeout_from_config(&request.config),
+            attempt: request.attempt,
+            same_provider_attempt: request.attempt.saturating_sub(recorded_hop_count).max(1),
+            recorded_hop_count,
+        }
+    }
+}
+
+async fn handle_policy_refusal(
+    seam: &RetryRecorderSeam,
+    request: &ActivityDispatch,
+    state: &mut RetryLoopState,
+    reason: &str,
+    refusal_recorded: bool,
+) -> Option<RetryLoopOutcome> {
+    if !refusal_recorded
+        && let Err(outcome) = record_required(
+            seam,
+            request,
+            RetryRecord::AttemptFailed {
+                attempt: state.attempt,
+                reason: reason.to_owned(),
+                kind: aion_core::ActivityErrorKind::PolicyRefused,
+            },
+            state.attempt,
+            reason,
+            "policy refusal",
+        )
+        .await
+    {
+        return Some(outcome);
+    }
+    if !state.fallback_chain.is_empty() {
+        return route_declared_fallback(seam, request, state, reason).await;
+    }
+    if let Some(terminal) = failure_stand_down(
+        state.policy.as_ref(),
+        reason,
+        state.same_provider_attempt,
+        false,
+        true,
+    ) {
+        record_advisory_exhaustion(seam, request, reason, state.attempt).await;
+        return Some(RetryLoopOutcome {
+            attempt: state.attempt,
+            terminal,
+        });
+    }
+    let policy = state.policy.as_ref()?;
+    announce_and_back_off(policy, request, reason, state.same_provider_attempt).await;
+    state.same_provider_attempt = state.same_provider_attempt.saturating_add(1);
+    state.attempt = state.attempt.saturating_add(1);
+    record_required(
+        seam,
+        request,
+        RetryRecord::AttemptStarted {
+            attempt: state.attempt,
+        },
+        state.attempt,
+        reason,
+        "policy-refusal retry start",
+    )
+    .await
+    .err()
+}
+
+async fn route_declared_fallback(
+    seam: &RetryRecorderSeam,
+    request: &ActivityDispatch,
+    state: &mut RetryLoopState,
+    reason: &str,
+) -> Option<RetryLoopOutcome> {
+    let Some((fallback_index, next_queue)) = super::nif_activity_fallback::next_hop(
+        &state.fallback_chain,
+        &state.initial_queue,
+        &state.current_queue,
+        state.consumed_fallback,
+    ) else {
+        let terminal = RetryLoopTerminal::Failed(format!(
+            "policy_refused: declared fallback queues refused in recorded order: {}",
+            state.refused_queues.join(", ")
+        ));
+        record_advisory_exhaustion(seam, request, reason, state.attempt).await;
+        return Some(RetryLoopOutcome {
+            attempt: state.attempt,
+            terminal,
+        });
+    };
+    if let Err(outcome) = record_required(
+        seam,
+        request,
+        RetryRecord::FallbackRouted {
+            attempt: state.attempt,
+            from_task_queue: state.current_queue.clone(),
+            to_task_queue: next_queue.clone(),
+            fallback_index: u32::try_from(fallback_index).unwrap_or(u32::MAX),
+        },
+        state.attempt,
+        reason,
+        "fallback hop",
+    )
+    .await
+    {
+        return Some(outcome);
+    }
+    state.consumed_fallback = fallback_index.saturating_add(1);
+    state.current_queue = next_queue;
+    state.refused_queues.push(state.current_queue.clone());
+    state.attempt = state.attempt.saturating_add(1);
+    record_required(
+        seam,
+        request,
+        RetryRecord::AttemptStarted {
+            attempt: state.attempt,
+        },
+        state.attempt,
+        reason,
+        "fallback attempt start",
+    )
+    .await
+    .err()
+}
+
+async fn record_required(
+    seam: &RetryRecorderSeam,
+    request: &ActivityDispatch,
+    record: RetryRecord,
+    attempt: u32,
+    reason: &str,
+    operation: &'static str,
+) -> Result<(), RetryLoopOutcome> {
+    match record_retry_event(seam, request, record).await {
+        RetryRecordOutcome::Recorded => Ok(()),
+        RetryRecordOutcome::Settled => Err(RetryLoopOutcome {
+            attempt,
+            terminal: RetryLoopTerminal::SettledElsewhere,
+        }),
+        RetryRecordOutcome::EpochClosed => Err(stood_down_on_closed_epoch(request, attempt)),
+        RetryRecordOutcome::RecordFailed(error) => {
+            tracing::warn!(
+                workflow_id = %request.workflow_id,
+                activity_id = %request.activity_id,
+                attempt,
+                %error,
+                operation,
+                "required retry-loop record failed; failing instead of continuing unrecorded"
+            );
+            Err(RetryLoopOutcome {
+                attempt,
+                terminal: RetryLoopTerminal::Failed(reason.to_owned()),
+            })
         }
     }
 }
@@ -448,6 +626,19 @@ async fn activity_settled_elsewhere(seam: &RetryRecorderSeam, request: &Activity
     super::nif_activity_retry::activity_settled(&history, &request.activity_id)
 }
 
+/// Snapshot this run's durable segment once when a retry loop starts.
+async fn retry_history(seam: &RetryRecorderSeam) -> Option<Vec<aion_core::Event>> {
+    let recorder = seam.recorder.lock().await;
+    let history = recorder.read_history().await.map_err(|error| {
+        tracing::warn!(%error, "could not read retry history; using the dispatch's recorded queue");
+    }).ok()?;
+    crate::durability::current_run_segment(history, &seam.run_id)
+        .map_err(|error| {
+            tracing::warn!(%error, "could not scope retry history to the run; using the dispatch's recorded queue");
+        })
+        .ok()
+}
+
 /// Record the R5 warning when an ADVISORY activity's attempt budget is spent
 /// (RUNTIME-OPERATIONS.md R5).
 ///
@@ -512,9 +703,20 @@ async fn record_advisory_exhaustion(
 /// One durable retry record the loop appends between attempts.
 enum RetryRecord {
     /// The just-failed attempt's non-terminal `ActivityFailed`.
-    AttemptFailed { attempt: u32, reason: String },
+    AttemptFailed {
+        attempt: u32,
+        reason: String,
+        kind: aion_core::ActivityErrorKind,
+    },
     /// The next delivery's `ActivityStarted`.
     AttemptStarted { attempt: u32 },
+    /// The durable post-failure override selecting the next authored queue.
+    FallbackRouted {
+        attempt: u32,
+        from_task_queue: String,
+        to_task_queue: String,
+        fallback_index: u32,
+    },
     /// The R5 warning that an ADVISORY activity spent its attempt budget.
     AdvisoryExhausted { attempt: u32, reason: String },
 }
@@ -570,14 +772,32 @@ async fn record_retry_event(
     if super::nif_activity_retry::activity_settled(&history, &request.activity_id) {
         return RetryRecordOutcome::Settled;
     }
+    if let RetryRecord::FallbackRouted { attempt, .. } = &record
+        && history.iter().any(|event| {
+            matches!(
+                event,
+                aion_core::Event::ActivityFallbackRouted {
+                    activity_id,
+                    attempt: recorded_attempt,
+                    ..
+                } if activity_id == &request.activity_id && recorded_attempt == attempt
+            )
+        })
+    {
+        return RetryRecordOutcome::Settled;
+    }
     let append_result = match record {
-        RetryRecord::AttemptFailed { attempt, reason } => {
+        RetryRecord::AttemptFailed {
+            attempt,
+            reason,
+            kind,
+        } => {
             recorder
                 .record_activity_failed(
                     chrono::Utc::now(),
                     request.activity_id.clone(),
                     aion_core::ActivityError {
-                        kind: aion_core::ActivityErrorKind::Retryable,
+                        kind,
                         message: reason,
                         details: None,
                     },
@@ -588,6 +808,23 @@ async fn record_retry_event(
         RetryRecord::AttemptStarted { attempt } => {
             recorder
                 .record_activity_started(chrono::Utc::now(), request.activity_id.clone(), attempt)
+                .await
+        }
+        RetryRecord::FallbackRouted {
+            attempt,
+            from_task_queue,
+            to_task_queue,
+            fallback_index,
+        } => {
+            recorder
+                .record_activity_fallback_routed(
+                    chrono::Utc::now(),
+                    request.activity_id.clone(),
+                    attempt,
+                    from_task_queue,
+                    to_task_queue,
+                    fallback_index,
+                )
                 .await
         }
         RetryRecord::AdvisoryExhausted { attempt, reason } => {

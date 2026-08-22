@@ -136,6 +136,15 @@ pub(crate) const RETRY: GuideEntry = GuideEntry::new(
     examples::RETRY,
 );
 
+/// `fallback`.
+pub(crate) const FALLBACK: GuideEntry = GuideEntry::new(
+    "fallback",
+    WordKind::Reserved,
+    "Declares the ordered task-queue chain consulted after a provider policy refusal.",
+    WORKERS_AND_ACTIONS,
+    examples::FALLBACK,
+);
+
 /// `every`.
 pub(crate) const EVERY: GuideEntry = GuideEntry::new(
     "every",

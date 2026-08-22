@@ -289,6 +289,7 @@ fn resolution_from_matched(events: &[Event]) -> Result<ResolvedCommand, Durabili
         // command waits on it, so a matched range ending here is a history
         // shape defect exactly like ending on ActivityStarted.
         | Event::ActivityAdvisoryExhausted { .. }
+        | Event::ActivityFallbackRouted { .. }
         | Event::ScheduleCreated { .. }
         | Event::ScheduleUpdated { .. }
         | Event::SchedulePaused { .. }
@@ -328,6 +329,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
         Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",
+        Event::ActivityFallbackRouted { .. } => "ActivityFallbackRouted",
         Event::ActivityCancelled { .. } => "ActivityCancelled",
         Event::TimerStarted { .. } => "TimerStarted",
         Event::TimerFired { .. } => "TimerFired",

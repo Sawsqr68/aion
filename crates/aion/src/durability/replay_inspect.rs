@@ -595,9 +595,12 @@ fn mocked_outcome_event(
 }
 
 fn ensure_terminal_activity_error(error: &ActivityError) -> Result<(), DurabilityError> {
-    if error.is_retryable() {
+    if !error.is_settled() {
         return Err(DurabilityError::HistoryShape {
-            reason: "mocked activity failure must be terminal to resolve at the fork".to_owned(),
+            reason: format!(
+                "mocked activity failure must be terminal to resolve at the fork; got {:?}",
+                error.kind
+            ),
         });
     }
     Ok(())
@@ -699,6 +702,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
         Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",
+        Event::ActivityFallbackRouted { .. } => "ActivityFallbackRouted",
         Event::ActivityCancelled { .. } => "ActivityCancelled",
         Event::TimerStarted { .. } => "TimerStarted",
         Event::TimerFired { .. } => "TimerFired",
