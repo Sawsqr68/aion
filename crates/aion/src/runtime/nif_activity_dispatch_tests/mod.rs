@@ -1,6 +1,7 @@
 mod await_paths;
 mod await_support;
 mod blocking_support;
+mod retry_fallback_recovery;
 mod retry_outcomes;
 mod retry_parking;
 mod retry_support;

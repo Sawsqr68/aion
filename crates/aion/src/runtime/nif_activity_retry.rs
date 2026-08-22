@@ -30,6 +30,16 @@ use crate::runtime::nif_activity_dispatch::FIRST_DELIVERY_ATTEMPT;
 /// a typed `error.Retryable`).
 pub(super) const RETRYABLE_REASON_PREFIX: &str = "retryable:";
 
+/// Reason prefix for a provider policy refusal. The retry loop handles this
+/// class before ordinary retryability so a declared queue hop always wins.
+const POLICY_REFUSED_REASON_PREFIX: &str = "policy_refused:";
+
+/// Whether a dispatcher failure is the dedicated provider-policy refusal class.
+#[must_use]
+pub(super) fn is_policy_refused_reason(reason: &str) -> bool {
+    reason.starts_with(POLICY_REFUSED_REASON_PREFIX)
+}
+
 /// Reason prefix of the ephemeral parked sentinel (#207). Never recorded to
 /// history, never delivered to workflow code, never crossing the SDK wire —
 /// it exists only to resolve a local pending waiter whose dispatch the server
@@ -91,8 +101,9 @@ pub fn is_worker_lost_reason(reason: &str) -> bool {
 ///
 /// True exactly when the reason carries the `retryable:` prefix — the string
 /// form of the wire's structured retryability classification (see module
-/// docs). Every other prefix (`terminal:`, `timeout:`, `cancelled:`, ...) and
-/// every unprefixed engine failure is non-retryable and behaves as before.
+/// docs). The separate `policy_refused:` class is handled ahead of this check
+/// so a live fallback chain wins; every other prefix (`terminal:`, `timeout:`,
+/// `cancelled:`, ...) and every unprefixed engine failure is non-retryable.
 pub(super) fn is_retryable_reason(reason: &str) -> bool {
     reason.starts_with(RETRYABLE_REASON_PREFIX)
 }
@@ -346,7 +357,7 @@ pub(super) fn activity_settled(history: &[Event], activity_id: &ActivityId) -> b
                 activity_id: id,
                 error,
                 ..
-            } if id == activity_id && !error.is_retryable() => return true,
+            } if id == activity_id && error.is_settled() => return true,
             Event::WorkflowReopened { reopened, .. } if reopened.contains(activity_id) => {
                 // The reopen supersedes every prior terminal for this
                 // activity AND the workflow terminal it belonged to; the

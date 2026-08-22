@@ -102,13 +102,17 @@ fn fallback_is_declaration_only() -> TestResult {
 }
 
 #[test]
-fn empty_and_soft_keyword_entries_are_parse_errors() {
+fn empty_and_soft_keyword_entries_are_parse_errors() -> TestResult {
     let empty = SOURCE.replace("fallback norn, claude", "fallback");
-    let error = parse(&empty).expect_err("empty fallback must fail");
+    let error = parse(&empty)
+        .err()
+        .ok_or("empty fallback unexpectedly parsed")?;
     assert!(error.message.contains("task queue"), "{}", error.message);
 
     let keyword = SOURCE.replace("fallback norn, claude", "fallback retry");
-    let error = parse(&keyword).expect_err("soft-keyword queue must fail");
+    let error = parse(&keyword)
+        .err()
+        .ok_or("soft-keyword fallback queue unexpectedly parsed")?;
     assert!(
         error
             .message
@@ -116,4 +120,5 @@ fn empty_and_soft_keyword_entries_are_parse_errors() {
         "{}",
         error.message
     );
+    Ok(())
 }

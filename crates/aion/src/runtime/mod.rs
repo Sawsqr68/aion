@@ -20,6 +20,7 @@ mod nif_activity_await;
 #[cfg(test)]
 mod nif_activity_delivery_tests;
 mod nif_activity_dispatch;
+mod nif_activity_fallback;
 mod nif_activity_in_vm;
 mod nif_activity_retry;
 mod nif_activity_retry_dispatch;

@@ -302,12 +302,13 @@ fn dispatch_unscheduled(
     let start_time_task_queue = context.start_time_task_queue();
     let start_time_task_queue = start_time_task_queue.as_deref();
     if outbox_enabled {
-        if !fresh.is_empty() {
-            let items = fan_out_items(&fresh, &workflow_namespace, start_time_task_queue, label)?;
-            context
-                .record_fan_out_dispatch(Utc::now(), &items)
-                .map_err(|error| error.error_reason())?;
-        }
+        record_fresh_outbox(
+            context,
+            &fresh,
+            &workflow_namespace,
+            start_time_task_queue,
+            label,
+        )?;
         // STALE recovery under the flag: the in-flight dispatch that died with the previous
         // engine process is re-staged by flipping each ordinal's durable outbox row back to
         // claimable `Pending`, so the OutboxDispatcher re-dispatches it. This replaces — does
@@ -329,7 +330,13 @@ fn dispatch_unscheduled(
         // Record the whole batch first so the Scheduled range stays contiguous,
         // then dispatch; completions land in the runtime maps keyed by ordinal.
         for (ordinal, spec) in &fresh {
-            let scheduled = fresh_scheduled_activity(spec, start_time_task_queue, label)?;
+            let scheduled = fresh_scheduled_activity(
+                *ordinal,
+                spec,
+                start_time_task_queue,
+                context.history(),
+                label,
+            )?;
             context
                 .record_activity_scheduled_started(
                     Utc::now(),
@@ -373,6 +380,28 @@ fn dispatch_unscheduled(
     Ok(())
 }
 
+fn record_fresh_outbox(
+    context: &NifContext,
+    fresh: &[(u64, &ActivitySpec)],
+    workflow_namespace: &str,
+    start_time_task_queue: Option<&str>,
+    label: &str,
+) -> Result<(), String> {
+    if fresh.is_empty() {
+        return Ok(());
+    }
+    let items = fan_out_items(
+        fresh,
+        workflow_namespace,
+        start_time_task_queue,
+        context.history(),
+        label,
+    )?;
+    context
+        .record_fan_out_dispatch(Utc::now(), &items)
+        .map_err(|error| error.error_reason())
+}
+
 /// Map a slice of `(ordinal, spec)` pairs to the durable-outbox [`FanOutItem`]s the recorder stages.
 ///
 /// Drives the flag-ON fresh dispatch ([`NifContext::record_fan_out_dispatch`]); the stale re-arm
@@ -386,6 +415,7 @@ fn fan_out_items(
     members: &[(u64, &ActivitySpec)],
     namespace: &str,
     start_time_task_queue: Option<&str>,
+    history: &[Event],
     label: &str,
 ) -> Result<Vec<FanOutItem>, String> {
     members
@@ -394,14 +424,15 @@ fn fan_out_items(
             Ok(FanOutItem {
                 ordinal: *ordinal,
                 namespace: namespace.to_owned(),
-                // NSTQ-4 (+#144): resolve each member's task queue once at this schedule seam
-                // (member override > workflow declared default > the workflow's recorded start-time
-                // queue > the named default) from its dispatch config, so the staged outbox row and
-                // the recorded `ActivityScheduled` land on the chosen pool.
-                task_queue: super::nif_activity::resolve_task_queue(
-                    &spec.config,
-                    start_time_task_queue,
-                ),
+                // Resolve the initial queue with the established precedence,
+                // then let a durable post-failure hop override it on recovery.
+                task_queue: super::nif_activity_fallback::recorded_hop_queue(
+                    history,
+                    &ActivityId::from_sequence_position(*ordinal),
+                )
+                .unwrap_or_else(|| {
+                    super::nif_activity::resolve_task_queue(&spec.config, start_time_task_queue)
+                }),
                 // NODE-4: resolve each member's OPTIONAL node affinity once at this schedule seam
                 // (member pin, else None — no workflow default) from its dispatch config, so the
                 // staged outbox row and the recorded `ActivityScheduled` land on the chosen node.
@@ -422,14 +453,22 @@ fn fan_out_items(
 /// precedence as the flag-ON fan-out and single-schedule paths), and stamps the first-delivery
 /// attempt (NOI-0): a fresh fan-out member is its first delivery, attempt 1.
 fn fresh_scheduled_activity(
+    ordinal: u64,
     spec: &ActivitySpec,
     start_time_task_queue: Option<&str>,
+    history: &[Event],
     label: &str,
 ) -> Result<super::nif_activity::ScheduledActivity, String> {
+    let initial_task_queue =
+        super::nif_activity::resolve_task_queue(&spec.config, start_time_task_queue);
     Ok(super::nif_activity::ScheduledActivity {
         activity_type: spec.name.clone(),
         input: payload_from_json_text(&spec.input, label)?,
-        task_queue: super::nif_activity::resolve_task_queue(&spec.config, start_time_task_queue),
+        task_queue: super::nif_activity_fallback::recorded_hop_queue(
+            history,
+            &ActivityId::from_sequence_position(ordinal),
+        )
+        .unwrap_or(initial_task_queue),
         node: super::nif_activity::resolve_node(&spec.config),
         attempt: FIRST_DELIVERY_ATTEMPT,
     })
@@ -458,8 +497,12 @@ fn fan_out_items_recovered(
             Ok(FanOutItem {
                 ordinal: *ordinal,
                 namespace: namespace.to_owned(),
-                task_queue: scheduled_task_queue(history, *ordinal)
-                    .unwrap_or_else(|| String::from(aion_core::DEFAULT_TASK_QUEUE)),
+                task_queue: super::nif_activity_fallback::recorded_hop_queue(
+                    history,
+                    &ActivityId::from_sequence_position(*ordinal),
+                )
+                .or_else(|| scheduled_task_queue(history, *ordinal))
+                .unwrap_or_else(|| String::from(aion_core::DEFAULT_TASK_QUEUE)),
                 // NODE-3 recovery: re-derive the OPTIONAL node affinity from history so the
                 // re-staged outbox row re-targets the SAME node the crashed dispatch chose. A
                 // pre-field history reads back `None` (no affinity) deterministically.

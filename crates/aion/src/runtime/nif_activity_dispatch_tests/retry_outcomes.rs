@@ -230,3 +230,95 @@ async fn a_closed_engine_task_epoch_stops_the_retry_loop_writing() -> TestResult
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn policy_refusal_hops_before_retry_and_records_the_durable_route() -> TestResult {
+    let config = r#"{"retry":{"max_attempts":3,"backoff":{"kind":"fixed","delay_ms":2}},"fallback":["default","claude"]}"#;
+    let harness = RetryLoopHarness::seeded(config).await?;
+    let dispatcher = ScriptedRetryDispatcher::new(vec![
+        Err("policy_refused:provider policy".to_owned()),
+        Ok(r#""done""#.to_owned()),
+    ]);
+    let outcome = super::dispatch_with_retries(
+        &(Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>),
+        &harness.seam,
+        &harness.request,
+    )
+    .await;
+
+    assert!(matches!(
+        outcome.terminal,
+        super::RetryLoopTerminal::Completed(_)
+    ));
+    assert_eq!(dispatcher.seen_attempts(), vec![1, 2]);
+    assert_eq!(dispatcher.seen_task_queues(), vec!["default", "claude"]);
+    let history = harness.history().await?;
+    assert_eq!(
+        history
+            .iter()
+            .filter(|event| matches!(event, Event::ActivityFallbackRouted { .. }))
+            .count(),
+        1
+    );
+    assert!(matches!(
+        history.get(3),
+        Some(Event::ActivityFailed { error, attempt: 1, .. })
+            if error.kind == aion_core::ActivityErrorKind::PolicyRefused
+    ));
+    assert!(matches!(
+        history.get(4),
+        Some(Event::ActivityFallbackRouted {
+            attempt: 1,
+            from_task_queue,
+            to_task_queue,
+            fallback_index: 1,
+            ..
+        }) if from_task_queue == "default" && to_task_queue == "claude"
+    ));
+    assert!(matches!(
+        history.get(5),
+        Some(Event::ActivityStarted { attempt: 2, .. })
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn policy_refusal_without_chain_uses_configured_retry_and_keeps_its_prefix() -> TestResult {
+    let harness = RetryLoopHarness::seeded(FIXED_RETRY_CONFIG).await?;
+    let dispatcher = ScriptedRetryDispatcher::new(vec![
+        Err("policy_refused:first".to_owned()),
+        Err("policy_refused:second".to_owned()),
+        Err("policy_refused:third".to_owned()),
+    ]);
+    let outcome = super::dispatch_with_retries(
+        &(Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>),
+        &harness.seam,
+        &harness.request,
+    )
+    .await;
+
+    assert!(matches!(
+        &outcome.terminal,
+        super::RetryLoopTerminal::Failed(reason)
+            if reason.starts_with("policy_refused:") && !reason.starts_with("exhausted:")
+    ));
+    assert!(dispatcher.seen_attempts().len() >= 2);
+    let history = harness.history().await?;
+    assert!(
+        !history
+            .iter()
+            .any(|event| matches!(event, Event::ActivityFallbackRouted { .. }))
+    );
+    assert!(
+        history
+            .iter()
+            .filter(|event| matches!(
+                event,
+                Event::ActivityFailed { error, .. }
+                    if error.kind == aion_core::ActivityErrorKind::PolicyRefused
+            ))
+            .count()
+            >= 2
+    );
+    Ok(())
+}
