@@ -19,5 +19,9 @@ class RetryableError(ActivityFailureError):
     """Raise from a handler when the activity failure should be retried."""
 
 
+class PolicyRefusedError(ActivityFailureError):
+    """Raise when a provider refuses the activity under its safety policy."""
+
+
 class TerminalError(ActivityFailureError):
     """Raise from a handler when the activity failure should not be retried."""

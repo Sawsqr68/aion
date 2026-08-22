@@ -79,7 +79,7 @@ message: string,
  */
 details: Payload | null, };
 
-export type ActivityErrorKind = "Retryable" | "Terminal";
+export type ActivityErrorKind = "Retryable" | "PolicyRefused" | "Terminal";
 
 export type ActivityError = {
 /**

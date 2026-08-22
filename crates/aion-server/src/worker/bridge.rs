@@ -65,7 +65,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use aion::{ActivityDispatch, ActivityDispatcher};
-use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
+use aion_core::{ActivityErrorKind, ActivityId, ContentType, Payload, RunId, WorkflowId};
 use aion_proto::{ProtoActivityId, ProtoActivityTask, ProtoPayload, ProtoWorkflowId};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
@@ -473,10 +473,10 @@ impl ActivityCompletionSink for PendingActivities {
                 })?
             }
             ActivityCompletionOutcome::Failed(error) => {
-                let prefix = if error.is_retryable() {
-                    "retryable"
-                } else {
-                    "terminal"
+                let prefix = match error.kind {
+                    ActivityErrorKind::Retryable => "retryable",
+                    ActivityErrorKind::PolicyRefused => "policy_refused",
+                    ActivityErrorKind::Terminal => "terminal",
                 };
                 tracing::error!(
                     operation = "activity_complete",
@@ -2042,6 +2042,35 @@ mod tests {
             .recv_timeout(Duration::from_millis(50))
             .map_err(|e| ServerError::worker_dispatch("", "", format!("channel: {e}")))?;
         assert_eq!(result, Err("retryable:temporary".to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn completion_sink_routes_policy_refusal_with_its_own_prefix() -> Result<(), ServerError> {
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(4);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+
+        pending.complete_activity(ActivityCompletion {
+            workflow_id,
+            activity_id: id,
+            run_id: None,
+            completion_token,
+            outcome: ActivityCompletionOutcome::Failed(ActivityError {
+                kind: ActivityErrorKind::PolicyRefused,
+                message: "provider safety policy".to_owned(),
+                details: None,
+            }),
+        })?;
+
+        let result = rx
+            .recv_timeout(Duration::from_millis(50))
+            .map_err(|error| ServerError::worker_dispatch("", "", format!("channel: {error}")))?;
+        assert_eq!(
+            result,
+            Err("policy_refused:provider safety policy".to_owned())
+        );
         Ok(())
     }
 

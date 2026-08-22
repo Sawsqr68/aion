@@ -191,7 +191,7 @@ async def test_non_json_input_is_terminal_decode_failure() -> None:
     assert "unsupported payload content type" in outcome.failure.message
 
 
-async def test_retryable_terminal_and_unclassified_failures_are_classified(
+async def test_retryable_policy_terminal_and_unclassified_failures_are_classified(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     registry = ActivityRegistry()
@@ -200,6 +200,11 @@ async def test_retryable_terminal_and_unclassified_failures_are_classified(
     async def retry(value: int) -> int:
         del value
         raise aion_worker.RetryableError("try again", detail={"retry": True})
+
+    @registry.activity(name="policy")
+    async def policy(value: int) -> int:
+        del value
+        raise aion_worker.PolicyRefusedError("provider safety policy")
 
     @registry.activity(name="terminal")
     async def terminal(value: int) -> int:
@@ -222,6 +227,7 @@ async def test_retryable_terminal_and_unclassified_failures_are_classified(
     )
 
     retry_outcome = await registry.dispatch(typed_task(1, "retry", 0).task, context)
+    policy_outcome = await registry.dispatch(typed_task(1, "policy", 0).task, context)
     terminal_outcome = await registry.dispatch(typed_task(1, "terminal", 0).task, context)
     with caplog.at_level("WARNING"):
         bare_outcome = await registry.dispatch(typed_task(1, "bare", 0).task, context)
@@ -230,6 +236,9 @@ async def test_retryable_terminal_and_unclassified_failures_are_classified(
     assert retry_outcome.failure.kind == worker_pb2.ACTIVITY_ERROR_KIND_RETRYABLE
     assert retry_outcome.failure.message == "try again"
     assert aion_worker.decode_json_payload(retry_outcome.failure.details) == {"retry": True}
+    assert isinstance(policy_outcome, aion_worker.Failed)
+    assert policy_outcome.failure.kind == worker_pb2.ACTIVITY_ERROR_KIND_POLICY_REFUSED
+    assert policy_outcome.failure.message == "provider safety policy"
     assert isinstance(terminal_outcome, aion_worker.Failed)
     assert terminal_outcome.failure.kind == worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL
     assert aion_worker.decode_json_payload(terminal_outcome.failure.details) == {"terminal": True}

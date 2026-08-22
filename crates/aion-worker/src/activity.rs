@@ -23,6 +23,8 @@ use crate::runtime::loop_::{ActivityDispatcher, DispatchOutcome};
 pub enum Classification {
     /// The engine may retry the activity according to policy.
     Retryable,
+    /// The provider refused under policy; route before ordinary retry handling.
+    PolicyRefused,
     /// The activity failure is permanent and must not be retried.
     Terminal,
 }
@@ -41,6 +43,12 @@ impl ActivityFailure {
     #[must_use]
     pub fn retryable(message: impl Into<String>) -> Self {
         Self::new(Classification::Retryable, message, None)
+    }
+
+    /// Creates a provider-policy-refused activity failure.
+    #[must_use]
+    pub fn policy_refused(message: impl Into<String>) -> Self {
+        Self::new(Classification::PolicyRefused, message, None)
     }
 
     /// Creates a terminal activity failure.
@@ -91,6 +99,7 @@ impl From<Classification> for ActivityErrorKind {
     fn from(value: Classification) -> Self {
         match value {
             Classification::Retryable => Self::Retryable,
+            Classification::PolicyRefused => Self::PolicyRefused,
             Classification::Terminal => Self::Terminal,
         }
     }

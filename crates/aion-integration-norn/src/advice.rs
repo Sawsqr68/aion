@@ -150,6 +150,9 @@ fn advise(error: HarnessError, allow_degraded_session: bool, opt_in: &str) -> Ha
                 None => HarnessError::Transport { detail },
             }
         }
+        // Policy classification is adapter-local and must survive this prose-only
+        // decorator unchanged; reclassifying here would discard the structured seam.
+        policy_refused @ HarnessError::PolicyRefused { .. } => policy_refused,
         other => other,
     }
 }

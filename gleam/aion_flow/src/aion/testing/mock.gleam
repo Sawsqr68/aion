@@ -82,6 +82,7 @@ pub fn child(
 fn activity_error_to_raw(activity_error: error.ActivityError) -> String {
   case activity_error {
     error.Retryable(message: message, details: _) -> "retryable:" <> message
+    error.PolicyRefused(message: message) -> "policy_refused:" <> message
     error.Terminal(message: message, details: _) -> "terminal:" <> message
     error.ActivityDecodeFailed(decode_error) ->
       "terminal:activity decode failed: " <> decode_error.reason

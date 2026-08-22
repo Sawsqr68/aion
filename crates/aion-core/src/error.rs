@@ -9,6 +9,9 @@ use crate::Payload;
 pub enum ActivityErrorKind {
     /// The activity failure may be retried according to the activity's retry policy.
     Retryable,
+    /// The provider declined the activity under policy; the engine must route it
+    /// before considering any configured same-provider retry.
+    PolicyRefused,
     /// The activity failure is terminal and must not be retried.
     Terminal,
 }
