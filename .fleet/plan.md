@@ -173,16 +173,65 @@ in the sse error event) over substring matching wherever the adapter still holds
 the structured object; name where that object is last available."* This is the
 one fact the whole design rests on. Here is what this tree actually shows.
 
-### 2.1 `cyber_policy` does not exist anywhere in this repository
+### 2.1 `cyber_policy` is not a symbol in this tree — but a tracked log carries the frame
 
 ```
-grep -rn 'cyber_policy' . → only .fleet/BRIEF.md and docs/evidence/…
+grep -rn 'cyber_policy' . → .fleet/*, docs/evidence/…, AND
+                            gate-logs/dev-worker-0150.log:589
 ```
 
 Zero hits in `crates/`, `gleam/`, `sdks/`. The code is a fact about the
-**provider's** wire, observed in flight logs — it is not a symbol this tree can
-be anchored on, and no test fixture in the tree carries it. **The design leg must
-not assume the spelling.** It must key on the structure that carries it.
+**provider's** wire — it is not a symbol this tree can be anchored on, and no
+test fixture carries it. **The design leg must not assume the spelling.** It must
+key on the structure that carries it.
+
+🔴 **AMENDED 2026-08-22 (re-fly verification).** The original text of this section
+said the grep hit "only `.fleet/BRIEF.md` and `docs/evidence/…`". That was
+incomplete. `gate-logs/dev-worker-0150.log` is **tracked at HEAD** (298423 bytes)
+and is the only in-repo artifact carrying the real frame. The ruling above is
+UNCHANGED; what follows is added evidence, and it is directly responsive to what
+L1-a asks the artifact to find.
+
+**Exhibit C — the frame, and the prose it becomes.** Two consecutive lines:
+
+```
+:589  ERROR norn::provider::openai::sse: provider emitted a standalone
+      Responses error event frame={"type":"error","error":{"type":
+      "invalid_request","code":"cyber_policy","message":"This content was
+      flagged for possible cybersecurity risk. …","param":null},
+      "sequence_number":13}
+:590  norn: agent error: provider error: invalid request: provider rejected
+      the request under its cybersecurity policy
+```
+
+`:589` is emitted by `norn::provider::openai::sse` — **inside the norn binary**.
+`:590` is what norn hands out. **The string `cyber_policy` does not appear in
+`:590`.** So §2.2's conclusion is no longer an inference: the structured code is
+consumed inside norn and never crosses the boundary. What reaches
+`session.rs:288-291` is prose that has already lost the discriminator.
+
+This gives L1-a decision #3 ("what happens when `error.data` is `None`") a
+measured, in-repo answer and the exact substring with provenance that
+`.fleet/legs/l1-design.md:59-65` requires: the observed carrier is
+`"provider rejected the request under its cybersecurity policy"` at
+`gate-logs/dev-worker-0150.log:590`. A prose match ADMITTED and bounded is the
+branch the evidence points at; the artifact still has to say so in those words.
+
+**The discriminator exists upstream and is thrown away.** The same log carries
+two other SSE error codes — `server_error` (×3: `:82`, `:476`, `:628`) and
+`context_length_exceeded` (`:117`). The frame is a stable structured family whose
+`code` separates a transient fault, a deterministic input fault, and a policy
+refusal. None of that separation survives to aion. That is the defect stated at
+its true origin.
+
+**Same-act attempt burn, visible in the log.** Workflow
+`192f954f-c4c4-452e-83b1-400cd6857875` ordinal 0 is dispatched at `:586` (attempt
+1), `:591` (attempt 2), `:605` (attempt 3), `:641` (attempt 4) — the four-attempt
+pattern the census records. Note the limit of this exhibit: the log holds exactly
+ONE `cyber_policy` frame and a `server_error` frame at `:628` falls between
+attempts 3 and 4, so it does NOT establish that all four attempts were refusals,
+and it does not show whether attempt 2 cleared. Cite it for the burn, not for a
+survival — Exhibits A and B remain the survival evidence.
 
 ### 2.2 There is no "sse error event" surface in this adapter
 
@@ -473,6 +522,7 @@ Restated so no leg has to re-derive them.
 | M1 | `:86-87` R1(b) asserts `PolicyRefused` is deterministic | Refuted premise, unswept. Arm is OPEN; measured default `false`; a `true` answer must name the mechanism |
 | M2 | `:116-118` R1(d) no-chain ⇒ fail fast, no in-place retries | Refuted premise, unswept. Bounded configured retry REMAINS |
 | C1 | `:50-51` structured refusal is an "openai sse error event" | No SSE surface at this boundary. `protocol.rs` declares no error schema. The structured carrier is `JsonRpcError.data` (`envelope.rs:117`), dropped at `session.rs:288-291` |
+| C1b | — (amendment to THIS plan, 2026-08-22 re-fly) | §2.1's grep result was incomplete. `gate-logs/dev-worker-0150.log` is tracked at HEAD and carries the frame at `:589` and norn's prose at `:590`; `cyber_policy` is absent from `:590`. Ruling unchanged; evidence added. See §2.1 Exhibit C |
 | C2 | `:71-75` `AdvisingHarness` is the detection template | It only ever sees `HarnessError::Harness { detail: String }` (`advice.rs:139-141`). It CANNOT prefer a structured code. Detection must live inside the adapter |
 | C3 | `:79-81` ACP equivalent surface is `outcome.rs:180-204` | That is `prompt_error` (JSON-RPC path). The refusal surface is `StopReason::Refusal` → `outcome.rs:152-154`, `169-177`. ACP expresses it TYPED |
 | C4 | `:60` `harness.rs:639-645` is a negative test on per-attempt provider variation | `:637-646`, `unrecognised_braced_text_is_literal`. Pins that `{attempt}` is not an argv placeholder. Effect is as described; intent is not in the test |
