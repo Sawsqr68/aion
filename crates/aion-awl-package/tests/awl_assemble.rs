@@ -64,7 +64,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// toolchain, and the alignment's step-2 harvest proved rf (erts 17.0.1) and
 /// Dean (erts 17.0.5) produce byte-identical modules, so this pin now holds
 /// across the aligned fleet instead of one venue. Module set and SDK version
-/// unchanged (47 modules, aion_flow 0.7.0).
+/// unchanged (47 modules, `aion_flow` 0.7.0).
 const BUNDLE_CHECKSUM: &str = "afbc1b1d82aee2e30af0ae03a293f53164e5bd06b5023fb65610de6d0bbe2b8c";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
