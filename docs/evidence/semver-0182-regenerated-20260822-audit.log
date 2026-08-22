@@ -1,0 +1,90 @@
+############ REGENERATE v0.18.2 SEMVER FINDINGS ############
+UTC 2026-08-22T02:03:08Z
+tree:     b3fdaebe9f309ecc35857ac120c60481ac64ebf3
+baseline: 0.18.1
+
+=== PRECONDITION: cargo-semver-checks ===
+  ✅ cargo-semver-checks 0.50.0
+
+  ✅ tree b3fdaebe9f309ecc35857ac120c60481ac64ebf3,        0 modified path(s)
+
+INVOCATION: cargo semver-checks --workspace --baseline-version 0.18.1
+rc: 100  (100 = breaks found, which is the EXPECTED outcome here)
+
+=== ASSERTION 1: the run is not vacuous ===
+  crates compared: 20
+  ✅ non-vacuous
+
+=== ASSERTION 2: the comparison is the PATCH one, so breaks are ILLEGAL ===
+
+=== ASSERTION 3: the finding set ===
+  --- crates reporting a required update ---
+  crates requiring a bump: 6  (banked claim: 6)
+  individual findings:     23  (banked claim: 23)
+
+=== EVERY FINDING, VERBATIM — this is the enumeration the audit needs ===
+    Checking aion-awl v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-awl-lsp v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-awl-package v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-client v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-core v0.18.1 -> v0.18.2 (minor change)
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+    Checking aion-darwin-acl v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-integration-acp v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-integration-cli v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-integration-norn v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-integrations v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-mcp v0.18.1 -> v0.18.2 (minor change)
+--- failure enum_missing: pub enum removed or renamed ---
+--- failure function_missing: pub fn removed or renamed ---
+--- failure function_parameter_count_changed: pub fn parameter count changed ---
+--- failure function_requires_different_generic_type_params: function now requires a different number of generic type parameters ---
+--- failure inherent_method_missing: pub method removed or renamed ---
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+--- failure module_missing: pub module removed or renamed ---
+--- failure struct_missing: pub struct removed or renamed ---
+--- failure struct_pub_field_missing: pub struct's pub field removed or renamed ---
+--- failure trait_method_added: pub trait method added ---
+    Checking aion-package v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-proto v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-proto-generated v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-rs v0.18.1 -> v0.18.2 (minor change)
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+    Checking aion-server v0.18.1 -> v0.18.2 (minor change)
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+--- failure enum_no_repr_variant_discriminant_changed: enum variant had its discriminant change value ---
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+--- failure function_parameter_count_changed: pub fn parameter count changed ---
+--- failure inherent_method_missing: pub method removed or renamed ---
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+--- failure pub_module_level_const_missing: pub module-level const is missing ---
+--- failure struct_pub_field_missing: pub struct's pub field removed or renamed ---
+    Checking aion-store v0.18.1 -> v0.18.2 (minor change)
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+    Checking aion-store-haematite v0.18.1 -> v0.18.2 (minor change)
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+    Checking aion-toolchain v0.18.1 -> v0.18.2 (minor change)
+    Checking aion-worker v0.18.1 -> v0.18.2 (minor change)
+
+############ NEXT: the actual intent read ############
+Read each finding above against the EIGHT categories in the recovered citation
+(workflow 6e48f394, WorkflowStarted.input.semver_citation):
+
+  1. haematite open / open_or_create — ruled lock patience + cadence
+  2. RunSummary.started_seq                       (run-scoped reads, aion#83/#94/#51)
+  3. DescribeWorkflowResponse.generations         (same arc)
+  4. EngineError::RunNotInHistory                 (same arc)
+  5. jit_threshold runtime config family
+  6. MCP tasks_* and config/service signature rework
+  7. DeclaredCommandDispatcher + cancel_in_flight_activities extensions
+  8. ServerError variant additions
+
+🔴 THE QUESTION IS COVERAGE, NOT PLAUSIBILITY. Any finding that does not land in
+one of the eight is an ACCIDENTAL public-surface break shipped in v0.18.2, and
+it is the single thing this whole exercise exists to find. Name it loudly.
+A category that matches "most" findings has not discharged anything — the claim
+under audit is "NOTHING accidental", and that is an all-quantifier.
+
+COMMIT the raw log under docs/evidence/ (NOT .release/, which the next ceremony
+overwrites in place — that is aion#141 and it is how the first one was lost).

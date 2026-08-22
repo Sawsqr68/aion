@@ -1,0 +1,476 @@
+    Building aion-awl v0.18.2 (current)
+       Built [  23.799s] (current)
+     Parsing aion-awl v0.18.2 (current)
+      Parsed [   0.070s] (current)
+     Parsing aion-awl v0.18.1 (baseline, cached)
+      Parsed [   0.072s] (baseline)
+    Checking aion-awl v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.041s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  28.566s] aion-awl
+    Building aion-awl-lsp v0.18.2 (current)
+       Built [  23.277s] (current)
+     Parsing aion-awl-lsp v0.18.2 (current)
+      Parsed [   0.008s] (current)
+     Parsing aion-awl-lsp v0.18.1 (baseline, cached)
+      Parsed [   0.010s] (baseline)
+    Checking aion-awl-lsp v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.005s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  28.232s] aion-awl-lsp
+    Building aion-awl-package v0.18.2 (current)
+       Built [  22.463s] (current)
+     Parsing aion-awl-package v0.18.2 (current)
+      Parsed [   0.005s] (current)
+     Parsing aion-awl-package v0.18.1 (baseline, cached)
+      Parsed [   0.009s] (baseline)
+    Checking aion-awl-package v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.005s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  25.272s] aion-awl-package
+    Building aion-client v0.18.2 (current)
+       Built [  38.199s] (current)
+     Parsing aion-client v0.18.2 (current)
+      Parsed [   0.012s] (current)
+     Parsing aion-client v0.18.1 (baseline, cached)
+      Parsed [   0.018s] (baseline)
+    Checking aion-client v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.030s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  42.859s] aion-client
+    Building aion-core v0.18.2 (current)
+       Built [   6.694s] (current)
+     Parsing aion-core v0.18.2 (current)
+      Parsed [   0.008s] (current)
+     Parsing aion-core v0.18.1 (baseline, cached)
+      Parsed [   0.009s] (baseline)
+    Checking aion-core v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.027s] 196 checks: 195 pass, 1 fail, 0 warn, 58 skip
+
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+
+Description:
+A pub struct that could be exhaustively constructed with a literal using only public API has a new pub field, breaking existing exhaustive literals.
+        ref: https://doc.rust-lang.org/reference/expressions/struct-expr.html
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/constructible_struct_adds_field.ron
+
+Failed in:
+  field DescribeWorkflowResponse.generations in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-core/src/describe.rs:55
+  field DescribeWorkflowResponse.generations in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-core/src/describe.rs:55
+
+     Summary semver requires new major version: 1 major and 0 minor checks failed
+    Finished [   8.240s] aion-core
+    Building aion-darwin-acl v0.18.2 (current)
+       Built [   0.964s] (current)
+     Parsing aion-darwin-acl v0.18.2 (current)
+      Parsed [   0.001s] (current)
+     Parsing aion-darwin-acl v0.18.1 (baseline, cached)
+      Parsed [   0.003s] (baseline)
+    Checking aion-darwin-acl v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.005s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [   2.136s] aion-darwin-acl
+    Building aion-integration-acp v0.18.2 (current)
+       Built [  13.316s] (current)
+     Parsing aion-integration-acp v0.18.2 (current)
+      Parsed [   0.006s] (current)
+     Parsing aion-integration-acp v0.18.1 (baseline, cached)
+      Parsed [   0.007s] (baseline)
+    Checking aion-integration-acp v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.016s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  17.450s] aion-integration-acp
+    Building aion-integration-cli v0.18.2 (current)
+       Built [  10.655s] (current)
+     Parsing aion-integration-cli v0.18.2 (current)
+      Parsed [   0.003s] (current)
+     Parsing aion-integration-cli v0.18.1 (baseline, cached)
+      Parsed [   0.005s] (baseline)
+    Checking aion-integration-cli v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.006s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  12.175s] aion-integration-cli
+    Building aion-integration-norn v0.18.2 (current)
+       Built [  10.216s] (current)
+     Parsing aion-integration-norn v0.18.2 (current)
+      Parsed [   0.003s] (current)
+     Parsing aion-integration-norn v0.18.1 (baseline, cached)
+      Parsed [   0.005s] (baseline)
+    Checking aion-integration-norn v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.006s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  11.660s] aion-integration-norn
+    Building aion-integrations v0.18.2 (current)
+       Built [   9.584s] (current)
+     Parsing aion-integrations v0.18.2 (current)
+      Parsed [   0.005s] (current)
+     Parsing aion-integrations v0.18.1 (baseline, cached)
+      Parsed [   0.007s] (baseline)
+    Checking aion-integrations v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.011s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  10.942s] aion-integrations
+    Building aion-mcp v0.18.2 (current)
+       Built [   9.169s] (current)
+     Parsing aion-mcp v0.18.2 (current)
+      Parsed [   0.008s] (current)
+     Parsing aion-mcp v0.18.1 (baseline, cached)
+      Parsed [   0.011s] (baseline)
+    Checking aion-mcp v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.014s] 196 checks: 186 pass, 10 fail, 0 warn, 58 skip
+
+--- failure enum_missing: pub enum removed or renamed ---
+
+Description:
+A publicly-visible enum cannot be imported by its prior path. A `pub use` may have been removed, or the enum itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/enum_missing.ron
+
+Failed in:
+  enum aion_mcp::tasks::store::TerminalOutcome, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/store.rs:224
+  enum aion_mcp::tasks::store::TaskStoreError, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/store.rs:27
+
+--- failure function_missing: pub fn removed or renamed ---
+
+Description:
+A publicly-visible function cannot be imported by its prior path. A `pub use` may have been removed, or the function itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/function_missing.ron
+
+Failed in:
+  function aion_mcp::tasks::runner::drive, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/runner.rs:35
+
+--- failure function_parameter_count_changed: pub fn parameter count changed ---
+
+Description:
+A publicly-visible function now takes a different number of parameters.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#fn-change-arity
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/function_parameter_count_changed.ron
+
+Failed in:
+  aion_mcp::server::tools_methods::execute_call now takes 5 parameters instead of 6, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tools_methods.rs:84
+  aion_mcp::server::tasks_methods::tasks_cancel now takes 5 parameters instead of 4, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:127
+  aion_mcp::server::dispatch::route now takes 5 parameters instead of 6, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/dispatch.rs:133
+  aion_mcp::server::tasks_methods::tasks_update now takes 5 parameters instead of 4, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:156
+  aion_mcp::server::tasks_methods::tasks_get now takes 5 parameters instead of 4, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:89
+
+--- failure function_requires_different_generic_type_params: function now requires a different number of generic type parameters ---
+
+Description:
+A function now requires a different number of generic type parameters than it used to. Uses of this function that supplied the previous number of generic types (e.g. via turbofish syntax) will be broken.
+        ref: https://doc.rust-lang.org/reference/items/generics.html
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/function_requires_different_generic_type_params.ron
+
+Failed in:
+  function tasks_cancel (0 -> 1 generic types) in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:127
+  function tasks_update (0 -> 1 generic types) in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:156
+  function tasks_get (0 -> 1 generic types) in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/tasks_methods.rs:89
+
+--- failure inherent_method_missing: pub method removed or renamed ---
+
+Description:
+A publicly-visible method or associated fn is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/inherent_method_missing.ron
+
+Failed in:
+  McpServer::tasks, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/handle.rs:48
+  McpServer::tasks, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/handle.rs:48
+  McpServer::tasks, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/handle.rs:48
+
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+
+Description:
+A publicly-visible method now takes a different number of parameters, not counting the receiver (self) parameter.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#fn-change-arity
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/method_parameter_count_changed.ron
+
+Failed in:
+  aion_mcp::server::config::McpServerConfig::new takes 6 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/config.rs:45, but now takes 5 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/config.rs:49
+  aion_mcp::McpServerConfig::new takes 6 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/config.rs:45, but now takes 5 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/server/config.rs:49
+
+--- failure module_missing: pub module removed or renamed ---
+
+Description:
+A publicly-visible module cannot be imported by its prior path. A `pub use` may have been removed, or the module may have been renamed, removed, or made non-public.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/module_missing.ron
+
+Failed in:
+  mod aion_mcp::tasks::store, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/store.rs:1
+  mod aion_mcp::tasks::runner, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/runner.rs:1
+
+--- failure struct_missing: pub struct removed or renamed ---
+
+Description:
+A publicly-visible struct cannot be imported by its prior path. A `pub use` may have been removed, or the struct itself may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/struct_missing.ron
+
+Failed in:
+  struct aion_mcp::tasks::store::TaskStore, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/store.rs:53
+  struct aion_mcp::TaskStore, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/tasks/store.rs:53
+
+--- failure struct_pub_field_missing: pub struct's pub field removed or renamed ---
+
+Description:
+A publicly-visible struct has at least one public field that is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/struct_pub_field_missing.ron
+
+Failed in:
+  field task_ttl_ms of struct McpServerConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/config.rs:21
+  field task_ttl_ms of struct McpServerConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-mcp-0.18.1/src/server/config.rs:21
+
+--- failure trait_method_added: pub trait method added ---
+
+Description:
+A non-sealed public trait added a new method without a default implementation, which breaks downstream implementations of the trait
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#trait-new-item-no-default
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/trait_method_added.ron
+
+Failed in:
+  trait method aion_mcp::tools::service::ToolService::task_handle in file /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/tools/service.rs:302
+  trait method aion_mcp::tools::service::ToolService::resolve_task in file /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/tools/service.rs:315
+  trait method aion_mcp::ToolService::task_handle in file /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/tools/service.rs:302
+  trait method aion_mcp::ToolService::resolve_task in file /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-mcp/src/tools/service.rs:315
+
+     Summary semver requires new major version: 10 major and 0 minor checks failed
+    Finished [  11.994s] aion-mcp
+    Building aion-package v0.18.2 (current)
+       Built [  12.696s] (current)
+     Parsing aion-package v0.18.2 (current)
+      Parsed [   0.027s] (current)
+     Parsing aion-package v0.18.1 (baseline, cached)
+      Parsed [   0.031s] (baseline)
+    Checking aion-package v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.045s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  15.641s] aion-package
+    Building aion-proto v0.18.2 (current)
+       Built [  13.959s] (current)
+     Parsing aion-proto v0.18.2 (current)
+      Parsed [   0.010s] (current)
+     Parsing aion-proto v0.18.1 (baseline, cached)
+      Parsed [   0.013s] (baseline)
+    Checking aion-proto v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.026s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  16.756s] aion-proto
+    Building aion-proto-generated v0.18.2 (current)
+       Built [  12.352s] (current)
+     Parsing aion-proto-generated v0.18.2 (current)
+      Parsed [   0.013s] (current)
+     Parsing aion-proto-generated v0.18.1 (baseline, cached)
+      Parsed [   0.014s] (baseline)
+    Checking aion-proto-generated v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.022s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  13.863s] aion-proto-generated
+    Building aion-rs v0.18.2 (current)
+       Built [  29.581s] (current)
+     Parsing aion-rs v0.18.2 (current)
+      Parsed [   0.065s] (current)
+     Parsing aion-rs v0.18.1 (baseline, cached)
+      Parsed [   0.068s] (baseline)
+    Checking aion-rs v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.105s] 196 checks: 194 pass, 2 fail, 0 warn, 58 skip
+
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+
+Description:
+A pub struct that could be exhaustively constructed with a literal using only public API has a new pub field, breaking existing exhaustive literals.
+        ref: https://doc.rust-lang.org/reference/expressions/struct-expr.html
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/constructible_struct_adds_field.ron
+
+Failed in:
+  field RuntimeConfig.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion/src/runtime/config.rs:58
+  field RuntimeConfig.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion/src/runtime/config.rs:58
+  field RuntimeConfig.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion/src/runtime/config.rs:58
+
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+
+Description:
+A publicly-visible enum without #[non_exhaustive] has a new variant.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#enum-variant-new
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/enum_variant_added.ron
+
+Failed in:
+  variant EngineError:RunNotInHistory in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion/src/error.rs:342
+  variant EngineError:RunNotInHistory in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion/src/error.rs:342
+
+     Summary semver requires new major version: 2 major and 0 minor checks failed
+    Finished [  35.000s] aion-rs
+    Building aion-server v0.18.2 (current)
+       Built [  71.409s] (current)
+     Parsing aion-server v0.18.2 (current)
+      Parsed [   0.128s] (current)
+     Parsing aion-server v0.18.1 (baseline, cached)
+      Parsed [   0.134s] (baseline)
+    Checking aion-server v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.152s] 196 checks: 188 pass, 8 fail, 0 warn, 58 skip
+
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+
+Description:
+A pub struct that could be exhaustively constructed with a literal using only public API has a new pub field, breaking existing exhaustive literals.
+        ref: https://doc.rust-lang.org/reference/expressions/struct-expr.html
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/constructible_struct_adds_field.ron
+
+Failed in:
+  field CliOverrides.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/config/runtime.rs:33
+  field RuntimeConfig.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/config/runtime.rs:84
+  field RuntimeSection.jit_threshold in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/config/sections.rs:309
+
+--- failure enum_no_repr_variant_discriminant_changed: enum variant had its discriminant change value ---
+
+Description:
+The enum's variant had its discriminant value change. This breaks downstream code that used its value via a numeric cast like `as isize`.
+        ref: https://doc.rust-lang.org/reference/items/enumerations.html#assigning-discriminant-values
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/enum_no_repr_variant_discriminant_changed.ron
+
+Failed in:
+  variant ServerError::LockPoisoned 15 -> 16 in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:217
+  variant ServerError::Wire 16 -> 17 in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:224
+  variant ServerError::LockPoisoned 15 -> 16 in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:217
+  variant ServerError::Wire 16 -> 17 in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:224
+
+--- failure enum_variant_added: enum variant added on exhaustive enum ---
+
+Description:
+A publicly-visible enum without #[non_exhaustive] has a new variant.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#enum-variant-new
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/enum_variant_added.ron
+
+Failed in:
+  variant ServerError:DeclaredAttemptCollision in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:206
+  variant ServerError:DeclaredAttemptCollision in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/error.rs:206
+
+--- failure function_parameter_count_changed: pub fn parameter count changed ---
+
+Description:
+A publicly-visible function now takes a different number of parameters.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#fn-change-arity
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/function_parameter_count_changed.ron
+
+Failed in:
+  aion_server::worker::activity_cancel::cancel_in_flight_activities now takes 4 parameters instead of 3, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/worker/activity_cancel.rs:141
+  aion_server::worker::cancel_in_flight_activities now takes 4 parameters instead of 3, in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/worker/activity_cancel.rs:141
+
+--- failure inherent_method_missing: pub method removed or renamed ---
+
+Description:
+A publicly-visible method or associated fn is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/inherent_method_missing.ron
+
+Failed in:
+  PendingActivities::with_heartbeat_window, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/worker/bridge.rs:348
+  PendingActivities::with_heartbeat_window, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/worker/bridge.rs:348
+
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+
+Description:
+A publicly-visible method now takes a different number of parameters, not counting the receiver (self) parameter.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#fn-change-arity
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/method_parameter_count_changed.ron
+
+Failed in:
+  aion_server::mcp::service::AionToolService::new takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/mcp/service.rs:37, but now takes 1 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/mcp/service.rs:36
+  aion_server::mcp::AionToolService::new takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/mcp/service.rs:37, but now takes 1 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/mcp/service.rs:36
+  aion_server::AionToolService::new takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/mcp/service.rs:37, but now takes 1 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/mcp/service.rs:36
+  aion_server::worker::declared_body::DeclaredCommandDispatcher::new takes 5 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/worker/declared_body.rs:249, but now takes 6 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/worker/declared_body.rs:278
+  aion_server::worker::DeclaredCommandDispatcher::new takes 5 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/worker/declared_body.rs:249, but now takes 6 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-server/src/worker/declared_body.rs:278
+
+--- failure pub_module_level_const_missing: pub module-level const is missing ---
+
+Description:
+A public const is missing or renamed
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/pub_module_level_const_missing.ron
+
+Failed in:
+  DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/defaults.rs:246
+  DEFAULT_MCP_TASK_TTL_MS in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/defaults.rs:236
+
+--- failure struct_pub_field_missing: pub struct's pub field removed or renamed ---
+
+Description:
+A publicly-visible struct has at least one public field that is no longer available under its prior name. It may have been renamed or removed entirely.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/struct_pub_field_missing.ron
+
+Failed in:
+  field task_ttl_ms of struct ResolvedMcpConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/sections.rs:633
+  field await_poll_interval_ms of struct ResolvedMcpConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/sections.rs:637
+  field task_ttl_ms of struct McpConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/sections.rs:539
+  field await_poll_interval_ms of struct McpConfig, previously in file /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-server-0.18.1/src/config/sections.rs:549
+
+     Summary semver requires new major version: 8 major and 0 minor checks failed
+    Finished [  77.754s] aion-server
+    Building aion-store v0.18.2 (current)
+       Built [  10.903s] (current)
+     Parsing aion-store v0.18.2 (current)
+      Parsed [   0.006s] (current)
+     Parsing aion-store v0.18.1 (baseline, cached)
+      Parsed [   0.008s] (baseline)
+    Checking aion-store v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.018s] 196 checks: 195 pass, 1 fail, 0 warn, 58 skip
+
+--- failure constructible_struct_adds_field: struct exhaustively constructible through public API adds field ---
+
+Description:
+A pub struct that could be exhaustively constructed with a literal using only public API has a new pub field, breaking existing exhaustive literals.
+        ref: https://doc.rust-lang.org/reference/expressions/struct-expr.html
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/constructible_struct_adds_field.ron
+
+Failed in:
+  field RunSummary.started_seq in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store/src/store.rs:60
+  field RunSummary.started_seq in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store/src/store.rs:60
+
+     Summary semver requires new major version: 1 major and 0 minor checks failed
+    Finished [  13.068s] aion-store
+    Building aion-store-haematite v0.18.2 (current)
+       Built [  25.034s] (current)
+     Parsing aion-store-haematite v0.18.2 (current)
+      Parsed [   0.006s] (current)
+     Parsing aion-store-haematite v0.18.1 (baseline, cached)
+      Parsed [   0.007s] (baseline)
+    Checking aion-store-haematite v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.007s] 196 checks: 195 pass, 1 fail, 0 warn, 58 skip
+
+--- failure method_parameter_count_changed: pub method parameter count changed ---
+
+Description:
+A publicly-visible method now takes a different number of parameters, not counting the receiver (self) parameter.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#fn-change-arity
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.50.0/src/lints/method_parameter_count_changed.ron
+
+Failed in:
+  aion_store_haematite::store::HaematiteStore::open_or_create takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-store-haematite-0.18.1/src/store.rs:297, but now takes 3 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store-haematite/src/store.rs:298
+  aion_store_haematite::store::HaematiteStore::open takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-store-haematite-0.18.1/src/store.rs:337, but now takes 3 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store-haematite/src/store.rs:339
+  aion_store_haematite::HaematiteStore::open_or_create takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-store-haematite-0.18.1/src/store.rs:297, but now takes 3 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store-haematite/src/store.rs:298
+  aion_store_haematite::HaematiteStore::open takes 2 parameters in /Users/tom/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aion-store-haematite-0.18.1/src/store.rs:337, but now takes 3 parameters in /Users/tom/Developer/ablative/stack/aion/.worktrees/cut-0182/crates/aion-store-haematite/src/store.rs:339
+
+     Summary semver requires new major version: 1 major and 0 minor checks failed
+    Finished [  27.875s] aion-store-haematite
+    Building aion-toolchain v0.18.2 (current)
+       Built [  15.373s] (current)
+     Parsing aion-toolchain v0.18.2 (current)
+      Parsed [   0.004s] (current)
+     Parsing aion-toolchain v0.18.1 (baseline, cached)
+      Parsed [   0.007s] (baseline)
+    Checking aion-toolchain v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.005s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  19.392s] aion-toolchain
+    Building aion-worker v0.18.2 (current)
+       Built [  39.297s] (current)
+     Parsing aion-worker v0.18.2 (current)
+      Parsed [   0.028s] (current)
+     Parsing aion-worker v0.18.1 (baseline, cached)
+      Parsed [   0.085s] (baseline)
+    Checking aion-worker v0.18.1 -> v0.18.2 (minor change)
+     Checked [   0.042s] 196 checks: 196 pass, 58 skip
+     Summary no semver update required
+    Finished [  42.931s] aion-worker
