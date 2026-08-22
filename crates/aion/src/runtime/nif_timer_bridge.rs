@@ -27,6 +27,7 @@ use crate::runtime::nif_timer_fire::{
     RefusedAppend, TimerAppendError, active_run_has_terminal, event_kind, fire_wheel_timer,
     wheel_torn_down_before_arming,
 };
+use crate::time::timer_service::{TimerDisposition, timer_disposition_in_active_segment};
 use crate::time::{DeadlineHandler, TimerService};
 
 pub(super) struct TimerNifBridge {
@@ -577,6 +578,34 @@ impl EngineHandle for TimerNifBridge {
             }
             match outcome {
                 TimerOutcome::Fired(timer_id) => {
+                    // #145 ack-loss reconciliation, under the SAME recorder lock
+                    // and against the SAME history read as the terminal refusal
+                    // above. If the active segment already shows `TimerFired` as
+                    // this timer's last event, that event can only be this
+                    // recorder's own earlier append whose acknowledgement was
+                    // lost (single writer per workflow; the timer service's
+                    // fire guard never sends a fire here for a timer another
+                    // path retired). Appending again would double-record the
+                    // fire, and appending anything ELSE would die on
+                    // `SequenceConflict`, because the un-acked append left the
+                    // recorder's tracked head one below the durable head. So:
+                    // reconcile the tracked head FORWARD to the durable head and
+                    // report `AlreadyRecorded`, appending nothing — the caller
+                    // still delivers the owed wake. The timer service performs
+                    // the same inspection before calling in (it keeps genuine
+                    // no-ops out of this seam); THIS check, under the lock, is
+                    // the authoritative one. Reconciliation happens ONLY on this
+                    // branch — never in response to a `SequenceConflict`, which
+                    // must keep surfacing un-resynced as the double-writer alarm
+                    // it is.
+                    if matches!(
+                        timer_disposition_in_active_segment(&history, &timer_id),
+                        TimerDisposition::Fired
+                    ) {
+                        let durable_head = history.iter().map(Event::seq).max().unwrap_or_default();
+                        recorder.reconcile_head_forward(durable_head);
+                        return Ok(RecordOutcome::AlreadyRecorded);
+                    }
                     recorder
                         .record_timer_fired(recorded_at, timer_id)
                         .await

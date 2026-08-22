@@ -324,7 +324,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tick_uses_injected_clock_and_fires_newly_due_timer_once() -> Result<(), TestError> {
+    async fn tick_uses_injected_clock_records_once_and_redelivers_the_wake() -> Result<(), TestError>
+    {
         let process = WorkflowProcessHandle::new(42);
         let (store, engine, recovery) = recovery();
         let workflow_id = workflow_id();
@@ -345,14 +346,20 @@ mod tests {
 
         assert_eq!(
             count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
-            1
+            1,
+            "the durable TimerFired is recorded exactly once across repeated ticks"
         );
-        assert_eq!(engine.delivered_messages()?.len(), 1);
+        // aion#145: the second tick finds the fire already recorded and
+        // RE-DELIVERS the wake to the resident workflow instead of silently
+        // no-opping — history cannot tell a delivered wake from a lost one, and
+        // delivery is a pure, duplicate-safe wake, so redelivering is the
+        // direction that heals a fired-but-undelivered wedge.
+        assert_eq!(engine.delivered_messages()?.len(), 2);
         Ok(())
     }
 
     #[tokio::test]
-    async fn running_startup_sweep_twice_fires_due_timer_once_total() -> Result<(), TestError> {
+    async fn running_startup_sweep_twice_records_due_timer_once_total() -> Result<(), TestError> {
         let process = WorkflowProcessHandle::new(42);
         let (store, engine, recovery) = recovery();
         let workflow_id = workflow_id();
@@ -372,9 +379,12 @@ mod tests {
 
         assert_eq!(
             count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
-            1
+            1,
+            "the durable TimerFired is recorded exactly once across repeated sweeps"
         );
-        assert_eq!(engine.delivered_messages()?.len(), 1);
+        // aion#145: the second sweep redelivers the recorded fire's wake — see
+        // `tick_uses_injected_clock_records_once_and_redelivers_the_wake`.
+        assert_eq!(engine.delivered_messages()?.len(), 2);
         Ok(())
     }
 

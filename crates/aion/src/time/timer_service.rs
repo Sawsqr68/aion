@@ -211,6 +211,10 @@ impl TimerService {
     ///
     /// `TimerFired` is recorded before any mailbox delivery. If the workflow is no longer resident,
     /// the recorded event remains the durable observation that replay/recovery can surface later.
+    /// A fire whose `TimerFired` is ALREADY the timer's last recorded event (an earlier append
+    /// landed while its acknowledgement was lost — aion#145) is not a no-op: for a resident
+    /// workflow the fire re-enters the recorder seam, which reconciles the recorder's sequence
+    /// forward without appending, and the owed mailbox wake is delivered.
     ///
     /// # Errors
     ///
@@ -253,8 +257,29 @@ impl TimerService {
         timer_id: TimerId,
         fire_at: DateTime<Utc>,
     ) -> Result<(), TimerServiceError> {
-        if !self.timer_is_live(&workflow_id, &timer_id).await? {
-            return Ok(());
+        // WHY the timer is not live decides what a fire still owes (aion#145).
+        // A cancelled or absent timer owes nothing; a timer whose last event is
+        // already `TimerFired` is the ack-loss shape — the durable record
+        // landed while the recording call's acknowledgement was lost, so the
+        // mailbox wake (and the recorder's sequence repair) may still be owed.
+        // This service-layer read is the cheap gate that keeps genuine no-ops
+        // (cancelled/absent/retired) out of the recorder seam; the bridge
+        // re-checks the same fact under the recorder lock, and that check is
+        // the authoritative one.
+        let history = self.store.read_history(&workflow_id).await?;
+        match timer_disposition_in_active_segment(&history, &timer_id) {
+            TimerDisposition::Live => {}
+            TimerDisposition::Fired if !is_deadline_timer(&timer_id) => {
+                return self
+                    .redeliver_recorded_fire(workflow_id, timer_id, fire_at)
+                    .await;
+            }
+            // A retired deadline (which never records `TimerFired` through this
+            // path), a cancelled timer, or a timer with no event in the active
+            // segment: nothing is owed, exactly as before the #145 fix.
+            TimerDisposition::Fired | TimerDisposition::Cancelled | TimerDisposition::Absent => {
+                return Ok(());
+            }
         }
 
         // Demux a reserved workflow-deadline timer out of the generic
@@ -269,14 +294,16 @@ impl TimerService {
             envelope: self.next_envelope(&workflow_id).await?,
             timer_id: timer_id.clone(),
         };
-        // Deliver the mailbox wake ONLY for a genuine append. The recorder seam
-        // refuses a late fire that lands after the run terminated
+        // Deliver the mailbox wake only when the durable record exists. The
+        // recorder seam refuses a late fire that lands after the run terminated
         // (`RefusedTerminal`), recording nothing; waking the process then would
         // reschedule a workflow that has already reached its terminal — the
-        // post-terminal wake this gate closes.
-        if self.engine.record_workflow_event(&workflow_id, event)? == RecordOutcome::RefusedTerminal
-        {
-            return Ok(());
+        // post-terminal wake this gate closes. `AlreadyRecorded` is the
+        // opposite case: the record exists (an earlier acknowledgement-lost
+        // append landed), so the wake is owed exactly as for `Recorded`.
+        match self.engine.record_workflow_event(&workflow_id, event)? {
+            RecordOutcome::RefusedTerminal => return Ok(()),
+            RecordOutcome::Recorded | RecordOutcome::AlreadyRecorded => {}
         }
 
         if let WorkflowResidency::Resident(process) = self.engine.resolve_workflow(&workflow_id)? {
@@ -286,6 +313,62 @@ impl TimerService {
             )?;
         }
 
+        Ok(())
+    }
+
+    /// Completes a fire whose durable `TimerFired` already exists but whose
+    /// delivery — and possibly the recorder's own sequence advance — was lost
+    /// (aion#145): the incident's ack-lost append, or a wake that failed after
+    /// a fully recorded fire.
+    ///
+    /// Only a RESIDENT workflow owes a live wake, and only its still-held
+    /// Recorder can be carrying the stale-low sequence the ack loss leaves
+    /// behind: a non-resident workflow's replay on residency restore rebuilds
+    /// its recorder from the durable head and consumes the recorded fire, so
+    /// for it this is a clean no-op, exactly as before the fix.
+    ///
+    /// For the resident case the fire is put back through the recorder seam
+    /// rather than woken directly: the bridge's check under the recorder lock
+    /// is the authoritative "already recorded" decision, and it is where the
+    /// recorder's in-memory sequence is reconciled forward to the durable head
+    /// — without that repair the woken workflow's next append would mint a
+    /// stale sequence and die on `SequenceConflict`, wedging the run one event
+    /// later. The wake itself is a pure wake (the suspended await re-resolves
+    /// from history), so a duplicate delivery is harmless by design.
+    async fn redeliver_recorded_fire(
+        &self,
+        workflow_id: WorkflowId,
+        timer_id: TimerId,
+        fire_at: DateTime<Utc>,
+    ) -> Result<(), TimerServiceError> {
+        let WorkflowResidency::Resident(process) = self.engine.resolve_workflow(&workflow_id)?
+        else {
+            return Ok(());
+        };
+
+        let event = Event::TimerFired {
+            envelope: self.next_envelope(&workflow_id).await?,
+            timer_id: timer_id.clone(),
+        };
+        match self.engine.record_workflow_event(&workflow_id, event)? {
+            // The run reached a terminal after the fire landed: the recorded
+            // fire is inert history now, and no wake may reschedule the run.
+            RecordOutcome::RefusedTerminal => return Ok(()),
+            RecordOutcome::Recorded | RecordOutcome::AlreadyRecorded => {}
+        }
+
+        self.engine.deliver_workflow_message(
+            process,
+            WorkflowMailboxMessage::TimerFired {
+                timer_id: timer_id.clone(),
+                fire_at,
+            },
+        )?;
+        tracing::info!(
+            %workflow_id,
+            %timer_id,
+            "timer fire was already durably recorded; delivered the owed mailbox wake"
+        );
         Ok(())
     }
 
@@ -329,7 +412,8 @@ impl TimerService {
     /// named timer.
     ///
     /// Liveness is decided by the *last* timer event for the id (see
-    /// [`live_timers_in_active_segment`]): a re-armed named timer
+    /// [`timer_disposition_in_active_segment`], the per-id view of the model
+    /// [`live_timers_in_active_segment`] enumerates): a re-armed named timer
     /// (`TimerStarted(T), TimerFired(T), TimerStarted(T)`) is correctly live
     /// again rather than judged terminal forever by the earlier `TimerFired`.
     async fn timer_is_live(
@@ -338,7 +422,10 @@ impl TimerService {
         timer_id: &TimerId,
     ) -> Result<bool, StoreError> {
         let history = self.store.read_history(workflow_id).await?;
-        Ok(live_timers_in_active_segment(&history).contains(timer_id))
+        Ok(matches!(
+            timer_disposition_in_active_segment(&history, timer_id),
+            TimerDisposition::Live
+        ))
     }
 
     async fn next_envelope(&self, workflow_id: &WorkflowId) -> Result<EventEnvelope, StoreError> {
@@ -367,12 +454,8 @@ impl TimerService {
 /// by [`TimerService::timer_is_live`] (firing/cancel guard) and the cancel-path
 /// enumerator in `engine::api`, so the two cannot diverge.
 pub(crate) fn live_timers_in_active_segment(history: &[Event]) -> Vec<TimerId> {
-    let segment_start = history
-        .iter()
-        .rposition(|event| matches!(event, Event::WorkflowStarted { .. }))
-        .unwrap_or(0);
     let mut live: Vec<TimerId> = Vec::new();
-    for event in &history[segment_start..] {
+    for event in active_segment(history) {
         match event {
             Event::TimerStarted { timer_id, .. } if !live.contains(timer_id) => {
                 live.push(timer_id.clone());
@@ -386,6 +469,72 @@ pub(crate) fn live_timers_in_active_segment(history: &[Event]) -> Vec<TimerId> {
     live
 }
 
+/// The workflow's active run segment: everything from the latest
+/// `WorkflowStarted` (the whole history when none is recorded — bare fixtures
+/// and coordinator histories).
+///
+/// The single segment anchor shared by [`live_timers_in_active_segment`] and
+/// [`timer_disposition_in_active_segment`], so the enumerating and the per-id
+/// view of the liveness model cannot disagree about where the active run
+/// begins.
+fn active_segment(history: &[Event]) -> &[Event] {
+    let segment_start = history
+        .iter()
+        .rposition(|event| matches!(event, Event::WorkflowStarted { .. }))
+        .unwrap_or(0);
+    &history[segment_start..]
+}
+
+/// The recorded fate of ONE timer in the workflow's active run segment, by the
+/// same last-event-wins rule as [`live_timers_in_active_segment`].
+///
+/// [`live_timers_in_active_segment`] can only answer "live or not"; the fire
+/// path needs to know WHY a timer is not live (aion#145): a timer whose last
+/// event is `TimerFired` already has its durable record — the fire's mailbox
+/// wake may still be owed — while a cancelled or absent timer owes nothing.
+/// This is the per-id view of the SAME model, not a fork of it: same segment
+/// anchor ([`active_segment`]), same last-event-wins traversal, so for every
+/// history and timer id, `Live` here if and only if the id appears in
+/// [`live_timers_in_active_segment`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TimerDisposition {
+    /// The timer's last event in the active segment is `TimerStarted`: live.
+    Live,
+    /// The timer's last event in the active segment is `TimerFired`: the
+    /// durable fire record exists (its mailbox wake may or may not have been
+    /// delivered — history cannot tell, which is why delivery is a pure,
+    /// duplicate-safe wake).
+    Fired,
+    /// The timer's last event in the active segment is `TimerCancelled`.
+    Cancelled,
+    /// The timer has no event in the active segment (never started there, or
+    /// started only in a prior, closed run segment).
+    Absent,
+}
+
+/// Computes [`TimerDisposition`] for `timer_id` over `history`.
+pub(crate) fn timer_disposition_in_active_segment(
+    history: &[Event],
+    timer_id: &TimerId,
+) -> TimerDisposition {
+    let mut disposition = TimerDisposition::Absent;
+    for event in active_segment(history) {
+        match event {
+            Event::TimerStarted { timer_id: id, .. } if id == timer_id => {
+                disposition = TimerDisposition::Live;
+            }
+            Event::TimerFired { timer_id: id, .. } if id == timer_id => {
+                disposition = TimerDisposition::Fired;
+            }
+            Event::TimerCancelled { timer_id: id, .. } if id == timer_id => {
+                disposition = TimerDisposition::Cancelled;
+            }
+            _ => {}
+        }
+    }
+    disposition
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -394,7 +543,10 @@ mod tests {
     use aion_store::{InMemoryStore, ReadableEventStore, StoreError, WritableEventStore};
     use chrono::{DateTime, Utc};
 
-    use super::{TimerService, TimerServiceError, live_timers_in_active_segment};
+    use super::{
+        TimerDisposition, TimerService, TimerServiceError, live_timers_in_active_segment,
+        timer_disposition_in_active_segment,
+    };
     use crate::engine_seam::test_support::{
         DeliveredWorkflowMessage, FakeEngineHandle, FakeEngineOperation,
     };
@@ -593,6 +745,59 @@ mod tests {
         assert_eq!(live_timers_in_active_segment(&history), vec![current]);
     }
 
+    /// The per-id disposition view (aion#145) must agree with the enumerating
+    /// liveness model on every shape: `Live` exactly when the id appears in
+    /// [`live_timers_in_active_segment`], with the not-live cases split by WHY.
+    /// Each case asserts both views so the two traversals cannot drift.
+    #[test]
+    fn disposition_tracks_the_last_event_for_the_id_and_agrees_with_liveness() {
+        let workflow_id = workflow_id();
+        let timer_id = named_timer_id();
+        let other = make_named("unrelated");
+        let assert_agrees = |history: &[Event], expected: TimerDisposition| {
+            assert_eq!(
+                timer_disposition_in_active_segment(history, &timer_id),
+                expected
+            );
+            assert_eq!(
+                live_timers_in_active_segment(history).contains(&timer_id),
+                expected == TimerDisposition::Live,
+                "the per-id disposition and the enumerating model disagree on liveness"
+            );
+        };
+
+        // Started → live.
+        let mut history = vec![
+            workflow_started_event(&workflow_id, 0),
+            timer_started_event(&workflow_id, &timer_id, 1),
+        ];
+        assert_agrees(&history, TimerDisposition::Live);
+
+        // Fired at head → the durable record exists (the aion#145 shape).
+        history.push(timer_fired_event(&workflow_id, &timer_id, 2));
+        assert_agrees(&history, TimerDisposition::Fired);
+
+        // A fire for an UNRELATED id must not disturb this timer's disposition.
+        history.push(timer_fired_event(&workflow_id, &other, 3));
+        assert_agrees(&history, TimerDisposition::Fired);
+
+        // Re-armed after the fire → live again (last-event-wins).
+        history.push(timer_started_event(&workflow_id, &timer_id, 4));
+        assert_agrees(&history, TimerDisposition::Live);
+
+        // Cancelled at head → retired, owed nothing.
+        history.push(timer_cancelled_event(&workflow_id, &timer_id, 5));
+        assert_agrees(&history, TimerDisposition::Cancelled);
+
+        // A new run segment closes the book: the id is absent from the active
+        // segment even though the prior segment fired and cancelled it.
+        history.push(workflow_started_event(&workflow_id, 6));
+        assert_agrees(&history, TimerDisposition::Absent);
+
+        // And with no events at all it was absent to begin with.
+        assert_agrees(&[], TimerDisposition::Absent);
+    }
+
     #[tokio::test]
     async fn re_armed_named_timer_fires_again() -> Result<(), TimerServiceError> {
         // End-to-end firing-path guard: with last-event-wins, a re-armed named
@@ -772,8 +977,17 @@ mod tests {
         Ok(())
     }
 
+    /// aion#145: a second fire of an already-fired timer records nothing new
+    /// but RE-DELIVERS the owed wake to a resident workflow. Delivery is a pure
+    /// wake (the suspended await re-resolves from history), so a duplicate is
+    /// harmless — while the pre-fix silent no-op is exactly what wedged the
+    /// incident's workflows: the durable `TimerFired` existed and the resident
+    /// process waited forever on a wake that never came. Mutation-sensitive:
+    /// reverting the `Fired`-disposition branch to a plain `Ok(())` leaves one
+    /// delivery; a second append would raise the fired count to two.
     #[tokio::test]
-    async fn firing_same_timer_twice_records_and_delivers_once() -> Result<(), TimerServiceError> {
+    async fn firing_same_timer_twice_records_once_and_redelivers_the_wake()
+    -> Result<(), TimerServiceError> {
         let process = WorkflowProcessHandle::new(42);
         let (store, engine, service) = service();
         let workflow_id = workflow_id();
@@ -788,15 +1002,140 @@ mod tests {
         service
             .fire_timer(workflow_id.clone(), timer_id.clone(), fire_at)
             .await?;
+        // The second fire re-enters the recorder seam, which answers
+        // `AlreadyRecorded` without appending (the fake implements the seam
+        // contract; the real bridge's under-lock decision — including the
+        // recorder-sequence reconciliation — is pinned in
+        // `nif_timer_bridge_tests`).
         service
             .fire_timer(workflow_id.clone(), timer_id.clone(), fire_at)
             .await?;
 
         assert_eq!(
             count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
+            1,
+            "the recorded fire must never be appended a second time"
+        );
+        assert_eq!(
+            engine.delivered_messages()?.len(),
+            2,
+            "the second fire re-delivers the owed wake instead of silently no-opping"
+        );
+        Ok(())
+    }
+
+    /// aion#145 Parts 2+3, service-seam mapping: a fire whose `TimerFired` is
+    /// already the timer's last recorded event (the incident's ack-lost append)
+    /// must NOT no-op for a resident workflow — it re-enters the recorder seam
+    /// (which answers `AlreadyRecorded` without appending) and then delivers
+    /// the owed wake. Mutation-sensitive both ways: reverting the
+    /// `Fired`-disposition branch to `Ok(())` delivers nothing, and mapping
+    /// `AlreadyRecorded` like `RefusedTerminal` delivers nothing.
+    #[tokio::test]
+    async fn already_recorded_fire_delivers_owed_wake_without_second_append()
+    -> Result<(), TimerServiceError> {
+        let process = WorkflowProcessHandle::new(42);
+        let (store, engine, service) = service();
+        let workflow_id = workflow_id();
+        let timer_id = timer_id();
+        let fire_at = instant(140);
+        engine.set_residency(workflow_id.clone(), WorkflowResidency::Resident(process))?;
+        engine.record_workflow_event(
+            &workflow_id,
+            timer_started_event(&workflow_id, &timer_id, 1),
+        )?;
+        engine
+            .record_workflow_event(&workflow_id, timer_fired_event(&workflow_id, &timer_id, 2))?;
+
+        service
+            .fire_timer(workflow_id.clone(), timer_id.clone(), fire_at)
+            .await?;
+
+        assert_eq!(
+            count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
+            1,
+            "the already-recorded fire must not be appended again"
+        );
+        assert_eq!(
+            engine.delivered_messages()?,
+            vec![(
+                process,
+                DeliveredWorkflowMessage::TimerFired { timer_id, fire_at }
+            )],
+            "the owed mailbox wake must be delivered"
+        );
+        Ok(())
+    }
+
+    /// aion#145 test matrix row 3: fired-but-undelivered for a NON-resident
+    /// workflow is a clean no-op — no wake is attempted (there is no live
+    /// process to wake) and the recorder seam is not re-entered: replay on
+    /// residency restore rebuilds the recorder from the durable head and
+    /// consumes the recorded fire. Load-bearing assertions: exactly one
+    /// durable `TimerFired`, and an empty delivery log.
+    #[tokio::test]
+    async fn already_recorded_fire_for_nonresident_workflow_wakes_nothing()
+    -> Result<(), TimerServiceError> {
+        let (store, engine, service) = service();
+        let workflow_id = workflow_id();
+        let timer_id = timer_id();
+        engine.set_residency(workflow_id.clone(), WorkflowResidency::NonResident)?;
+        engine.record_workflow_event(
+            &workflow_id,
+            timer_started_event(&workflow_id, &timer_id, 1),
+        )?;
+        engine
+            .record_workflow_event(&workflow_id, timer_fired_event(&workflow_id, &timer_id, 2))?;
+
+        service
+            .fire_timer(workflow_id.clone(), timer_id.clone(), instant(150))
+            .await?;
+
+        assert_eq!(
+            count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
+            1,
+            "a non-resident redelivery must not re-enter the recorder seam"
+        );
+        assert!(
+            engine.delivered_messages()?.is_empty(),
+            "no wake is attempted for a non-resident workflow"
+        );
+        Ok(())
+    }
+
+    /// aion#145: the redelivery path still honors the post-terminal refusal.
+    /// A recorded fire whose run has since reached a terminal gets NO wake —
+    /// the recorder seam answers `RefusedTerminal` and the recorded fire is
+    /// inert history. Mutation-sensitive: delivering the wake regardless of the
+    /// refusal would reschedule a terminated workflow.
+    #[tokio::test]
+    async fn already_recorded_fire_after_run_terminal_delivers_no_wake()
+    -> Result<(), TimerServiceError> {
+        let process = WorkflowProcessHandle::new(42);
+        let (store, engine, service) = service();
+        let workflow_id = workflow_id();
+        let timer_id = timer_id();
+        engine.set_residency(workflow_id.clone(), WorkflowResidency::Resident(process))?;
+        engine.record_workflow_event(
+            &workflow_id,
+            timer_started_event(&workflow_id, &timer_id, 1),
+        )?;
+        engine
+            .record_workflow_event(&workflow_id, timer_fired_event(&workflow_id, &timer_id, 2))?;
+        engine.refuse_next_record_as_terminal()?;
+
+        service
+            .fire_timer(workflow_id.clone(), timer_id.clone(), instant(160))
+            .await?;
+
+        assert_eq!(
+            count_timer_fired(&history(&store, &workflow_id).await?, &timer_id),
             1
         );
-        assert_eq!(engine.delivered_messages()?.len(), 1);
+        assert!(
+            engine.delivered_messages()?.is_empty(),
+            "a post-terminal redelivery must not wake the terminated run"
+        );
         Ok(())
     }
 

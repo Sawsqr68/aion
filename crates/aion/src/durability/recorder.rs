@@ -106,6 +106,32 @@ impl Recorder {
         self.sequence.current()
     }
 
+    /// Reconciles the tracked sequence head FORWARD to `durable_head` after an
+    /// acknowledgement-lost append is discovered to have landed (aion#145).
+    ///
+    /// The incident shape: a store call returned an error AFTER its write
+    /// landed, so `append_one` never reached `mark_append_success` and this
+    /// tracker sits below the durable head — every later append would mint a
+    /// stale sequence and die on `SequenceConflict`. The single sanctioned
+    /// caller is the timer bridge's already-recorded-fire branch, which has
+    /// proven UNDER THE RECORDER LOCK that the active-segment history shows
+    /// this recorder's own `TimerFired` as the firing timer's last event
+    /// (single-writer discipline: an event of that exact shape can only be
+    /// ours).
+    ///
+    /// Forward-only, never backward: a `durable_head` at or below the tracked
+    /// head leaves the tracker untouched (the at-head case is the delivery
+    /// retry of a fully acknowledged fire, which needs no repair). This method
+    /// must NEVER be called in response to a `SequenceConflict` itself — a
+    /// genuine double-writer conflict must surface un-resynced (pinned by
+    /// `sequence_conflict_surfaces_without_advancing_or_retrying`); resyncing
+    /// there would convert the crate's double-writer alarm into silence.
+    pub(crate) fn reconcile_head_forward(&mut self, durable_head: u64) {
+        if durable_head > self.sequence.current() {
+            self.sequence = SequenceHead::from_head(durable_head);
+        }
+    }
+
     /// Reads this workflow's recorded history without appending new events.
     ///
     /// This narrow read seam lets replay contexts build a history cursor from the same store the
@@ -1859,6 +1885,55 @@ mod tests {
         let history = store.read_history(&workflow_id).await?;
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].seq(), 1);
+        Ok(())
+    }
+
+    /// aion#145: the ack-loss repair is FORWARD-ONLY and restores the append
+    /// path. It exists for exactly one shape — an append this recorder issued
+    /// landed while its acknowledgement was lost, leaving the tracked head
+    /// below the durable head — and it must never move the head backward
+    /// (which could mask a genuine double-writer conflict by re-arming a stale
+    /// expectation). The sibling pin
+    /// `sequence_conflict_surfaces_without_advancing_or_retrying` guards the
+    /// other side: a conflict itself never reconciles anything.
+    #[tokio::test]
+    async fn reconcile_head_forward_is_forward_only_and_restores_the_append_path()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workflow_id = workflow_id(42);
+        let store = Arc::new(InMemoryStore::default());
+        let mut recorder = Recorder::new(workflow_id.clone(), store.clone());
+        // Reproduce the ack-lost store state: the event the recorder minted
+        // landed durably, but `mark_append_success` was never reached.
+        let landed = workflow_started(1, &workflow_id)?;
+        store
+            .append(WriteToken::recorder(), &workflow_id, &[landed], 0)
+            .await?;
+        assert_eq!(
+            recorder.current_head(),
+            0,
+            "the ack loss left the tracker stale-low"
+        );
+
+        // At-head (here: still-stale-equal) reconciliation is a no-op.
+        recorder.reconcile_head_forward(0);
+        assert_eq!(recorder.current_head(), 0);
+
+        // Forward reconciliation adopts the durable head.
+        recorder.reconcile_head_forward(1);
+        assert_eq!(recorder.current_head(), 1);
+
+        // Never backward.
+        recorder.reconcile_head_forward(0);
+        assert_eq!(recorder.current_head(), 1);
+
+        // The append path is healthy again: the next event lands at seq 2.
+        recorder
+            .record_signal_received(recorded_at(2), String::from("next"), payload("signal")?)
+            .await?;
+        let history = store.read_history(&workflow_id).await?;
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].seq(), 2);
+        assert_eq!(recorder.current_head(), 2);
         Ok(())
     }
 

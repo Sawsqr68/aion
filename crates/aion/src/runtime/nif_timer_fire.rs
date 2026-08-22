@@ -4,9 +4,10 @@
 //! Split out of `nif_timer_bridge` because that file crossed the 500-line
 //! production cap this codebase holds itself to. The seam is a real one rather
 //! than a slice taken to hit a number: everything here runs *after* a timer is
-//! due — the fire callback, its bounded deadline retry, the refusals that stop
-//! an append, and the history predicates those refusals consult — while the
-//! bridge proper owns the struct, the wheel, and the [`EngineHandle`] impl.
+//! due — the fire callback, its bounded retry ladder (deadline and ordinary
+//! timers alike, aion#145), the refusals that stop an append, and the history
+//! predicates those refusals consult — while the bridge proper owns the
+//! struct, the wheel, and the [`EngineHandle`] impl.
 
 use std::sync::Weak;
 use std::time::Duration;
@@ -246,21 +247,29 @@ pub(super) fn is_wheel_teardown(error: &TimerServiceError) -> bool {
     )
 }
 
-/// Fire a due wheel timer, retrying a DEADLINE fire with bounded backoff while
-/// its history timer remains live.
+/// Fire a due wheel timer, retrying EVERY failed fire — ordinary and deadline
+/// alike — with bounded backoff.
 ///
 /// The live wheel is one-shot and production runs no periodic recovery tick, so
-/// without this a transient timeout-teardown/fire failure would be dropped and
-/// never re-driven in the same engine epoch. Only a reserved `deadline:{run}`
-/// timer that is STILL live in durable history is retried; an ordinary timer's
-/// fire failure — or a deadline already retired/superseded — is logged and
-/// dropped exactly as before. The backoff interval grows and is capped (never a
-/// hot loop), attempts are bounded, and the durable deadline row stays live so
-/// restart recovery remains the final backstop.
+/// without this a transient store failure during the fire callback would drop
+/// the fire for the whole engine epoch. That is aion#145: ordinary timers used
+/// to WARN-and-return here, so one ~6s store stall wedged every short-cadence
+/// workflow whose fire it caught — permanently, because nothing in the epoch
+/// ever re-drove the fire. Both timer classes now share one bounded ladder;
+/// the backoff interval grows and is capped (never a hot loop) and attempts
+/// are bounded.
+///
+/// The two classes differ only in their pre-retry read. A reserved
+/// `deadline:{run}` fire is retried only while [`deadline_remains_live`] cannot
+/// POSITIVELY rule it out — exactly the pre-#145 deadline behavior. An
+/// ordinary timer needs no such pre-read: each retry re-enters `fire_timer`,
+/// whose guarded path resolves every state correctly from history — still
+/// live records and delivers, already-fired-but-unacknowledged reconciles the
+/// recorder and delivers the owed wake, cancelled/retired no-ops.
 ///
 /// A wheel teardown is not a failure this function can make progress against
 /// and is returned on immediately — see [`is_wheel_teardown`], which also
-/// records why the deadline ladder below was never the path at risk.
+/// records why the deadline ladder below was never the path at risk from it.
 pub(super) async fn fire_wheel_timer(
     nif_state: &Weak<EngineNifState>,
     workflow_id: &WorkflowId,
@@ -298,29 +307,41 @@ pub(super) async fn fire_wheel_timer(
             );
             return;
         }
-        if !crate::time::is_deadline_timer(timer_id) {
-            tracing::warn!(error = %error, "timer wheel fire callback failed");
-            return;
-        }
-        // A deadline fire failed. It stays eligible for a bounded retry unless we
-        // can POSITIVELY confirm it is no longer live. A liveness-read error —
-        // e.g. the same store outage that failed the fire — is UNCERTAIN, not a
-        // reason to abandon the same-epoch drive: fall through to the backoff and
-        // the next attempt, whose `fire_timer` performs its own fresh liveness
-        // read and safely no-ops if another actor has since retired the deadline.
-        match deadline_remains_live(&bridge, workflow_id, timer_id).await {
-            Ok(false) => return,
-            Ok(true) => tracing::warn!(
+        if crate::time::is_deadline_timer(timer_id) {
+            // A deadline fire failed. It stays eligible for a bounded retry
+            // unless we can POSITIVELY confirm it is no longer live. A
+            // liveness-read error — e.g. the same store outage that failed the
+            // fire — is UNCERTAIN, not a reason to abandon the same-epoch
+            // drive: fall through to the backoff and the next attempt, whose
+            // `fire_timer` performs its own fresh liveness read and safely
+            // no-ops if another actor has since retired the deadline.
+            match deadline_remains_live(&bridge, workflow_id, timer_id).await {
+                Ok(false) => return,
+                Ok(true) => tracing::warn!(
+                    error = %error,
+                    attempt,
+                    "workflow deadline fire failed while its timer is still live; retrying with backoff"
+                ),
+                Err(read_error) => tracing::warn!(
+                    error = %error,
+                    %read_error,
+                    attempt,
+                    "workflow deadline fire failed and its liveness could not be read (store outage?); treating as still-eligible and retrying with backoff"
+                ),
+            }
+        } else {
+            // An ordinary timer's failed fire needs no pre-retry read: the next
+            // attempt's `fire_timer` resolves every state from history itself
+            // (records-and-delivers, redelivers an already-recorded fire's owed
+            // wake, or no-ops a retired timer). See the function doc — dropping
+            // the fire here was the aion#145 wedge.
+            tracing::warn!(
                 error = %error,
+                %workflow_id,
+                %timer_id,
                 attempt,
-                "workflow deadline fire failed while its timer is still live; retrying with backoff"
-            ),
-            Err(read_error) => tracing::warn!(
-                error = %error,
-                %read_error,
-                attempt,
-                "workflow deadline fire failed and its liveness could not be read (store outage?); treating as still-eligible and retrying with backoff"
-            ),
+                "timer wheel fire callback failed; retrying with backoff"
+            );
         }
         if attempt == MAX_ATTEMPTS {
             break;
@@ -328,11 +349,27 @@ pub(super) async fn fire_wheel_timer(
         tokio::time::sleep(backoff).await;
         backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
     }
-    tracing::error!(
-        %workflow_id,
-        %timer_id,
-        "workflow deadline fire exhausted same-epoch retries; the durable timer stays live for restart recovery"
-    );
+    if crate::time::is_deadline_timer(timer_id) {
+        tracing::error!(
+            %workflow_id,
+            %timer_id,
+            "workflow deadline fire exhausted same-epoch retries; the durable timer stays live for restart recovery"
+        );
+    } else {
+        // Both end states are stated because this function cannot tell them
+        // apart: if the `TimerFired` append never landed, the durable
+        // `TimerStarted` is still live and restart recovery re-drives the fire;
+        // if an append landed but its acknowledgement was lost, the recorded
+        // fire is consumed by replay on restart. Either way the fire is NOT
+        // recoverable within this engine epoch once the ladder is spent.
+        tracing::error!(
+            %workflow_id,
+            %timer_id,
+            "timer fire exhausted same-epoch retries; if its TimerFired append never landed, the \
+             durable TimerStarted stays live for restart recovery, and if an append landed \
+             unacknowledged, the recorded fire is consumed by replay on restart"
+        );
+    }
 }
 
 /// Whether the reserved deadline timer `timer_id` is still live in durable

@@ -221,18 +221,33 @@ pub enum EngineSeamError {
     },
 }
 
-/// Whether a recorder seam durably appended a timer event, or refused it because
-/// the workflow's active run already reached a terminal.
+/// Whether a recorder seam durably appended a timer event, found it already
+/// durably recorded, or refused it because the workflow's active run already
+/// reached a terminal.
 ///
 /// A refusal is a benign, expected outcome — a late timer fire or cancel that
 /// lands after the run terminated — not an error. It exists as an explicit value
 /// so the timer service can distinguish "appended" from "refused" and deliver a
-/// mailbox wake ONLY for a genuine append: a refused post-terminal fire must
-/// never wake (and thereby reschedule) a workflow that has already terminated.
+/// mailbox wake ONLY when the durable record exists: a refused post-terminal
+/// fire must never wake (and thereby reschedule) a workflow that has already
+/// terminated.
+///
+/// [`Self::AlreadyRecorded`] is the ack-loss shape (aion#145): an earlier
+/// `TimerFired` append LANDED in the store while its acknowledgement was lost,
+/// so a retry of the same fire finds its own event already at the timer's head.
+/// The seam reconciles the recorder's tracked sequence forward to the durable
+/// head, appends nothing, and reports this value so the caller delivers the owed
+/// mailbox wake exactly as it would for [`Self::Recorded`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RecordOutcome {
     /// The event was durably appended through the target run's Recorder.
     Recorded,
+    /// The event was already durably recorded by an earlier acknowledgement-lost
+    /// append from this run's own Recorder (single writer: an event of that
+    /// exact shape can only be ours). Nothing was appended now; the recorder's
+    /// tracked head was reconciled forward, and the owed wake must still follow
+    /// exactly as for [`Self::Recorded`].
+    AlreadyRecorded,
     /// The append was refused because the active run already recorded a terminal;
     /// no history was mutated and no wake must follow.
     RefusedTerminal,
@@ -321,12 +336,16 @@ pub trait EngineHandle: Send + Sync {
 
     /// Records an event through the target workflow's single AD Recorder.
     ///
-    /// Returns [`RecordOutcome::Recorded`] when the event was durably appended, or
-    /// [`RecordOutcome::RefusedTerminal`] when the append was declined because the
-    /// active run already recorded a terminal (a benign late arrival). Callers
-    /// that follow a recorded fire with a mailbox wake MUST gate the wake on
-    /// `Recorded` — a `RefusedTerminal` fire must not reschedule a terminated
-    /// workflow.
+    /// Returns [`RecordOutcome::Recorded`] when the event was durably appended,
+    /// [`RecordOutcome::AlreadyRecorded`] when an earlier acknowledgement-lost
+    /// append of the same timer fire is found already durable (nothing is
+    /// appended and the recorder's tracked head is reconciled forward —
+    /// aion#145), or [`RecordOutcome::RefusedTerminal`] when the append was
+    /// declined because the active run already recorded a terminal (a benign
+    /// late arrival). Callers that follow a recorded fire with a mailbox wake
+    /// MUST deliver it for `Recorded` AND `AlreadyRecorded` — the durable record
+    /// exists in both — and MUST withhold it for `RefusedTerminal`, which must
+    /// not reschedule a terminated workflow.
     ///
     /// # Errors
     ///
@@ -751,6 +770,33 @@ pub(crate) mod test_support {
                 // Simulate the production bridge refusing a late fire/cancel under
                 // the recorder lock: nothing is appended and no wake must follow.
                 return Ok(RecordOutcome::RefusedTerminal);
+            }
+            // The seam contract's already-recorded answer (aion#145), mirrored
+            // from the production bridge so multi-fire paths (retry ladders,
+            // recovery ticks) behave against this fake as they do against the
+            // real seam: a `TimerFired` whose timer already shows `TimerFired`
+            // as its last recorded event is NOT appended again — the earlier
+            // append is the durable record — and the caller must still deliver
+            // the owed wake. Decided from the fake's own recorded history via
+            // the same disposition model the bridge consults; the bridge-side
+            // behavior itself (including recorder-sequence reconciliation) is
+            // pinned by the real-bridge tests in `runtime::nif_timer_bridge_tests`.
+            if let Event::TimerFired { timer_id, .. } = &event {
+                let workflow_history: Vec<Event> = state
+                    .recorded_events
+                    .iter()
+                    .filter(|(recorded_workflow_id, _)| recorded_workflow_id == workflow_id)
+                    .map(|(_, recorded_event)| recorded_event.clone())
+                    .collect();
+                if matches!(
+                    crate::time::timer_service::timer_disposition_in_active_segment(
+                        &workflow_history,
+                        timer_id,
+                    ),
+                    crate::time::timer_service::TimerDisposition::Fired
+                ) {
+                    return Ok(RecordOutcome::AlreadyRecorded);
+                }
             }
             state
                 .recorded_events

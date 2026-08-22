@@ -20,19 +20,26 @@ use crate::time::{DeadlineHandler, DeadlineHandlerError};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// An [`EventStore`] wrapping an in-memory store whose `read_history` fails for a
-/// configured number of the next calls (a bounded, deterministic "store outage"),
-/// then delegates. Every other operation delegates unconditionally.
-struct FlakyReadStore {
+/// An [`EventStore`] wrapping an in-memory store with bounded, deterministic
+/// fault injection: `read_history` can fail outright for the next N calls, and
+/// `append` can either be REFUSED (nothing lands) or suffer an
+/// acknowledgement loss (the write LANDS in the inner store and the caller
+/// still sees `Err` — the aion#145 incident shape). Every other operation
+/// delegates unconditionally.
+struct FaultableStore {
     inner: Arc<InMemoryStore>,
     fail_reads: AtomicUsize,
+    refuse_appends: AtomicUsize,
+    lose_append_acks: AtomicUsize,
 }
 
-impl FlakyReadStore {
+impl FaultableStore {
     fn new(inner: Arc<InMemoryStore>) -> Self {
         Self {
             inner,
             fail_reads: AtomicUsize::new(0),
+            refuse_appends: AtomicUsize::new(0),
+            lose_append_acks: AtomicUsize::new(0),
         }
     }
 
@@ -41,19 +48,26 @@ impl FlakyReadStore {
         self.fail_reads.store(count, Ordering::SeqCst);
     }
 
-    /// Consumes one armed read failure, returning whether this call should fail.
-    fn take_read_failure(&self) -> bool {
-        let mut current = self.fail_reads.load(Ordering::SeqCst);
+    /// Arms the next `count` `append` calls to be refused with NOTHING landing.
+    fn refuse_next_appends(&self, count: usize) {
+        self.refuse_appends.store(count, Ordering::SeqCst);
+    }
+
+    /// Arms the next `count` `append` calls to LAND in the inner store while
+    /// the caller still receives an error — the ack-loss incident shape.
+    fn lose_next_append_acks(&self, count: usize) {
+        self.lose_append_acks.store(count, Ordering::SeqCst);
+    }
+
+    /// Consumes one armed fault from `counter`, returning whether it fired.
+    fn take_fault(counter: &AtomicUsize) -> bool {
+        let mut current = counter.load(Ordering::SeqCst);
         loop {
             if current == 0 {
                 return false;
             }
-            match self.fail_reads.compare_exchange(
-                current,
-                current - 1,
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-            ) {
+            match counter.compare_exchange(current, current - 1, Ordering::SeqCst, Ordering::SeqCst)
+            {
                 Ok(_) => return true,
                 Err(actual) => current = actual,
             }
@@ -62,9 +76,9 @@ impl FlakyReadStore {
 }
 
 #[async_trait::async_trait]
-impl ReadableEventStore for FlakyReadStore {
+impl ReadableEventStore for FaultableStore {
     async fn read_history(&self, workflow_id: &WorkflowId) -> Result<Vec<Event>, StoreError> {
-        if self.take_read_failure() {
+        if Self::take_fault(&self.fail_reads) {
             return Err(StoreError::Backend(
                 "simulated store outage during read_history".to_owned(),
             ));
@@ -120,7 +134,7 @@ impl ReadableEventStore for FlakyReadStore {
 }
 
 #[async_trait::async_trait]
-impl WritableEventStore for FlakyReadStore {
+impl WritableEventStore for FaultableStore {
     async fn append(
         &self,
         token: WriteToken,
@@ -128,6 +142,24 @@ impl WritableEventStore for FlakyReadStore {
         events: &[Event],
         expected_seq: u64,
     ) -> Result<(), StoreError> {
+        if Self::take_fault(&self.refuse_appends) {
+            return Err(StoreError::Backend(
+                "simulated store outage: append refused before any write landed".to_owned(),
+            ));
+        }
+        if Self::take_fault(&self.lose_append_acks) {
+            // The write LANDS; only the acknowledgement is lost. A genuine inner
+            // failure (e.g. a sequence conflict) still surfaces as itself —
+            // masking it would let the fault injector manufacture the incident
+            // on top of an append the store never took.
+            self.inner
+                .append(token, workflow_id, events, expected_seq)
+                .await?;
+            return Err(StoreError::Backend(
+                "simulated acknowledgement loss: the append landed but the caller's ack timed out"
+                    .to_owned(),
+            ));
+        }
         self.inner
             .append(token, workflow_id, events, expected_seq)
             .await
@@ -135,7 +167,7 @@ impl WritableEventStore for FlakyReadStore {
 }
 
 #[async_trait::async_trait]
-impl aion_store::PackageStore for FlakyReadStore {
+impl aion_store::PackageStore for FaultableStore {
     async fn put_package(&self, record: PackageRecord) -> Result<(), StoreError> {
         self.inner.put_package(record).await
     }
@@ -234,7 +266,7 @@ async fn deadline_fire_retries_through_a_store_outage_spanning_both_reads() -> T
         .record_timer_started(Utc::now(), deadline_id.clone(), Utc::now())
         .await?;
 
-    let flaky = Arc::new(FlakyReadStore::new(inner));
+    let flaky = Arc::new(FaultableStore::new(inner));
     let registry = Arc::new(Registry::default());
     install_timer_nif_bridge(
         runtime.nif_state(),
@@ -268,6 +300,275 @@ async fn deadline_fire_retries_through_a_store_outage_spanning_both_reads() -> T
         "a later retry attempt drove the deadline fire to the handler after the double-read outage"
     );
     runtime.shutdown()?;
+    Ok(())
+}
+
+/// Shared fixture for the aion#145 ordinary-timer ladder tests: a runtime with
+/// a REAL inert live process (so a delivered wake goes through the genuine
+/// `wake_workflow` path instead of erroring on a fake pid), a resident
+/// registered workflow whose Recorder writes THROUGH the [`FaultableStore`],
+/// and an ordinary named timer recorded live in durable history through that
+/// same recorder — history `[WorkflowStarted(1), TimerStarted(2)]`, recorder
+/// head `2`.
+struct OrdinaryFireFixture {
+    runtime: Arc<crate::runtime::RuntimeHandle>,
+    inner: Arc<InMemoryStore>,
+    faulted: Arc<FaultableStore>,
+    registry: Arc<Registry>,
+    workflow_id: WorkflowId,
+    run_id: RunId,
+    timer_id: TimerId,
+}
+
+impl OrdinaryFireFixture {
+    async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+        let inner = Arc::new(InMemoryStore::default());
+        let faulted = Arc::new(FaultableStore::new(Arc::clone(&inner)));
+        let registry = Arc::new(Registry::default());
+        let pid = runtime.spawn_test_process()?;
+        let store: Arc<dyn EventStore> = Arc::clone(&faulted) as Arc<dyn EventStore>;
+        let (workflow_id, run_id) = seed_resident_workflow(&registry, &store, pid).await?;
+        install_timer_nif_bridge(
+            runtime.nif_state(),
+            Arc::clone(&registry),
+            Arc::clone(&faulted) as Arc<dyn EventStore>,
+            tokio::runtime::Handle::current(),
+            runtime.signal_delivery(),
+        );
+        let timer_id = TimerId::named("ordinary-loop")?;
+        let handle = registry
+            .get(&workflow_id, &run_id)?
+            .ok_or("the seeded workflow must be registered")?;
+        let recorder = handle.recorder();
+        recorder
+            .lock()
+            .await
+            .record_timer_started(Utc::now(), timer_id.clone(), Utc::now())
+            .await?;
+        Ok(Self {
+            runtime,
+            inner,
+            faulted,
+            registry,
+            workflow_id,
+            run_id,
+            timer_id,
+        })
+    }
+
+    /// Drive the wheel's fire ladder for the fixture's ordinary timer.
+    async fn fire_through_ladder(&self) {
+        fire_wheel_timer(
+            &Arc::downgrade(self.runtime.nif_state()),
+            &self.workflow_id,
+            &self.timer_id,
+            Utc::now(),
+        )
+        .await;
+    }
+
+    /// Count of durable `TimerFired` events for the fixture's timer.
+    async fn fired_count(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        Ok(self
+            .inner
+            .read_history(&self.workflow_id)
+            .await?
+            .iter()
+            .filter(|event| {
+                matches!(event, Event::TimerFired { timer_id, .. } if timer_id == &self.timer_id)
+            })
+            .count())
+    }
+
+    /// Assert the registered handle's Recorder tracks `expected_head`, then
+    /// prove the workflow's NEXT append through that SAME recorder lands at
+    /// `expected_head + 1` — the assertion that catches a stale-low recorder
+    /// as the `SequenceConflict` wedge it would become one event later.
+    async fn assert_recorder_healthy_at(
+        &self,
+        expected_head: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let handle = self
+            .registry
+            .get(&self.workflow_id, &self.run_id)?
+            .ok_or("the workflow handle must still be registered")?;
+        let recorder = handle.recorder();
+        let mut recorder = recorder.lock().await;
+        assert_eq!(
+            recorder.current_head(),
+            expected_head,
+            "the recorder's tracked head must match the durable head"
+        );
+        recorder
+            .record_signal_received(
+                Utc::now(),
+                "after-the-incident".to_owned(),
+                Payload::from_json(&serde_json::json!({}))?,
+            )
+            .await
+            .map_err(|error| {
+                format!(
+                    "the workflow's next append through the same recorder must succeed, got: {error}"
+                )
+            })?;
+        let history = self.inner.read_history(&self.workflow_id).await?;
+        let head = history
+            .last()
+            .ok_or("the history cannot be empty after a successful append")?;
+        assert!(
+            matches!(head, Event::SignalReceived { .. }),
+            "the next append must be the event just recorded: {head:?}"
+        );
+        assert_eq!(
+            head.seq(),
+            expected_head + 1,
+            "the next append lands at the correct sequence"
+        );
+        Ok(())
+    }
+}
+
+/// aion#145, the incident shape end-to-end: an ordinary timer's `TimerFired`
+/// append LANDS in the store while the caller's acknowledgement is lost. The
+/// ladder retries; the retry finds the fire already recorded, reconciles the
+/// recorder's stale sequence forward under the recorder lock
+/// (`RecordOutcome::AlreadyRecorded`, nothing appended), and delivers the owed
+/// wake through the genuine `wake_workflow` path to the fixture's live
+/// process. The closing assertion is the one that pins Part 3: the workflow's
+/// NEXT append through the SAME recorder succeeds at the correct sequence.
+///
+/// This is the unconditional mutant killer for the three parts together:
+/// - revert Part 1 (ordinary timers WARN-and-drop): no retry runs, nothing
+///   reconciles, the next-append assertion dies on `SequenceConflict`;
+/// - revert Part 2 (fired-at-head → silent no-op): the retry never re-enters
+///   the recorder seam, nothing reconciles — same red;
+/// - revert Part 3 (no already-recorded branch in the bridge): the retry
+///   re-appends into a `SequenceConflict` every attempt, the recorder stays
+///   stale — same red (and a double append would also redden the
+///   exactly-one assertion).
+#[tokio::test(flavor = "multi_thread")]
+async fn an_ack_lost_ordinary_fire_is_retried_reconciled_and_the_run_keeps_appending() -> TestResult
+{
+    let fixture = OrdinaryFireFixture::new().await?;
+    fixture.faulted.lose_next_append_acks(1);
+
+    fixture.fire_through_ladder().await;
+
+    assert_eq!(
+        fixture.fired_count().await?,
+        1,
+        "exactly one durable TimerFired: the landed-unacknowledged append, never a duplicate"
+    );
+    let history = fixture.inner.read_history(&fixture.workflow_id).await?;
+    assert_eq!(
+        history.len(),
+        3,
+        "WorkflowStarted, TimerStarted, TimerFired and nothing else: {history:#?}"
+    );
+    fixture.assert_recorder_healthy_at(3).await?;
+    fixture.runtime.shutdown()?;
+    Ok(())
+}
+
+/// aion#145 Part 1 in isolation: a fire attempt that fails OUTRIGHT (the
+/// append is refused, nothing lands) must be retried within the same engine
+/// epoch, and the retry records exactly one `TimerFired` with the recorder
+/// advanced normally. Mutation-sensitive: reverting the ordinary-timer ladder
+/// to WARN-and-drop leaves history with no fire at all — the pre-fix wedge.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_transiently_refused_ordinary_fire_is_retried_to_success() -> TestResult {
+    let fixture = OrdinaryFireFixture::new().await?;
+    fixture.faulted.refuse_next_appends(1);
+
+    fixture.fire_through_ladder().await;
+
+    assert_eq!(
+        fixture.fired_count().await?,
+        1,
+        "the retry must record the fire exactly once after the refused first attempt"
+    );
+    fixture.assert_recorder_healthy_at(3).await?;
+    fixture.runtime.shutdown()?;
+    Ok(())
+}
+
+/// aion#145 Part 3's guard rail: reconciliation keys on THIS timer's own last
+/// event, and a rogue event at the head — even one of the same KIND, for a
+/// different timer id — must NOT trigger it. The genuine double-writer
+/// indicator keeps surfacing un-resynced, exactly as the Recorder-level pin
+/// `sequence_conflict_surfaces_without_advancing_or_retrying` demands; this is
+/// the same law measured at the bridge, where the reconciliation branch lives.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rogue_head_event_does_not_reconcile_and_the_conflict_surfaces() -> TestResult {
+    use crate::engine_seam::EngineHandle;
+
+    let fixture = OrdinaryFireFixture::new().await?;
+    // A rogue writer lands a TimerFired for a DIFFERENT timer behind the
+    // registered recorder's back (the recorder still tracks head 2).
+    let rogue_id = TimerId::named("rogue-timer")?;
+    fixture
+        .inner
+        .append(
+            WriteToken::recorder(),
+            &fixture.workflow_id,
+            &[Event::TimerFired {
+                envelope: aion_core::EventEnvelope {
+                    seq: 3,
+                    recorded_at: Utc::now(),
+                    workflow_id: fixture.workflow_id.clone(),
+                },
+                timer_id: rogue_id,
+            }],
+            2,
+        )
+        .await?;
+    let bridge = super::timer_bridge(fixture.runtime.nif_state())
+        .map_err(|error| format!("the timer bridge must be installed: {error}"))?;
+
+    let refused = bridge.record_workflow_event(
+        &fixture.workflow_id,
+        Event::TimerFired {
+            envelope: aion_core::EventEnvelope {
+                seq: 3,
+                recorded_at: Utc::now(),
+                workflow_id: fixture.workflow_id.clone(),
+            },
+            timer_id: fixture.timer_id.clone(),
+        },
+    );
+
+    let Err(error) = refused else {
+        return Err(
+            "a rogue head event must NOT be taken for our own landed append: the fire for OUR \
+             timer must surface the sequence conflict, not reconcile over a second writer"
+                .into(),
+        );
+    };
+    assert!(
+        error.to_string().contains("sequence conflict"),
+        "the double-writer indicator must surface as itself: {error}"
+    );
+    let handle = fixture
+        .registry
+        .get(&fixture.workflow_id, &fixture.run_id)?
+        .ok_or("the workflow handle must still be registered")?;
+    let recorder = handle.recorder();
+    assert_eq!(
+        recorder.lock().await.current_head(),
+        2,
+        "the conflict must leave the recorder's tracked head un-resynced"
+    );
+    assert_eq!(
+        fixture
+            .inner
+            .read_history(&fixture.workflow_id)
+            .await?
+            .len(),
+        3,
+        "the refused append must not have grown the history"
+    );
+    fixture.runtime.shutdown()?;
     Ok(())
 }
 
@@ -1049,6 +1350,21 @@ async fn seed_running_workflow(
     store: &Arc<InMemoryStore>,
     pid: u64,
 ) -> Result<WorkflowId, Box<dyn std::error::Error>> {
+    let store: Arc<dyn EventStore> = Arc::clone(store) as Arc<dyn EventStore>;
+    seed_resident_workflow(registry, &store, pid)
+        .await
+        .map(|(workflow_id, _)| workflow_id)
+}
+
+/// [`seed_running_workflow`] over any [`EventStore`] — the fault-injection
+/// tests need the registered handle's Recorder writing THROUGH the faultable
+/// wrapper, not around it — returning the run id as well so tests can retrieve
+/// the handle (and its recorder) back from the registry.
+async fn seed_resident_workflow(
+    registry: &Registry,
+    store: &Arc<dyn EventStore>,
+    pid: u64,
+) -> Result<(WorkflowId, RunId), Box<dyn std::error::Error>> {
     use crate::registry::{
         CompletionNotifier, HandleResidency, WorkflowHandle, WorkflowHandleParts,
     };
@@ -1072,7 +1388,7 @@ async fn seed_running_workflow(
     store
         .append(WriteToken::recorder(), &workflow_id, &[started], 0)
         .await?;
-    let recorder = Recorder::resume_at(workflow_id.clone(), Arc::clone(store) as _, 1);
+    let recorder = Recorder::resume_at(workflow_id.clone(), Arc::clone(store), 1);
     let handle = WorkflowHandle::new(WorkflowHandleParts {
         workflow_id: workflow_id.clone(),
         run_id: run_id.clone(),
@@ -1085,6 +1401,6 @@ async fn seed_running_workflow(
         recorder,
         completion: CompletionNotifier::new(),
     });
-    registry.insert((workflow_id.clone(), run_id), handle)?;
-    Ok(workflow_id)
+    registry.insert((workflow_id.clone(), run_id.clone()), handle)?;
+    Ok((workflow_id, run_id))
 }
