@@ -53,7 +53,7 @@ pub use envelope_delta::{
 pub use environment::{
     ChildEnvironment, EnvironmentDeclaration, EnvironmentError, process_environment,
 };
-pub use error::HarnessError;
+pub use error::{HarnessError, PolicyRefusalDetection};
 pub use spec::AgentRunSpec;
 pub use workspace::HarnessWorkspace;
 

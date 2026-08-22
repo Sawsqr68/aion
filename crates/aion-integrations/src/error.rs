@@ -6,6 +6,15 @@
 //! at all (as generic descriptions, never a specific protocol type). An adapter maps its own
 //! failures onto these variants; callers above the adapter branch on the variant alone.
 
+/// How an adapter recognised a provider policy refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyRefusalDetection {
+    /// A typed or structured discriminator identified the refusal.
+    Structured,
+    /// The adapter matched a documented, narrowly bounded provider message.
+    Textual,
+}
+
 /// The neutral error taxonomy for the harness-integration seam.
 ///
 /// Every arm is harness-neutral. [`Self::CapabilityNotSupported`] is the first-class outcome an
@@ -79,6 +88,19 @@ pub enum HarnessError {
     Harness {
         /// Human-readable description of the reported failure.
         detail: String,
+    },
+    /// The provider declined to execute the run under its safety policy.
+    ///
+    /// This is stochastic: the same content has succeeded on a later attempt, so
+    /// [`Self::is_deterministic`] returns `false`. It remains distinct from
+    /// [`Self::Harness`] because callers route on this class before considering an
+    /// ordinary same-provider retry.
+    #[error("provider policy refused the run: {detail}")]
+    PolicyRefused {
+        /// Human-readable adapter-owned detail preserving the provider's refusal.
+        detail: String,
+        /// Whether recognition used a structured discriminator or admitted prose.
+        detection: PolicyRefusalDetection,
     },
     /// The harness cannot be launched as CONFIGURED, so no run was started.
     ///
@@ -164,6 +186,15 @@ impl HarnessError {
         }
     }
 
+    /// Builds a [`Self::PolicyRefused`] with the adapter-owned refusal detail.
+    #[must_use]
+    pub fn policy_refused(detail: impl Into<String>, detection: PolicyRefusalDetection) -> Self {
+        Self::PolicyRefused {
+            detail: detail.into(),
+            detection,
+        }
+    }
+
     /// Builds a [`Self::Contract`] with a detail message naming the canonical
     /// agent-outcome contract and what was found instead.
     #[must_use]
@@ -213,6 +244,9 @@ impl HarnessError {
     /// - [`Self::Protocol`]: a malformed frame CAN be a one-off peer flake
     ///   (truncated stream, interleaved write), so it stays retryable even
     ///   though some protocol faults are in fact permanent.
+    /// - [`Self::PolicyRefused`]: stochastic by measurement — the same act and
+    ///   content have succeeded on a later attempt. The dedicated class is a
+    ///   route-first control signal, not a claim that the refusal is permanent.
     /// - [`Self::Harness`]: the run failed; overload and timeouts recur or
     ///   do not — that judgement belongs to the retry policy.
     /// - [`Self::CapabilityNotSupported`] / [`Self::StaleTarget`]: gating and
@@ -227,6 +261,7 @@ impl HarnessError {
             | Self::Occupied { .. }
             | Self::Transport { .. }
             | Self::Protocol { .. }
+            | Self::PolicyRefused { .. }
             | Self::Harness { .. } => false,
         }
     }
@@ -292,6 +327,10 @@ mod tests {
             HarnessError::occupied("live sibling pid 7 holds this tree"),
             HarnessError::transport("broken pipe"),
             HarnessError::protocol("invalid JSON frame"),
+            HarnessError::policy_refused(
+                "provider rejected the request",
+                super::PolicyRefusalDetection::Structured,
+            ),
             HarnessError::harness("run stopped without completing"),
             HarnessError::stale_target("attempt 2 superseded"),
             HarnessError::capability_not_supported("pause_resume"),

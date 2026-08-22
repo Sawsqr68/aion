@@ -65,9 +65,14 @@ async fn refusal_and_the_two_limits_are_failures_naming_themselves() -> TestResu
             session.wait_result().await.err().ok_or_else(|| {
                 format!("`{reason}` must never be reported as a completed result")
             })?;
+        let expected_class = if reason == "refusal" {
+            matches!(error, HarnessError::PolicyRefused { .. })
+        } else {
+            matches!(error, HarnessError::Harness { .. })
+        };
         assert!(
-            matches!(error, HarnessError::Harness { .. }),
-            "`{reason}` is a harness failure, got {error:?}"
+            expected_class,
+            "`{reason}` has its adapter-local class, got {error:?}"
         );
         let message = error.to_string();
         assert!(

@@ -20,6 +20,8 @@ pub enum ProtoActivityErrorKind {
     Unspecified = 0,
     /// Activity failure may be retried by the engine.
     Retryable = 1,
+    /// Provider policy refusal to be routed before ordinary retry handling.
+    PolicyRefused = 3,
     /// Activity failure is terminal.
     Terminal = 2,
 }
@@ -298,6 +300,7 @@ impl From<aion_core::ActivityErrorKind> for ProtoActivityErrorKind {
     fn from(value: aion_core::ActivityErrorKind) -> Self {
         match value {
             aion_core::ActivityErrorKind::Retryable => Self::Retryable,
+            aion_core::ActivityErrorKind::PolicyRefused => Self::PolicyRefused,
             aion_core::ActivityErrorKind::Terminal => Self::Terminal,
         }
     }
@@ -312,6 +315,7 @@ impl TryFrom<ProtoActivityErrorKind> for aion_core::ActivityErrorKind {
                 Err(WireError::backend("activity error kind is missing"))
             }
             ProtoActivityErrorKind::Retryable => Ok(Self::Retryable),
+            ProtoActivityErrorKind::PolicyRefused => Ok(Self::PolicyRefused),
             ProtoActivityErrorKind::Terminal => Ok(Self::Terminal),
         }
     }
@@ -374,6 +378,18 @@ mod tests {
         let proto = ProtoActivityError::from(core.clone());
         assert_eq!(aion_core::ActivityError::try_from(proto.clone())?, core);
         assert!(aion_core::ActivityError::try_from(proto)?.is_retryable());
+
+        let policy_refused = ProtoActivityError {
+            kind: ProtoActivityErrorKind::PolicyRefused as i32,
+            message: String::from("provider safety policy"),
+            details: None,
+        };
+        let policy_refused = aion_core::ActivityError::try_from(policy_refused)?;
+        assert_eq!(
+            policy_refused.kind,
+            aion_core::ActivityErrorKind::PolicyRefused
+        );
+        assert!(!policy_refused.is_retryable());
 
         let terminal = ProtoActivityError {
             kind: ProtoActivityErrorKind::Terminal as i32,

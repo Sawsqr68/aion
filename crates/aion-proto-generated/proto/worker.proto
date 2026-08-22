@@ -237,6 +237,7 @@ enum ActivityErrorKind {
   ACTIVITY_ERROR_KIND_UNSPECIFIED = 0;
   ACTIVITY_ERROR_KIND_RETRYABLE = 1;
   ACTIVITY_ERROR_KIND_TERMINAL = 2;
+  ACTIVITY_ERROR_KIND_POLICY_REFUSED = 3;
 }
 
 // Failure shape mirroring aion-core ActivityError without inferring retryability

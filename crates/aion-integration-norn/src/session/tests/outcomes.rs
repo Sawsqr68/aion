@@ -127,6 +127,72 @@ fn each_non_completed_stop_reason_surfaces_with_its_detail_and_partial_verbatim(
 }
 
 #[test]
+fn structured_provider_policy_refusal_has_its_own_class() -> TestResult {
+    let response: JsonRpcResponse = serde_json::from_value(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+            "code": -32603,
+            "message": "agent error",
+            "data": { "error": { "code": "cyber_policy" } }
+        }
+    }))?;
+    let Err(error) = response_into_payload(response) else {
+        return Err("a structured policy refusal must not be a payload".into());
+    };
+    assert!(matches!(
+        error,
+        HarnessError::PolicyRefused {
+            detection: PolicyRefusalDetection::Structured,
+            ..
+        }
+    ));
+    Ok(())
+}
+
+#[test]
+fn measured_norn_policy_phrase_is_the_narrow_textual_fallback() -> TestResult {
+    let response: JsonRpcResponse = serde_json::from_value(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+            "code": -32603,
+            "message": "provider error: invalid request: provider rejected the request under its cybersecurity policy"
+        }
+    }))?;
+    let Err(error) = response_into_payload(response) else {
+        return Err("the measured policy refusal phrase must not be a payload".into());
+    };
+    assert!(matches!(
+        error,
+        HarnessError::PolicyRefused {
+            detection: PolicyRefusalDetection::Textual,
+            ..
+        }
+    ));
+    Ok(())
+}
+
+#[test]
+fn ordinary_generic_json_rpc_failure_remains_harness_retryable() -> TestResult {
+    let response: JsonRpcResponse = serde_json::from_value(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+            "code": -32603,
+            "message": "provider overloaded",
+            "data": { "error": { "code": "server_error" } }
+        }
+    }))?;
+    let Err(error) = response_into_payload(response) else {
+        return Err("an ordinary JSON-RPC failure must not be a payload".into());
+    };
+    assert!(matches!(error, HarnessError::Harness { .. }));
+    assert!(!error.is_deterministic());
+    Ok(())
+}
+
+#[test]
 fn null_result_is_the_slash_command_harness_error() -> TestResult {
     // A prompt that resolves entirely to a local slash command is answered with a success
     // Response whose result is JSON null — an agent activity must produce output.

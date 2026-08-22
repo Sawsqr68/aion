@@ -290,6 +290,8 @@ export function completionIdentity(task: ActivityTask): ActivityCompletionIdenti
 
 export interface ActivityFailure {
 	readonly retryable: boolean;
+	/** Provider policy refusal; takes precedence over `retryable` when true. */
+	readonly policyRefused?: boolean;
 	readonly message: string;
 	readonly details?: Payload;
 }
@@ -870,9 +872,11 @@ function encodeFailure(failure: ActivityFailure): ActivityError {
 		throw new Error("activity failure message must not be empty");
 	}
 	return {
-		kind: failure.retryable
-			? ActivityErrorKind.ACTIVITY_ERROR_KIND_RETRYABLE
-			: ActivityErrorKind.ACTIVITY_ERROR_KIND_TERMINAL,
+		kind: failure.policyRefused
+			? ActivityErrorKind.ACTIVITY_ERROR_KIND_POLICY_REFUSED
+			: failure.retryable
+				? ActivityErrorKind.ACTIVITY_ERROR_KIND_RETRYABLE
+				: ActivityErrorKind.ACTIVITY_ERROR_KIND_TERMINAL,
 		message: failure.message,
 		details:
 			failure.details === undefined

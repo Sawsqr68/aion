@@ -26,6 +26,7 @@ export enum ActivityErrorKind {
   ACTIVITY_ERROR_KIND_UNSPECIFIED = 0,
   ACTIVITY_ERROR_KIND_RETRYABLE = 1,
   ACTIVITY_ERROR_KIND_TERMINAL = 2,
+  ACTIVITY_ERROR_KIND_POLICY_REFUSED = 3,
   UNRECOGNIZED = -1,
 }
 
@@ -40,6 +41,9 @@ export function activityErrorKindFromJSON(object: any): ActivityErrorKind {
     case 2:
     case "ACTIVITY_ERROR_KIND_TERMINAL":
       return ActivityErrorKind.ACTIVITY_ERROR_KIND_TERMINAL;
+    case 3:
+    case "ACTIVITY_ERROR_KIND_POLICY_REFUSED":
+      return ActivityErrorKind.ACTIVITY_ERROR_KIND_POLICY_REFUSED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -55,6 +59,8 @@ export function activityErrorKindToJSON(object: ActivityErrorKind): string {
       return "ACTIVITY_ERROR_KIND_RETRYABLE";
     case ActivityErrorKind.ACTIVITY_ERROR_KIND_TERMINAL:
       return "ACTIVITY_ERROR_KIND_TERMINAL";
+    case ActivityErrorKind.ACTIVITY_ERROR_KIND_POLICY_REFUSED:
+      return "ACTIVITY_ERROR_KIND_POLICY_REFUSED";
     case ActivityErrorKind.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
