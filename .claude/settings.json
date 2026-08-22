@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "collective notify check --stdin --dm-only --xml",
+            "command": "collective notify check --stdin --dm-only --xml 2>/dev/null || true",
             "type": "command"
           }
         ],
@@ -27,7 +27,7 @@
       {
         "hooks": [
           {
-            "command": "collective notify check --stdin --dm-only --xml",
+            "command": "collective notify check --stdin --dm-only --xml 2>/dev/null || true",
             "type": "command"
           }
         ],
@@ -60,7 +60,7 @@
       {
         "hooks": [
           {
-            "command": "collective notify check --stdin --xml",
+            "command": "collective notify check --stdin --xml 2>/dev/null || true",
             "type": "command"
           }
         ],
