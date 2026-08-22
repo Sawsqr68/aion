@@ -9,12 +9,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use aion_core::{
-    ActivityEvent, ActivityEventKind, ActivityId, ContentType, InterventionCapabilities,
-    InterventionCommand, InterventionKind, InterventionPrimitive, MessageRole, Payload, RunId,
-    WorkflowId,
+    ActivityErrorKind, ActivityEvent, ActivityEventKind, ActivityId, ContentType,
+    InterventionCapabilities, InterventionCommand, InterventionKind, InterventionPrimitive,
+    MessageRole, Payload, RunId, WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
-use aion_integrations::error::HarnessError;
+use aion_integrations::error::{HarnessError, PolicyRefusalDetection};
 use aion_integrations::spec::AgentRunSpec;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -364,6 +364,21 @@ async fn a_harness_reported_failure_surfaces_and_maps_to_failed() {
     // The caller maps it to a retryable Failed outcome.
     match harness_error_to_outcome(&error) {
         DispatchOutcome::Failed { failure } => assert!(failure.is_retryable()),
+        DispatchOutcome::Completed { .. } => panic!("expected a Failed outcome"),
+    }
+}
+
+#[test]
+fn a_policy_refusal_maps_to_its_dedicated_activity_kind() {
+    let outcome = harness_error_to_outcome(&HarnessError::policy_refused(
+        "provider rejected the request under its safety policy",
+        PolicyRefusalDetection::Structured,
+    ));
+    match outcome {
+        DispatchOutcome::Failed { failure } => {
+            assert_eq!(failure.kind, ActivityErrorKind::PolicyRefused);
+            assert!(!failure.is_retryable());
+        }
         DispatchOutcome::Completed { .. } => panic!("expected a Failed outcome"),
     }
 }

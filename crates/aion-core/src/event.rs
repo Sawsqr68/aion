@@ -501,6 +501,24 @@ pub enum Event {
         /// One-based number of the attempt that spent the budget.
         attempt: u32,
     },
+    /// A policy-refused activity execution was durably routed to a fallback queue.
+    ///
+    /// This event is nonterminal and status-invisible. Its recorded destination
+    /// is the durable replay answer; recovery reuses it rather than choosing again.
+    ActivityFallbackRouted {
+        /// Recording metadata for this event.
+        envelope: EventEnvelope,
+        /// Activity whose refusing execution caused the hop.
+        activity_id: ActivityId,
+        /// One-based execution attempt whose policy refusal caused this hop.
+        attempt: u32,
+        /// Queue the refusing execution was dispatched on.
+        from_task_queue: String,
+        /// Queue the next execution is dispatched on.
+        to_task_queue: String,
+        /// Zero-based position consumed from the authored fallback list.
+        fallback_index: u32,
+    },
     /// An activity was cancelled as an explicit cancellation outcome.
     ActivityCancelled {
         /// Recording metadata for this event.
@@ -732,6 +750,7 @@ impl Event {
             | Self::ActivityCompleted { envelope, .. }
             | Self::ActivityFailed { envelope, .. }
             | Self::ActivityAdvisoryExhausted { envelope, .. }
+            | Self::ActivityFallbackRouted { envelope, .. }
             | Self::ActivityCancelled { envelope, .. }
             | Self::TimerStarted { envelope, .. }
             | Self::TimerFired { envelope, .. }

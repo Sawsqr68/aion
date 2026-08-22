@@ -13,7 +13,7 @@ from typing import get_type_hints
 
 from .codec import PayloadDecodeError, ResultEncodeError, decode_activity_input, encode_activity_output
 from .context import JSON_CONTENT_TYPE, ActivityContext, encode_detail
-from .errors import ActivityFailureError, RetryableError, TerminalError
+from .errors import ActivityFailureError, PolicyRefusedError, RetryableError, TerminalError
 from .loop import Completed, DispatchOutcome, Failed
 from .proto import common_pb2, worker_pb2
 from .schema import PERMISSIVE_SCHEMA, SchemaDerivationError, derive_input_schema, derive_output_schema
@@ -162,6 +162,10 @@ class ActivityRegistry:
             result = await self._invoke(spec, argument, context)
         except RetryableError as exc:
             return Failed(_classified_error(worker_pb2.ACTIVITY_ERROR_KIND_RETRYABLE, exc, task.input.content_type))
+        except PolicyRefusedError as exc:
+            return Failed(
+                _classified_error(worker_pb2.ACTIVITY_ERROR_KIND_POLICY_REFUSED, exc, task.input.content_type)
+            )
         except TerminalError as exc:
             return Failed(_classified_error(worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL, exc, task.input.content_type))
         except Exception as exc:

@@ -9,6 +9,9 @@ use crate::Payload;
 pub enum ActivityErrorKind {
     /// The activity failure may be retried according to the activity's retry policy.
     Retryable,
+    /// The provider declined the activity under policy; the engine must route it
+    /// before considering any configured same-provider retry.
+    PolicyRefused,
     /// The activity failure is terminal and must not be retried.
     Terminal,
 }
@@ -30,9 +33,24 @@ pub struct ActivityError {
 
 impl ActivityError {
     /// Returns whether the engine may retry this activity failure.
+    ///
+    /// This is not the complement of [`Self::is_settled`]: a policy refusal is
+    /// neither an ordinary retryable failure nor a settling terminal failure.
     #[must_use]
     pub fn is_retryable(&self) -> bool {
         matches!(self.kind, ActivityErrorKind::Retryable)
+    }
+
+    /// Whether this failure settles its activity: only `Terminal` does.
+    ///
+    /// The complement of [`Self::is_retryable`] is not this question.
+    /// `PolicyRefused` is neither retryable by the ordinary budget nor settling,
+    /// because routing may still hop to a declared fallback queue or spend a
+    /// configured same-provider retry. The final disposition is recorded as
+    /// `Terminal`, so settlement code asks this predicate directly.
+    #[must_use]
+    pub fn is_settled(&self) -> bool {
+        matches!(self.kind, ActivityErrorKind::Terminal)
     }
 }
 
@@ -82,6 +100,19 @@ mod tests {
         };
 
         assert!(!error.is_retryable());
+        assert!(error.is_settled());
+    }
+
+    #[test]
+    fn policy_refused_is_neither_retryable_nor_settled() {
+        let error = ActivityError {
+            kind: ActivityErrorKind::PolicyRefused,
+            message: String::from("provider policy"),
+            details: None,
+        };
+
+        assert!(!error.is_retryable());
+        assert!(!error.is_settled());
     }
 
     #[test]

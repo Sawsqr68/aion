@@ -270,6 +270,7 @@ pub(super) fn parse_config_block(stream: &mut Stream) -> Result<Option<ConfigLin
                     Keyword::Node
                         | Keyword::Timeout
                         | Keyword::Retry
+                        | Keyword::Fallback
                         | Keyword::Advisory
                         | Keyword::Agent
                 )
@@ -297,6 +298,7 @@ pub(super) fn parse_config_line(
     let mut timeout = None;
     let mut agent = None;
     let mut retry = None;
+    let mut fallback = None;
     loop {
         match stream.peek() {
             Some(token) => {
@@ -342,11 +344,18 @@ pub(super) fn parse_config_line(
                         }
                         retry = Some(parse_retry(stream, key_span)?);
                     }
+                    TokenKind::Keyword(Keyword::Fallback) => {
+                        stream.next();
+                        if fallback.is_some() {
+                            return Err(ParseError::new(key_span, "duplicate `fallback` key"));
+                        }
+                        fallback = Some(parse_fallback(stream, key_span)?);
+                    }
                     ref other => {
                         return Err(ParseError::new(
                             key_span,
                             format!(
-                                "expected a config key (`advisory`, `node`, `timeout`, `retry`), \
+                                "expected a config key (`advisory`, `agent`, `node`, `timeout`, `retry`, `fallback`), \
                                  found {}",
                                 describe(other)
                             ),
@@ -357,7 +366,7 @@ pub(super) fn parse_config_line(
             None => {
                 return Err(ParseError::new(
                     stream.eof_span(),
-                    "expected a config key (`advisory`, `node`, `timeout`, `retry`), found end \
+                    "expected a config key (`advisory`, `agent`, `node`, `timeout`, `retry`, `fallback`), found end \
                      of input",
                 ));
             }
@@ -378,8 +387,63 @@ pub(super) fn parse_config_line(
             node,
             timeout,
             retry,
+            fallback,
         });
     }
+}
+
+fn parse_fallback(
+    stream: &mut Stream,
+    fallback_span: Span,
+) -> Result<crate::ast::FallbackSpec, ParseError> {
+    let mut entries = Vec::new();
+    loop {
+        let Some(token) = stream.peek() else {
+            return Err(ParseError::new(
+                stream.eof_span(),
+                "`fallback` needs at least one task queue",
+            ));
+        };
+        match &token.kind {
+            TokenKind::Identifier(name) => {
+                let span = token.span;
+                let name = name.clone();
+                stream.next();
+                entries.push(ConfigValue { span, name });
+            }
+            TokenKind::Keyword(keyword) => {
+                return Err(ParseError::new(
+                    token.span,
+                    format!(
+                        "`fallback` task queue `{}` is a soft keyword and cannot be written in a fallback list",
+                        keyword.as_word()
+                    ),
+                ));
+            }
+            other => {
+                return Err(ParseError::new(
+                    token.span,
+                    format!(
+                        "`fallback` needs a task queue name, found {}",
+                        describe(other)
+                    ),
+                ));
+            }
+        }
+        let continues = matches!(stream.peek().map(|t| &t.kind), Some(TokenKind::Comma))
+            && matches!(
+                stream.peek_second().map(|t| &t.kind),
+                Some(TokenKind::Identifier(_))
+            );
+        if !continues {
+            break;
+        }
+        stream.next();
+    }
+    Ok(crate::ast::FallbackSpec {
+        span: fallback_span,
+        entries,
+    })
 }
 
 fn parse_retry(stream: &mut Stream, retry_span: Span) -> Result<RetrySpec, ParseError> {

@@ -13,9 +13,11 @@ class ActivityErrorKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ACTIVITY_ERROR_KIND_UNSPECIFIED: _ClassVar[ActivityErrorKind]
     ACTIVITY_ERROR_KIND_RETRYABLE: _ClassVar[ActivityErrorKind]
     ACTIVITY_ERROR_KIND_TERMINAL: _ClassVar[ActivityErrorKind]
+    ACTIVITY_ERROR_KIND_POLICY_REFUSED: _ClassVar[ActivityErrorKind]
 ACTIVITY_ERROR_KIND_UNSPECIFIED: ActivityErrorKind
 ACTIVITY_ERROR_KIND_RETRYABLE: ActivityErrorKind
 ACTIVITY_ERROR_KIND_TERMINAL: ActivityErrorKind
+ACTIVITY_ERROR_KIND_POLICY_REFUSED: ActivityErrorKind
 
 class DrainRequest(_message.Message):
     __slots__ = ()

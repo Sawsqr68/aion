@@ -278,21 +278,28 @@ fn open_this_delivery(
             if let Some(superseded) = dangling {
                 record_superseded_attempt(ctx, context, activity_id, superseded)?;
             }
-            record_started(
-                ctx,
-                context,
-                activity_id.clone(),
-                super::nif_activity::ScheduledActivity {
-                    activity_type: activity_type.to_owned(),
-                    input,
-                    task_queue: task_queue.to_owned(),
-                    node: node.map(str::to_owned),
-                    // NOI-0: stamp the SAME one-based attempt onto the recorded
-                    // `ActivityStarted` that is stamped onto the live
-                    // `ActivityDispatch` below, so history and the worker wire agree.
-                    attempt,
-                },
-            )?;
+            // A crash after recording PolicyRefused but before recording its
+            // hop leaves the routing decision pending. The async retry seam
+            // must record the hop (or final exhaustion) before any next start;
+            // eagerly recording one here would invert the durable R1-e order.
+            if super::nif_activity_fallback::trailing_policy_refusal(context.history(), activity_id)
+                .is_none()
+            {
+                record_started(
+                    ctx,
+                    context,
+                    activity_id.clone(),
+                    super::nif_activity::ScheduledActivity {
+                        activity_type: activity_type.to_owned(),
+                        input,
+                        task_queue: task_queue.to_owned(),
+                        node: node.map(str::to_owned),
+                        // NOI-0: stamp the SAME one-based attempt onto the recorded
+                        // `ActivityStarted` that is stamped onto the live wire.
+                        attempt,
+                    },
+                )?;
+            }
             Ok(attempt)
         }
     }
@@ -347,10 +354,16 @@ fn dispatch_activity_with_context(
             // never diverge. The start-time queue is read from recorded history,
             // so replay re-resolves identically.
             let start_time_task_queue = context.start_time_task_queue();
-            let task_queue = super::nif_activity::resolve_task_queue(
+            let initial_task_queue = super::nif_activity::resolve_task_queue(
                 &call.config,
                 start_time_task_queue.as_deref(),
             );
+            // A recorded hop is a post-failure override of the initial choice,
+            // not another precedence level inside `resolve_task_queue`. Reading
+            // the durable answer makes crash recovery reuse the selected queue.
+            let task_queue =
+                super::nif_activity_fallback::recorded_hop_queue(context.history(), &activity_id)
+                    .unwrap_or(initial_task_queue);
             // NODE-4: resolve the OPTIONAL node affinity once at the same seam
             // (activity pin, else None — no workflow default), and stamp the same
             // value onto BOTH the recorded `ActivityScheduled` and the live

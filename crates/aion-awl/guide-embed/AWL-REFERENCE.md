@@ -159,7 +159,7 @@ A worker block imports an external worker contract:
 ```awl
 worker dev
   action build(repo: String, clean: Bool) -> Build
-    node builder, timeout 30m, retry 2 backoff 10s..2m
+    node builder, timeout 30m, retry 2 backoff 10s..2m, fallback norn, claude
 ```
 
 The worker name (`dev`) is the task queue. Every worker has at least one action.

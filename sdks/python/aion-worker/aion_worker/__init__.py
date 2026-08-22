@@ -15,7 +15,7 @@ from .codec import (
     encode_activity_output,
 )
 from .context import ActivityCancellationHandle, ActivityContext
-from .errors import RetryableError, TerminalError
+from .errors import PolicyRefusedError, RetryableError, TerminalError
 from .host import ScriptLoadError, load_activity_script
 from .loop import (
     ActivityDispatcher,
@@ -98,6 +98,7 @@ __all__ = [
     "PendingActivityReport",
     "PendingCompletedReport",
     "PendingFailedReport",
+    "PolicyRefusedError",
     "ReconnectBackoff",
     "ReconnectConfig",
     "ReconnectError",

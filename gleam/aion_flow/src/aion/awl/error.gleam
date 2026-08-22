@@ -160,6 +160,7 @@ pub fn map_activity_error(
 fn describe_activity_error(activity_error: error.ActivityError) -> String {
   case activity_error {
     error.Retryable(message, _) -> "activity failed (retryable): " <> message
+    error.PolicyRefused(message) -> "activity policy refused: " <> message
     error.Terminal(message, _) -> "activity failed (terminal): " <> message
     error.ActivityDecodeFailed(codec.DecodeError(reason, _)) ->
       "activity output decode failed: " <> reason

@@ -244,7 +244,12 @@ async fn deliver_dyn_command(session: &dyn DynAgentSession, message: ControlMess
         Err(HarnessError::CapabilityNotSupported { .. }) => {
             InterventionOutcome::capability_not_supported(primitive)
         }
-        Err(HarnessError::StaleTarget { detail }) => InterventionOutcome::stale_target(detail),
+        // Policy refusal is a result-path class. If an adapter reports it while
+        // delivering an intervention, it follows the explicit stale-target NACK
+        // path without ending the run.
+        Err(HarnessError::StaleTarget { detail } | HarnessError::PolicyRefused { detail, .. }) => {
+            InterventionOutcome::stale_target(detail)
+        }
         Err(error) => InterventionOutcome::stale_target(error.to_string()),
     };
     match &outcome {
@@ -327,20 +332,26 @@ where
         Err(HarnessError::CapabilityNotSupported { .. }) => {
             InterventionOutcome::capability_not_supported(primitive)
         }
-        Err(HarnessError::StaleTarget { detail }) => InterventionOutcome::stale_target(detail),
+        // Policy refusal is a result-path class. If an adapter reports it while
+        // delivering an intervention, it follows the explicit stale-target NACK
+        // path without ending the run.
+        Err(HarnessError::StaleTarget { detail } | HarnessError::PolicyRefused { detail, .. }) => {
+            InterventionOutcome::stale_target(detail)
+        }
         Err(error) => InterventionOutcome::stale_target(error.to_string()),
     }
 }
 
 /// Maps a [`HarnessError`] into a [`DispatchOutcome::Failed`] a caller can report.
 ///
-/// A [`HarnessError::Harness`] (the agent ran but reported failure), a
-/// transport/protocol/stale fault, and an [`HarnessError::Occupied`] spawn
-/// refusal (a live sibling holds the declared tree — issue #33's field case)
-/// are all retryable activity failures: the attempt did not produce an
-/// accepted result, and each of those classes CAN be transient (a
-/// provider-overload burst, a one-off malformed frame, a dropped pipe, an
-/// occupant that exits or dies), so the engine re-dispatches.
+/// [`HarnessError::PolicyRefused`] is stochastic but is not an ordinary
+/// transient failure: it maps to its dedicated activity kind so the engine can
+/// route first. A [`HarnessError::Harness`] (the agent ran but reported failure),
+/// a transport/protocol/stale fault, and an [`HarnessError::Occupied`] spawn
+/// refusal (a live sibling holds the declared tree — issue #33's field case) are
+/// retryable activity failures: each CAN be transient (a provider-overload
+/// burst, a one-off malformed frame, a dropped pipe, an occupant that exits or
+/// dies), so the engine may re-dispatch under policy.
 ///
 /// A DETERMINISTIC error ([`HarnessError::is_deterministic`] — today
 /// [`HarnessError::Contract`] or [`HarnessError::Configuration`]) is TERMINAL,
@@ -364,10 +375,10 @@ where
 /// this function's default, and never by this comment falling behind it.
 #[must_use]
 pub fn harness_error_to_outcome(error: &HarnessError) -> DispatchOutcome {
-    let failure = if error.is_deterministic() {
-        ActivityFailure::terminal(error.to_string())
-    } else {
-        ActivityFailure::retryable(error.to_string())
+    let failure = match error {
+        HarnessError::PolicyRefused { .. } => ActivityFailure::policy_refused(error.to_string()),
+        _ if error.is_deterministic() => ActivityFailure::terminal(error.to_string()),
+        _ => ActivityFailure::retryable(error.to_string()),
     };
     DispatchOutcome::Failed {
         failure: failure.into(),

@@ -47,6 +47,7 @@ pub const fn for_keyword(keyword: Keyword) -> GuideEntry {
         Keyword::Sleep => flow::SLEEP,
         Keyword::Timeout => decl::TIMEOUT,
         Keyword::Retry => decl::RETRY,
+        Keyword::Fallback => decl::FALLBACK,
         Keyword::Advisory => decl::ADVISORY,
         Keyword::Agent => decl::AGENT,
         Keyword::Every => decl::EVERY,

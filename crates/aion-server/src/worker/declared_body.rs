@@ -480,6 +480,7 @@ fn encode_end(request: &ActivityDispatch, ended: AttemptEnd) -> Result<String, S
         Err(failure) => {
             let prefix = match failure.classification() {
                 aion_worker::Classification::Retryable => "retryable",
+                aion_worker::Classification::PolicyRefused => "policy_refused",
                 aion_worker::Classification::Terminal => "terminal",
             };
             Err(format!("{prefix}:{}", failure.message()))

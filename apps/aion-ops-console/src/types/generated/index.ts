@@ -79,7 +79,7 @@ message: string,
  */
 details: Payload | null, };
 
-export type ActivityErrorKind = "Retryable" | "Terminal";
+export type ActivityErrorKind = "Retryable" | "PolicyRefused" | "Terminal";
 
 export type ActivityError = {
 /**
@@ -480,7 +480,31 @@ reason: string,
 /**
  * One-based number of the attempt that spent the budget.
  */
-attempt: number, } } | { "type": "ActivityCancelled", "data": {
+attempt: number, } } | { "type": "ActivityFallbackRouted", "data": {
+/**
+ * Recording metadata for this event.
+ */
+envelope: EventEnvelope,
+/**
+ * Activity whose refusing execution caused the hop.
+ */
+activity_id: ActivityId,
+/**
+ * One-based execution attempt whose policy refusal caused this hop.
+ */
+attempt: number,
+/**
+ * Queue the refusing execution was dispatched on.
+ */
+from_task_queue: string,
+/**
+ * Queue the next execution is dispatched on.
+ */
+to_task_queue: string,
+/**
+ * Zero-based position consumed from the authored fallback list.
+ */
+fallback_index: number, } } | { "type": "ActivityCancelled", "data": {
 /**
  * Recording metadata for this event.
  */

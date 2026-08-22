@@ -498,7 +498,7 @@ pub struct ParamDecl {
 }
 
 /// An indented config line: `advisory, node <name>, timeout <duration>,
-/// retry …`.
+/// retry …, fallback q1, q2`.
 ///
 /// Appears under an action declaration, or under a call statement as a
 /// call-site override (the checker rules on which keys may pin where).
@@ -539,6 +539,21 @@ pub struct ConfigLine {
     pub timeout: Option<DurationLiteral>,
     /// Optional retry policy.
     pub retry: Option<RetrySpec>,
+    /// Optional authored fallback queue chain.
+    pub fallback: Option<FallbackSpec>,
+}
+
+/// An ordered `fallback q1, q2, …` chain on an action config line.
+///
+/// Entries are TASK QUEUES, not model names, and the list is authored order.
+/// There is deliberately no count and no bound here: the chain is exactly as
+/// long as the author wrote it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FallbackSpec {
+    /// Span covering the complete `fallback` clause.
+    pub span: Span,
+    /// Queue entries in authored order, each with its own source span.
+    pub entries: Vec<ConfigValue>,
 }
 
 /// A named config value (the `node` selector).

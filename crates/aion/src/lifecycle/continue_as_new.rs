@@ -198,6 +198,7 @@ fn guard_no_pending_work(events: &[Event]) -> Result<(), EngineError> {
             // A warning, not a settlement: the advisory activity's own
             // terminal ActivityFailed is what clears it from pending work.
             | Event::ActivityAdvisoryExhausted { .. }
+            | Event::ActivityFallbackRouted { .. }
             | Event::TimerStarted { .. }
             | Event::TimerFired { .. }
             | Event::TimerCancelled { .. }

@@ -119,8 +119,9 @@ impl PumpEnd {
 ///   conversation handle. ACP's Response carries ONLY a stop reason, so the answer itself has to
 ///   come from the accumulated `agent_message_chunk` text; a payload of the stop reason alone
 ///   would hand the workflow an activity result with no result in it.
-/// - **`refusal`, `max_tokens`, `max_turn_requests`** → [`HarnessError::Harness`] naming the reason.
-///   None of them is a completed run: the agent stopped short. The partial text rides along,
+/// - **`refusal`** → [`HarnessError::PolicyRefused`].
+/// - **`max_tokens`, `max_turn_requests`** → [`HarnessError::Harness`] naming the reason.
+///   None is a completed run: the agent stopped short. The partial text rides along,
 ///   labelled and bounded, so a caller's accept-the-partial policy stays reachable.
 /// - **`cancelled`** → [`HarnessError::Harness`] whose message starts with
 ///   [`protocol::CANCELLED_DETAIL_PREFIX`], so a cancellation is distinguishable from a failure.
@@ -151,6 +152,9 @@ pub(crate) fn outcome_into_payload(
     })?;
     let label = translate::stop_reason_label(prompt.stop_reason);
     if !translate::is_success(prompt.stop_reason) {
+        if matches!(prompt.stop_reason, StopReason::Refusal) {
+            return Err(policy_refusal(label, &text));
+        }
         return Err(non_completion(prompt.stop_reason, label, &text));
     }
     AgentOutcome::new(
@@ -163,6 +167,16 @@ pub(crate) fn outcome_into_payload(
     .map_err(|source| {
         HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
     })
+}
+
+/// The typed provider-policy refusal, preserving any bounded partial response.
+fn policy_refusal(label: &str, text: &str) -> HarnessError {
+    let mut message = format!("the prompt turn was refused: stopReason: {label}");
+    append_partial(&mut message, text);
+    HarnessError::policy_refused(
+        message,
+        aion_integrations::PolicyRefusalDetection::Structured,
+    )
 }
 
 /// The honest error for a turn that ended on a stop reason other than `end_turn`.
@@ -299,8 +313,8 @@ mod tests {
             .err()
             .ok_or("a refusal must not be a completed result")?;
         assert!(
-            matches!(error, HarnessError::Harness { .. }),
-            "a refusal is a harness failure, got {error:?}"
+            matches!(error, HarnessError::PolicyRefused { .. }),
+            "a refusal has its own policy class, got {error:?}"
         );
         let message = error.to_string();
         assert!(
@@ -316,7 +330,7 @@ mod tests {
 
     #[test]
     fn each_non_completing_stop_reason_is_a_failure_naming_itself() -> Result<(), String> {
-        for label in ["max_tokens", "max_turn_requests", "refusal"] {
+        for label in ["max_tokens", "max_turn_requests"] {
             let error = payload_of(json!({ "stopReason": label }), "")
                 .err()
                 .ok_or_else(|| format!("{label} must not be a completed result"))?;

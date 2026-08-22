@@ -25,6 +25,7 @@ import aion/codec
 /// depend on engine payload internals.
 pub type ActivityError {
   Retryable(message: String, details: String)
+  PolicyRefused(message: String)
   Terminal(message: String, details: String)
   ActivityDecodeFailed(codec.DecodeError)
   ActivityTimedOut(TimeoutError)
@@ -44,6 +45,11 @@ pub fn retryable_with_details(
   details: String,
 ) -> ActivityError {
   Retryable(message: message, details: details)
+}
+
+/// Construct a provider-policy-refused activity failure.
+pub fn policy_refused(message: String) -> ActivityError {
+  PolicyRefused(message: message)
 }
 
 /// Construct a terminal activity failure with no detail payload.

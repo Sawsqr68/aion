@@ -54,8 +54,11 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// the host toolchain, so the freshness oracle is venue-bound; estate
 /// toolchain unification is tracked as its own issue. The module set and SDK
 /// version are unchanged; `committed_closure_matches_a_fresh_oracle_harvest`
-/// proves these are the current deterministic shipped bytes.
-const BUNDLE_CHECKSUM: &str = "208007cf39b2d71e8c367b7688fdeb15d0eeea40da10ce4f65c34a09b8d193f7";
+/// proves these are the current deterministic shipped bytes. Repinned
+/// 2026-08-22 for `PolicyRefused` L3: `activity.fallback/2` changed the shipped
+/// activity module, and a fresh Gleam 1.18.1 harvest on this Linux venue
+/// refreshed the venue-bound BEAM bytes across the closure.
+const BUNDLE_CHECKSUM: &str = "be25d4143e72cd75cdc02207a6ff8349e8143d87d6bd6e65899f440836900dfe";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -163,9 +166,11 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// deterministic shipped bytes. Repinned 2026-08-18 with the fresh Gleam
 /// landing-venue closure (see `BUNDLE_CHECKSUM` notes); the
 /// bundle checksum and freshness proof move in the same change, while the
-/// fixed-input assembly remains deterministic.
+/// fixed-input assembly remains deterministic. Repinned 2026-08-22 because the
+/// L3 `activity.fallback/2` closure harvest is an input to every archive; the
+/// same-process determinism and fresh-closure tests remain the controls.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "c98c1c087244c96661da53c137cd0b97ac78aba76c883699a981926cbb8c5b56";
+    "9c3e0e3d9c21a5f2e097246a9515c6d86f9db34eaf002fb0522b743cfc36f96a";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

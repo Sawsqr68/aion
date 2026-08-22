@@ -290,6 +290,21 @@ pub fn retryable_error_kind_round_trips_through_the_in_vm_wire_test() {
   }
 }
 
+pub fn policy_refused_kind_round_trips_through_the_in_vm_wire_test() {
+  case testing.new() {
+    Ok(_env) -> {
+      failing_probe(
+        "probe-invm-policy-refused",
+        error.policy_refused("provider safety policy"),
+      )
+      |> activity.execution_tier(activity.InVm)
+      |> workflow.run
+      |> should.equal(Error(error.PolicyRefused("provider safety policy")))
+    }
+    Error(_) -> should.fail()
+  }
+}
+
 pub fn terminal_error_kind_round_trips_through_the_in_vm_wire_test() {
   case testing.new() {
     Ok(_env) -> {

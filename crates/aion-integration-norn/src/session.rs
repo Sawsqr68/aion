@@ -18,12 +18,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use aion_core::{ActivityEvent, InterventionCapabilities, InterventionCommand, Payload};
-use aion_integrations::HarnessError;
 use aion_integrations::contract::AgentSession;
 use aion_integrations::envelope_delta::{Compaction, EnvelopeDeltaEncoder};
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
 };
+use aion_integrations::{HarnessError, PolicyRefusalDetection};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -282,13 +282,21 @@ fn response_into_ack(response: JsonRpcResponse) -> Result<(), HarnessError> {
 /// - a result-less, error-less Response (a broken peer) → [`HarnessError::Protocol`],
 /// - a non-envelope result → [`HarnessError::Protocol`] naming what was missing.
 ///
-/// An error object on the Response surfaces as [`HarnessError::Harness`].
+/// A provider policy refusal is recognised here, while the JSON-RPC error is
+/// still structured. The exact `/error/code` data path is preferred; because
+/// today's norn output drops that provider code, the measured adapter-owned
+/// message phrase is the deliberately narrow textual fallback. Other error
+/// objects surface as [`HarnessError::Harness`].
 fn response_into_payload(response: JsonRpcResponse) -> Result<Payload, HarnessError> {
     if let Some(error) = response.error {
-        return Err(HarnessError::harness(format!(
+        let detail = format!(
             "run/execute failed (code {}): {}",
             error.code, error.message
-        )));
+        );
+        if let Some(detection) = policy_refusal_detection(&error) {
+            return Err(HarnessError::policy_refused(detail, detection));
+        }
+        return Err(HarnessError::harness(detail));
     }
     // The envelope type keeps key presence: `None` means the frame carried NO `result` key — with
     // `error` also absent that is a broken peer, not a payload. A PRESENT `"result": null`
@@ -310,6 +318,25 @@ fn response_into_payload(response: JsonRpcResponse) -> Result<Payload, HarnessEr
     translate::run_result_to_outcome(&result)?
         .into_payload()
         .map_err(|source| HarnessError::protocol(format!("run output is not encodable: {source}")))
+}
+
+const POLICY_REFUSAL_CODE: &str = "cyber_policy";
+const POLICY_REFUSAL_MESSAGE: &str = "provider rejected the request under its cybersecurity policy";
+
+fn policy_refusal_detection(
+    error: &aion_integrations::jsonrpc::JsonRpcError,
+) -> Option<PolicyRefusalDetection> {
+    let structured = error.data.as_ref().and_then(|data| {
+        data.pointer("/error/code")
+            .and_then(serde_json::Value::as_str)
+    });
+    if structured == Some(POLICY_REFUSAL_CODE) {
+        Some(PolicyRefusalDetection::Structured)
+    } else if error.message.contains(POLICY_REFUSAL_MESSAGE) {
+        Some(PolicyRefusalDetection::Textual)
+    } else {
+        None
+    }
 }
 
 impl<R, W> Drop for NornSession<R, W> {

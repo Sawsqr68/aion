@@ -145,6 +145,8 @@ pub enum Keyword {
     Timeout,
     /// `retry`.
     Retry,
+    /// `fallback`.
+    Fallback,
     /// `advisory`.
     Advisory,
     /// `agent` — the action's single String input is an agent prompt and its
@@ -227,7 +229,7 @@ impl Keyword {
     /// list against a count derived from [`Keyword::as_word`]'s own source, so
     /// a new variant fails a test here rather than going quietly missing
     /// downstream.
-    pub const ALL: [Self; 57] = [
+    pub const ALL: [Self; 58] = [
         Self::Workflow,
         Self::Input,
         Self::Signal,
@@ -251,6 +253,7 @@ impl Keyword {
         Self::Sleep,
         Self::Timeout,
         Self::Retry,
+        Self::Fallback,
         Self::Advisory,
         Self::Agent,
         Self::Every,
@@ -314,6 +317,7 @@ impl Keyword {
             Self::Sleep => "sleep",
             Self::Timeout => "timeout",
             Self::Retry => "retry",
+            Self::Fallback => "fallback",
             Self::Advisory => "advisory",
             Self::Agent => "agent",
             Self::Every => "every",
@@ -378,6 +382,7 @@ impl Keyword {
             "sleep" => Some(Self::Sleep),
             "timeout" => Some(Self::Timeout),
             "retry" => Some(Self::Retry),
+            "fallback" => Some(Self::Fallback),
             "advisory" => Some(Self::Advisory),
             "agent" => Some(Self::Agent),
             "every" => Some(Self::Every),

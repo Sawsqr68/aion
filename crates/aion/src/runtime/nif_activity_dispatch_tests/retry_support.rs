@@ -7,6 +7,7 @@ use super::{await_support::envelope, support::*};
 pub(in super::super) struct ScriptedRetryDispatcher {
     outcomes: std::sync::Mutex<std::collections::VecDeque<Result<String, String>>>,
     attempts: std::sync::Mutex<Vec<u32>>,
+    task_queues: std::sync::Mutex<Vec<String>>,
 }
 
 impl ScriptedRetryDispatcher {
@@ -14,6 +15,7 @@ impl ScriptedRetryDispatcher {
         Arc::new(Self {
             outcomes: std::sync::Mutex::new(outcomes.into_iter().collect()),
             attempts: std::sync::Mutex::new(Vec::new()),
+            task_queues: std::sync::Mutex::new(Vec::new()),
         })
     }
 
@@ -21,6 +23,13 @@ impl ScriptedRetryDispatcher {
         self.attempts
             .lock()
             .map(|attempts| attempts.clone())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn seen_task_queues(&self) -> Vec<String> {
+        self.task_queues
+            .lock()
+            .map(|queues| queues.clone())
             .unwrap_or_default()
     }
 }
@@ -31,6 +40,10 @@ impl ActivityDispatcher for ScriptedRetryDispatcher {
             .lock()
             .map_err(|_| "attempts lock poisoned".to_owned())?
             .push(request.attempt);
+        self.task_queues
+            .lock()
+            .map_err(|_| "task queue lock poisoned".to_owned())?
+            .push(request.task_queue);
         self.outcomes
             .lock()
             .map_err(|_| "outcomes lock poisoned".to_owned())?
@@ -51,10 +64,18 @@ pub(in super::super) struct RetryLoopHarness {
 
 impl RetryLoopHarness {
     pub(super) async fn seeded(config: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::seeded_with_tail(config, super::FIRST_DELIVERY_ATTEMPT, |_| Vec::new()).await
+    }
+
+    pub(super) async fn seeded_with_tail(
+        config: &str,
+        request_attempt: u32,
+        tail: impl FnOnce(&WorkflowId) -> Vec<Event>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let store: Arc<dyn EventStore> = Arc::new(aion_store::InMemoryStore::default());
         let workflow_id = WorkflowId::new_v4();
         let run_id = RunId::new_v4();
-        let events = vec![
+        let mut events = vec![
             Event::WorkflowStarted {
                 envelope: envelope(&workflow_id, 1),
                 workflow_type: "retrier".to_owned(),
@@ -78,10 +99,12 @@ impl RetryLoopHarness {
                 attempt: 1,
             },
         ];
+        events.extend(tail(&workflow_id));
+        let next_sequence = u64::try_from(events.len())?;
         store
             .append(WriteToken::recorder(), &workflow_id, &events, 0)
             .await?;
-        let recorder = Recorder::resume_at(workflow_id.clone(), Arc::clone(&store), 3);
+        let recorder = Recorder::resume_at(workflow_id.clone(), Arc::clone(&store), next_sequence);
         let request = ActivityDispatch {
             namespace: String::from("default"),
             task_queue: String::from("default"),
@@ -92,7 +115,7 @@ impl RetryLoopHarness {
             name: "flaky".to_owned(),
             input: r#""in""#.to_owned(),
             config: config.to_owned(),
-            attempt: super::FIRST_DELIVERY_ATTEMPT,
+            attempt: request_attempt,
             labels: std::collections::BTreeMap::new(),
             advisory: false,
         };

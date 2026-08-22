@@ -35,6 +35,13 @@ const WORKER_WITNESSES: &[WorkerWitness] = &[
                  name)\n  route done(name)\n",
     },
     WorkerWitness {
+        word: "fallback",
+        source: "//! Witness: an authored `fallback` chain inside a worker block.\nworkflow \
+                 witness\n  input name: String\n  outcome done: type String, route \
+                 success\n\nworker crew\n  action ping(name: String) -> String\n    fallback \
+                 norn, claude\n\nstep go\n  ping(name: name) -> answer\n  route done(answer)\n",
+    },
+    WorkerWitness {
         word: "every",
         source: "//! Witness: `every` fixing a retry interval inside a worker block.\nworkflow \
                  witness\n  input name: String\n  outcome done: type String, route \

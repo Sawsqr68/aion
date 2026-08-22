@@ -135,25 +135,35 @@ pub fn parse_error(raw: String) -> error.ActivityError {
   case string.starts_with(raw, "retryable:") {
     True -> error.Retryable(message: string.drop_start(raw, 10), details: "")
     False ->
-      case string.starts_with(raw, "terminal:") {
-        True -> error.Terminal(message: string.drop_start(raw, 9), details: "")
+      case string.starts_with(raw, "policy_refused:") {
+        True -> error.PolicyRefused(message: string.drop_start(raw, 15))
         False ->
-          case string.starts_with(raw, "timeout:") {
+          case string.starts_with(raw, "terminal:") {
             True ->
-              error.ActivityTimedOut(error.TimedOut(string.drop_start(raw, 8)))
+              error.Terminal(message: string.drop_start(raw, 9), details: "")
             False ->
-              case string.starts_with(raw, "cancelled:") {
+              case string.starts_with(raw, "timeout:") {
                 True ->
-                  error.ActivityCancelled(
-                    error.Cancelled(string.drop_start(raw, 10)),
+                  error.ActivityTimedOut(
+                    error.TimedOut(string.drop_start(raw, 8)),
                   )
                 False ->
-                  case string.starts_with(raw, "non_determinism:") {
+                  case string.starts_with(raw, "cancelled:") {
                     True ->
-                      error.ActivityNonDeterministic(
-                        error.NonDeterminismViolation(string.drop_start(raw, 16)),
+                      error.ActivityCancelled(
+                        error.Cancelled(string.drop_start(raw, 10)),
                       )
-                    False -> error.ActivityEngineFailure(message: raw)
+                    False ->
+                      case string.starts_with(raw, "non_determinism:") {
+                        True ->
+                          error.ActivityNonDeterministic(
+                            error.NonDeterminismViolation(string.drop_start(
+                              raw,
+                              16,
+                            )),
+                          )
+                        False -> error.ActivityEngineFailure(message: raw)
+                      }
                   }
               }
           }
@@ -178,6 +188,7 @@ fn in_vm_thunk(
 fn encode_error(runner_error: error.ActivityError) -> String {
   case runner_error {
     error.Retryable(message: message, details: _) -> "retryable:" <> message
+    error.PolicyRefused(message: message) -> "policy_refused:" <> message
     error.Terminal(message: message, details: _) -> "terminal:" <> message
     error.ActivityTimedOut(error.TimedOut(message: message)) ->
       "timeout:" <> message
@@ -203,6 +214,10 @@ pub fn config(
   json.object([
     #("retry", retry_config(activity.retry_policy(activity_value))),
     #(
+      "fallback",
+      fallback_config(activity.selected_fallback(activity_value)),
+    ),
+    #(
       "timeout_ms",
       optional_duration(activity.timeout_duration(activity_value)),
     ),
@@ -226,6 +241,13 @@ pub fn config(
     ),
   ])
   |> json.to_string
+}
+
+fn fallback_config(queues: List(String)) -> json.Json {
+  case queues {
+    [] -> json.null()
+    queues -> json.array(queues, json.string)
+  }
 }
 
 fn optional_string(value: option.Option(String)) -> json.Json {
