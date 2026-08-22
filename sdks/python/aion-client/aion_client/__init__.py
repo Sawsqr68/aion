@@ -3,6 +3,7 @@
 from .client import (
     Client,
     DisplayNameNotApplied,
+    HistoryPage,
     RunOutcome,
     StartOutcome,
     TLSConfig,
@@ -37,6 +38,7 @@ __all__ = [
     "JSONValue",
     "NamespaceDenied",
     "NotFound",
+    "HistoryPage",
     "Payload",
     "QueryFailed",
     "QueryTimeout",

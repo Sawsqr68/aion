@@ -53,10 +53,34 @@ class TLSConfig:
 
 @dataclass(frozen=True, slots=True)
 class WorkflowDescription:
-    """Decoded describe response containing summary and optional history."""
+    """Decoded describe response: summary, optional history, and the bounded
+    describe facts the contract carries alongside them.
+
+    ``run_id`` names the concrete run described. ``history_head_seq`` is the
+    run's current history head, usable as a ``read_history`` cursor bound.
+    ``terminal_event`` is the run's terminal event envelope when the run has
+    reached one, ``None`` while it is still running.
+    """
 
     summary: Any
     history: list[Any]
+    run_id: str
+    history_head_seq: int
+    terminal_event: Any | None
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryPage:
+    """One ``read_history`` page: events plus the cursor pair.
+
+    ``next_from_seq`` is the cursor to pass as the next call's ``from_seq``;
+    ``head_seq`` is the run's history head at read time, so a caller can tell
+    a complete read (``next_from_seq > head_seq``) from a partial one.
+    """
+
+    events: list[Any]
+    next_from_seq: int
+    head_seq: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -629,7 +653,49 @@ class Client:
         request = self._targeted_message("DescribeWorkflowRequest", namespace, workflow_id, run_id)
         request.include_history = include_history
         response = await self._call("describe", self._transport.describe_workflow(request, self._metadata))
-        return WorkflowDescription(summary=response.summary, history=list(getattr(response, "history", [])))
+        terminal_event = response.terminal_event if response.HasField("terminal_event") else None
+        return WorkflowDescription(
+            summary=response.summary,
+            history=list(getattr(response, "history", [])),
+            run_id=_id_value(response.run_id),
+            history_head_seq=response.history_head_seq,
+            terminal_event=terminal_event,
+        )
+
+    async def read_history(
+        self,
+        workflow_id: str,
+        *,
+        from_seq: int = 0,
+        limit: int | None = None,
+        namespace: str | None = None,
+    ) -> HistoryPage:
+        """Read one page of a workflow's event history from ``from_seq``.
+
+        ``limit`` bounds the page when given; when omitted the field is left at
+        the wire default and the server applies its own bound. Page through by
+        passing each page's ``next_from_seq`` back as ``from_seq`` until it
+        exceeds ``head_seq``.
+
+        Raises:
+            NotFound, Unauthenticated, NamespaceDenied, Unavailable,
+            InvalidArgument, ServerError, Cancelled.
+        """
+
+        if not workflow_id:
+            raise InvalidArgument("workflow_id must not be empty")
+        request = self._message("ReadHistoryRequest")
+        request.namespace = namespace or self.namespace
+        _set_id(request.workflow_id, workflow_id)
+        request.from_seq = from_seq
+        if limit is not None:
+            request.limit = limit
+        response = await self._call("read_history", self._transport.read_history(request, self._metadata))
+        return HistoryPage(
+            events=list(getattr(response, "events", [])),
+            next_from_seq=response.next_from_seq,
+            head_seq=response.head_seq,
+        )
 
     def handle(self, workflow_id: str, *, run_id: str | None = None, namespace: str | None = None) -> WorkflowHandle:
         """Construct a bare-ID workflow handle targeting latest or a concrete run.

@@ -90,6 +90,11 @@ class WorkflowServiceStub:
                 request_serializer=workflow__pb2.DescribeWorkflowRequest.SerializeToString,
                 response_deserializer=workflow__pb2.DescribeWorkflowResponse.FromString,
                 _registered_method=True)
+        self.ReadHistory = channel.unary_unary(
+                '/aion.WorkflowService/ReadHistory',
+                request_serializer=workflow__pb2.ReadHistoryRequest.SerializeToString,
+                response_deserializer=workflow__pb2.ReadHistoryResponse.FromString,
+                _registered_method=True)
         self.CreateSchedule = channel.unary_unary(
                 '/aion.WorkflowService/CreateSchedule',
                 request_serializer=workflow__pb2.CreateScheduleRequest.SerializeToString,
@@ -197,6 +202,12 @@ class WorkflowServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def DescribeWorkflow(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReadHistory(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -316,6 +327,11 @@ def add_WorkflowServiceServicer_to_server(servicer, server):
                     servicer.DescribeWorkflow,
                     request_deserializer=workflow__pb2.DescribeWorkflowRequest.FromString,
                     response_serializer=workflow__pb2.DescribeWorkflowResponse.SerializeToString,
+            ),
+            'ReadHistory': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReadHistory,
+                    request_deserializer=workflow__pb2.ReadHistoryRequest.FromString,
+                    response_serializer=workflow__pb2.ReadHistoryResponse.SerializeToString,
             ),
             'CreateSchedule': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateSchedule,
@@ -656,6 +672,33 @@ class WorkflowService:
             '/aion.WorkflowService/DescribeWorkflow',
             workflow__pb2.DescribeWorkflowRequest.SerializeToString,
             workflow__pb2.DescribeWorkflowResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReadHistory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/ReadHistory',
+            workflow__pb2.ReadHistoryRequest.SerializeToString,
+            workflow__pb2.ReadHistoryResponse.FromString,
             options,
             channel_credentials,
             insecure,

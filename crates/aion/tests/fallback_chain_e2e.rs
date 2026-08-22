@@ -212,7 +212,7 @@ async fn run_chain(
         .map_err(|error| format!("fallback workflow failed: {error:?}"))?;
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(payload.bytes())?,
-        json!("hello Ada")
+        json!({ "outcome": "greeted", "payload": { "text": "hello Ada" } })
     );
     let history = store.read_history(handle.workflow_id()).await?;
     let summary = summarize(&history);
@@ -261,7 +261,7 @@ async fn declared_chain_is_auditable_and_both_lowerings_agree() -> TestResult {
     if gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
-    let (reference, entry) = reference_package(CHAIN_SOURCE, "fallback-chain")?;
+    let (reference, entry) = reference_package(CHAIN_SOURCE, "fallback_chain")?;
     let direct = direct_package(CHAIN_SOURCE, &reference, &entry)?;
     let reference_summary = run_chain(reference, &entry).await?;
     let direct_summary = run_chain(direct, &entry).await?;
@@ -270,7 +270,7 @@ async fn declared_chain_is_auditable_and_both_lowerings_agree() -> TestResult {
     assert_eq!(reference_summary.refused, 1);
     assert_eq!(
         reference_summary.hops,
-        vec![("default".to_owned(), "claude".to_owned(), 0)]
+        vec![("agents".to_owned(), "claude".to_owned(), 0)]
     );
     assert_eq!(reference_summary.starts, vec![1, 2]);
     assert!(reference_summary.completed);
@@ -283,7 +283,7 @@ async fn no_chain_retries_without_a_hop_and_finishes_policy_refused() -> TestRes
     if gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
-    let (package, entry) = reference_package(NO_CHAIN_SOURCE, "fallback-no-chain")?;
+    let (package, entry) = reference_package(NO_CHAIN_SOURCE, "fallback_no_chain")?;
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let dispatcher = RefusingDispatcher::always();
     let engine = EngineBuilder::new()

@@ -33,6 +33,7 @@ class WorkflowTransport(Protocol):
     async def resume(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def list_workflows(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def describe_workflow(self, request: Any, metadata: MappingMetadata) -> Any: ...
+    async def read_history(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def close(self) -> None: ...
 
 
@@ -99,6 +100,9 @@ class GrpcWorkflowTransport:
 
     async def describe_workflow(self, request: Any, metadata: MappingMetadata) -> Any:
         return await self._stub.DescribeWorkflow(request, metadata=metadata)
+
+    async def read_history(self, request: Any, metadata: MappingMetadata) -> Any:
+        return await self._stub.ReadHistory(request, metadata=metadata)
 
     async def close(self) -> None:
         await self._channel.close()

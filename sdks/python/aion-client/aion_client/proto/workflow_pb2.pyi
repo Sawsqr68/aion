@@ -230,12 +230,40 @@ class DescribeWorkflowRequest(_message.Message):
     def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., include_history: _Optional[bool] = ...) -> None: ...
 
 class DescribeWorkflowResponse(_message.Message):
-    __slots__ = ("summary", "history")
+    __slots__ = ("summary", "history", "run_id", "history_head_seq", "terminal_event")
     SUMMARY_FIELD_NUMBER: _ClassVar[int]
     HISTORY_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    HISTORY_HEAD_SEQ_FIELD_NUMBER: _ClassVar[int]
+    TERMINAL_EVENT_FIELD_NUMBER: _ClassVar[int]
     summary: _common_pb2.WireEnvelope
     history: _containers.RepeatedCompositeFieldContainer[_common_pb2.WireEnvelope]
-    def __init__(self, summary: _Optional[_Union[_common_pb2.WireEnvelope, _Mapping]] = ..., history: _Optional[_Iterable[_Union[_common_pb2.WireEnvelope, _Mapping]]] = ...) -> None: ...
+    run_id: _common_pb2.RunId
+    history_head_seq: int
+    terminal_event: _common_pb2.WireEnvelope
+    def __init__(self, summary: _Optional[_Union[_common_pb2.WireEnvelope, _Mapping]] = ..., history: _Optional[_Iterable[_Union[_common_pb2.WireEnvelope, _Mapping]]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., history_head_seq: _Optional[int] = ..., terminal_event: _Optional[_Union[_common_pb2.WireEnvelope, _Mapping]] = ...) -> None: ...
+
+class ReadHistoryRequest(_message.Message):
+    __slots__ = ("namespace", "workflow_id", "from_seq", "limit")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    FROM_SEQ_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    workflow_id: _common_pb2.WorkflowId
+    from_seq: int
+    limit: int
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., from_seq: _Optional[int] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class ReadHistoryResponse(_message.Message):
+    __slots__ = ("events", "next_from_seq", "head_seq")
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_FROM_SEQ_FIELD_NUMBER: _ClassVar[int]
+    HEAD_SEQ_FIELD_NUMBER: _ClassVar[int]
+    events: _containers.RepeatedCompositeFieldContainer[_common_pb2.WireEnvelope]
+    next_from_seq: int
+    head_seq: int
+    def __init__(self, events: _Optional[_Iterable[_Union[_common_pb2.WireEnvelope, _Mapping]]] = ..., next_from_seq: _Optional[int] = ..., head_seq: _Optional[int] = ...) -> None: ...
 
 class CreateScheduleRequest(_message.Message):
     __slots__ = ("namespace", "config")
