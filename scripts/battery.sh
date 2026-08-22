@@ -117,7 +117,14 @@ gate() {
   local name="$1"
   shift
   printf '\n=== %s ===\n' "$name"
-  "$@"
+  # `</dev/null` is load-bearing: the leg loop feeds this function from a
+  # heredoc, so an unredirected leg inherits the REMAINING LEG LIST as stdin.
+  # Any leg whose tool reads stdin then eats the legs after it — observed live
+  # on .205 (gleam:aion-flow's erl consumed legs 15-25 in two consecutive
+  # rounds, 25 declared / 14 executed, no partial-run flag). Venue-dependent:
+  # fires only where a leg's tool actually reads stdin, which is exactly why
+  # it survived 322 full-set runs on another box.
+  "$@" </dev/null
   local code=$?
   GATE_NAMES+=("$name")
   GATE_CODES+=("$code")
@@ -288,16 +295,61 @@ fi
 
 printf '%d of %d gates failed.\n' "$failed" "${#GATE_NAMES[@]}"
 
-# 🔴 A GREEN HERE IS NOT YET A BATTERY RESULT, and saying so is this script's job
-# rather than the reader's memory. `0 of N failed` is a claim about the legs that
-# RAN; whether those were the legs this repository declares is a separate
-# question, and the whole reason the two lists drifted for as long as they did is
-# that nobody was asked it. This script cannot answer it about itself — the
-# comparison needs the completed EXECUTED_LEGS line above — so it names the
-# command that can.
-printf '\nNOT VERIFIED YET. This run reports on the legs it ran; that they are the\n'
-printf 'legs gates.json declares is a separate claim. Capture this output and run:\n'
-printf '    scripts/gates/verify-declaration.sh <this-log>\n'
+# 🔴 A GREEN ABOVE IS NOT YET A BATTERY RESULT. `0 of N failed` is a claim about
+# the legs that RAN; whether those were the legs this repository declares is a
+# separate question, and the whole reason the two lists drifted for as long as
+# they did is that nobody was asked it. That question is now asked HERE, in the
+# run, not left as a remembered follow-up: 5 of 14 audited landing records had
+# no verify-declaration invocation on file — their safety rested on a human
+# reading EXECUTED_LEGS.
+#
+# The runner writes its own EXECUTED_LEGS line to a scratch log and puts it
+# through the same verifier a bank auditor uses. In self-test mode the
+# expectation INVERTS rather than the step being skipped (a harness check that
+# skips the step most likely to break is checking the easy half): the self-test
+# log runs synthetic legs and no declared one, so the verifier MUST reject it —
+# a verifier that passes that log is a verifier that cannot fail on anything.
+#
+# 🔴 AUDITOR TRAP, recorded where the trailer is generated: every battery log
+# CONTAINS the string `verify-declaration.sh` because this trailer prints it.
+# String presence in a log is NOT evidence the verifier ran — only an
+# invocation/result record like the block below is.
+SELF_VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/battery-self-verify.XXXXXX") || {
+  printf '🔴 could not create the self-verification scratch log.\n'
+  exit 1
+}
+printf 'EXECUTED_LEGS %s\n' "$(printf '%s\n' "${GATE_NAMES[@]}" | sort | tr '\n' ' ')" \
+  > "$SELF_VERIFY_LOG"
+printf '\n--- declaration verification (in-run, mandatory) ---\n'
+"$REPO_ROOT/scripts/gates/verify-declaration.sh" "$SELF_VERIFY_LOG"
+verify_rc=$?
+rm -f "$SELF_VERIFY_LOG"
+if [ -n "${AION_BATTERY_SELF_TEST:-}" ]; then
+  if [ "$verify_rc" -eq 1 ]; then
+    printf 'self-test: verify-declaration.sh REJECTED the synthetic leg set (exit 1) — its red path is proven.\n'
+  else
+    printf '🔴 self-test: verify-declaration.sh exited %d on a log it must reject.\n' "$verify_rc"
+    printf 'A verifier that cannot fail on the synthetic set cannot fail on anything.\n'
+    exit 1
+  fi
+elif [ -n "${ONLY:-}" ]; then
+  # A deliberate subset is LOUD three times over (the banner above, the
+  # verifier's rejection here naming every skipped leg, and the subset
+  # EXECUTED_LEGS in any banked copy), so its rc stays the selected legs'
+  # truth: folding the expected rejection in would make the escape hatch exit
+  # 1 even when the leg under test passed, which un-usables the hatch without
+  # closing any laundering path the banner has not already closed.
+  printf 'partial run: the rejection above is EXPECTED — it names what this run skipped.\n'
+elif [ "$verify_rc" -ne 0 ]; then
+  printf '🔴 the executed leg set does not verify against gates.json (exit %d).\n' "$verify_rc"
+  printf 'This run is NOT a battery result regardless of the manifest above.\n'
+  exit 1
+fi
+
+# Independent re-verification of the BANKED log stays available (and is what an
+# auditor of the bank runs — the in-run check above verified this process's leg
+# set, not the file you saved):
+printf '\nTo re-verify a captured copy of this output: scripts/gates/verify-declaration.sh <this-log>\n'
 
 if [ "$failed" -ne 0 ]; then
   exit 1
