@@ -1,43 +1,3 @@
-# ADDENDUM — three places the correction below does NOT yet reach
-
-The brief that follows is the CANONICAL text from ablative-docs `02935c2`,
-carrying its own binding correction at the top. That correction is authoritative
-and this addendum does not repeat it — one truth in two places drifts, so the
-correction lives in exactly one place, below.
-
-What the canonical correction covers: R1 (b)'s determinism claim and R1 (d)'s
-fail-fast-after-one. What it does NOT yet reach — the premise is load-bearing in
-three further places, and leaving them would let the flight enshrine the refuted
-behaviour in a TEST, which is the worst place for it to survive:
-
-1. **R3 (3), the green criterion** — "no chain declared ⇒ the act fails
-   `policy_refused:` after exactly ONE attempt (the fail-fast proof)."
-   ❌ **MUST NOT be written as a test.** A test asserting exactly-one-attempt
-   pins the behaviour that would have killed workflow `4ddee56c`. Replace it
-   with: no chain declared ⇒ the act exhausts its CONFIGURED bound and then
-   fails `policy_refused:`, asserting the CLASSIFICATION and that **no chain hop
-   was attempted**, with attempt accounting in the record — and asserting NO
-   particular attempt count. Assert the invariant, not the enumeration.
-
-2. **The "cure is two halves" paragraph**, immediately below the canonical
-   correction — "(1) classify the refusal as what it is — deterministic for this
-   provider-and-content, never retried in place." ❌ Same refuted premise, in the
-   brief's own summary of its purpose. Read it as: classify it as what it is — a
-   ROUTING fact rather than a transient fault — and stop it burning a
-   same-provider retry budget under a transient label. Not: never retried.
-
-3. **The closing sentence** — "never ask the same wall the same question twice."
-   ❌ Precisely what measurement refutes: asking twice worked, twice,
-   independently. The durable half is the routing insight — classify once, route
-   around it rather than grinding on it. Keep that; drop the claim that the
-   second ask is futile.
-
-If you find a further site, treat it the same way and NAME it in your report.
-A premise this load-bearing does not appear once; a correction that fixes only
-where it was first noticed leaves the design rebuildable from the leftovers.
-
----
-
 # BRIEF — aion: PolicyRefused error class + declared provider fallback
 
 ## 🔴 CORRECTION — 2026-08-22, binding, outranks the text below where they
@@ -73,9 +33,11 @@ different one." Today the refusal arrives as `Retryable`, the engine
 re-asks the SAME provider the SAME content four times (~25 min), and the
 flight dies. Four flights died this way 08-20→08-21 (both #68
 investigates, inv73-harness-flight2, beamr flight1). The cure is two
-halves: (1) classify the refusal as what it is — deterministic for this
-provider-and-content, never retried in place; (2) reroute it to the next
-provider in a chain the workflow DECLARED.
+halves: (1) classify the refusal as its own class — never mislabelled as
+a transient error, never burning the same-provider retry budget as if it
+were one; (2) route around it: consult the declared chain FIRST (hop
+first, retry second), any same-provider retry bounded by the act's
+CONFIGURED budget.
 
 Seam provenance: exploration of tree `89ab967a` (branch regate/inv87r2)
 — re-derive every line number on your tree; the SEAMS are the contract.
@@ -162,9 +124,10 @@ Seam provenance: exploration of tree `89ab967a` (branch regate/inv87r2)
 
 ## R2 — IMPLEMENTATION, per the committed design only
 
-Both halves land together: classification (adapter → `PolicyRefused` →
-deterministic, never retried in place) and reroute (declared chain
-honored end-to-end). The Gleam grammar gains its arms — `parse_error/1`,
+Both halves land together: classification (adapter → `PolicyRefused` —
+its own class, never mislabelled transient) and routing (chain consulted
+first, honored end-to-end; same-provider retry only under the act's
+configured bound). The Gleam grammar gains its arms — `parse_error/1`,
 `encode_error/1` (`activity_dispatch.gleam:134-195`),
 `describe_activity_error/1` (`awl/error.gleam:160-175`), `mock.gleam:80-90`
 — so `policy_refused:` presents as itself, never as "activity engine
@@ -181,9 +144,11 @@ named finding (it deserves its own item), don't fix it silently.
    worker refuses by policy re-dispatches to the declared fallback queue
    and COMPLETES there; history shows one refusal + one hop, zero
    same-queue retries; `failure_reason` empty (the run succeeded).
-3. E2E negative: no chain declared ⇒ the act fails `policy_refused:`
-   after exactly ONE attempt (the fail-fast proof; attempt accounting in
-   the record).
+3. E2E negative: no chain declared ⇒ the act exhausts its CONFIGURED
+   retry bound and fails `policy_refused:` — assert the CLASSIFICATION
+   and that NO chain hop was attempted, with attempt accounting in the
+   record; assert no particular attempt count (the invariant, not the
+   enumeration).
 4. The Gleam surface: a `policy_refused:` failure presents with that
    prefix, not "activity engine failure" (assertion on the projected
    `failure_reason`, `crates/aion-core/src/filter.rs:176-206` path).
@@ -206,6 +171,6 @@ named finding (it deserves its own item), don't fix it silently.
 
 ## The sentence to hold on to
 
-A refusal that is deterministic for this provider and this content is
-not a retry candidate — it is a routing fact. **Classify it once, route
-around it once, and never ask the same wall the same question twice.**
+A policy refusal is a routing fact before it is a retry candidate.
+**Classify it once, and route around the wall before grinding against
+it.**
