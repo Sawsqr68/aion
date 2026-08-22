@@ -54,3 +54,35 @@ The required command output is pasted verbatim below after the final report-bear
 .fleet/reports/l2-classify.md
 .fleet/reports/l3-route.md
 ```
+
+## FIX ROUND — 2026-08-22
+
+### Attribution before mutation
+
+- **MEASURED IN SCOPE** — the immutable pre-leg base was `c0c04142e66184a19a8602774914e6f88e30d624` (`origin/fleet/policyref-l3-base`; the local fleet branch had already advanced through fan-in). In detached worktree `/tmp/policyref-l3-base-measure` with independent `CARGO_TARGET_DIR=/tmp/policyref-l3-base-target`, all five RED targets passed unchanged: `editor_assets` 5/5, `grammar_parser_gate` 6/6, `guide_reference_gate` 7/7, `runtime_surface_guard` 1/1, and `console_guide_asset` 2/2. Therefore none was pre-existing.
+- **MEASURED EXTERNAL RESIDUAL** — anonymous `git ls-remote` reports public mirror head `8d4d63e398bf765dd51772b60555b9dae8ebc106`. A read-only shallow clone digests to the recorded `eb61fb429719c7666618a7dc841266119db320ee9a8cf8557d4364dcb993691e`; this L3 tree requires `5c659cfa6ced3154ad5a69173b320591b83886f80972ed44f42b5d7db405f859`. The mirror has not been pushed, so the Zed pin was not falsified locally. Publishing to the shared external repository requires an authorized mirror push and remains report-only.
+- **VENUE** — no memory-shaped anomaly was observed during attribution or verification. The known aion#54 shard-actor timeout battery was not run or retried.
+
+### Minimal in-scope fixes
+
+- Added a checker-passing worker-block witness for authored `fallback`, preserving the grammar/parser gate rather than weakening it.
+- Added `fallback` to §4's truthful action-config example in the authored AWL reference, synchronized the embedded reference, and regenerated the console guide JSON from `aion awl guide --json`.
+- Regenerated the committed 47-module SDK closure with the repository script using Gleam 1.18.1, so `aion@activity:fallback/2` is a real shipped export. Deliberately repinned the closure and fixed-input archive digests with dated provenance; no generated BEAM was hand-edited.
+- No `HarnessError` or `ActivityErrorKind` match was touched. No catch-all arm, lint suppression, `#[ignore]`, library `.unwrap()`/`.expect()`, or dependency was added.
+
+### Verification
+
+- **PASS** — `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
+- **PASS** — doubled gate suites: `aion-integrations` 67/67 twice, `aion-integration-norn` 92/92 twice, and `aion-worker` 143/143 twice.
+- **PASS** — `cargo test -p aion-awl --test grammar_parser_gate --test guide_reference_gate`; 6/6 and 7/7.
+- **PASS** — `cargo test -p aion-cli --test console_guide_asset`; 2/2.
+- **PASS** — full `cargo test -p aion-awl-package --tests -- --nocapture` with Gleam 1.18.1, including `runtime_surface_guard`, closure integrity/archive pins, and `committed_closure_matches_a_fresh_oracle_harvest`.
+- **EXACT GATE RESIDUAL** — `.fleet/gate-entry.sh` cleared fmt, clippy, both focused-suite rounds, and every completed workspace target; its only observed failure is `aion-awl --test editor_assets::the_zed_pin_names_a_mirror_commit_carrying_this_grammar`, for the measured unpublished public-mirror digest above. No other failure or memory-shaped anomaly appears in the no-fail-fast log.
+
+### FIX ROUND receipt
+
+```text
+.fleet/reports/l1-design.md
+.fleet/reports/l2-classify.md
+.fleet/reports/l3-route.md
+```
