@@ -314,11 +314,28 @@ fn committed_closure_matches_a_fresh_oracle_harvest() -> TestResult {
     }
     let root = workspace_root();
     let oracle = root.join("examples/awl-hello");
+    // Freshness is THIS test's property, so the test carries it: bust the
+    // oracle's compiled artefacts before building. Without this, the compile
+    // guard below and the harvested population are DISJOINT — the guard proves
+    // the oracle's own `src/` modules compiled, while the comparison excludes
+    // exactly those modules and reads only the dependency packages, which a
+    // cached `build/dev` tree serves stale (`gleam build` does not recompile
+    // up-to-date deps). A stale tree whose bytes happened to match would green
+    // a test whose name claims freshness; the divergent direction was observed
+    // live (.205, 2026-08-22: 47/47 modules stale under a prior-OTP cache).
+    // Only `build/dev` is removed: `build/packages` keeps the downloaded
+    // package sources, so the rebuild needs no registry and adds no network
+    // premise to the gate.
+    let stale_artifacts = oracle.join("build/dev");
+    if stale_artifacts.exists() {
+        fs::remove_dir_all(&stale_artifacts)?;
+    }
     // Proves the oracle's own modules were really compiled, retries a
     // transient Hex registry, and names an unreachable registry as
     // infrastructure instead of as a stale-closure verdict. A zero exit that
     // compiled nothing would otherwise let this guard compare the committed
-    // closure against a stale `build/` tree.
+    // closure against a missing `build/` tree; paired with the bust above, the
+    // harvested dependency beams are freshly compiled by construction.
     crate::gleam_test_support::compile_whole_project(&oracle)?;
 
     let manifest = fs::read_to_string(oracle.join("manifest.toml"))?;
