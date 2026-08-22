@@ -1,87 +1,71 @@
-# BRIEF — PolicyRefused L3: authored fallback and routing (leg 3 of 3, staged)
+# Brief: policyref-l3-pin — retire the editor_assets mirror-pin red
 
-You are standing on L2's ratified result (fleet/policyref-l2-result =
-68568af4d). L1 designed, L2 classified. L3 ROUTES. The authoritative design is
-the artifact IN THIS TREE: `docs/design/policy-refused-fallback.md` — read it
-whole before anything; sections R1-d (declared fallback semantics), R1-e
-(history-derived replay), "Why the authored list is immutable for a run", and
-"Implementation boundaries and gates" are your specification. Where this brief
-and the artifact disagree, the artifact wins and you SAY SO in your report.
+## Standing
 
-## Scope (artifact: "L3 owns only authored fallback and routing")
+You stand on the FULL spent tree of flight policyref-l3-route (fleet/policyref-l3-flagged
+= e64031e6). That flight's deliverable — routing policy refusals through authored
+fallbacks, including the new AWL `fallback` reserved word — is DONE, COMMITTED, and
+judged real work. Its final gate ended with exactly ONE red:
 
-AWL `fallback` syntax/lowering, queue-chain configuration, route recording
-(`Event::ActivityFallbackRouted` + recorder method), retry-loop consultation,
-recovery/replay cursor handling, and E2E coverage. L3 CONSUMES L2's committed
-class (`HarnessError::PolicyRefused`, `ActivityErrorKind::PolicyRefused`, the
-`policy_refused:` reason vocabulary) — never duplicates recognition.
+```
+test the_zed_pin_names_a_mirror_commit_carrying_this_grammar ... FAILED
+crates/aion-awl/tests/editor_assets.rs:283
+```
 
-## Binding counsel findings — carried verbatim, non-negotiable
+Mechanism (verified first-hand by the dispatcher): the L3 leg extended the grammar
+(commits 48047bd2 + 9422491d) and honestly regenerated the in-tree parser, but the Zed
+pin in `editors/zed-awl/extension.toml` still records the PREVIOUS mirror commit and
+digest. The test recomputes `published_grammar_digest()` from in-tree sources and
+fails when the recorded pair lags. The cure requires pushing the external mirror —
+an estate-external act a fleet seat cannot and must not perform.
 
-1. 🔴 THE SETTLEMENT TERMINAL PREDICATE (L2 counsel OPEN-2, ruled):
-   "L2 must not implement it; L3 cannot omit it."
-   Five sites read `!error.is_retryable()` as "settled" (audit-time
-   coordinates — RE-DERIVE each by symbol on this tree):
-   `crates/aion/src/durability/cursor.rs:343`,
-   `crates/aion/src/runtime/nif_collect_settlement.rs:339` and `:430`,
-   `crates/aion/src/runtime/fan_out.rs:339`,
-   `crates/aion/src/runtime/nif_activity_retry.rs:349`.
-   A `policy_refused:` reason is NOT retryable — but with a live fallback
-   chain it is NOT SETTLED either. Every one of those five sites must decide
-   the three-valued question on purpose; leaving any on the two-valued read
-   silently settles a mid-chain refusal.
-2. 🔴 CONFIRMED BY L2's JUDGE (hand-off note): `is_retryable_reason`
-   (`nif_activity_retry.rs:96-98` audit-time) still tests only the
-   `retryable:` prefix, so on the tree you stand on a `policy_refused:`
-   reason settles without retry or hop. Artifact R1-d step 5 ("no-chain →
-   existing configured retry policy, refusal stays nonterminal while budget
-   remains, terminal on exhaustion with `policy_refused:` reason — never
-   relabeled") plus hop-first-retry-second is YOURS to make true.
+## What has ALREADY been done for you (do not redo)
 
-## Hard walls, from the artifact
+The dispatcher (Vesper Lynd) has synced the grammar into the published mirror and
+pushed it. Verify it yourself, anonymously — this is your first act:
 
-- **Single writer**: `ActivityFallbackRouted` is appended ONLY through the
-  workflow's existing Recorder held by `RetryRecorderSeam`. NEVER
-  `EventStore::append` directly. The recorder guard re-reads the run segment
-  under the recorder lock (settled ordinal / closed epoch / already-recorded
-  hop stands the task down).
-- **Immutability premise**: the authored fallback list is read from THE RUN'S
-  OWN BOUND MODULE VERSION, never the currently deployed package (artifact
-  §"Why the authored list is immutable" — current-deploy reading is a
-  long-lived-workflow replay break invisible in every test).
-- **Hop ordering is durable** (artifact R1-e order 1-5); replay after a crash
-  at EACH boundary chooses the same recorded queue — tested.
-- **No numeric retry bound minted anywhere** — the design deliberately has
-  none; the no-chain path uses the act's existing resolved `RetrySpec`.
-- **`resolve_task_queue` gains NO fourth precedence level** — fallback is a
-  post-failure override of the recorded initial choice.
-- Terminal `policy_refused:` reason lists queues by RECORDED sequence.
-- Duplicate fallback entries rejected at AWL check; an entry equal to the
-  current queue is skipped at runtime and the original authored index is what
-  history records.
-- Known artifact erratum (L1 counsel OPEN-1, ruled "report, do not stop"):
-  the norn secondary-site name `outcome_into_payload` does not exist; the
-  referent is `run_result_to_outcome`. Not an L3 work item — recorded so you
-  do not re-derive the confusion.
+```
+git ls-remote https://github.com/tomWhiting/tree-sitter-awl.git refs/heads/main
+```
 
-## Tests (artifact list, binding)
+MUST print exactly `4ba65879406dbe9204138e24397917ba60d82aff`. If it prints anything
+else, STOP: commit nothing, write the observed value into your report, and end your
+leg — the precondition failed and the dispatcher must re-examine.
 
-- A declared chain records refusal then hop and succeeds WITHOUT a same-queue
-  retry; the E2E claim auditable from history: one refusal, one hop, zero
-  same-queue retries, empty final failure reason on success.
-- No-chain behavior preserves the configured retry policy, attempts no hop,
-  terminates with policy-refused classification WITHOUT asserting a
-  particular attempt count.
-- Replay after each crash boundary chooses the same recorded queue.
-- Live-seat tests runtime-gated (env var, logged skip, return Ok) — never
-  `#[ignore]`. No blocking sleep sized to a duration; poll + total deadline +
-  timeout-as-distinct-outcome.
+The mirror commit 4ba65879 carries the fallback grammar byte-identically
+(tree-sitter generate byte-stable against the leg's committed sources; tree-sitter
+test 18/18 at the dispatcher's hand).
 
-## Process walls
+## The task (R1) — exactly two lines in one file
 
-No lint suppressions in any spelling. No hand-edited generated types
-(regenerate; `aion-proto/src/worker.rs` and the `.proto` are hand-authored
-surfaces by design). No new dependencies. Files already over 500 lines at
-base may gain only what the compiler demands, disclosed in the report (L2's
-precedent). Report at the workflow's injected wire path with the
-`git ls-tree` receipt PASTED INTO the report body.
+In `editors/zed-awl/extension.toml`, section `[grammars.awl]`:
+
+- `rev = "8d4d63e398bf765dd51772b60555b9dae8ebc106"`
+  → `rev = "4ba65879406dbe9204138e24397917ba60d82aff"`
+- `# grammar-sha256 = "eb61fb429719c7666618a7dc841266119db320ee9a8cf8557d4364dcb993691e"`
+  → `# grammar-sha256 = "5c659cfa6ced3154ad5a69173b320591b83886f80972ed44f42b5d7db405f859"`
+
+The sha256 value is what the failing test itself printed as the required digest of the
+in-tree grammar sources. Do NOT recompute it by improvising a hash command — prove it
+by running the test (below); the test IS the oracle.
+
+## Acceptance
+
+1. `cargo test -p aion-awl --test editor_assets` — ALL tests green, including
+   `the_zed_pin_names_a_mirror_commit_carrying_this_grammar`.
+2. The full gate (`.fleet/gate-entry.sh` via the gates activity) — green.
+3. Your diff against base is EXACTLY the two lines above in that one file, plus your
+   .fleet report/plan artifacts. Nothing else. No grammar-source edits, no vendored
+   query edits, no test edits, no suppressions in any spelling.
+
+## Walls
+
+- NEVER touch tools/tree-sitter-awl/, editors/zed-awl/ beyond the two pin lines,
+  editors/nvim-awl/, or any test file.
+- NEVER attempt any push to the mirror repository or any external remote.
+- If the editor_assets test stays red AFTER the two-line edit, do not widen the
+  change: record the verbatim failure in your report and end the leg red — the
+  dispatcher reads it from there.
+- aion#54 shard-actor timeout is a KNOWN flake on this box (2/24 base rate): a red
+  there reproducing on the unmodified base is REPORTED, never chased. NO BUILDS
+  during a battery.
