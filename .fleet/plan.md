@@ -285,7 +285,10 @@ refusal code must be in `error.data`, or nowhere.
 **(B) The stop envelope — the second flattening point.**
 
 ```rust
-// crates/aion-integration-norn/src/translate/outcome.rs:61-91
+// crates/aion-integration-norn/src/translate/outcome.rs::run_result_to_outcome (decl :54), body :61-91
+// ↑ SYMBOL ADDED 2026-08-22 (L2 counsel). The original text cited this site by LINE ONLY,
+//   violating §1's own "anchor on the symbol" rule. The L1 artifact then named it
+//   `outcome_into_payload`, which does not exist in this file — see §8, OPEN-1.
 let stop = result.get(protocol::STOP_KEY)…;          // :61  — &Value, structured
 let reason = stop.get(protocol::STOP_REASON_KEY)…;   // :67  — &str, structured
 if reason != protocol::STOP_REASON_COMPLETED {
@@ -498,6 +501,9 @@ Restated so no leg has to re-derive them.
   generated types. The registry at `crates/aion-core/src/generated_types.rs:210-234`
   is hand-maintained and its own module doc (`:3-19`) records the 2026-07-30
   break from forgetting an entry — add the entry if a type is added.
+  🔴 **AMENDED 2026-08-22 (L2 counsel).** L1 chose R1-c option 1, so this wall is
+  now concrete and it is WIDER than "generated_types + TS". `ActivityErrorKind`
+  crosses FOUR generated surfaces, two of which no compiler checks. See §8, OPEN-3.
 - ⛔ Never one blocking sleep sized to the expected duration. Poll, with a total
   deadline, and timeout as its own distinct outcome.
 - 🔴 **Never a test asserting the no-chain path fails after exactly ONE attempt**,
@@ -538,3 +544,111 @@ Restated so no leg has to re-derive them.
 - `.fleet/legs/l1-design.md` — the design artifact. Blocking.
 - `.fleet/legs/l2-classify.md` — classification + Gleam grammar.
 - `.fleet/legs/l3-route.md` — fallback chain + replay + E2E.
+
+---
+
+## 8. L2 COUNSEL PASS — 2026-08-22, verification of this plan against L1's artifact
+
+Added by the L2 planning counsel standing on L1's head (`27e3668a`). The plan
+above is otherwise **byte-identical**; the only inline edits are the symbol name
+at §2.3(B) and the wire-wall pointer at §5, both of which point here.
+
+Every §1–§2 coordinate spot-checked BY SYMBOL still resolves on this tree —
+L1 changed documentation only, as expected. **The one symbol that does not
+resolve is in the ARTIFACT, not in this plan.**
+
+### OPEN-1 (artifact defect, non-blocking — the referent is unambiguous)
+
+`docs/design/policy-refused-fallback.md:98` names the norn secondary structured
+point as `crates/aion-integration-norn/src/translate/outcome.rs::outcome_into_payload`.
+**No such function exists in that file.** Its functions are `run_result_to_outcome`
+(`:54`), `completed_stop_kind` (`:164`), `json_kind` (`:169`), `bounded_for_message`
+(`:188`).
+
+The behaviour the artifact describes at that site — the stop envelope, the
+`stop.reason` check against `STOP_REASON_COMPLETED`, the `format!` flattening —
+is exactly `run_result_to_outcome`, body `:54-91`. The name appears to have been
+borrowed from the ACP section: `outcome_into_payload` IS real, at
+`crates/aion-integration-acp/src/outcome.rs:130`.
+
+**Ruling:** report, do not stop. The referent is unambiguous and the artifact's
+DECISION about the site is unaffected (that site recognises `PolicyRefused` only
+if norn's wire contract gains an explicit refusal reason — artifact `:104-106`).
+L2 reads it as `run_result_to_outcome`.
+
+### OPEN-2 (artifact left the OWNER unassigned; this plan §4 already answers it)
+
+Artifact `:180-184` mandates a change this plan should be explicit about:
+`ActivityError::is_retryable()` stays false for `PolicyRefused`, "while
+settlement/cursor code gains an explicit terminal predicate under which only
+`Terminal` settles an activity."
+
+That code is in `crates/aion`, at five non-test settlement sites that today read
+`!error.is_retryable()` as "settled":
+
+- `crates/aion/src/durability/cursor.rs:343`
+- `crates/aion/src/runtime/nif_collect_settlement.rs:339`, `:430`
+- `crates/aion/src/durability/recorder/fan_out.rs:339`
+- `crates/aion/src/runtime/nif_activity_retry.rs:349`
+
+(plus the retry-vs-fail decisions at `durability/executor.rs:277` and
+`durability/replay_inspect.rs:598`).
+
+The artifact's own boundary section `:340-347` assigns this to NEITHER leg, and
+`.fleet/legs/l2-classify.md:22-25` excludes `crates/aion` from L2's scope.
+
+**This plan's §4 already resolves it:** `:450` assigns `crates/aion` to L3. The
+predicate is L3's.
+
+**Verified it cannot bite L2 alone.** No `ActivityErrorKind::PolicyRefused` can
+reach a settlement site after L2, because the engine never reconstructs a kind
+from the reason string: `is_retryable_reason` (`nif_activity_retry.rs:96-98`)
+tests only the `retryable:` prefix, and every engine-side kind is minted
+explicitly as `Terminal` or `Retryable` (`replay.rs:384`, `resolver.rs:555`,
+`:654`, `nif_activity.rs:234`, `nif_activity_dispatch.rs:199`, `command.rs:204`,
+`activity/dispatch.rs:168`). The predicate only bites once L3 records the
+nonterminal `PolicyRefused` of artifact `:217-218`.
+
+⇒ **L2 must NOT implement the terminal predicate.** It is L3's, and L3 cannot
+omit it: artifact `:308-311` already says omitting any of its pieces makes the
+route implicit or charges the wrong budget.
+
+### OPEN-3 (BINDING ON L2 — the regeneration surface is undercounted by every document)
+
+Artifact `:172-174` says the R1-c option-1 wire change is "update the registered
+type in `crates/aion-core/src/generated_types.rs`, regenerate all TypeScript
+bindings." `.fleet/legs/l2-classify.md:116-122` and §5 of this plan said the same.
+**That is two of four surfaces.** `ActivityErrorKind` also crosses protobuf:
+
+| Surface | Site | Compiler-caught? |
+|---|---|---|
+| ts-rs registry + TS types | `crates/aion-core/src/generated_types.rs:222` | yes — `assert_every_dependency_is_exported` |
+| protobuf enum | `crates/aion-proto-generated/proto/worker.proto:238-239` (`_RETRYABLE = 1`, `_TERMINAL = 2`, `_UNSPECIFIED = 0`) | no — hand-authored `.proto` |
+| Rust proto conversions | `crates/aion-proto/src/worker.rs:297-316` — exhaustive `From`/`TryFrom` both directions | **yes** |
+| TS worker SDK | `sdks/typescript/aion-worker/src/proto/worker.ts`; `src/session.ts:874-875` | **NO** — `:874-875` is a boolean ternary, retryable-or-terminal |
+| Python worker SDK | `sdks/python/aion-worker/aion_worker/proto/worker_pb2.py{,i}`; `activity.py:283`, `:290` | **NO** |
+
+`ActivityErrorKind` carries no `#[non_exhaustive]` (`crates/aion-core/src/error.rs:8-9`),
+unlike `HarnessError` — so `match` sites break loudly, but `matches!` and the two
+SDK ternaries do not. The Python SDK is named in NO governing document.
+
+**Ruling for L2:** the R1-c change is a four-surface regeneration. The `.proto`
+enum gains a third value; `aion-proto/src/worker.rs` conversions gain their arms;
+TS and Python bindings are REGENERATED, never hand-edited; and the two boolean
+ternaries (`session.ts:874-875`, `activity.py`) must be made to decide the third
+value on purpose, because no compiler will ask them to.
+
+### Not amended, and why
+
+- §0 MISSED SITE 1 / 2 and index rows M1/M2 are historical per `.fleet/BRIEF.md`'s
+  RECONCILIATION and are left byte-identical by design. **Verified swept in the
+  body:** R1(b) now reads "the arm is ARGUED against Exhibits A and B, never
+  assumed: a refusal is stochastic"; R1(d) now reads "No chain declared ⇒ a
+  bounded same-provider retry REMAINS … the bound CONFIGURED by the act's own
+  retry declaration, never minted here." Both propositions are correctly
+  superseded. Do not re-litigate.
+- `.fleet/BRIEF.md:47` cites this plan's M1/M2 index rows as `:473-474`; on this
+  tree they are `:522-523`. Stale coordinate in the reconciliation itself, named
+  here so no one navigates by it. The rows are unambiguous by their M1/M2 labels.
+- F-4 for this pass: **no provider policy refusal tripped this planning work.**
+  Recorded so its absence is not mistaken for an omission.
