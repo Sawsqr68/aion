@@ -1,62 +1,70 @@
-# 🔴 READ THIS FIRST — A PREMISE OF THE BRIEF BELOW IS REFUTED BY MEASUREMENT
+# ADDENDUM — three places the correction below does NOT yet reach
 
-The brief that follows is gated FIT TO FLY, but two of its proposals are
-CONTRADICTED by the engine's own history and must NOT be implemented as
-written. This banner is binding and outranks the text below it wherever they
-disagree. The full verdict is
-`docs/evidence/policy-refused-census-20260822.md`, which travels in this base;
-R1 argues against those measured events, not against a remembered count.
+The brief that follows is the CANONICAL text from ablative-docs `02935c2`,
+carrying its own binding correction at the top. That correction is authoritative
+and this addendum does not repeat it — one truth in two places drifts, so the
+correction lives in exactly one place, below.
 
-## What is refuted
+What the canonical correction covers: R1 (b)'s determinism claim and R1 (d)'s
+fail-fast-after-one. What it does NOT yet reach — the premise is load-bearing in
+three further places, and leaving them would let the flight enshrine the refuted
+behaviour in a TEST, which is the worst place for it to survive:
 
-The brief proposes (b) that `PolicyRefused` be classified **deterministic**
-("this provider will refuse this content every time") and (d) that with no
-chain declared the act should **fail fast after ONE attempt**. Both are false:
+1. **R3 (3), the green criterion** — "no chain declared ⇒ the act fails
+   `policy_refused:` after exactly ONE attempt (the fail-fast proof)."
+   ❌ **MUST NOT be written as a test.** A test asserting exactly-one-attempt
+   pins the behaviour that would have killed workflow `4ddee56c`. Replace it
+   with: no chain declared ⇒ the act exhausts its CONFIGURED bound and then
+   fails `policy_refused:`, asserting the CLASSIFICATION and that **no chain hop
+   was attempted**, with attempt accounting in the record — and asserting NO
+   particular attempt count. Assert the invariant, not the enumeration.
 
-- **Exhibit A** — workflow `4ddee56c` (`aion84_dev`, 2026-08-19), read event by
-  event: `seq 9 ActivityFailed act 1 attempt 1` (a `cyber_policy` refusal) then
-  `seq 11 ActivityCompleted act 1 attempt 2`. Same act, same content — the
-  retry CLEARED it and the flight continued. Under "fail fast after one
-  attempt" that flight dies at seq 9.
-- **Exhibit B** — aion#65 round 3's leg, independently, on a different repo:
-  attempt 1 died at 22m44s on `cyber_policy`; attempt 2, same prompt and same
-  tree, ran 11m29s PAST attempt 1's death depth and delivered the leg whole.
+2. **The "cure is two halves" paragraph**, immediately below the canonical
+   correction — "(1) classify the refusal as what it is — deterministic for this
+   provider-and-content, never retried in place." ❌ Same refuted premise, in the
+   brief's own summary of its purpose. Read it as: classify it as what it is — a
+   ROUTING fact rather than a transient fault — and stop it burning a
+   same-provider retry budget under a transient label. Not: never retried.
 
-A refusal is **stochastic, not deterministic-for-content**.
+3. **The closing sentence** — "never ask the same wall the same question twice."
+   ❌ Precisely what measurement refutes: asking twice worked, twice,
+   independently. The durable half is the routing insight — classify once, route
+   around it rather than grinding on it. Keep that; drop the claim that the
+   second ask is futile.
 
-## What replaces it
-
-- `PolicyRefused` may still be its own class, and it must still stop burning a
-  same-provider retry budget. That half of the brief STANDS.
-- **Hop first, retry second.** A declared chain hop is cheaper and likelier to
-  succeed than a same-provider retry, so the chain is consulted first.
-- **With no chain declared, a bounded same-provider retry REMAINS**, because
-  measurement says it sometimes clears. What is removed is the waste and the
-  mislabelling — not the retry.
-- **DO NOT MINT THE BOUND.** The honest number is unknown (2 survivals
-  observed, tiny sample). It is a configured value like every other retry
-  bound, defaulting to what the act already declares. Minting "1" or "2" here
-  is the no-assumed-defaults violation this estate refuses — and "1" is
-  affirmatively refuted above.
-- If R1 still argues determinism after weighing both exhibits, it must name the
-  MECHANISM that makes a refusal which demonstrably cleared on attempt 2
-  deterministic. That argument, not the assumption, is what gets gated.
-
-## Two further binding notes
-
-**The grounding tree is not main.** The brief's seams come from `89ab967a`
-(`regate/inv87r2`). Re-derive every `file:line` on YOUR tree before use and
-report any coordinate that moved. A positional reference fails silently — a
-line number still resolves after the code moves — so anchor on the SYMBOL.
-
-**If this flight's own content trips the refusal it is fixing, REPORT THAT as a
-first-class finding.** It is evidence for the brief, not an obstacle to route
-around. Do not rewrite the work to avoid the trigger; say what tripped and
-where.
+If you find a further site, treat it the same way and NAME it in your report.
+A premise this load-bearing does not appear once; a correction that fixes only
+where it was first noticed leaves the design rebuildable from the leftovers.
 
 ---
 
 # BRIEF — aion: PolicyRefused error class + declared provider fallback
+
+## 🔴 CORRECTION — 2026-08-22, binding, outranks the text below where they
+## disagree (refutation by Vesper Lynd, ratified by Waffles)
+
+Two of this brief's proposals are CONTRADICTED by measured engine history
+and must NOT be implemented as written: (b)'s claim that a policy refusal
+is **deterministic-for-this-content**, and (d)'s **fail-fast after ONE
+attempt** when no chain is declared. Exhibit A: workflow `4ddee56c`
+(aion84_dev, 2026-08-19) — seq 9 ActivityFailed on a `cyber_policy`
+refusal, seq 11 ActivityCompleted, SAME act, attempt 2: the retry cleared
+it. Exhibit B: aion#65 round 3's leg — attempt 1 died at 22m44s on
+`cyber_policy`; attempt 2, same prompt and tree, delivered the leg whole.
+(Exhibit B was this author's own banked evidence, not consulted when (b)
+was written — the refutation stands on data I already held.) A refusal is
+**stochastic, not deterministic**. What replaces the refuted parts:
+`PolicyRefused` remains its own class and must still never burn a
+same-provider retry budget mislabelled as transient; the declared chain is
+consulted FIRST (hop first, retry second — a hop is cheaper and likelier
+than a same-provider retry); with NO chain declared, a bounded
+same-provider retry REMAINS, its bound a CONFIGURED value defaulting to
+what the act already declares — minting "1" or "2" here is the
+no-assumed-defaults violation this estate refuses. If R1 still argues
+determinism it must name the mechanism that makes a refusal which
+demonstrably cleared on attempt 2 deterministic. Full verdict with the
+event-by-event reads: `docs/evidence/policy-refused-census-20260822.md`
+in the flight base (`fleet/policyrefused-base` = `8709317ba`).
 
 Tom's ruling, 2026-08-22 09:50 his time, governs this flight: a provider
 rejecting an act under its safety policy must not be a flight-killer.
