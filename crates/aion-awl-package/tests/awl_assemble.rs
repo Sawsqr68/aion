@@ -58,7 +58,14 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// 2026-08-22 for `PolicyRefused` L3: `activity.fallback/2` changed the shipped
 /// activity module, and a fresh Gleam 1.18.1 harvest on this Linux venue
 /// refreshed the venue-bound BEAM bytes across the closure.
-const BUNDLE_CHECKSUM: &str = "be25d4143e72cd75cdc02207a6ff8349e8143d87d6bd6e65899f440836900dfe";
+/// Repinned 2026-08-22 for the estate toolchain alignment: the closure was
+/// re-harvested on an OTP 29.0.5 venue (Dean, Gleam 1.18.1/erts 17.0.5) after
+/// every fleet venue converged on OTP 29 — BEAM bytes follow the host
+/// toolchain, and the alignment's step-2 harvest proved rf (erts 17.0.1) and
+/// Dean (erts 17.0.5) produce byte-identical modules, so this pin now holds
+/// across the aligned fleet instead of one venue. Module set and SDK version
+/// unchanged (47 modules, aion_flow 0.7.0).
+const BUNDLE_CHECKSUM: &str = "afbc1b1d82aee2e30af0ae03a293f53164e5bd06b5023fb65610de6d0bbe2b8c";
 const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -169,8 +176,12 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// fixed-input assembly remains deterministic. Repinned 2026-08-22 because the
 /// L3 `activity.fallback/2` closure harvest is an input to every archive; the
 /// same-process determinism and fresh-closure tests remain the controls.
+/// Repinned 2026-08-22 with the estate toolchain-alignment closure harvest
+/// (OTP 29.0.5 venue; see `BUNDLE_CHECKSUM` notes): the closure is an input
+/// to every archive, so the archive bytes moved with the closure while the
+/// fixed-input assembly remains deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "9c3e0e3d9c21a5f2e097246a9515c6d86f9db34eaf002fb0522b743cfc36f96a";
+    "8529350178f674902fb23be87b8d06622263a4f09785eb7fd0cd67626920fe38";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
