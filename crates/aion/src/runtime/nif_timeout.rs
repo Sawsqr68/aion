@@ -176,7 +176,7 @@ pub(super) fn with_timeout_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
     {
         return error_result_term(ctx, &error);
     }
-    match arm_scope(&state, args, pid) {
+    match arm_scope(&state, args, pid, ctx.borrow_terms()) {
         Ok((fun, state_id)) => {
             ctx.set_continuation_trampoline(
                 fun,
@@ -197,9 +197,15 @@ pub(super) fn with_timeout_impl(args: &[Term], ctx: &mut ProcessContext) -> Resu
 }
 
 /// Resolve the scope's durable timer command and register the scope.
-fn arm_scope(state: &EngineNifState, args: &[Term], pid: u64) -> Result<(Term, u64), String> {
+fn arm_scope(
+    state: &EngineNifState,
+    args: &[Term],
+    pid: u64,
+    heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+) -> Result<(Term, u64), String> {
     let duration =
-        decode_duration_arg("with_timeout deadline", args[0]).map_err(|error| error.to_string())?;
+        decode_duration_arg("with_timeout deadline", args[0], heap)
+            .map_err(|error| error.to_string())?;
     let fun = args[1];
     let mut context = build_context_for_pid(state, pid).map_err(|error| error.to_string())?;
     let now = recorded_now(&context);

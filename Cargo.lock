@@ -535,7 +535,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -546,7 +546,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -699,9 +699,9 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "beamr"
-version = "0.19.3"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbd1a009e87acd34def034229b6e2f446d0a110aecce0ff8b2ad49787cd74ae1"
+checksum = "e49c35fe8b5dd5f607fc7b66c7cf98228507cf40303203d79b8aa7bc9b74b22f"
 dependencies = [
  "base64 0.23.1",
  "cranelift-codegen",
@@ -850,7 +850,7 @@ dependencies = [
  "cap-primitives",
  "cap-std",
  "io-lifetimes 3.0.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -867,7 +867,7 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
  "winx",
 ]
 
@@ -1607,7 +1607,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1977,9 +1977,9 @@ dependencies = [
 
 [[package]]
 name = "haematite"
-version = "0.9.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60b8566825e2647cc4b1b25395972d06eb722b66f2fe398de9651c191c9135e1"
+checksum = "360ea313bbaa982b624aa96b26a2bdb6ef9415a93e8d8ee17f19cd0dc93f4a86"
 dependencies = [
  "beamr",
  "blake3",
@@ -2012,8 +2012,6 @@ version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash 0.1.5",
 ]
 
@@ -2702,13 +2700,13 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "liminal-protocol"
-version = "0.7.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63#8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63"
+version = "0.7.1"
+source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
 
 [[package]]
 name = "liminal-rs"
-version = "0.6.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63#8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63"
+version = "0.6.1"
+source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
 dependencies = [
  "async-trait",
  "beamr",
@@ -2725,8 +2723,8 @@ dependencies = [
 
 [[package]]
 name = "liminal-sdk"
-version = "0.7.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63#8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63"
+version = "0.8.0"
+source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
 dependencies = [
  "futures-core",
  "liminal-protocol",
@@ -2741,7 +2739,7 @@ dependencies = [
 [[package]]
 name = "liminal-server"
 version = "0.9.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63#8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63"
+source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
 dependencies = [
  "anyhow",
  "beamr",
@@ -2790,11 +2788,11 @@ checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "lru"
-version = "0.12.5"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
+checksum = "5d2f2f9b4ba7e6b24d95e7e899329d35be83bcded72c8540cdd5368932d1d90a"
 dependencies = [
- "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -2991,7 +2989,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3927,7 +3925,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4004,7 +4002,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4433,7 +4431,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4544,7 +4542,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5389,7 +5387,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

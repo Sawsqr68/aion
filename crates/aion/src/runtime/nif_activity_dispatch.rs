@@ -12,6 +12,7 @@ use crate::runtime::nif_context::NifContext;
 use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 use aion_core::ActivityId;
 use beamr::native::ProcessContext;
+use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::Term;
 
 /// NIF backing `aion_flow_ffi:dispatch_activity/3`.
@@ -19,7 +20,7 @@ pub(super) fn dispatch_activity_impl(
     args: &[Term],
     ctx: &mut ProcessContext,
 ) -> Result<Term, Term> {
-    let Ok((name, input, config)) = decode_dispatch_args(args) else {
+    let Ok((name, input, config)) = decode_dispatch_args(args, ctx.borrow_terms()) else {
         return error_result_term(
             ctx,
             &format!(
@@ -101,7 +102,7 @@ pub(super) fn await_activity_result_impl(
             ),
         );
     }
-    let correlation = match decode_string_arg(args[0]) {
+    let correlation = match decode_string_arg(args[0], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("await_activity_result id: {error}"));
@@ -130,13 +131,13 @@ pub(super) fn await_activity_result_impl(
     await_activity_result_with_context(&state, context, &runtime.runtime, ctx, &correlation)
 }
 
-fn decode_dispatch_args(args: &[Term]) -> Result<(String, String, String), ()> {
+fn decode_dispatch_args(args: &[Term], heap: HeapBorrow<'_>) -> Result<(String, String, String), ()> {
     if args.len() != 3 {
         return Err(());
     }
-    let name = decode_string_arg(args[0]).map_err(|_| ())?;
-    let input = decode_string_arg(args[1]).map_err(|_| ())?;
-    let config = decode_string_arg(args[2]).map_err(|_| ())?;
+    let name = decode_string_arg(args[0], heap).map_err(|_| ())?;
+    let input = decode_string_arg(args[1], heap).map_err(|_| ())?;
+    let config = decode_string_arg(args[2], heap).map_err(|_| ())?;
     Ok((name, input, config))
 }
 

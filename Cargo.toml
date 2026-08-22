@@ -84,19 +84,22 @@ fs4 = "1.1"
 notify = "8.2"
 saffron = { version = "0.1", features = ["std"] }
 hostname = "0.4"
-# 0.19.3 is the estate-wide runtime floor. Keep the direct runtime and every
+# 0.20.0 is the estate-wide runtime floor (raised from 0.19.3, 2026-08-23, on
+# the accessor-lifetimes release). Keep the direct runtime and every
 # storage/messaging wrapper on releases whose beamr requirements can unify at
 # that floor; older 0.x requirements are disjoint and would retain unsafe
-# runtimes in the resolved graph.
-beamr = { version = "0.19.3", features = ["json", "encode"] }
-haematite = "0.9.0"
+# runtimes in the resolved graph. haematite 0.11.0 is the release cut for this
+# floor (declares beamr ^0.20.0 on both edges, beamr-wasm ^0.10.0); the liminal
+# rev below is its one-motion counterpart (beamr 0.20.0 + haematite =0.11.0 +
+# the NativeHandler frame-copy fix for beamr#36).
+beamr = { version = "0.20.0", features = ["json", "encode"] }
+haematite = "0.11.0"
 # The crates.io 0.7.0 SDK manifest still selects liminal-rs 0.5.5 (and therefore
-# beamr 0.16.3). Pin the complete liminal family to its immutable 0.9.0 release
-# revision so shared wire types come from one source and its std transport uses
-# liminal-rs 0.6.0.
-liminal = { package = "liminal-rs", git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.6.0" }
-liminal-sdk = { git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.7.0" }
-liminal-server = { git = "https://github.com/ablative-io/liminal.git", rev = "8a36db0ccc36cb90ac5c29938eb9ed2b63b5ed63", version = "0.9.0" }
+# beamr 0.16.3). Pin the complete liminal family to one git revision so shared
+# wire types come from one source and its std transport uses liminal-rs 0.6.1.
+liminal = { package = "liminal-rs", git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.6.1" }
+liminal-sdk = { git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.8.0" }
+liminal-server = { git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.9.0" }
 tempfile = "3.27.0"
 tokio-stream = "0.1.18"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "no-serde-warnings"] }

@@ -7,6 +7,7 @@
 use beamr::native::{NativeFn, ProcessContext};
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 
 use super::nif::{Determinism, Mfa, NifEntry};
 use super::nif_child;
@@ -23,9 +24,10 @@ const FFI_MODULE: &str = "aion_flow_ffi";
 #[cfg(test)]
 const NOT_YET_IMPLEMENTED: &str = "not_yet_implemented";
 
-pub(super) fn decode_string_arg(term: Term) -> Result<String, String> {
+pub(super) fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 fn dispatch_activity(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
@@ -209,7 +211,10 @@ mod tests {
         Ok(mfas)
     }
 
-    fn decode_result_tuple(term: Term) -> Result<(String, String), Box<dyn std::error::Error>> {
+    fn decode_result_tuple(
+        term: Term,
+        heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+    ) -> Result<(String, String), Box<dyn std::error::Error>> {
         let tuple = Tuple::new(term).ok_or("result should be a tuple")?;
         if tuple.arity() != 2 {
             return Err(format!("expected arity 2, got {}", tuple.arity()).into());
@@ -222,7 +227,7 @@ mod tests {
             "error"
         };
         let bin = BinaryRef::new(value).ok_or("value should be a binary")?;
-        let text = String::from_utf8(bin.as_bytes().to_vec())
+        let text = String::from_utf8(bin.as_bytes(heap).to_vec())
             .map_err(|_| "value should be valid UTF-8")?;
         Ok((tag_name.to_owned(), text))
     }
@@ -235,7 +240,7 @@ mod tests {
 
         match result {
             Ok(term) => {
-                let (tag, message) = decode_result_tuple(term)?;
+                let (tag, message) = decode_result_tuple(term, ctx.borrow_terms())?;
                 assert_eq!(tag, "error");
                 assert!(
                     message.contains("expected 3 arguments"),
@@ -393,7 +398,7 @@ mod tests {
 
         match result {
             Ok(term) => {
-                let (tag, message) = decode_result_tuple(term)?;
+                let (tag, message) = decode_result_tuple(term, ctx.borrow_terms())?;
                 assert_eq!(tag, "error");
                 assert_eq!(message, NOT_YET_IMPLEMENTED);
             }

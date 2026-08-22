@@ -25,13 +25,13 @@ pub(super) fn report_query_diagnostic(
 
     // Decode both terms before allocating a result because attached calls may
     // collect during allocation and rewrite argument terms in place.
-    let category = match decode_string_arg(args[0]) {
+    let category = match decode_string_arg(args[0], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("report_query_diagnostic category: {error}"));
         }
     };
-    let message = match decode_string_arg(args[1]) {
+    let message = match decode_string_arg(args[1], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("report_query_diagnostic message: {error}"));

@@ -494,7 +494,7 @@ impl Vm {
         let payload = Tuple::new(root)
             .and_then(|tuple| tuple.get(0))
             .and_then(BinaryRef::new)
-            .map(|binary| binary.as_bytes().to_vec());
+            .map(|binary| binary.as_bytes(owned.borrow_terms()).to_vec());
         (reason, formatted, payload)
     }
 

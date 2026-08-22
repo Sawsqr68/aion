@@ -37,7 +37,11 @@ impl RuntimeHandle {
         let observed = self.activity_process_exit_outcome(activity_pid)?;
         self.release_spawn_heaps(activity_pid);
         if observed.reason == ExitReason::Normal {
-            let payload = term_to_payload(observed.result.root(), &self.atom_table)?;
+            let payload = term_to_payload(
+                observed.result.root(),
+                &self.atom_table,
+                observed.result.borrow_terms(),
+            )?;
             self.deliver_activity_result(parent_pid, activity_pid, payload)
         } else {
             let error = self
@@ -77,7 +81,7 @@ impl RuntimeHandle {
         let observed = self.activity_process_exit_outcome(child_pid)?;
         self.release_spawn_heaps(child_pid);
         if observed.reason == ExitReason::Normal {
-            match decode_in_vm_result(observed.result.root()) {
+            match decode_in_vm_result(observed.result.root(), observed.result.borrow_terms()) {
                 Some(outcome) => Ok(outcome),
                 None => Ok(InVmChildOutcome::Failed(format!(
                     "terminal:activity process {child_pid} returned an unexpected result shape"
@@ -664,7 +668,10 @@ pub(crate) enum InVmChildOutcome {
 ///
 /// Returns `None` for any other shape — including non-UTF-8 payload bytes —
 /// so the caller synthesizes a terminal failure instead of guessing.
-fn decode_in_vm_result(term: beamr::term::Term) -> Option<InVmChildOutcome> {
+fn decode_in_vm_result(
+    term: beamr::term::Term,
+    heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+) -> Option<InVmChildOutcome> {
     let tuple = beamr::term::boxed::Tuple::new(term)?;
     if tuple.arity() != 2 {
         return None;
@@ -672,7 +679,7 @@ fn decode_in_vm_result(term: beamr::term::Term) -> Option<InVmChildOutcome> {
     let tag = tuple.get(0)?;
     let value = tuple.get(1)?;
     let bin = beamr::term::binary_ref::BinaryRef::new(value)?;
-    let text = String::from_utf8(bin.as_bytes().to_vec()).ok()?;
+    let text = String::from_utf8(bin.as_bytes(heap).to_vec()).ok()?;
     if tag == beamr::term::Term::atom(Atom::OK) {
         Some(InVmChildOutcome::Completed(text))
     } else if tag == beamr::term::Term::atom(Atom::ERROR) {

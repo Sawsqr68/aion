@@ -8,6 +8,7 @@ use aion_store::EventStore;
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{Rng, SeedableRng};
 use sha2::{Digest, Sha256};
@@ -67,9 +68,10 @@ pub(crate) fn install_nif_context_source(state: &EngineNifState, source: Arc<Nif
     }
 }
 
-fn decode_string_arg(term: Term) -> Result<String, String> {
+fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 fn context_from_process(ctx: &ProcessContext) -> Result<NifContext, String> {
@@ -149,11 +151,11 @@ pub(crate) fn random_int_impl(args: &[Term], ctx: &mut ProcessContext) -> Result
         );
     }
 
-    let min = match parse_i64_arg(args[0], "random_int min") {
+    let min = match parse_i64_arg(args[0], "random_int min", ctx.borrow_terms()) {
         Ok(value) => value,
         Err(message) => return error_term(ctx, &message),
     };
-    let max = match parse_i64_arg(args[1], "random_int max") {
+    let max = match parse_i64_arg(args[1], "random_int max", ctx.borrow_terms()) {
         Ok(value) => value,
         Err(message) => return error_term(ctx, &message),
     };
@@ -170,8 +172,8 @@ pub(crate) fn random_int_impl(args: &[Term], ctx: &mut ProcessContext) -> Result
     }
 }
 
-fn parse_i64_arg(term: Term, label: &str) -> Result<i64, String> {
-    let text = decode_string_arg(term).map_err(|error| format!("{label}: {error}"))?;
+fn parse_i64_arg(term: Term, label: &str, heap: HeapBorrow<'_>) -> Result<i64, String> {
+    let text = decode_string_arg(term, heap).map_err(|error| format!("{label}: {error}"))?;
     text.parse::<i64>()
         .map_err(|_| format!("{label}: argument is not a valid i64"))
 }
@@ -455,7 +457,7 @@ mod tests {
         ctx.set_pid(Some(pid));
         ctx.set_nif_private_data(Some(state));
         let result = now_impl(&[], &mut ctx).map_err(|_| "now should return Ok at beamr level")?;
-        let (tag, value) = decode_result_tuple(result)?;
+        let (tag, value) = decode_result_tuple(result, ctx.borrow_terms())?;
         if tag != "ok" {
             return Err(format!("now returned an error: {value}").into());
         }
@@ -539,7 +541,10 @@ mod tests {
         }
     }
 
-    fn decode_result_tuple(term: impl IntoTestTerm) -> TestResult<(String, String)> {
+    fn decode_result_tuple(
+        term: impl IntoTestTerm,
+        heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+    ) -> TestResult<(String, String)> {
         let tuple = Tuple::new(term.into_test_term()?).ok_or("result should be a tuple")?;
         let tag = tuple.get(0).ok_or("missing tag element")?;
         let value = tuple.get(1).ok_or("missing value element")?;
@@ -549,7 +554,7 @@ mod tests {
             "error"
         };
         let bin = BinaryRef::new(value).ok_or("value should be a binary")?;
-        let text = String::from_utf8(bin.as_bytes().to_vec())?;
+        let text = String::from_utf8(bin.as_bytes(heap).to_vec())?;
         Ok((tag_name.to_owned(), text))
     }
 
@@ -574,7 +579,7 @@ mod tests {
         // Detached contexts allocate owned blocks that live as long as the
         // ProcessContext itself.
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -596,7 +601,7 @@ mod tests {
         let context = context_with_history(&runtime, 61, workflow_id, run_id(), &history)?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -627,7 +632,7 @@ mod tests {
         context.resolve_command_observed(sleep_command())?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
         assert_eq!(tag, "ok");
         assert_eq!(
             value,
@@ -651,7 +656,7 @@ mod tests {
         let context = context_with_history(&runtime, 63, workflow_id, run_id(), &history)?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context))?;
+        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -744,7 +749,7 @@ mod tests {
         )?;
         let mut live_now = Vec::new();
         let mut ctx = ProcessContext::new();
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
         let scheduled_at_time = Utc
             .timestamp_millis_opt(scheduled_at)
             .single()
@@ -760,7 +765,7 @@ mod tests {
                 attempt: 1,
             },
         )?;
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
         let completed_at_time = Utc
             .timestamp_millis_opt(completed_at)
             .single()
@@ -774,7 +779,7 @@ mod tests {
         // The OBSERVED await seam's live half: `await_activity_result` advances
         // to the terminal it just recorded and returns it to workflow code.
         live.context.observe_recorded_at(completed_at_time);
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context))?.1);
+        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
 
         // REPLAY: a fresh handle over the history live just produced.
         let replay_history = runtime.block_on(live.store.read_history(&workflow_id))?;
@@ -785,9 +790,9 @@ mod tests {
         // resolvers over the same history.
         let mut replay_context = replay.context;
         let mut replay_now = Vec::new();
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context), ctx.borrow_terms())?.1);
         replay_context.resolve_command_unobserved(command.clone())?;
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context))?.1);
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context), ctx.borrow_terms())?.1);
         let mut await_context = NifContext::new_with_history_store(
             72,
             replay.registry.as_ref(),
@@ -796,7 +801,7 @@ mod tests {
             crate::runtime::SignalDeliveryConfig::default(),
         )?;
         await_context.resolve_command_observed(command)?;
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &await_context))?.1);
+        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &await_context), ctx.borrow_terms())?.1);
 
         assert_eq!(
             live_now, replay_now,
@@ -858,7 +863,7 @@ mod tests {
         ctx.set_pid(Some(52));
         ctx.set_nif_private_data(Some(second_state));
         let result = now_impl(&[], &mut ctx).map_err(|_| "now should return Ok at beamr level")?;
-        let (tag, value) = decode_result_tuple(result)?;
+        let (tag, value) = decode_result_tuple(result, ctx.borrow_terms())?;
         assert_eq!(tag, "ok");
         assert_eq!(value, "1700000500000");
 
@@ -867,7 +872,7 @@ mod tests {
         first_ctx.set_nif_private_data(Some(first_state));
         let result =
             now_impl(&[], &mut first_ctx).map_err(|_| "now should return Ok at beamr level")?;
-        let (tag, value) = decode_result_tuple(result)?;
+        let (tag, value) = decode_result_tuple(result, ctx.borrow_terms())?;
         assert_eq!(tag, "ok");
         assert_eq!(value, "1700000000123");
         Ok(())
@@ -915,7 +920,7 @@ mod tests {
 
         let result = super::random_int_impl(&[min, max], &mut ctx);
         let term = result.map_err(|_| "random_int should return Ok at the beamr level")?;
-        let (tag, message) = decode_result_tuple(term)?;
+        let (tag, message) = decode_result_tuple(term, ctx.borrow_terms())?;
 
         assert_eq!(tag, "error");
         assert!(message.contains("min is greater than max"));
@@ -935,16 +940,16 @@ mod tests {
             context_with_history(&runtime, 43, workflow_id.clone(), run_id.clone(), &history)?;
         let mut ctx = ProcessContext::new();
         let first_values = vec![
-            decode_result_tuple(now_from_context(&mut ctx, &first))?.1,
-            decode_result_tuple(random_from_context(&mut ctx, &first))?.1,
-            decode_result_tuple(random_int_from_context(&mut ctx, &first, 1, 100))?.1,
+            decode_result_tuple(now_from_context(&mut ctx, &first), ctx.borrow_terms())?.1,
+            decode_result_tuple(random_from_context(&mut ctx, &first), ctx.borrow_terms())?.1,
+            decode_result_tuple(random_int_from_context(&mut ctx, &first, 1, 100), ctx.borrow_terms())?.1,
         ];
 
         let replay = context_with_history(&runtime, 44, workflow_id, run_id, &history)?;
         let replay_values = vec![
-            decode_result_tuple(now_from_context(&mut ctx, &replay))?.1,
-            decode_result_tuple(random_from_context(&mut ctx, &replay))?.1,
-            decode_result_tuple(random_int_from_context(&mut ctx, &replay, 1, 100))?.1,
+            decode_result_tuple(now_from_context(&mut ctx, &replay), ctx.borrow_terms())?.1,
+            decode_result_tuple(random_from_context(&mut ctx, &replay), ctx.borrow_terms())?.1,
+            decode_result_tuple(random_int_from_context(&mut ctx, &replay, 1, 100), ctx.borrow_terms())?.1,
         ];
 
         assert_eq!(first_values, replay_values);

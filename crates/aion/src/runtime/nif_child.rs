@@ -20,6 +20,7 @@ use aion_core::{ContentType, Payload, WorkflowError, WorkflowId};
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 use chrono::Utc;
 
 use crate::durability::{Command, CorrelationKey, Resolution, ResolveOutcome};
@@ -71,13 +72,13 @@ pub(super) fn await_child_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
 fn run_spawn_child(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, NifRefusal> {
     require_arity("spawn_child", args, 3)
         .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
-    let workflow_type = decode_string_arg(args[0])
+    let workflow_type = decode_string_arg(args[0], ctx.borrow_terms())
         .map_err(|error| format!("workflow_type:{error}"))
         .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
-    let input = decode_payload_arg(args[1])
+    let input = decode_payload_arg(args[1], ctx.borrow_terms())
         .map_err(|error| format!("input:{error}"))
         .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
-    decode_string_arg(args[2])
+    decode_string_arg(args[2], ctx.borrow_terms())
         .map_err(|error| format!("options:{error}"))
         .map_err(|message| child_refusal(ctx, "spawn_child", &message))?;
     let bridge =
@@ -297,7 +298,7 @@ enum AwaitChildStep {
 
 fn run_await_child(args: &[Term], ctx: &mut ProcessContext) -> Result<AwaitChildOutcome, String> {
     require_arity("await_child", args, 1)?;
-    let child_workflow_id = parse_workflow_id(&decode_string_arg(args[0])?)?;
+    let child_workflow_id = parse_workflow_id(&decode_string_arg(args[0], ctx.borrow_terms())?)?;
     let bridge = child_bridge(ctx)?;
     let pid = ctx.pid().ok_or_else(|| "missing_caller_pid".to_owned())?;
     let state = super::nif_state::engine_nif_state(ctx)?;
@@ -616,13 +617,14 @@ fn parse_workflow_id(value: &str) -> Result<WorkflowId, String> {
         .map_err(|error| format!("invalid_child_workflow_id:{error}"))
 }
 
-fn decode_payload_arg(term: Term) -> Result<Payload, String> {
-    decode_string_arg(term).map(|value| Payload::new(ContentType::Json, value.into_bytes()))
+fn decode_payload_arg(term: Term, heap: HeapBorrow<'_>) -> Result<Payload, String> {
+    decode_string_arg(term, heap).map(|value| Payload::new(ContentType::Json, value.into_bytes()))
 }
 
-fn decode_string_arg(term: Term) -> Result<String, String> {
+fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 fn require_arity(name: &str, args: &[Term], expected: usize) -> Result<(), String> {

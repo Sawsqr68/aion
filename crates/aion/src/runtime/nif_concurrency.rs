@@ -10,6 +10,7 @@
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::boxed::Cons;
 
 use crate::runtime::nif_activity::runtime_context;
@@ -21,9 +22,10 @@ use crate::runtime::nif_result_term::{
 };
 use crate::runtime::nif_state::{CollectKind, engine_nif_state};
 
-fn decode_string_arg(term: Term) -> Result<String, String> {
+fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 fn decode_spec_list(
@@ -45,7 +47,7 @@ fn decode_spec_list(
         };
         let head = cons.head();
         let next_tail = cons.tail();
-        let encoded = decode_string_arg(head).map_err(|error| {
+        let encoded = decode_string_arg(head, ctx.borrow_terms()).map_err(|error| {
             NifRefusal::reported(error_result_term(
                 ctx,
                 &format!("{label}: activity spec: {error}"),
@@ -87,7 +89,7 @@ fn decode_concurrency_args(
             &format!("{label}: expected 2 arguments, got {}", args.len()),
         )));
     }
-    decode_string_arg(args[0]).map_err(|error| {
+    decode_string_arg(args[0], ctx.borrow_terms()).map_err(|error| {
         NifRefusal::reported(error_result_term(
             ctx,
             &format!("{label}: collection id: {error}"),
@@ -193,12 +195,15 @@ mod allocation_failure_control {
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-    fn decode_result(term: Term) -> Result<(Term, String), Box<dyn std::error::Error>> {
+    fn decode_result(
+        term: Term,
+        heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+    ) -> Result<(Term, String), Box<dyn std::error::Error>> {
         let tuple = Tuple::new(term).ok_or("result should be a tuple")?;
         let tag = tuple.get(0).ok_or("result should have a tag")?;
         let payload = tuple.get(1).ok_or("result should have a payload")?;
         let binary = BinaryRef::new(payload).ok_or("payload should be a binary")?;
-        let text = String::from_utf8(binary.as_bytes().to_vec())?;
+        let text = String::from_utf8(binary.as_bytes(heap).to_vec())?;
         Ok((tag, text))
     }
 
@@ -208,7 +213,7 @@ mod allocation_failure_control {
 
         let result = encoded_results(&mut ctx, &[]);
         let term = result.map_err(|reason| format!("result allocation failed: {reason:?}"))?;
-        let (tag, payload) = decode_result(term)?;
+        let (tag, payload) = decode_result(term, ctx.borrow_terms())?;
 
         println!("CONTROL healthy empty: tag=ok payload={payload}");
         assert_eq!(tag, Term::atom(Atom::OK));

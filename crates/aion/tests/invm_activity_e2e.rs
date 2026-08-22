@@ -50,14 +50,13 @@ static COUNTERS: LazyLock<Mutex<HashMap<Vec<u8>, i64>>> =
 /// Host NIF `invm_test_host:bump/1`: increment and return the counter for the
 /// binary key argument.
 fn bump_nif(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    let _ = ctx;
     if args.len() != 1 {
         return Err(Term::NIL);
     }
     let Some(key) = BinaryRef::new(args[0]) else {
         return Err(Term::NIL);
     };
-    let key = key.as_bytes().to_vec();
+    let key = key.as_bytes(ctx.borrow_terms()).to_vec();
     let Ok(mut counters) = COUNTERS.lock() else {
         return Err(Term::NIL);
     };

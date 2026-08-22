@@ -8,6 +8,7 @@ use aion_core::{ActivityError, ActivityErrorKind, ActivityId, Payload};
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 use chrono::Utc;
 use tokio::runtime::Handle;
 
@@ -207,9 +208,10 @@ pub(super) fn runtime_context(state: &EngineNifState) -> Result<RuntimeContext, 
     })
 }
 
-pub(super) fn decode_string_arg(term: Term) -> Result<String, String> {
+pub(super) fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 pub(super) fn json_payload(

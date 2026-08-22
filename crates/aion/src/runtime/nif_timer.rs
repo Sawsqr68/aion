@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{Event, TimerId};
 use beamr::native::ProcessContext;
+use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::Term;
 use chrono::{DateTime, Utc};
 
@@ -44,9 +45,9 @@ pub(super) fn sleep_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term
     } else {
         consume_one_wake_marker(ctx);
     }
-    timer_call("sleep", 1, args, ctx, |state, mut context, args| {
+    timer_call("sleep", 1, args, ctx, |state, mut context, args, heap| {
         let pid = context.pid();
-        let duration = decode_duration_arg("sleep duration", args[0])?;
+        let duration = decode_duration_arg("sleep duration", args[0], heap)?;
         let pinned = match state.pending_awaits.get(&pid).map(|entry| entry.clone()) {
             Some(PendingAwait::Sleep { timer_id, fire_at }) => Some((timer_id, fire_at)),
             Some(PendingAwait::Signal { .. }) => {
@@ -179,9 +180,9 @@ fn consume_one_wake_marker(ctx: &mut ProcessContext) {
 
 /// NIF backing `aion_flow_ffi:start_timer/2`.
 pub(super) fn start_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    timer_call("start_timer", 2, args, ctx, |state, mut context, args| {
-        let timer_id = decode_timer_id_arg("start_timer timer_id", args[0])?;
-        let duration = decode_duration_arg("start_timer duration", args[1])?;
+    timer_call("start_timer", 2, args, ctx, |state, mut context, args, heap| {
+        let timer_id = decode_timer_id_arg("start_timer timer_id", args[0], heap)?;
+        let duration = decode_duration_arg("start_timer duration", args[1], heap)?;
         let recorded_now = recorded_now(&context);
         let fire_at = add_duration(recorded_now, duration)?;
         // UNOBSERVED seam. `start_timer` arms a timer and returns its handle
@@ -207,8 +208,8 @@ pub(super) fn start_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Resul
 
 /// NIF backing `aion_flow_ffi:cancel_timer/1`.
 pub(super) fn cancel_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    timer_call("cancel_timer", 1, args, ctx, |state, mut context, args| {
-        let timer_id = decode_timer_id_arg("cancel_timer timer_id", args[0])?;
+    timer_call("cancel_timer", 1, args, ctx, |state, mut context, args, heap| {
+        let timer_id = decode_timer_id_arg("cancel_timer timer_id", args[0], heap)?;
         let recorded_now = recorded_now(&context);
         // UNOBSERVED seam. The live path issues the cancel through the timer
         // service, which arbitrates fire-versus-cancel and owns the terminal's
@@ -237,7 +238,7 @@ fn timer_call<F>(
     f: F,
 ) -> Result<Term, Term>
 where
-    F: FnOnce(&EngineNifState, NifContext, &[Term]) -> Result<NifResult, NifTimerError>,
+    F: FnOnce(&EngineNifState, NifContext, &[Term], HeapBorrow<'_>) -> Result<NifResult, NifTimerError>,
 {
     if args.len() != arity {
         return error_result_term(
@@ -256,7 +257,9 @@ where
     {
         return error_result_term(process_context, &error);
     }
-    match build_context(&state, process_context).and_then(|context| f(&state, context, args)) {
+    match build_context(&state, process_context)
+        .and_then(|context| f(&state, context, args, process_context.borrow_terms()))
+    {
         Ok(NifResult::Ok(value)) => ok_result_term(process_context, value.as_bytes()),
         Ok(NifResult::Error(message)) => error_result_term(process_context, &message),
         Ok(NifResult::Suspend) => {
@@ -296,8 +299,12 @@ pub(super) fn build_context_for_pid(
     .map_err(Into::into)
 }
 
-pub(super) fn decode_duration_arg(label: &str, term: Term) -> Result<Duration, NifTimerError> {
-    let text = decode_string_arg(term).map_err(NifTimerError::Argument)?;
+pub(super) fn decode_duration_arg(
+    label: &str,
+    term: Term,
+    heap: HeapBorrow<'_>,
+) -> Result<Duration, NifTimerError> {
+    let text = decode_string_arg(term, heap).map_err(NifTimerError::Argument)?;
     let millis = text
         .parse::<u64>()
         .map_err(|error| NifTimerError::Argument(format!("{label}: {error}")))?;
@@ -313,8 +320,12 @@ pub(super) fn decode_duration_arg(label: &str, term: Term) -> Result<Duration, N
 /// forging — an engine timer.
 const RESERVED_TIMER_NAME_PREFIXES: [&str; 2] = [crate::time::DEADLINE_TIMER_PREFIX, "schedule:"];
 
-fn decode_timer_id_arg(label: &str, term: Term) -> Result<TimerId, NifTimerError> {
-    let raw = decode_string_arg(term).map_err(NifTimerError::Argument)?;
+fn decode_timer_id_arg(
+    label: &str,
+    term: Term,
+    heap: HeapBorrow<'_>,
+) -> Result<TimerId, NifTimerError> {
+    let raw = decode_string_arg(term, heap).map_err(NifTimerError::Argument)?;
     let name = raw.strip_prefix("timer:named:").unwrap_or(raw.as_str());
     author_timer_id(label, name)
 }

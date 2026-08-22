@@ -7,6 +7,7 @@ use aion_core::{Event, Payload, WorkflowId};
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
+use beamr::term::heap_borrow::HeapBorrow;
 use chrono::Utc;
 use tokio::runtime::Handle;
 use uuid::Uuid;
@@ -64,9 +65,10 @@ fn signal_bridge(ctx: &ProcessContext) -> Result<Arc<SignalNifBridge>, String> {
     slot.ok_or_else(|| "signal NIF bridge is not configured".to_owned())
 }
 
-fn decode_string_arg(term: Term) -> Result<String, String> {
+fn decode_string_arg(term: Term, heap: HeapBorrow<'_>) -> Result<String, String> {
     let bin = BinaryRef::new(term).ok_or_else(|| "argument is not a binary".to_owned())?;
-    String::from_utf8(bin.as_bytes().to_vec()).map_err(|_| "argument is not valid UTF-8".to_owned())
+    String::from_utf8(bin.as_bytes(heap).to_vec())
+        .map_err(|_| "argument is not valid UTF-8".to_owned())
 }
 
 fn payload_from_json_string(input: &str) -> Result<Payload, String> {
@@ -453,13 +455,13 @@ pub(super) fn receive_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<
             &format!("receive_signal: expected 2 arguments, got {}", args.len()),
         );
     }
-    let name = match decode_string_arg(args[0]) {
+    let name = match decode_string_arg(args[0], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("receive_signal name: {error}"));
         }
     };
-    let config = match decode_string_arg(args[1]) {
+    let config = match decode_string_arg(args[1], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("receive_signal config: {error}"));
@@ -509,19 +511,19 @@ pub(super) fn send_signal(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
             &format!("send_signal: expected 3 arguments, got {}", args.len()),
         );
     }
-    let target = match decode_string_arg(args[0]) {
+    let target = match decode_string_arg(args[0], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("send_signal target: {error}"));
         }
     };
-    let name = match decode_string_arg(args[1]) {
+    let name = match decode_string_arg(args[1], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("send_signal name: {error}"));
         }
     };
-    let payload = match decode_string_arg(args[2]) {
+    let payload = match decode_string_arg(args[2], ctx.borrow_terms()) {
         Ok(value) => value,
         Err(error) => {
             return error_result_term(ctx, &format!("send_signal payload: {error}"));

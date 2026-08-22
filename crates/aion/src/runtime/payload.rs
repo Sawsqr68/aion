@@ -1,6 +1,7 @@
 //! Runtime-owned conversions between durable payloads and BEAM terms.
 
 use aion_core::{ContentType, Payload};
+use beamr::term::heap_borrow::HeapBorrow;
 use beamr::atom::AtomTable;
 use beamr::term::Term;
 use beamr::term::binary::Binary;
@@ -45,12 +46,20 @@ fn json_to_binary_term(bytes: &[u8]) -> Result<PayloadTerm, EngineError> {
     })
 }
 
-pub(crate) fn term_to_payload(term: Term, atoms: &AtomTable) -> Result<Payload, EngineError> {
-    let value = term_to_json(term, atoms)?;
+pub(crate) fn term_to_payload(
+    term: Term,
+    atoms: &AtomTable,
+    heap: HeapBorrow<'_>,
+) -> Result<Payload, EngineError> {
+    let value = term_to_json(term, atoms, heap)?;
     Payload::from_json(&value).map_err(runtime_error_from_display)
 }
 
-fn term_to_json(term: Term, atoms: &AtomTable) -> Result<serde_json::Value, EngineError> {
+fn term_to_json(
+    term: Term,
+    atoms: &AtomTable,
+    heap: HeapBorrow<'_>,
+) -> Result<serde_json::Value, EngineError> {
     if term.is_nil() {
         return Ok(serde_json::Value::Null);
     }
@@ -69,10 +78,10 @@ fn term_to_json(term: Term, atoms: &AtomTable) -> Result<serde_json::Value, Engi
         }
     }
     if let Some(bin) = Binary::new(term) {
-        return binary_to_json(bin.as_bytes());
+        return binary_to_json(bin.as_bytes(heap));
     }
     if let Some(tuple) = Tuple::new(term) {
-        return tuple_to_json(tuple, atoms);
+        return tuple_to_json(tuple, atoms, heap);
     }
     Err(runtime_error(format!(
         "term {term:?} cannot become a payload"
@@ -88,13 +97,17 @@ fn binary_to_json(bytes: &[u8]) -> Result<serde_json::Value, EngineError> {
     }
 }
 
-fn tuple_to_json(tuple: Tuple, atoms: &AtomTable) -> Result<serde_json::Value, EngineError> {
+fn tuple_to_json(
+    tuple: Tuple,
+    atoms: &AtomTable,
+    heap: HeapBorrow<'_>,
+) -> Result<serde_json::Value, EngineError> {
     let elements: Result<Vec<serde_json::Value>, EngineError> = (0..tuple.arity())
         .map(|i| {
             let element = tuple
                 .get(i)
                 .ok_or_else(|| runtime_error(format!("tuple element {i} out of bounds")))?;
-            term_to_json(element, atoms)
+            term_to_json(element, atoms, heap)
         })
         .collect();
     Ok(serde_json::Value::Array(elements?))

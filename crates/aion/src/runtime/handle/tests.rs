@@ -29,7 +29,7 @@ fn thirteen(args: &[Term], context: &mut ProcessContext) -> Result<Term, Term> {
 fn binary_length(args: &[Term], _: &mut ProcessContext) -> Result<Term, Term> {
     match args {
         [term] => BinaryRef::new(*term)
-            .and_then(|binary| i64::try_from(binary.as_bytes().len()).ok())
+            .and_then(|binary| i64::try_from(binary.len()).ok())
             .map(Term::small_int)
             .ok_or_else(|| Term::small_int(0)),
         _ => Err(Term::small_int(0)),

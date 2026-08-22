@@ -68,14 +68,24 @@ pub(super) fn workflow_outcome_from_owned_exit(
         if let Some(exception) = &observed.exception {
             let formatted = exception.format_with_atoms(atoms);
             let view = exception.view();
-            let details = term_to_payload(view.reason, atoms).ok();
+            let details = beamr::ets::copy_term_to_ets(view.reason)
+                .ok()
+                .and_then(|reason| {
+                    term_to_payload(reason.root(), atoms, reason.borrow_terms()).ok()
+                });
             return Ok(WorkflowProcessOutcome::Failed(WorkflowError {
                 message: format!("workflow process {pid} exited: {formatted}"),
                 details,
             }));
         }
     }
-    convert_process_outcome(atoms, pid, observed.reason, observed.result.root())
+    convert_process_outcome(
+        atoms,
+        pid,
+        observed.reason,
+        observed.result.root(),
+        observed.result.borrow_terms(),
+    )
 }
 
 pub(super) fn convert_process_outcome(
@@ -83,12 +93,13 @@ pub(super) fn convert_process_outcome(
     pid: Pid,
     reason: ExitReason,
     result: Term,
+    heap: beamr::term::heap_borrow::HeapBorrow<'_>,
 ) -> Result<WorkflowProcessOutcome, EngineError> {
     if reason == ExitReason::Normal {
-        unwrap_gleam_result(result, atoms, pid)
+        unwrap_gleam_result(result, atoms, pid, heap)
     } else {
         let formatted = beamr::term::format::format_term(result, atoms);
-        let details = term_to_payload(result, atoms).ok();
+        let details = term_to_payload(result, atoms, heap).ok();
         Ok(WorkflowProcessOutcome::Failed(WorkflowError {
             message: format!("workflow process {pid} exited: {reason:?}: {formatted}"),
             details,
@@ -100,6 +111,7 @@ fn unwrap_gleam_result(
     result: Term,
     atoms: &AtomTable,
     pid: Pid,
+    heap: beamr::term::heap_borrow::HeapBorrow<'_>,
 ) -> Result<WorkflowProcessOutcome, EngineError> {
     if let Some(tuple) = Tuple::new(result) {
         if tuple.arity() == 2 {
@@ -107,11 +119,11 @@ fn unwrap_gleam_result(
                 if let Some(atom) = tag.as_atom() {
                     if atom == Atom::OK {
                         return Ok(WorkflowProcessOutcome::Completed(term_to_payload(
-                            value, atoms,
+                            value, atoms, heap,
                         )?));
                     }
                     if atom == Atom::ERROR {
-                        let details = term_to_payload(value, atoms).ok();
+                        let details = term_to_payload(value, atoms, heap).ok();
                         return Ok(WorkflowProcessOutcome::Failed(WorkflowError {
                             message: format!("workflow {pid} returned error"),
                             details,
@@ -122,6 +134,6 @@ fn unwrap_gleam_result(
         }
     }
     Ok(WorkflowProcessOutcome::Completed(term_to_payload(
-        result, atoms,
+        result, atoms, heap,
     )?))
 }

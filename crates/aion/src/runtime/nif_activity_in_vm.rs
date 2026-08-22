@@ -54,7 +54,7 @@ pub(super) fn dispatch_activity_in_vm_impl(
 ) -> Result<Term, Term> {
     // Decode (and validate the thunk's shape) BEFORE any ordinal allocation or
     // resolve: a malformed wire records nothing.
-    let (name, input, config) = match decode_in_vm_args(args) {
+    let (name, input, config) = match decode_in_vm_args(args, ctx.borrow_terms()) {
         Ok(parts) => parts,
         Err(reason) => return error_result_term(ctx, &reason),
     };
@@ -102,18 +102,21 @@ pub(super) fn dispatch_activity_in_vm_impl(
 /// Decode the three string arguments and validate the fourth is a zero-arity
 /// closure — the ONLY spawnable thunk shape. Rejection happens before anything
 /// is recorded, so a defective wire cannot leave a pending `Scheduled`.
-fn decode_in_vm_args(args: &[Term]) -> Result<(String, String, String), String> {
+fn decode_in_vm_args(
+    args: &[Term],
+    heap: beamr::term::heap_borrow::HeapBorrow<'_>,
+) -> Result<(String, String, String), String> {
     if args.len() != 4 {
         return Err(format!(
             "dispatch_activity_in_vm: expected 4 arguments, got {}",
             args.len()
         ));
     }
-    let name = decode_string_arg(args[0])
+    let name = decode_string_arg(args[0], heap)
         .map_err(|error| format!("dispatch_activity_in_vm name: {error}"))?;
-    let input = decode_string_arg(args[1])
+    let input = decode_string_arg(args[1], heap)
         .map_err(|error| format!("dispatch_activity_in_vm input: {error}"))?;
-    let config = decode_string_arg(args[2])
+    let config = decode_string_arg(args[2], heap)
         .map_err(|error| format!("dispatch_activity_in_vm config: {error}"))?;
     let Some(thunk) = Closure::new(args[3]) else {
         return Err("dispatch_activity_in_vm: thunk argument is not a closure".to_owned());
