@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write|Bash|ExitPlanMode"
-      }
-    ],
     "PostToolUse": [
       {
         "hooks": [
