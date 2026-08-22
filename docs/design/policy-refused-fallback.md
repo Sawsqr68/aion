@@ -310,6 +310,31 @@ method, cursor/recovery handling, and separate retry-budget accounting described
 above. Omitting any one of those pieces would make the route implicit or charge
 fallback executions against the wrong budget.
 
+### Why the authored list is immutable for a run
+
+*(Added post-gate by the flight owner: the derivation above relies on this
+premise without stating it, which is the owner's finding on review, not a defect
+in the gated design.)*
+
+The derivation above depends on the authored fallback list being **immutable for
+the lifetime of a run**. It is, and the reason is worth stating because the
+alternative reading is the natural one.
+
+Each `.aion` package version is a distinct, immutable module named by its content
+hash (`logical_name$hash`). A running workflow is bound to the module version it
+started with, so the fallback list it derives hops from cannot change underneath
+it — a redeploy mints a *new* module rather than mutating the existing one.
+`ContinuedAsNew` begins a new run and re-derives against whatever version that
+new run binds to, which is correct rather than a gap.
+
+⇒ Implementations must read the authored list from **the run's own bound module
+version**, never from the currently deployed package. The current-deploy reading
+produces identical behaviour in every test — the two only diverge for a workflow
+that was mid-hop when a new version landed, and then replay derives a different
+queue sequence than history recorded. That is a long-lived-workflow replay break
+that is invisible until the moment it matters, which is the class of defect this
+engine exists to eliminate.
+
 ## Implementation boundaries and gates
 
 L2 owns only classification and presentation: adapter recognition,
