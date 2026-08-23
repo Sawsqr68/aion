@@ -85,7 +85,7 @@ shows zero files outside the amended wall.
 | a command-declaration construct in the AWL grammar | `crates/aion-awl/src/lexer/**`, `crates/aion-awl/src/parser/**` | **ZERO.** `Keyword` (`lexer/tokens.rs:101`) carried 58 variants; none was `command`, `program`, `option`, `operand`, `env`, `cwd` or `admits`. `POSITIONAL_WORDS` (`:70`) was `[&str; 6]` and carried none of them. The top-level dispatch (`parser/document.rs:450–495`) admitted exactly `const`/`type`/`worker`/`child`/`subflow`/`step`. |
 | an argv emitter | `crates/`, `sdks/`, `gleam/` | **ZERO in the AWL family.** 15 `argv` hits under `crates/aion-awl*`, every one a doc comment or a fixture narration; not one constructs an argv. Every functional `argv` is downstream plumbing outside the family (`aion-integration-norn/src/harness.rs`, `aion-cli/src/main.rs`, `aion-fleet-plan/src/verify.rs`, `aion-integration-acp/src/harness.rs`). None derives an argv from an AWL declaration. |
 | an `admits_dash` / end-of-options property, ANY spelling | whole worktree, case-insensitive: `admits[_-]?dash`, `end[_-]?of[_-]?options`, `double[_-]?dash`, `dash[_-]?dash`, `opt(ion)?s?[_-]terminator` | **ZERO** outside `.fleet/`. Measured count outside `.fleet/`: **0**. The 8 hits inside `.fleet/` are the brief, plan and leg brief describing what does not exist. |
-| `{{`-interpolation handling outside string display | `crates/aion-awl*` | **ZERO as a language construct.** All 104 `{{` occurrences are Rust `format!` brace escapes emitting literal Gleam braces (`emitter/codecs.rs`, `forks.rs`, `flows.rs`, …) or doc-comment escapes (`ast/command.rs:190,245`). No `{{name}}` was ever lexed, parsed or resolved. |
+| `{{`-interpolation handling outside string display | `crates/aion-awl*` | **ZERO as a language construct.** The 104 figure is LINES containing `{{` under `crates/aion-awl/src` (re-measured on the verification pass: 109 occurrences in `src/**/*.rs`, 195 across the whole crate — the counts differ by pathspec and by line-vs-occurrence, so the instrument is stated here rather than the bare number). Every one is a Rust `format!` brace escape emitting literal Gleam braces (`emitter/codecs.rs`, `forks.rs`, `flows.rs`, …) or a doc-comment escape (`ast/command.rs:190,245`). The conclusion is what the census turns on and it is unchanged: no `{{name}}` was ever lexed, parsed or resolved — searched for a token or production (`DoubleBrace`, `InterpolationOpen`, a `"{{"` literal) at base, ZERO. |
 | Just-grammar conformance fixtures | whole worktree | **ZERO.** The only `justfile` in the tree is `.meridian/workflows/onatopp-dev-norn/justfile`, a Meridian dispatch script. `CONTRIBUTING.md:32` mentions justfiles only to say the repo has none. No CC0 suite was vendored anywhere. |
 
 **Triage of the one adjacent hit that is NOT the contract.**
@@ -612,6 +612,46 @@ per named form. The gate's own COVERAGE paragraph was updated to say so.
 
 ---
 
+## §5b — INDEPENDENT VERIFICATION PASS (re-run against the committed tree)
+
+The surface was re-verified from the bytes rather than from this report's own
+claims. What was re-measured, and what it returned:
+
+| claim re-tested | instrument | result |
+|---|---|---|
+| the census's five zeros | re-run at BASE, not at HEAD (a census at HEAD would only find this cut's own code) | **CONFIRMED.** `Keyword::ALL` is `[Self; 58]` with none of the new words; `POSITIONAL_WORDS` is `[&str; 6]`; 15 `argv` hits in the family, every one prose; `admits[_-]?dash\|end[_-]?of[_-]?options\|double[_-]?dash\|…` ZERO tree-wide; no CC0 suite vendored |
+| seam re-derivation | `git diff --stat c590712f5 5e2fb5a3e` over the AWL family + both teaching assets | **CONFIRMED EMPTY.** Five intervening commits, none in the family |
+| the four specimen digests | `sha256sum` re-run against the RIG table | **4/4 MATCH** |
+| the four cited specimen lines | read directly out of the carried scripts | **CONFIRMED.** All four carry the byte-identical `changed=$(git diff --name-only "${BASE}"..HEAD)`; base pins as cited |
+| F-RIG-1's necessity | `guide::REFERENCE_PATH` vs the staged wall regex | **CONFIRMED.** `REFERENCE_PATH = "examples/assistant/resources/AWL-REFERENCE.md"`, pinned byte-identical to the embed by a pre-existing test inside the admitted crate, and absent from the staged wall. The two copies are `cmp`-identical today |
+| 500-line law | code lines, comments and blanks stripped | **CONFIRMED.** Largest new file `clauses.rs` 472; largest edited 482 |
+| no bypasses added | the whole diff, added lines only | **ZERO** `#[allow]` / `#[expect]` / `#[deny]` / `#[ignore]` / `#[cfg(any())]` |
+| no panics in library code | every changed non-test `src/*.rs` | **ZERO** `unwrap`/`expect`/`panic!`/`todo!`. The two `stream.expect(` hits are the pre-existing `Result`-returning parser method (`parser/stream.rs:365`), used with `?` |
+| walls | the diff | ratchet family ZERO hits; tree-sitter/editors ZERO; `BUILTIN_TYPES` unchanged; `fleet_dev.awl` byte-identical; no `.fleet/` script retired |
+| autoformat discipline | `cargo fmt --all --check` | rc=0 — applied, and still NOT a gate leg |
+
+**One gap was found and closed, one number was made precise.**
+
+* **GAP, closed:** `emit()` guards the marker push with
+  `command.admits_end_of_options() && !decl.operands.is_empty()`. The
+  operand-carrying fixtures cannot reach the empty-operand branch, the checker
+  imposes no operand-count requirement (so the branch is REACHABLE, not dead),
+  and no test pinned it — a live branch in the load-bearing cure whose
+  behaviour a later refactor could change silently. Now pinned by
+  `an_admitting_invocation_with_no_operands_emits_no_marker`: `git tag --list`
+  emits no marker, because with no operands there is no options/operands
+  boundary to mark. This makes the word "unconditional" precise — it is a
+  claim about operand CONTENT (the marker never depends on what an operand
+  turns out to be), not a claim that a marker appears where no operand
+  boundary exists. New-test count 63 → **64**.
+* **PRECISION:** the census's `{{` figure is 104 LINES under
+  `crates/aion-awl/src`, not 104 occurrences (109 in `src/**/*.rs`, 195
+  across the crate). Corrected in §0 with the instrument stated, since a
+  number a reader cannot reproduce is not evidence. The census's conclusion is
+  untouched.
+
+Nothing else in this report failed re-measurement.
+
 ## §6 — FINDINGS INDEX
 
 | id | finding | disposition |
@@ -621,12 +661,12 @@ per named form. The gate's own COVERAGE paragraph was updated to say so.
 | **F-R6-1** | Env hardening is expressible as a VALUE but not as a PRESENCE, so one shape cannot cover the four rigs' hardening dimension. | Reported at the bytes, recorded in the fixture header. Needs a design answer (optional-presence form, or two shapes), not an implementation one. |
 | **F-CAUSE-1** | `specimen_wrong_cause` has no reachable red arm in this cut's emit vocabulary. | Shadowed by construction, recorded honestly, code retained (collapsing it would be the catch-all the law forbids). Same shape as the rig's own two shadowed probe arms. |
 | **F-CENSUS-1** | A second adjacent construct exists: `crates/aion-cli/tests/awl_corpus_gate.rs`. | Triaged in §0 — a different question over a different corpus (35-document floor vs 431). Not a substitute for R8's instrument; untouched. |
-| **F-VENUE-1** | Three `--workspace` suite runs on a LOADED rocketfish each failed one e2e test, a DIFFERENT one each time; every one passed in isolation. On a settled venue the same tree ran 5391/5391 green. | Reported for Waffles' re-gate: **let the box settle before running the gate.** Details below. |
+| **F-RACE-1** (supersedes F-VENUE-1) | `bridge_dispatch_reaches_liminal_worker_and_resolves` asserts a post-condition that production code establishes AFTER it wakes the caller — a real ordering race in a pre-existing `aion-server` test, not merely a loaded box. | Reported WITH BYTES below. **Outside this cut's wall** (`aion-server` is untouched), so this leg cannot fix it and did not try. Hand-on to the server family. |
 
 **No requirement was thinned.** R1–R8 all landed. Nothing was deferred, and
 there is no partial requirement to report.
 
-### F-VENUE-1, in detail — the gate needs a settled box
+### F-RACE-1, in detail — a real ordering race, not just a contended box
 
 Three full `cargo nextest run --workspace` runs on this venue while its load
 average sat between 14 and 19 (on 16 CPUs, the load being this leg's own
@@ -646,7 +686,57 @@ After waiting for the load average to fall below 3.0, the SAME commit ran
 as a red tree — and so that if it recurs on a quiet box, that is a real
 finding rather than a repeat of this one.
 
-**GATE RECEIPT (this leg's own run, on the committed tree):**
+**IT RECURRED ON A QUIET BOX, so by this finding's own stated test it is a real
+finding — and the verification pass ran it down to the two lines.** The gate
+was started at load average **0.04** (16 CPUs, nothing else running but the
+fleet's own long-lived workers). It went RED on run 1 of this pass with the
+same test as run 1 above, and the assertion is not a timeout — it is a
+counter:
+
+```
+thread '…bridge_dispatch_reaches_liminal_worker_and_resolves' panicked at
+crates/aion-server/tests/bridge_liminal_dispatch_e2e/bridge_liminal_dispatch_cases.rs:70:5:
+assertion `left == right` failed: completed liminal dispatches must clear their in-flight tracking
+  left: 1
+ right: 0
+```
+
+**The race, at the bytes.** In `crates/aion-server/src/worker/bridge.rs` the
+completion path does these two things IN THIS ORDER:
+
+1. `:1588` `pending.complete_fenced(…)` — which ends at `:337` with
+   `self.complete(workflow_id, activity_id, run_id, result)`, and THAT is what
+   resolves the dispatch the test is awaiting. The test task becomes runnable
+   here.
+2. `:1605` `heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)`
+   — which is what removes the entry (`heartbeat.rs:520`,
+   `state.tasks.remove(&key)`) that the test's final assertion counts
+   (`heartbeat.rs:591`, `in_flight_count`).
+
+The test asserts at its line 70, immediately after the second dispatch's
+`await` returns. That await is satisfied by step 1. On a multi-threaded
+runtime the woken test task can therefore run the assertion before step 2
+executes — the counter reads 1, and the test fails. Load makes it likelier by
+widening the scheduling gap; load is not the cause. Measured this pass:
+**10/10 PASS in isolation** on the same tree, which is the signature of an
+ordering race rather than a broken invariant — the production code does clear
+the entry, just not before it wakes the caller.
+
+⛔ **This leg did not fix it, and the restraint is deliberate.**
+`crates/aion-server/` is OUTSIDE this cut's wall — `git diff --name-only
+5e2fb5a3e HEAD -- crates/aion-server/` is EMPTY, so nothing this cut did can
+have caused it, and touching it now would be a wall breach committed to make a
+gate green, which is precisely the move the estate's discipline forbids. It is
+handed on, named, with the two line numbers, for the server family to fix at
+the seam of its choosing (the honest fix is on the test side: assert the
+bookkeeping after it is observable, not immediately after the reply resolves).
+
+**Consequence for the re-gate, stated plainly:** this test can red a gate on a
+tree that is entirely innocent of it, on a quiet box. A runner who sees
+exactly this failure should re-run before concluding anything about the tree
+under test.
+
+**GATE RECEIPT — the build pass, on the committed tree:**
 
 ```
 GATE-GREEN: toolchain 1.97.1 pin-honored from rust-toolchain.toml;
@@ -656,14 +746,17 @@ census within wall with deliverable present; clippy -D warnings clean;
 against base 5e2fb5a3ed32b53d48dbc585aa914acd056458c6
 ```
 
-(The commit this report is committed IN is one further along, since the report
-is itself a deliverable inside the wall; the gate was re-run on that tree too.)
+**GATE RECEIPT — the verification pass (this report's final state):** recorded
+in §8 below, which is written last precisely so it quotes a run rather than a
+prediction. Legs 1 and 2 of that pass are on the record above: the first went
+RED on F-RACE-1 and is reported rather than buried, because a gate that reds on
+an innocent tree is a fact the next runner needs more than a tidy receipt.
 
 ---
 
 ## §7 — EVIDENCE SUMMARY
 
-* **63** new test annotations under `crates/aion-awl*`.
+* **64** new test annotations under `crates/aion-awl*`.
 * **35** cause codes, every one with a refusing specimen or an honestly
   recorded shadowing.
 * **431/431** pre-existing AWL documents re-read byte-identically.

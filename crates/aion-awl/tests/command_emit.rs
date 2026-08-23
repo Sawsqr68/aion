@@ -357,3 +357,34 @@ fn firing_a_declared_specimen_proves_the_refusal_is_load_bearing() {
     };
     assert!(fire_specimen(admitting).is_ok());
 }
+
+/// THE BOUNDARY OF "UNCONDITIONALLY", PINNED. The marker separates options
+/// from operands, so an admitting invocation that declares NO operands emits
+/// none: there is nothing behind the marker for it to protect, and a trailing
+/// `--` would be a word the author never wrote standing in the argv a reviewer
+/// reads.
+///
+/// This is the one branch in the cure that the operand-carrying fixtures
+/// cannot reach (`emit()` guards the push with `!decl.operands.is_empty()`),
+/// so it is pinned here rather than left to a future refactor to decide
+/// silently. "Unconditional" is a claim about the operands' CONTENT — the
+/// marker never depends on what an operand turns out to be — not a claim that
+/// a marker appears where there is no operand boundary to mark.
+#[test]
+fn an_admitting_invocation_with_no_operands_emits_no_marker() {
+    let emitted = argv(
+        "command list_tags()\n  program \"git\" \"tag\"\n  admits \"--\"\n  \
+         option \"--list\"",
+        &ParameterSet::new(),
+    );
+    assert_eq!(
+        emitted,
+        vec!["git", "tag", "--list"],
+        "with no operands there is no options/operands boundary to mark"
+    );
+    assert!(
+        !emitted.contains(&"--".to_owned()),
+        "a trailing `--` would put a word in the argv that the author never \
+         declared and no operand needs"
+    );
+}
