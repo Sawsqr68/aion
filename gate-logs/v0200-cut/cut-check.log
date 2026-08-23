@@ -1,0 +1,35 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded liminal-rs v0.7.0
+  Downloaded liminal-protocol v0.7.1
+  Downloaded liminal-sdk v0.9.0
+  Downloaded liminal-server v0.10.0
+    Checking aion-core v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-core)
+   Compiling aion-proto-generated v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-proto-generated)
+    Checking liminal-protocol v0.7.1
+    Checking liminal-rs v0.7.0
+    Checking aion-mcp v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-mcp)
+   Compiling aion-server v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-server)
+    Checking aion-darwin-acl v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-darwin-acl)
+    Checking aion-package v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-package)
+    Checking aion-store v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-store)
+    Checking aion-integrations v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-integrations)
+    Checking aion-proto v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-proto)
+    Checking aion-integration-norn v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-integration-acp)
+    Checking aion-integration-cli v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-integration-cli)
+    Checking aion-awl v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-awl)
+    Checking aion-toolchain v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-toolchain)
+    Checking aion-store-haematite v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-store-haematite)
+    Checking aion-rs v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion)
+    Checking liminal-sdk v0.9.0
+    Checking liminal-server v0.10.0
+    Checking aion-worker v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-worker)
+    Checking aion-awl-package v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-awl-lsp)
+    Checking aion-client v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-client)
+    Checking million-processes v0.1.0 (/home/rocketfish/vesper/aion-migrate/benchmarks/million-processes)
+    Checking aion-cli v0.20.0 (/home/rocketfish/vesper/aion-migrate/crates/aion-cli)
+    Finished `dev` profile [unoptimized] target(s) in 46.12s
+CHECK_TRUE_EXIT=0
+SENTINEL_DONE

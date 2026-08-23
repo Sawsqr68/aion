@@ -27,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.19.0"
+version = "0.20.0"
 edition = "2024"
 rust-version = "1.85"
 license = "AGPL-3.0-only"
@@ -90,16 +90,19 @@ hostname = "0.4"
 # that floor; older 0.x requirements are disjoint and would retain unsafe
 # runtimes in the resolved graph. haematite 0.11.0 is the release cut for this
 # floor (declares beamr ^0.20.0 on both edges, beamr-wasm ^0.10.0); the liminal
-# rev below is its one-motion counterpart (beamr 0.20.0 + haematite =0.11.0 +
-# the NativeHandler frame-copy fix for beamr#36).
+# 0.10.0 wave below is its one-motion counterpart (beamr 0.20.0 + haematite
+# =0.11.0 + the NativeHandler frame-copy fix for beamr#36).
 beamr = { version = "0.20.0", features = ["json", "encode"] }
 haematite = "0.11.0"
-# The crates.io 0.7.0 SDK manifest still selects liminal-rs 0.5.5 (and therefore
-# beamr 0.16.3). Pin the complete liminal family to one git revision so shared
-# wire types come from one source and its std transport uses liminal-rs 0.6.1.
-liminal = { package = "liminal-rs", git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.6.1" }
-liminal-sdk = { git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.8.0" }
-liminal-server = { git = "https://github.com/ablative-io/liminal.git", rev = "dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7", version = "0.9.0" }
+# The liminal family resolves from the registry as one release wave (the
+# 0.10.0 wave, cut from liminal commit 27f1356 — the same tree as the git rev
+# this table previously pinned): liminal-rs 0.7.0 / liminal-server 0.10.0 /
+# liminal-sdk 0.9.0 all declare beamr ^0.20.0 and haematite =0.11.0, so shared
+# wire types come from one source and the whole graph unifies at the 0.20.0
+# runtime floor. Keep the three on the same wave when any of them moves.
+liminal = { package = "liminal-rs", version = "0.7.0" }
+liminal-sdk = "0.9.0"
+liminal-server = "0.10.0"
 tempfile = "3.27.0"
 tokio-stream = "0.1.18"
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "no-serde-warnings"] }

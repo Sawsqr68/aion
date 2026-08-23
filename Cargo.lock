@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-package",
  "aion-worker",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl-lsp"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-awl",
  "lsp-server",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl-package"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-awl",
  "aion-package",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "aion-cli"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-awl",
  "aion-awl-lsp",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "aion-client"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-proto",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "aion-core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "chrono",
  "serde",
@@ -178,7 +178,7 @@ dependencies = [
 
 [[package]]
 name = "aion-darwin-acl"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "libc",
  "uuid",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-acp"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "agent-client-protocol-schema",
  "aion-core",
@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-cli"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-norn"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integrations"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -254,7 +254,7 @@ dependencies = [
 
 [[package]]
 name = "aion-mcp"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "aion-package"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "jsonschema 0.46.6",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-proto-generated",
@@ -301,7 +301,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto-generated"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "aion-rs"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-awl",
  "aion-awl-package",
@@ -347,7 +347,7 @@ dependencies = [
 
 [[package]]
 name = "aion-server"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-awl",
  "aion-awl-package",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "aion-store"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "aion-store-haematite"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-store",
@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "aion-toolchain"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-package",
  "serde",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "aion-worker"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -535,7 +535,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -546,7 +546,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -850,7 +850,7 @@ dependencies = [
  "cap-primitives",
  "cap-std",
  "io-lifetimes 3.0.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -867,7 +867,7 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "winx",
 ]
 
@@ -1607,7 +1607,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2701,12 +2701,14 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "liminal-protocol"
 version = "0.7.1"
-source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2e23a16e327a538140770e83948b188eabd88d2252e3843be6e10bc2e330e7e"
 
 [[package]]
 name = "liminal-rs"
-version = "0.6.1"
-source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "758e8db55e45fc70aacf9f2f87556a617632b04fc4e7f4b0028d978f7f13397e"
 dependencies = [
  "async-trait",
  "beamr",
@@ -2723,8 +2725,9 @@ dependencies = [
 
 [[package]]
 name = "liminal-sdk"
-version = "0.8.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3aaea3b61b89f34b79bb01b9814de809305acb6a2996820f847ed7a9753b25dd"
 dependencies = [
  "futures-core",
  "liminal-protocol",
@@ -2738,8 +2741,9 @@ dependencies = [
 
 [[package]]
 name = "liminal-server"
-version = "0.9.0"
-source = "git+https://github.com/ablative-io/liminal.git?rev=dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7#dfc7bf763b2babc3020ff02f9f948b44d1dcb1c7"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed0a4ecca2498385d5640f083009f793f02ab2c676e5a8d6994ab2ef41eebfc5"
 dependencies = [
  "anyhow",
  "beamr",
@@ -2989,7 +2993,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3925,7 +3929,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4002,7 +4006,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4431,7 +4435,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4542,7 +4546,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5387,7 +5391,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
