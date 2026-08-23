@@ -1,0 +1,38 @@
+//! Q3 PROBE (plan §4.3 stage-loop shape) — throwaway evidence, not product.
+//! Can a RECORD accumulator thread through bodiless worker actions inside a
+//! `loop … counting`, with the step routing on outcome clauses AFTERWARDS?
+//! This is the shape movement finding M4 forces: `route` is illegal inside a
+//! loop body, so the loop carries the iteration and the loop-carrying step
+//! routes. OBSERVED: exit 0.
+workflow q3_probe
+  input max_stages: Int
+  outcome done: type ChainState, route success
+  outcome stopped: type ChainState, route failure
+
+type ChainState {
+  halted: Bool,
+  verdict: String,
+  next_stage_id: String,
+  last_accepted_commit: String,
+  ledger: String,
+}
+
+worker fleet_chain_ops
+  action chain_dispatch(state: ChainState) -> ChainState
+  action chain_await(state: ChainState) -> ChainState
+  action chain_verify(state: ChainState) -> ChainState
+
+step run_chain
+  loop chain = ChainState(halted: false, verdict: "running", next_stage_id: "", last_accepted_commit: "", ledger: "") counting stage_index
+    chain_dispatch(state: chain) -> chain
+    chain_await(state: chain) -> chain
+    chain_verify(state: chain) -> chain
+    until chain.halted
+    max max_stages
+
+  outcome finished: when chain.verdict == "completed",
+    route done(halted: chain.halted, verdict: chain.verdict, next_stage_id: chain.next_stage_id,
+      last_accepted_commit: chain.last_accepted_commit, ledger: chain.ledger)
+  outcome halted: otherwise,
+    route stopped(halted: chain.halted, verdict: chain.verdict, next_stage_id: chain.next_stage_id,
+      last_accepted_commit: chain.last_accepted_commit, ledger: chain.ledger)

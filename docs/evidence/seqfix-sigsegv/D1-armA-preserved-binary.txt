@@ -1,0 +1,38 @@
+# D1 — arm A redone on the PRESERVED crashing artifact
+# The binary red-3.md:7189 names. No rebuild: this is the only artifact known to have crashed.
+host: omarchy  date: 2026-08-23T14:02:07+10:00
+binary: /home/rocketfish/fleet/runs/seqlegs-impl-flight1/repo/target/debug/deps/recovery_declared_body_e2e-9990dace6ae08d82
+ls -l: -rwxr-xr-x 1 rocketfish rocketfish 141682248 Aug 23 12:44 /home/rocketfish/fleet/runs/seqlegs-impl-flight1/repo/target/debug/deps/recovery_declared_body_e2e-9990dace6ae08d82
+file:  ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 4.4.0, BuildID[sha1]=897541b0d194741ef095166fb846f57ad04ddcdf, not stripped
+sha256: b88e5946b4c3ecce333b5f0ece0d8268544580456a3985155b6490c8009e94bc
+loadavg at start: 0.12 0.18 0.43 1/1166 2937127
+protocol: 20 consecutive isolated runs, $? recorded verbatim. 139 = SIGSEGV(11)+128; 0 = pass.
+
+run 01: rc=139  elapsed=11.16s  2 lines out
+run 02: rc=139  elapsed=11.74s  2 lines out
+run 03: rc=139  elapsed=11.24s  2 lines out
+run 04: rc=139  elapsed=11.58s  2 lines out
+run 05: rc=139  elapsed=11.50s  2 lines out
+run 06: rc=139  elapsed=11.64s  2 lines out
+run 07: rc=139  elapsed=11.44s  2 lines out
+run 08: rc=139  elapsed=11.19s  2 lines out
+run 09: rc=139  elapsed=11.43s  2 lines out
+run 10: rc=139  elapsed=11.55s  2 lines out
+run 11: rc=139  elapsed=11.37s  2 lines out
+run 12: rc=139  elapsed=11.38s  2 lines out
+run 13: rc=139  elapsed=11.48s  2 lines out
+run 14: rc=139  elapsed=11.55s  2 lines out
+run 15: rc=139  elapsed=11.34s  2 lines out
+run 16: rc=139  elapsed=11.35s  2 lines out
+run 17: rc=139  elapsed=10.82s  2 lines out
+run 18: rc=139  elapsed=11.61s  2 lines out
+run 19: rc=139  elapsed=10.91s  2 lines out
+run 20: rc=139  elapsed=10.71s  2 lines out
+
+TOTALS: crash(139)=20/20  pass(0)=0/20  other=0/20
+loadavg at end: 1.06 0.66 0.58 1/1165 2942584
+
+--- verbatim output of run 01 ---
+
+running 1 test
+timeout: the monitored command dumped core

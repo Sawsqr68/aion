@@ -30,6 +30,8 @@ upstream accessor ships. Gate evidence for the migration tree lives at
 `gate-logs/beamr-020-bump/` (clippy `-D warnings` clean, full workspace
 suite green, with the voided first run adjudicated in place).
 
+## 0.19.0 — 2026-08-21
+
 **Breaking.** This release moves public surfaces in six crates
 (cargo-semver-checks: 23 findings against 0.18.1), all deliberate:
 `HaematiteStore::open`/`open_or_create` now take the ruled lock-acquisition

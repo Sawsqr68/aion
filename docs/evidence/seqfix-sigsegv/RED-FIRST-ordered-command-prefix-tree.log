@@ -1,0 +1,78 @@
+### PRE-FIX TREE: 45686a3e7cfd46791a875abae7a2d5af8ff065be  2026-08-23T14:14:30+10:00
+### command as ordered by O1: cargo test -p aion-server --test recovery_declared_body_e2e
+
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling tokio v1.52.3
+   Compiling beamr v0.20.0
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling tungstenite v0.29.0
+   Compiling rustls v0.23.40
+   Compiling clap_builder v4.6.0
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+   Compiling clap v4.6.1
+   Compiling uuid v1.23.4
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling chrono v0.4.45
+   Compiling ahash v0.8.12
+   Compiling fluent-uri v0.4.1
+   Compiling email_address v0.2.9
+   Compiling serde_urlencoded v0.7.1
+   Compiling tracing-serde v0.2.0
+   Compiling referencing v0.46.6
+   Compiling referencing v0.49.9
+   Compiling jsonschema-value v0.49.9
+   Compiling tracing-subscriber v0.3.23
+   Compiling schemars v1.2.1
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-core)
+   Compiling tokio-util v0.7.18
+   Compiling jsonschema v0.46.6
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tokio-stream v0.1.18
+   Compiling jsonschema v0.49.9
+   Compiling tower-http v0.6.11
+   Compiling tokio-rustls v0.26.4
+   Compiling saffron v0.1.0
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling aion-mcp v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-mcp)
+   Compiling hyper v1.10.1
+   Compiling aion-package v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-package)
+   Compiling aion-store v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-store)
+   Compiling aion-integrations v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-integrations)
+   Compiling hyper-util v0.1.20
+   Compiling axum v0.8.9
+   Compiling hyper-timeout v0.5.2
+   Compiling aion-toolchain v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-toolchain)
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling aion-awl v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-awl)
+   Compiling aion-rs v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion)
+   Compiling tonic v0.14.6
+   Compiling haematite v0.11.0
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-proto-generated)
+   Compiling aion-awl-package v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-awl-package)
+   Compiling aion-proto v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-proto)
+   Compiling liminal-rs v0.7.0
+   Compiling aion-store-haematite v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-store-haematite)
+   Compiling liminal-sdk v0.9.0
+   Compiling liminal-server v0.10.0
+   Compiling aion-worker v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-worker)
+    Finished `test` profile [unoptimized] target(s) in 1m 01s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+
+### CARGO-EXIT=0
+### 2026-08-23T14:15:33+10:00

@@ -1,0 +1,118 @@
+### TEN CONSECUTIVE GREENS — the target O1 names, run exactly as O1 words it
+### command: cargo test -p aion-server --test recovery_declared_body_e2e
+### tree: 45686a3e7cfd46791a875abae7a2d5af8ff065be, no source path changed by this round
+### ulimit -n: 65536   started: 2026-08-23T14:58:47+10:00
+
+===================== RUN 1 of 10  2026-08-23T14:58:47+10:00 =====================
+   Compiling aion-rs v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion)
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 43.89s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.46s
+
+### RUN 1 CARGO-EXIT=0
+===================== RUN 2 of 10  2026-08-23T14:59:33+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 38.34s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s
+
+### RUN 2 CARGO-EXIT=0
+===================== RUN 3 of 10  2026-08-23T15:00:13+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 38.05s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+
+### RUN 3 CARGO-EXIT=0
+===================== RUN 4 of 10  2026-08-23T15:00:52+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 36.57s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+
+### RUN 4 CARGO-EXIT=0
+===================== RUN 5 of 10  2026-08-23T15:01:30+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 37.19s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+### RUN 5 CARGO-EXIT=0
+===================== RUN 6 of 10  2026-08-23T15:02:09+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 36.94s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.47s
+
+### RUN 6 CARGO-EXIT=0
+===================== RUN 7 of 10  2026-08-23T15:02:48+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 36.91s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s
+
+### RUN 7 CARGO-EXIT=0
+===================== RUN 8 of 10  2026-08-23T15:03:26+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 36.49s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s
+
+### RUN 8 CARGO-EXIT=0
+===================== RUN 9 of 10  2026-08-23T15:04:04+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 37.23s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+
+### RUN 9 CARGO-EXIT=0
+===================== RUN 10 of 10  2026-08-23T15:04:43+10:00 =====================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 37.80s
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 1 test
+test adopted_declared_body_dispatch_executes_after_recovery ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+### RUN 10 CARGO-EXIT=0
+
+### TOTAL: 10/10 green, 0 crash. finished: 2026-08-23T15:05:22+10:00

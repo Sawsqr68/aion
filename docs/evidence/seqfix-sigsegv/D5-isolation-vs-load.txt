@@ -1,0 +1,32 @@
+# D5 — isolation vs load, and the file-descriptor limit
+#
+# M12 measured 1 abort in 3 workspace runs vs 0 in 12 isolated and concluded
+# load-dependence. This rung asks the same question of THIS defect.
+date: 2026-08-23T14:56:00+10:00
+shell default ulimit -n: 524288
+gate-entry.sh:4 raises it: ulimit -n 65536
+nproc: 16   loadavg: 0.79 0.97 1.12 1/1171 3020063
+
+arm 1  green draw, isolated, ulimit -n 1024      : crash=0/10 pass=10/10 other=0/10
+arm 2  green draw, isolated, ulimit -n 65536     : crash=0/10 pass=10/10 other=0/10
+arm 3  green draw, 16-way concurrent, 2 rounds   : crash=0/32 pass=32/32 other=0/32
+arm 4  RED draw,   isolated, ulimit -n 1024      : crash=5/5  pass=0/5  other=0/5
+arm 5  RED draw,   isolated, ulimit -n 65536     : crash=5/5  pass=0/5  other=0/5
+
+The remaining arm — the target UNDER `cargo test --workspace --no-fail-fast`
+with ulimit -n 65536 — is the gate's own command and is recorded in
+GATE-RUN-1.log and GATE-RUN-2.log rather than duplicated here.
+
+loadavg at end: 0.98 0.98 1.09 2/1168 3035286
+
+READING. Neither load nor the file-descriptor limit moves this defect in
+either direction:
+
+  * a GREEN draw stays green at ulimit 1024, at ulimit 65536, and under
+    16-way self-inflicted concurrency (32/32);
+  * the RED draw stays red at both ulimits (10/10 across arms 4 and 5).
+
+So this is NOT M12's shape. M12 surfaced only under `--workspace` load (1 in 3)
+and never in isolation (0 in 12). This one is 20/20 in isolation on its own
+draw and 0/32 under load on another draw. **The draw decides it; the venue
+does not.**

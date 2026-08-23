@@ -15,6 +15,7 @@ members = [
     "crates/aion-mcp",
     "crates/aion-server",
     "crates/aion-darwin-acl",
+    "crates/aion-fleet-plan",
     "crates/aion-worker",
     "crates/aion-client",
     "crates/aion-integrations",

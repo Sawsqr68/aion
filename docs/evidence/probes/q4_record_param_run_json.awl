@@ -1,0 +1,12 @@
+//! Q4 probe: worker document — can `run json` interpolate a RECORD param?
+worker fleet_chain_ops
+  action chain_dispatch(state: ChainState) -> ChainState
+    run json "sh /home/aion/fleet/bin/fleet-chain-dispatch.sh $state"
+
+type ChainState {
+  halted: Bool,
+  verdict: String,
+  next_stage_id: String,
+  last_accepted_commit: String,
+  ledger: String,
+}

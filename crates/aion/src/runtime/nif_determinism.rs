@@ -558,6 +558,17 @@ mod tests {
         Ok((tag_name.to_owned(), text))
     }
 
+    /// The workflow-visible `now` this context serves, decoded from the NIF's
+    /// own result tuple. An error tuple is an error here rather than a value
+    /// that would silently be compared as if it were a timestamp.
+    fn now_value(ctx: &mut ProcessContext, context: &NifContext) -> TestResult<String> {
+        let (tag, value) = decode_result_tuple(now_from_context(ctx, context), ctx.borrow_terms())?;
+        if tag != "ok" {
+            return Err(format!("now returned an error: {value}").into());
+        }
+        Ok(value)
+    }
+
     /// Re-cast of `now_returns_last_recorded_event_timestamp_millis` (aion#1).
     ///
     /// 🔴 The OLD assertion — that `now` answers the LAST recorded event's
@@ -721,41 +732,6 @@ mod tests {
         Ok(())
     }
 
-    /// Replay `history` through the contexts production would build — a FRESH
-    /// context per NIF call over the one shared handle, so the dispatch and
-    /// the await are two resolvers over the same history — and collect the
-    /// `now` value served at each of the three observed positions.
-    fn replayed_now_sequence(
-        runtime: &tokio::runtime::Runtime,
-        ctx: &mut ProcessContext,
-        workflow_id: aion_core::WorkflowId,
-        history: &[Event],
-        command: Command,
-    ) -> TestResult<Vec<String>> {
-        let replay = context_fixture_with_history(runtime, 72, workflow_id, run_id(), history)?;
-        let mut replay_context = replay.context;
-        let mut replay_now = Vec::new();
-        replay_now.push(
-            decode_result_tuple(now_from_context(ctx, &replay_context), ctx.borrow_terms())?.1,
-        );
-        replay_context.resolve_command_unobserved(command.clone())?;
-        replay_now.push(
-            decode_result_tuple(now_from_context(ctx, &replay_context), ctx.borrow_terms())?.1,
-        );
-        let mut await_context = NifContext::new_with_history_store(
-            72,
-            replay.registry.as_ref(),
-            runtime.handle().clone(),
-            Some(Arc::clone(&replay.store)),
-            crate::runtime::SignalDeliveryConfig::default(),
-        )?;
-        await_context.resolve_command_observed(command)?;
-        replay_now.push(
-            decode_result_tuple(now_from_context(ctx, &await_context), ctx.borrow_terms())?.1,
-        );
-        Ok(replay_now)
-    }
-
     /// Live execution and its replay serve identical `now` sequences at the
     /// same code positions (aion#1, the replay-parity rule).
     ///
@@ -788,13 +764,7 @@ mod tests {
         )?;
         let mut live_now = Vec::new();
         let mut ctx = ProcessContext::new();
-        live_now.push(
-            decode_result_tuple(
-                now_from_context(&mut ctx, &live.context),
-                ctx.borrow_terms(),
-            )?
-            .1,
-        );
+        live_now.push(now_value(&mut ctx, &live.context)?);
         let scheduled_at_time = Utc
             .timestamp_millis_opt(scheduled_at)
             .single()
@@ -810,13 +780,7 @@ mod tests {
                 attempt: 1,
             },
         )?;
-        live_now.push(
-            decode_result_tuple(
-                now_from_context(&mut ctx, &live.context),
-                ctx.borrow_terms(),
-            )?
-            .1,
-        );
+        live_now.push(now_value(&mut ctx, &live.context)?);
         let completed_at_time = Utc
             .timestamp_millis_opt(completed_at)
             .single()
@@ -830,18 +794,29 @@ mod tests {
         // The OBSERVED await seam's live half: `await_activity_result` advances
         // to the terminal it just recorded and returns it to workflow code.
         live.context.observe_recorded_at(completed_at_time);
-        live_now.push(
-            decode_result_tuple(
-                now_from_context(&mut ctx, &live.context),
-                ctx.borrow_terms(),
-            )?
-            .1,
-        );
+        live_now.push(now_value(&mut ctx, &live.context)?);
 
         // REPLAY: a fresh handle over the history live just produced.
         let replay_history = runtime.block_on(live.store.read_history(&workflow_id))?;
-        let replay_now =
-            replayed_now_sequence(&runtime, &mut ctx, workflow_id, &replay_history, command)?;
+        let replay =
+            context_fixture_with_history(&runtime, 72, workflow_id, run_id(), &replay_history)?;
+        // Production builds a FRESH context per NIF call over the one shared
+        // handle; the dispatch and the await are two calls, so they are two
+        // resolvers over the same history.
+        let mut replay_context = replay.context;
+        let mut replay_now = Vec::new();
+        replay_now.push(now_value(&mut ctx, &replay_context)?);
+        replay_context.resolve_command_unobserved(command.clone())?;
+        replay_now.push(now_value(&mut ctx, &replay_context)?);
+        let mut await_context = NifContext::new_with_history_store(
+            72,
+            replay.registry.as_ref(),
+            runtime.handle().clone(),
+            Some(Arc::clone(&replay.store)),
+            crate::runtime::SignalDeliveryConfig::default(),
+        )?;
+        await_context.resolve_command_observed(command)?;
+        replay_now.push(now_value(&mut ctx, &await_context)?);
 
         assert_eq!(
             live_now, replay_now,

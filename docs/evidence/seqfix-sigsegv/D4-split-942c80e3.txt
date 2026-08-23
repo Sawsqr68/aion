@@ -1,0 +1,108 @@
+# D4 (as ordered) — split `942c80e3`'s two LINKED perturbations
+#
+# .fleet/plan.md S2.1 names the only two things in the flight diff that can
+# reach this binary: (1) the cargo-fmt reflow of eight files under
+# crates/aion/src/runtime/, (2) crates/aion-server/changelog-embed/CHANGELOG.md
+# +20 lines, an include_str! static. This rung builds each ALONE and runs 20.
+#
+# READ D7 FIRST. Each arm below is ONE build draw, and D7 measures the draw
+# distribution directly: relinking one unchanged tree produces a different
+# binary every time. A single draw therefore cannot discriminate between these
+# two perturbations, and this rung is reported for completeness, not as a
+# discrimination. The working tree is restored to HEAD at the end.
+date: 2026-08-23T14:52:02+10:00   HEAD=45686a3e7cfd46791a875abae7a2d5af8ff065be   base=957de0a1eb96d03c936157e7db1cf371bf911bef
+
+--- ARM R: fmt reflow ONLY (changelog-embed reverted to base) ---
+    git status --porcelain:
+      M  crates/aion-server/changelog-embed/CHANGELOG.md
+      ?? docs/evidence/seqfix-sigsegv/
+      ?? docs/evidence/venue/M13-beamr-jit-compile-sigsegv.md
+    binary sha256=c07bcfe9a1a28cb025bf0185b84942f2271fba4c7572816ba4cbb82c4902d3f7 size=141681096
+    run 01: rc=0
+    run 02: rc=0
+    run 03: rc=0
+    run 04: rc=0
+    run 05: rc=0
+    run 06: rc=0
+    run 07: rc=0
+    run 08: rc=0
+    run 09: rc=0
+    run 10: rc=0
+    run 11: rc=0
+    run 12: rc=0
+    run 13: rc=0
+    run 14: rc=0
+    run 15: rc=0
+    run 16: rc=0
+    run 17: rc=0
+    run 18: rc=0
+    run 19: rc=0
+    run 20: rc=0
+    ARM R TOTALS: crash(139)=0/20 pass(0)=20/20 other=0/20
+
+--- ARM C: changelog-embed ONLY (runtime reflow reverted to base) ---
+    git status --porcelain:
+      M  crates/aion/src/runtime/nif_activity_dispatch.rs
+      M  crates/aion/src/runtime/nif_concurrency.rs
+      M  crates/aion/src/runtime/nif_continue_as_new.rs
+      M  crates/aion/src/runtime/nif_determinism.rs
+      M  crates/aion/src/runtime/nif_query.rs
+      M  crates/aion/src/runtime/nif_timeout.rs
+      M  crates/aion/src/runtime/nif_timer.rs
+      M  crates/aion/src/runtime/payload.rs
+      ?? docs/evidence/seqfix-sigsegv/
+      ?? docs/evidence/venue/M13-beamr-jit-compile-sigsegv.md
+    binary sha256=e1fb8f7f16d00dce56f73c27803f32a316459571afe8acfa32f16f481fc47950 size=141682248
+    run 01: rc=0
+    run 02: rc=0
+    run 03: rc=0
+    run 04: rc=0
+    run 05: rc=0
+    run 06: rc=0
+    run 07: rc=0
+    run 08: rc=0
+    run 09: rc=0
+    run 10: rc=0
+    run 11: rc=0
+    run 12: rc=0
+    run 13: rc=0
+    run 14: rc=0
+    run 15: rc=0
+    run 16: rc=0
+    run 17: rc=0
+    run 18: rc=0
+    run 19: rc=0
+    run 20: rc=0
+    ARM C TOTALS: crash(139)=0/20 pass(0)=20/20 other=0/20
+
+--- ARM H: BOTH present = HEAD (control) ---
+    git status --porcelain:
+      ?? docs/evidence/seqfix-sigsegv/
+      ?? docs/evidence/venue/M13-beamr-jit-compile-sigsegv.md
+    binary sha256=05206861fefb73a91ac35876536bc8476e5f93c27616cf44b1ac31d2d433d826 size=141682248
+    run 01: rc=0
+    run 02: rc=0
+    run 03: rc=0
+    run 04: rc=0
+    run 05: rc=0
+    run 06: rc=0
+    run 07: rc=0
+    run 08: rc=0
+    run 09: rc=0
+    run 10: rc=0
+    run 11: rc=0
+    run 12: rc=0
+    run 13: rc=0
+    run 14: rc=0
+    run 15: rc=0
+    run 16: rc=0
+    run 17: rc=0
+    run 18: rc=0
+    run 19: rc=0
+    run 20: rc=0
+    ARM H TOTALS: crash(139)=0/20 pass(0)=20/20 other=0/20
+
+restored working tree: 2 modified tracked paths (0 expected)
+git status --porcelain after restore:
+  ?? docs/evidence/seqfix-sigsegv/
+  ?? docs/evidence/venue/M13-beamr-jit-compile-sigsegv.md

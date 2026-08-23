@@ -22,11 +22,16 @@
 //!   whole purpose is to be refused;
 //! - `templates`: scaffolds carrying `{{name}}` placeholders, rendered and
 //!   checked by the scaffold e2e tests, unparseable verbatim;
-//! - `docs/design`: dated records of what was believed on a date (including
-//!   the deliberately-historical `139-drafts` documents and the playtest
-//!   probes, several of which exist to be refused) — rewriting them to keep a
-//!   gate green would falsify the record;
+//! - `docs/design`, `docs/archive`, `docs/evidence`: dated records of what
+//!   was believed or measured on a date (including the deliberately-
+//!   historical `139-drafts` documents, and the playtest and flight probes,
+//!   several of which exist to be refused and whose recorded answer IS the
+//!   refusal) — rewriting them to keep a gate green would falsify the record;
 //! - `gate-logs`: dated gate evidence, same reasoning.
+//!
+//! Those four dated-record areas are the same classes the sibling
+//! `retired_doctrine_gate` excludes, for the same stated reason; the two
+//! gates sweep the same living tree and must agree on what "living" means.
 //!
 //! Everything else — `workflows/`, the deck and tutorial examples under
 //! `docs/authoring/`, every `examples/` document, the embedded assistant
@@ -92,7 +97,10 @@ fn component_excluded(component: &str) -> bool {
 /// Whether a repo-relative path is outside the corpus for an area-level
 /// reason (dated records and dated evidence).
 fn area_excluded(relative: &Path) -> bool {
-    relative.starts_with("docs/design") || relative.starts_with("gate-logs")
+    relative.starts_with("docs/design")
+        || relative.starts_with("docs/archive")
+        || relative.starts_with("docs/evidence")
+        || relative.starts_with("gate-logs")
 }
 
 /// Every corpus document under `root`, repo-relative, sorted.

@@ -1,0 +1,28 @@
+running 5 tests
+test crash_and_resume_at_every_one_of_the_seven_boundaries ... FAILED
+test no_pattern_kill_anywhere ... FAILED
+test a_successor_uses_the_recorded_accepted_sha_never_a_ref ... ok
+test a_skipped_stage_creates_no_base ... ok
+test the_decision_function_is_pure_over_the_recorded_ledger ... ok
+
+failures:
+
+---- crash_and_resume_at_every_one_of_the_seven_boundaries stdout ----
+
+thread 'crash_and_resume_at_every_one_of_the_seven_boundaries' (2306186) panicked at crates/aion-fleet-plan/tests/r6_replay_determinism.rs:177:9:
+ParseComplete: no control next action
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- no_pattern_kill_anywhere stdout ----
+
+thread 'no_pattern_kill_anywhere' (2306187) panicked at crates/aion-fleet-plan/tests/r6_replay_determinism.rs:364:13:
+/home/rocketfish/fleet/runs/seqlegs-impl-flight1/legs/build/crates/aion-fleet-plan/tests/r6_replay_determinism.rs contains the forbidden pattern-kill spelling "pkill"
+
+
+failures:
+    crash_and_resume_at_every_one_of_the_seven_boundaries
+    no_pattern_kill_anywhere
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-fleet-plan --test r6_replay_determinism`

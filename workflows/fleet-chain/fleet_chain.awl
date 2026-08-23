@@ -1,0 +1,250 @@
+//! fleet_chain — the staged-flight chain coordinator (sequential-legs
+//! Resolution D). An opt-in chain runs whole `fleet_dev` flights ONE STAGE
+//! AT A TIME from a validated plan block; a sealed verifier reads one
+//! declared conclusion token from each stage's EXACT pushed commit before
+//! anything is accepted, held, admitted, or skipped.
+//!
+//! THIS IS A NEW DOCUMENT AND IT CHANGES NOTHING. `fleet_dev` remains the
+//! ordinary parallel-only stage executor; its `distribute` arms, its
+//! report, its single-token judge admission, and its exit 1/3 precedence
+//! are untouched. A plan WITHOUT a `fleet-stages-v1` block runs only
+//! through the existing `fleet_dev` entry point, and this coordinator
+//! REFUSES ITS OWN MISSING CONTRACT rather than reinterpreting a legacy
+//! flight (design §7 clause 5, and the `no_contract` outcome below).
+//!
+//! WHAT RUNS HERE, AND WHAT DOES NOT. A stage is a whole `fleet_dev`
+//! execution: cut, build, fan in, verify reports, gate/fix, judge, push.
+//! All of that is the CHILD's, unchanged. This document runs only BETWEEN
+//! stage executions — record the child outcome, verify the conclusion at
+//! the recorded pushed SHA, record the typed result, apply `advance`,
+//! record the accepted SHA or the hold, evaluate the successor's
+//! admission, then dispatch or record skipped. A FAILING STAGE DISPATCHES
+//! NOTHING DOWNSTREAM.
+//!
+//! REPLAY. Every workflow-visible choice is a function of recorded history
+//! plus immutable bound configuration. The loop body is one bodiless
+//! worker action PER RECORDED BOUNDARY, so each of design §6's boundaries
+//! is a separately recorded activity result and replay consumes the
+//! record rather than redoing the work. Nothing here resolves a live ref,
+//! reads a worktree, greps prose, consults time or worker availability, or
+//! reads the deployed module to recover a prior decision.
+//!
+//! WHY A `loop … counting` AND NOT A STEP-VISIT CYCLE. `route` is illegal
+//! inside a loop body and a loop exits through `until`/`max`, so the loop
+//! carries the iteration and THIS STEP routes on its outcome clauses —
+//! measured on this tree (movement finding M4) and proven by the Q3 probe
+//! committed under `docs/evidence/probes/`. The accumulator is threaded by
+//! the same shape the corpus already flies
+//! (`crates/aion-awl/tests/fixtures/rev2/loop-outcomes/valid/loop_counting_until_max.awl`,
+//! step `compose`).
+//!
+//! THE CEILING IS BOUND CONFIGURATION, NOT AN ARBITRARY LIMIT.
+//! `max_stages` is dispatch-authored and arrives as a flow input; a plan
+//! whose stage count exceeds it REFUSES at `check_plan` with its own cause
+//! code, before any stage leg is dispatched, and is never silently
+//! truncated. An input-expression visit bound is legal on this tree —
+//! measured, Q1 probe, contradicting `fleet_dev.awl`'s own claim that the
+//! bound must be a literal (movement finding M2; that document is
+//! byte-frozen, so this is a report, not a fix).
+//!
+//! LANDING IS NOT THIS DOCUMENT'S ACT. Chain promotion accepts a green,
+//! judge-clear, conclusion-verified result SHA as the next stage's base.
+//! It is not a landing to main; the landing re-gate stays at the
+//! operator's desk (§8).
+workflow fleet_chain
+  input workspace_root: String
+  input run_name: String
+  input repo_url: String
+  // The chain's authored base_ref. The ROOT stage is cut from the exact
+  // commit resolved from this at chain start; every later stage is cut
+  // from the recorded ACCEPTED result SHA of its predecessor, never from
+  // this and never from a mutable ref (§3 clauses 1 and 4).
+  input base_ref: String
+  input repo: String
+  // The dispatch-fixed leg ids, exactly as `fleet_dev` fixes them. The
+  // planner ORDERS these ids into stages; it does not invent new ones.
+  input leg_ids_csv: String
+  // The dispatch-authored stage ceiling. Bound configuration (§6), not a
+  // hardcoded cap.
+  input max_stages: Int
+  outcome done:                     type ChainReport,       route success
+  outcome planned_descope:          type ChainReport,       route success
+  outcome no_contract:              type ChainRefused,      route failure
+  outcome plan_graph_invalid:       type StagePlanRefused,  route failure
+  outcome stage_failed:             type StageFailed,       route failure
+  outcome stage_conclusion_refused: type ConclusionRefused, route failure
+  outcome chain_exhausted:          type ChainRefused,      route failure
+
+/// The chain's whole recorded state, threaded through every boundary.
+/// `ledger` is the serialized append-only record of every decision — the
+/// durable home design §6 requires, and the explicit payload a
+/// `ContinuedAsNew` carries forward rather than rediscovering from git.
+type ChainState {
+  halted: Bool,
+  verdict: String,
+  stage_id: String,
+  child_workflow_id: String,
+  base_commit: String,
+  result_commit: String,
+  accepted_commit: String,
+  conclusion: String,
+  cause: String,
+  cause_code: String,
+  observed_bytes: String,
+  kept_root: String,
+  last_accepted_commit: String,
+  ledger: String,
+}
+
+/// A `check_plan` reply: the inner exit code as data, the normalized typed
+/// graph on success, and the stable cause code on an exit-4 refusal.
+type ChainPlan {
+  exit_code: Int,
+  chain_block: Bool,
+  graph: String,
+  cause_code: String,
+  stage_id: String,
+  stdout: String,
+  stderr: String,
+}
+
+/// A chain that ran every admitted stage. `result_commit` is the last
+/// ACCEPTED SHA. `ledger` carries every stage id, base, result, verdict,
+/// conclusion, acceptance decision and skip — §9.3 clause 6's report,
+/// derived from recorded history and nothing else.
+type ChainReport { result_commit: String, last_stage_id: String, ledger: String, graph: String }
+
+/// The coordinator refused its own contract. `no_contract` is the
+/// committed plan carrying no `fleet-stages-v1` block: this document does
+/// not reinterpret a legacy flight, it refuses (§7 clause 5).
+/// `chain_exhausted` is the dispatch-authored `max_stages` ceiling reached
+/// with the chain still running — a distinct outcome, never a silent stop.
+type ChainRefused { refusal: String, ledger: String, kept_root: String }
+
+/// Exit 4 — PLAN GRAPH INVALID. Carries the stable cause code, the stage
+/// when one applies, the checker's streams, and the kept root. It does NOT
+/// widen `plan_mismatch`: an unknown predecessor, cycle, duplicate leg,
+/// invalid conclusion owner or vocabulary shape, invalid condition, or
+/// unsupported graph shape "is neither absence nor an id naming mismatch"
+/// (§5.3).
+type StagePlanRefused {
+  cause_code: String,
+  stage_id: String,
+  stdout: String,
+  stderr: String,
+  plan: String,
+  kept_root: String,
+}
+
+/// Design §4's `stage_failed`, field for field. `cause` preserves the
+/// child outcome's TYPED label (`unforked`, `unmerged`, `unreported`,
+/// `gates_red`, `judge_flagged`, …) and is NEVER `unplanned`.
+type StageFailed {
+  stage_id: String,
+  child_workflow_id: String,
+  child_outcome: String,
+  cause: String,
+  kept_root: String,
+  last_accepted_commit: String,
+}
+
+/// Design §4's `stage_conclusion_refused`, field for field. Neither
+/// `unplanned` nor an unlabelled `stage_failed`. `cause_code` is exactly
+/// one of `conclusion_missing`, `conclusion_malformed`,
+/// `conclusion_undeclared`.
+type ConclusionRefused {
+  stage_id: String,
+  child_workflow_id: String,
+  result_commit: String,
+  conclusion_path: String,
+  cause_code: String,
+  observed_bytes: String,
+  kept_root: String,
+  last_accepted_commit: String,
+}
+
+worker fleet_chain_ops
+  /// The mechanical half, served by `aion worker awl` on the box from
+  /// `fleet_chain_worker.awl` — bodiless here, because the commands must
+  /// run where the tree lives. Every action's script is sealed at
+  /// `/home/aion/fleet/bin/`, exits zero on anticipated faces, and carries
+  /// the inner status back as typed data.
+  action chain_plan_check(workspace_root: String, run_name: String, leg_ids_csv: String, max_stages: Int) -> ChainPlan
+  action chain_dispatch(state: ChainState) -> ChainState
+  action chain_await(state: ChainState) -> ChainState
+  action chain_verify(state: ChainState) -> ChainState
+  action chain_accept(state: ChainState) -> ChainState
+  action chain_admit(state: ChainState) -> ChainState
+
+/// BOUNDARY 1 — parse complete. `check_plan` parses and normalizes the
+/// committed block ONCE; its typed success result is recorded as the
+/// activity result and is authoritative for the run (§6 clause 1). The
+/// normalized typed graph returned here — not any later parse of the
+/// working tree — is the run's ordering authority (§5.3 final ¶).
+///
+/// Exit 4 routes to the NEW `plan_graph_invalid` outcome. Exit 1 and exit 3
+/// keep their pre-existing meanings and are refused before any stage leg is
+/// dispatched: no builder leg is dispatched on 1, 3, or 4 (§9.2).
+step check_plan
+  chain_plan_check(workspace_root: workspace_root, run_name: run_name, leg_ids_csv: leg_ids_csv, max_stages: max_stages) -> planned
+  outcome charted: when planned.exit_code == 0 and planned.chain_block, route run_chain
+  outcome legacy: when planned.exit_code == 0,
+    route no_contract(
+      refusal: "the committed plan carries no `fleet-stages-v1` block. This coordinator refuses its own missing contract rather than reinterpreting a legacy flight; a plan without a block runs only through the existing fleet_dev entry point.",
+      ledger: "", kept_root: repo)
+  outcome refused: when planned.exit_code == 4,
+    route plan_graph_invalid(cause_code: planned.cause_code, stage_id: planned.stage_id,
+      stdout: planned.stdout, stderr: planned.stderr, plan: planned.graph, kept_root: repo)
+  outcome incomplete: otherwise,
+    route no_contract(refusal: planned.stdout, ledger: "", kept_root: repo)
+
+/// BOUNDARIES 2 THROUGH 7, one recorded activity result each.
+///
+/// The loop threads the whole `ChainState` and each body call records
+/// exactly one boundary, so replay consumes six separate recorded results
+/// rather than one collapsed decision:
+///
+///   `chain_dispatch`  boundary 2 — stage id, exact base SHA, child id
+///   `chain_await`     boundary 3 — typed child outcome + exact receipts
+///   `chain_verify`    boundary 4 — the sealed verifier's typed result
+///   `chain_accept`    boundary 5 — the exact ACCEPTED SHA, or the hold
+///   `chain_admit`     boundary 6 — admission or the durable skip
+///   next iteration    boundary 7 — the successor, from the ACCEPTED SHA
+///
+/// A halted state passes through the remaining calls unchanged and `until`
+/// exits, which is how a failing stage dispatches nothing downstream: the
+/// next dispatch only ever happens at the TOP of the next iteration, and
+/// that iteration never comes.
+///
+/// `max max_stages` is the dispatch-authored ceiling. Exhausting it is
+/// `chain_exhausted` — a distinct outcome, never a silent stop.
+step run_chain
+  loop chain = ChainState(halted: false, verdict: "running", stage_id: "", child_workflow_id: "", base_commit: base_ref, result_commit: "", accepted_commit: "", conclusion: "", cause: "", cause_code: "", observed_bytes: "", kept_root: repo, last_accepted_commit: "", ledger: planned.graph) counting stage_index
+    chain_admit(state: chain) -> chain
+    chain_dispatch(state: chain) -> chain
+    chain_await(state: chain) -> chain
+    chain_verify(state: chain) -> chain
+    chain_accept(state: chain) -> chain
+    until chain.halted
+    max max_stages
+
+  outcome completed: when chain.verdict == "completed",
+    route done(result_commit: chain.accepted_commit, last_stage_id: chain.stage_id,
+      ledger: chain.ledger, graph: planned.graph)
+  outcome descoped: when chain.verdict == "planned_descope",
+    route planned_descope(result_commit: chain.accepted_commit, last_stage_id: chain.stage_id,
+      ledger: chain.ledger, graph: planned.graph)
+  outcome failed: when chain.verdict == "stage_failed",
+    route stage_failed(stage_id: chain.stage_id, child_workflow_id: chain.child_workflow_id,
+      child_outcome: chain.cause, cause: chain.cause, kept_root: chain.kept_root,
+      last_accepted_commit: chain.last_accepted_commit)
+  outcome unverified: when chain.verdict == "stage_conclusion_refused",
+    route stage_conclusion_refused(stage_id: chain.stage_id,
+      child_workflow_id: chain.child_workflow_id, result_commit: chain.result_commit,
+      conclusion_path: ".fleet/conclusions/" + chain.stage_id, cause_code: chain.cause_code,
+      observed_bytes: chain.observed_bytes, kept_root: chain.kept_root,
+      last_accepted_commit: chain.last_accepted_commit)
+  outcome exhausted: otherwise,
+    route chain_exhausted(
+      refusal: "the chain reached its dispatch-authored max_stages ceiling with the chain still running; the ceiling is bound configuration and exhausting it is a distinct outcome, never a silent stop",
+      ledger: chain.ledger, kept_root: chain.kept_root)

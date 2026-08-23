@@ -1,0 +1,135 @@
+   Compiling aion-fleet-plan v0.20.0 (/home/rocketfish/fleet/runs/seqlegs-impl-flight1/legs/build/crates/aion-fleet-plan)
+    Finished `test` profile [unoptimized] target(s) in 0.39s
+     Running unittests src/lib.rs (target/debug/deps/aion_fleet_plan-813f2b52d9b9dd84)
+
+running 14 tests
+test grammar::admit::tests::always_parses ... ok
+test grammar::admit::tests::equals_parses ... ok
+test grammar::admit::tests::canonical_round_trips ... ok
+test grammar::admit::tests::prose_is_refused ... ok
+test grammar::admit::tests::the_exemplar_condition_parses ... ok
+test ids::tests::all_nine_charset_vectors_are_refused ... ok
+test ids::tests::digits_may_lead ... ok
+test ids::tests::no_refused_vector_can_escape_the_conclusion_prefix ... ok
+test ids::tests::the_design_exemplar_ids_are_accepted ... ok
+test ids::tests::conclusion_path_is_the_designs_canonical_shape ... ok
+test ids::tests::underscore_is_accepted_in_the_tail_only ... ok
+test verify::tests::observed_bytes_show_every_byte ... ok
+test verify::tests::only_an_exact_object_id_is_accepted ... ok
+test verify::tests::the_token_contract_is_bytes_not_prose ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/aion-fleet-chain-step.rs (target/debug/deps/aion_fleet_chain_step-ea3cdbeb26631594)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/aion-fleet-plan.rs (target/debug/deps/aion_fleet_plan-be027b10e04e7944)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/r1_plan_refusals.rs (target/debug/deps/r1_plan_refusals-b763964be5ba75f9)
+
+running 40 tests
+test a_plan_without_a_block_is_the_legacy_path_not_a_refusal ... ok
+test a_plan_at_the_ceiling_is_accepted ... ok
+test a_plan_over_the_dispatch_authored_ceiling_refuses_before_any_leg_is_dispatched ... ok
+test advance_hold_is_valid ... ok
+test cause_code_wire_renderings_are_pinned ... ok
+test charset_no_accepted_id_can_escape_the_conclusion_prefix ... ok
+test charset_all_nine_stage_id_vectors_refuse ... ok
+test charset_all_nine_leg_id_vectors_refuse ... ok
+test clause_01_an_empty_block_refuses ... ok
+test clause_01_two_blocks_refuse ... ok
+test canonical_form_refusals_are_each_named ... ok
+test clause_02_duplicate_stage_id_refuses ... ok
+test clause_01_unsupported_version_refuses_by_name ... ok
+test clause_03_a_leg_in_two_stages_refuses ... ok
+test clause_04_a_leg_dispatch_never_declared_refuses ... ok
+test clause_06_a_stage_with_no_leg_refuses ... ok
+test clause_07_a_stage_following_itself_refuses ... ok
+test clause_05_a_dispatch_declared_leg_in_no_stage_refuses ... ok
+test clause_07_unknown_predecessor_refuses ... ok
+test clause_08_an_arbitrary_multi_parent_graph_refuses ... ok
+test clause_08_multiple_roots_refuse ... ok
+test clause_08_no_root_refuses ... ok
+test clause_09_a_cycle_refuses_by_name_not_as_a_missing_root ... ok
+test clause_11_a_multi_leg_stage_with_multiple_conclusions_refuses ... ok
+test clause_10_a_conclusion_owner_outside_its_stage_refuses ... ok
+test clause_13_an_admit_naming_no_stage_refuses ... ok
+test clause_17_loose_fleet_state_refuses_at_exit_one ... ok
+test clause_13_an_admit_on_a_later_stage_refuses ... ok
+test subsumed_clauses::clause_06_a_legless_stage_refuses_at_the_clause ... ok
+test every_graph_refusal_is_exit_four_and_never_widens_plan_mismatch ... ok
+test clause_16_an_advance_outside_auto_or_hold_refuses ... ok
+test clause_14_an_undeclared_compared_conclusion_refuses ... ok
+test subsumed_clauses::clause_02_nonempty_refuses_an_empty_stage_id ... ok
+test subsumed_clauses::clause_08_no_root_refuses_a_rootless_set ... ok
+test subsumed_clauses::clause_08_multiple_terminals_refuse ... ok
+test subsumed_clauses::clause_15_colliding_conclusion_paths_refuse ... ok
+test subsumed_clauses::clause_12_multi_value_multi_leg_refuses ... ok
+test the_design_mixed_graph_example_is_valid ... ok
+test the_normalized_graph_is_the_ordering_authority ... ok
+test the_140_exemplar_block_is_valid ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/r3_conclusion_verifier.rs (target/debug/deps/r3_conclusion_verifier-57f3b83a4853671d)
+
+running 15 tests
+test the_three_cause_codes_are_exactly_the_designs_three ... ok
+test the_verifier_refuses_a_ref_name_before_any_git_runs ... ok
+test conclusion_missing_when_the_path_is_a_tree_not_a_blob ... ok
+test conclusion_missing_when_the_path_is_absent_at_the_exact_commit ... ok
+test conclusion_undeclared_when_the_token_is_outside_the_closed_vocabulary ... ok
+test a_refusal_carries_every_field_the_design_names ... ok
+test conclusion_malformed_specimen_2_no_lf ... ok
+test the_verifier_refuses_an_unsafe_stage_id_before_deriving_a_path ... ok
+test conclusion_malformed_specimen_3_two_lines ... ok
+test measured_red_verifies_as_a_success_conclusion ... ok
+test conclusion_malformed_specimen_1_token_plus_trailing_garbage ... ok
+test a_declared_token_verifies_from_the_exact_commit ... ok
+test the_verifier_reads_the_commit_it_was_given_not_the_current_branch ... ok
+test the_vocabulary_comparison_is_byte_exact_not_prose ... ok
+test conclusion_malformed_further_byte_shapes ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/r6_replay_determinism.rs (target/debug/deps/r6_replay_determinism-1810711be268ac74)
+
+running 5 tests
+test a_successor_uses_the_recorded_accepted_sha_never_a_ref ... ok
+test a_skipped_stage_creates_no_base ... ok
+test the_decision_function_is_pure_over_the_recorded_ledger ... ok
+test no_pattern_kill_anywhere ... ok
+test crash_and_resume_at_every_one_of_the_seven_boundaries ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/r8_exemplar.rs (target/debug/deps/r8_exemplar-077ad265856e5bc1)
+
+running 11 tests
+test r4_the_cause_is_never_unplanned_and_is_never_defaulted ... ok
+test r4_no_hold_approves_a_stage_whose_conclusion_has_not_verified ... ok
+test r5_the_condition_is_the_normalized_graphs_canonical_text_not_plan_prose ... ok
+test r5_the_base_law_all_five_clauses ... ok
+test r8a_a_plan_without_a_block_takes_the_legacy_path ... ok
+test r4_a_failing_stage_dispatches_nothing_downstream ... ok
+test r4_a_refused_conclusion_accepts_no_sha_and_runs_nothing_downstream ... ok
+test r8a_check_plan_exit_by_exit ... ok
+test r8c_l3_is_skipped_with_no_worktree_cut_and_no_seat_spent ... ok
+test r8c_measured_red_verifies_as_success_and_l2_runs_from_l1s_accepted_sha ... ok
+test r8b_happy_path_three_stages_each_on_the_predecessors_accepted_sha ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests aion_fleet_plan
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,601 @@
+### O2 VERIFY-FIRST — the spent work re-run on THIS tree
+### HEAD=45686a3e7cfd46791a875abae7a2d5af8ff065be   2026-08-23T15:05:46+10:00
+### Nothing below is rebuilt. These are verification runs only.
+
+=================== V9 — cargo fmt --all --check (round-1 fix c213d221) ===================
+### EXIT=0
+
+=================== V3/V7 — the whole aion-fleet-plan suite (452ab47b + 653b2802, report S10: 85 tests) ===================
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling syn v2.0.117
+   Compiling memchr v2.8.1
+   Compiling libc v0.2.186
+   Compiling getrandom v0.4.2
+   Compiling tempfile v3.27.0
+   Compiling serde_json v1.0.150
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling clap_derive v4.6.1
+   Compiling thiserror v2.0.18
+   Compiling clap v4.6.1
+   Compiling aion-fleet-plan v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-fleet-plan)
+    Finished `test` profile [unoptimized] target(s) in 4.10s
+     Running unittests src/lib.rs (target/debug/deps/aion_fleet_plan-9b85a5b206193569)
+
+running 14 tests
+test grammar::admit::tests::always_parses ... ok
+test grammar::admit::tests::canonical_round_trips ... ok
+test grammar::admit::tests::prose_is_refused ... ok
+test ids::tests::conclusion_path_is_the_designs_canonical_shape ... ok
+test grammar::admit::tests::the_exemplar_condition_parses ... ok
+test grammar::admit::tests::equals_parses ... ok
+test ids::tests::all_nine_charset_vectors_are_refused ... ok
+test ids::tests::digits_may_lead ... ok
+test ids::tests::no_refused_vector_can_escape_the_conclusion_prefix ... ok
+test ids::tests::the_design_exemplar_ids_are_accepted ... ok
+test verify::tests::observed_bytes_show_every_byte ... ok
+test ids::tests::underscore_is_accepted_in_the_tail_only ... ok
+test verify::tests::only_an_exact_object_id_is_accepted ... ok
+test verify::tests::the_token_contract_is_bytes_not_prose ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/aion-fleet-chain-step.rs (target/debug/deps/aion_fleet_chain_step-2291f090f1c1a86e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/aion-fleet-plan.rs (target/debug/deps/aion_fleet_plan-21b1851e94693387)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/r1_plan_refusals.rs (target/debug/deps/r1_plan_refusals-ada2886e9c36ddfa)
+
+running 40 tests
+test a_plan_over_the_dispatch_authored_ceiling_refuses_before_any_leg_is_dispatched ... ok
+test a_plan_at_the_ceiling_is_accepted ... ok
+test a_plan_without_a_block_is_the_legacy_path_not_a_refusal ... ok
+test charset_all_nine_leg_id_vectors_refuse ... ok
+test advance_hold_is_valid ... ok
+test canonical_form_refusals_are_each_named ... ok
+test cause_code_wire_renderings_are_pinned ... ok
+test clause_01_an_empty_block_refuses ... ok
+test charset_no_accepted_id_can_escape_the_conclusion_prefix ... ok
+test clause_01_two_blocks_refuse ... ok
+test clause_01_unsupported_version_refuses_by_name ... ok
+test charset_all_nine_stage_id_vectors_refuse ... ok
+test clause_03_a_leg_in_two_stages_refuses ... ok
+test clause_04_a_leg_dispatch_never_declared_refuses ... ok
+test clause_05_a_dispatch_declared_leg_in_no_stage_refuses ... ok
+test clause_02_duplicate_stage_id_refuses ... ok
+test clause_06_a_stage_with_no_leg_refuses ... ok
+test clause_07_a_stage_following_itself_refuses ... ok
+test clause_07_unknown_predecessor_refuses ... ok
+test clause_08_an_arbitrary_multi_parent_graph_refuses ... ok
+test clause_08_multiple_roots_refuse ... ok
+test clause_08_no_root_refuses ... ok
+test clause_10_a_conclusion_owner_outside_its_stage_refuses ... ok
+test clause_11_a_multi_leg_stage_with_multiple_conclusions_refuses ... ok
+test clause_09_a_cycle_refuses_by_name_not_as_a_missing_root ... ok
+test clause_13_an_admit_on_a_later_stage_refuses ... ok
+test clause_14_an_undeclared_compared_conclusion_refuses ... ok
+test clause_17_loose_fleet_state_refuses_at_exit_one ... ok
+test clause_16_an_advance_outside_auto_or_hold_refuses ... ok
+test clause_13_an_admit_naming_no_stage_refuses ... ok
+test subsumed_clauses::clause_02_nonempty_refuses_an_empty_stage_id ... ok
+test subsumed_clauses::clause_06_a_legless_stage_refuses_at_the_clause ... ok
+test every_graph_refusal_is_exit_four_and_never_widens_plan_mismatch ... ok
+test subsumed_clauses::clause_08_no_root_refuses_a_rootless_set ... ok
+test subsumed_clauses::clause_12_multi_value_multi_leg_refuses ... ok
+test subsumed_clauses::clause_15_colliding_conclusion_paths_refuse ... ok
+test subsumed_clauses::clause_08_multiple_terminals_refuse ... ok
+test the_140_exemplar_block_is_valid ... ok
+test the_normalized_graph_is_the_ordering_authority ... ok
+test the_design_mixed_graph_example_is_valid ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/r3_conclusion_verifier.rs (target/debug/deps/r3_conclusion_verifier-964b59634101fa9f)
+
+running 15 tests
+test the_three_cause_codes_are_exactly_the_designs_three ... ok
+test the_verifier_refuses_a_ref_name_before_any_git_runs ... ok
+test the_verifier_refuses_an_unsafe_stage_id_before_deriving_a_path ... ok
+test conclusion_missing_when_the_path_is_a_tree_not_a_blob ... ok
+test conclusion_missing_when_the_path_is_absent_at_the_exact_commit ... ok
+test conclusion_malformed_specimen_1_token_plus_trailing_garbage ... ok
+test conclusion_malformed_specimen_2_no_lf ... ok
+test a_refusal_carries_every_field_the_design_names ... ok
+test a_declared_token_verifies_from_the_exact_commit ... ok
+test conclusion_undeclared_when_the_token_is_outside_the_closed_vocabulary ... ok
+test measured_red_verifies_as_a_success_conclusion ... ok
+test conclusion_malformed_specimen_3_two_lines ... ok
+test the_verifier_reads_the_commit_it_was_given_not_the_current_branch ... ok
+test the_vocabulary_comparison_is_byte_exact_not_prose ... ok
+test conclusion_malformed_further_byte_shapes ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/r6_replay_determinism.rs (target/debug/deps/r6_replay_determinism-bfa58377d6854ede)
+
+running 5 tests
+test a_successor_uses_the_recorded_accepted_sha_never_a_ref ... ok
+test no_pattern_kill_anywhere ... ok
+test a_skipped_stage_creates_no_base ... ok
+test the_decision_function_is_pure_over_the_recorded_ledger ... ok
+test crash_and_resume_at_every_one_of_the_seven_boundaries ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/r8_exemplar.rs (target/debug/deps/r8_exemplar-a8ab2653741b0838)
+
+running 11 tests
+test r5_the_condition_is_the_normalized_graphs_canonical_text_not_plan_prose ... ok
+test r5_the_base_law_all_five_clauses ... ok
+test r4_the_cause_is_never_unplanned_and_is_never_defaulted ... ok
+test r4_no_hold_approves_a_stage_whose_conclusion_has_not_verified ... ok
+test r8a_a_plan_without_a_block_takes_the_legacy_path ... ok
+test r4_a_failing_stage_dispatches_nothing_downstream ... ok
+test r4_a_refused_conclusion_accepts_no_sha_and_runs_nothing_downstream ... ok
+test r8a_check_plan_exit_by_exit ... ok
+test r8c_measured_red_verifies_as_success_and_l2_runs_from_l1s_accepted_sha ... ok
+test r8c_l3_is_skipped_with_no_worktree_cut_and_no_seat_spent ... ok
+test r8b_happy_path_three_stages_each_on_the_predecessors_accepted_sha ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests aion_fleet_plan
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+### EXIT=0
+
+=================== V5 — R6 replay determinism, all seven boundaries by kill-and-resume ===================
+    Finished `test` profile [unoptimized] target(s) in 0.09s
+     Running tests/r6_replay_determinism.rs (target/debug/deps/r6_replay_determinism-bfa58377d6854ede)
+
+running 5 tests
+test a_successor_uses_the_recorded_accepted_sha_never_a_ref ... ok
+test no_pattern_kill_anywhere ... ok
+test a_skipped_stage_creates_no_base ... ok
+test the_decision_function_is_pure_over_the_recorded_ledger ... ok
+test crash_and_resume_at_every_one_of_the_seven_boundaries ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+### EXIT=0
+
+=================== V6 — R8 the #140 exemplar, both paths ===================
+    Finished `test` profile [unoptimized] target(s) in 0.09s
+     Running tests/r8_exemplar.rs (target/debug/deps/r8_exemplar-a8ab2653741b0838)
+
+running 11 tests
+test r4_the_cause_is_never_unplanned_and_is_never_defaulted ... ok
+test r4_no_hold_approves_a_stage_whose_conclusion_has_not_verified ... ok
+test r5_the_condition_is_the_normalized_graphs_canonical_text_not_plan_prose ... ok
+test r5_the_base_law_all_five_clauses ... ok
+test r8a_a_plan_without_a_block_takes_the_legacy_path ... ok
+test r4_a_failing_stage_dispatches_nothing_downstream ... ok
+test r4_a_refused_conclusion_accepts_no_sha_and_runs_nothing_downstream ... ok
+test r8a_check_plan_exit_by_exit ... ok
+test r8c_measured_red_verifies_as_success_and_l2_runs_from_l1s_accepted_sha ... ok
+test r8c_l3_is_skipped_with_no_worktree_cut_and_no_seat_spent ... ok
+test r8b_happy_path_three_stages_each_on_the_predecessors_accepted_sha ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+### EXIT=0
+
+=================== V11 — M10 corpus gate (942c80e3) ===================
+   Compiling beamr v0.20.0
+   Compiling tokio-rustls v0.26.4
+   Compiling aion-package v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-package)
+   Compiling aion-integrations v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-integrations)
+   Compiling aion-store v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-store)
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+   Compiling tokio-tungstenite v0.29.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling axum v0.8.9
+   Compiling aion-integration-acp v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-integration-acp)
+   Compiling aion-integration-norn v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-integration-norn)
+   Compiling aion-toolchain v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-toolchain)
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-proto-generated)
+   Compiling aion-awl v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-awl)
+   Compiling aion-rs v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion)
+   Compiling aion-proto v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-proto)
+   Compiling haematite v0.11.0
+   Compiling aion-awl-package v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-awl-lsp)
+   Compiling liminal-rs v0.7.0
+   Compiling aion-store-haematite v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-store-haematite)
+   Compiling aion-client v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-client)
+   Compiling liminal-sdk v0.9.0
+   Compiling liminal-server v0.10.0
+   Compiling aion-worker v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-worker)
+   Compiling aion-cli v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-cli)
+    Finished `test` profile [unoptimized] target(s) in 1m 00s
+     Running tests/awl_corpus_gate.rs (target/debug/deps/awl_corpus_gate-d5717a4b9dfc67ad)
+
+running 3 tests
+test the_gate_refuses_the_retired_three_field_agent_shape ... ok
+test the_derived_corpus_is_non_vacuous_and_covers_every_area ... ok
+test every_living_awl_document_checks_clean ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+### EXIT=0
+
+=================== V12 — M11 changelog embed synced to the authored document (942c80e3) ===================
+   Compiling aion-server v0.20.0 (/home/rocketfish/fleet/runs/seqfix-flight1/legs/build/crates/aion-server)
+    Finished `test` profile [unoptimized] target(s) in 1m 00s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-95b9d1c4745676ce)
+
+running 1 test
+test changelog::tests::changelog_embed_matches_the_authored_document ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1159 filtered out; finished in 0.00s
+
+     Running tests/assistant_embed_e2e.rs (target/debug/deps/assistant_embed_e2e-2b93ace5624ad6d9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/assistant_private_queue.rs (target/debug/deps/assistant_private_queue-3ebd4ab99f92c61e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/authoring_e2e.rs (target/debug/deps/authoring_e2e-acaa7473616811e0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/authoring_out_of_box_e2e.rs (target/debug/deps/authoring_out_of_box_e2e-8c799f47bde63a1f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/awl_deploy_direct_e2e.rs (target/debug/deps/awl_deploy_direct_e2e-dbac62ecf55ab7db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/bridge_liminal_dispatch_e2e.rs (target/debug/deps/bridge_liminal_dispatch_e2e-cf4e9313930e22cc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_e2e.rs (target/debug/deps/dead_man_switch_e2e-855de2d9a99435ab)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_refusal_logs.rs (target/debug/deps/dead_man_switch_refusal_logs-98225562951850cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/deploy_api_e2e.rs (target/debug/deps/deploy_api_e2e-9756bfd54c610341)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/deploy_audit_log.rs (target/debug/deps/deploy_audit_log-3cc2ee89075d3270)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/deploy_restart_e2e.rs (target/debug/deps/deploy_restart_e2e-8b03ccbb93f3a9d1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/dev_ui_e2e.rs (target/debug/deps/dev_ui_e2e-80e6ccff78cf47f1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/graceful_shutdown_park_e2e.rs (target/debug/deps/graceful_shutdown_park_e2e-8c725993190d435c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/grpc_admission_refusal_logs.rs (target/debug/deps/grpc_admission_refusal_logs-0c1e43fb97f9a196)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/grpc_liminal_one_eligibility_set.rs (target/debug/deps/grpc_liminal_one_eligibility_set-e8fbb244a407eb4a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/grpc_worker_liveness_e2e.rs (target/debug/deps/grpc_worker_liveness_e2e-5ea9afc2f861b074)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/haematite_backend.rs (target/debug/deps/haematite_backend-7e957651fd8bc45b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/heartbeat_sweeper_e2e.rs (target/debug/deps/heartbeat_sweeper_e2e-e64bf1ab18b50923)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/liveness_verdict_transport_scope.rs (target/debug/deps/liveness_verdict_transport_scope-1b85b5313f90e75f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/lsub1_xnode_dispatch_e2e.rs (target/debug/deps/lsub1_xnode_dispatch_e2e-1ac53ee23d564443)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/lsub3_failover_e2e.rs (target/debug/deps/lsub3_failover_e2e-e876d8c924387074)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/lsub5_xnode_failover_e2e.rs (target/debug/deps/lsub5_xnode_failover_e2e-69fefabb21a0d220)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/managed_worker_drain_e2e.rs (target/debug/deps/managed_worker_drain_e2e-69e9a9309e05c83f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/mcp_surface_e2e.rs (target/debug/deps/mcp_surface_e2e-93cc4343f343e5c0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_forward_e2e.rs (target/debug/deps/namespace_mint_forward_e2e-9c603d07c68db632)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_routing_e2e.rs (target/debug/deps/namespace_mint_routing_e2e-f50ff8f5742cc62e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-a87e6e1561a010b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/noi5b_noi6_live_agent_e2e.rs (target/debug/deps/noi5b_noi6_live_agent_e2e-83983dafc073ad7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/noi6_intervention_routing_e2e.rs (target/debug/deps/noi6_intervention_routing_e2e-bce37e1ac51dab57)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ops_console_packaging.rs (target/debug/deps/ops_console_packaging-83033bdc67256701)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/outbox_delivery_contract_e2e.rs (target/debug/deps/outbox_delivery_contract_e2e-7f09fb1bba738dac)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/outbox_transport_e2e.rs (target/debug/deps/outbox_transport_e2e-9aaab534091d7452)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/query_workflow.rs (target/debug/deps/query_workflow-39af17739910ea9d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/recovery_declared_body_e2e.rs (target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/routing_forward_e2e.rs (target/debug/deps/routing_forward_e2e-0872b0d99680d9ab)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/routing_nstq_node_compose_e2e.rs (target/debug/deps/routing_nstq_node_compose_e2e-a94c52b7ea07bb40)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/run_server_outbox_e2e.rs (target/debug/deps/run_server_outbox_e2e-15a7b1be0e8b34c4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/shutdown_process_exit_e2e.rs (target/debug/deps/shutdown_process_exit_e2e-24cd6eff6f7c00e7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ss3_directory_failover_e2e.rs (target/debug/deps/ss3_directory_failover_e2e-89e3ca8e51cabe0d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ss5b_auto_failover.rs (target/debug/deps/ss5b_auto_failover-216530ee36a1ae9f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/transcript_retention_e2e.rs (target/debug/deps/transcript_retention_e2e-5f536d68457c8e7f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/transcript_stream_e2e.rs (target/debug/deps/transcript_stream_e2e-84345d57a178f40c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/unserved_park_cluster_event.rs (target/debug/deps/unserved_park_cluster_event-ec94e45ed7c41065)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-b921e3ada7103541)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_policies.rs (target/debug/deps/unserved_queue_policies-276f2b4a513ccf45)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/update_check_live_e2e.rs (target/debug/deps/update_check_live_e2e-f8eeef907e64eff9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/update_check_start_binding.rs (target/debug/deps/update_check_start_binding-d21717c575fcdf54)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/websocket_resume.rs (target/debug/deps/websocket_resume-2c875c0b7b8cdff2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_contract_registration.rs (target/debug/deps/worker_contract_registration-6100abd98b6d80f0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_deployment_spawn_fence.rs (target/debug/deps/worker_deployment_spawn_fence-e24f5493338b61d7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/worker_dispatch_delivery.rs (target/debug/deps/worker_dispatch_delivery-e5d02f5e2d730016)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/worker_lifecycle_admin.rs (target/debug/deps/worker_lifecycle_admin-33255dc9f0bd2472)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_sdk_e2e.rs (target/debug/deps/worker_sdk_e2e-a47a620a8cbca1e1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+### EXIT=0
+
+=================== V7 — mutation matrix (20 mutations, 0 survivors expected) ===================
+=== mutation matrix: neutralize one clause, the suite must go RED ===
+killed    charset clause (stage + leg ids)
+killed    clause 2  — stage id nonempty
+killed    clause 2  — stage id uniqueness
+killed    clause 3  — leg uniqueness
+killed    clauses 4+5 — dispatch leg cover
+killed    clause 6  — stage has legs
+killed    clause 10 — conclusion owner
+killed    clause 11 — multi-leg vocabulary
+killed    clause 12 — multi-value legs
+killed    clause 15 — distinct conclusion paths
+killed    clause 7  — predecessors
+killed    clause 9  — acyclicity
+killed    clause 8  — chain cardinality
+killed    clauses 13+14 — admit references
+killed    clause 16 — advance
+
+=== the R3 seal: neutralize the exact-object-id gate ===
+killed    R3 seal — a ref name is refused before any git process starts
+
+=== the R3 token contract: accept anything as a well-formed token ===
+killed    R3 token contract
+
+=== the chain decision function: R5 base law and R6/R8 ordering ===
+killed    R5 clause 4 — successor base = accepted SHA
+killed    R8 §9.4 — admission evaluated from recorded history
+killed    R3/R4 §2.6 — verify BEFORE accept-or-hold
+
+mutations: 20   survivors: 0
+MUTATION MATRIX: PASS — every clause is load-bearing; neutralizing any one turns the suite RED
+### EXIT=0
+=================== working tree after the mutation matrix ===================
+?? docs/evidence/seqfix-sigsegv/
+?? docs/evidence/venue/M13-beamr-jit-compile-sigsegv.md

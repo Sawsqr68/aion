@@ -1,0 +1,73 @@
+# D3 — the discrimination the flight actually needed: BUILD MODE, at one and the same source
+# Both binaries below are built from THIS tree, HEAD=45686a3e7cfd46791a875abae7a2d5af8ff065be, same source bytes.
+# W = produced by 'cargo test --workspace --no-run'   (what .fleet/gate-entry.sh runs)
+# P = produced by 'cargo test -p aion-server --test recovery_declared_body_e2e' (what O1 names)
+date: 2026-08-23T14:16:12+10:00
+W: -rwxr-xr-x 1 rocketfish rocketfish 141682248 Aug 23 14:13 target/debug/deps/recovery_declared_body_e2e-9990dace6ae08d82
+P: -rwxr-xr-x 1 rocketfish rocketfish 138651864 Aug 23 14:15 target/debug/deps/recovery_declared_body_e2e-056da3913225b1e6
+W sha256: 4d7c8248deac2be0bf12ff86a8c6c6aa5769b37de1e425ba5157ba8d85d51134
+P sha256: fa253191698001e4cd710b00b80651641375b686653e8603061a59cfe0e393a8
+W cargo metadata hash 9990dace6ae08d82 == the hash red-3.md:7189 names.
+protocol: 20 consecutive isolated runs each, $? verbatim.
+
+--- arm W: recovery_declared_body_e2e-9990dace6ae08d82 ---
+  W run 01: rc=0 elapsed=1.55s
+  W run 02: rc=0 elapsed=1.56s
+  W run 03: rc=0 elapsed=1.51s
+  W run 04: rc=0 elapsed=1.58s
+  W run 05: rc=0 elapsed=1.51s
+  W run 06: rc=0 elapsed=1.50s
+  W run 07: rc=0 elapsed=1.31s
+  W run 08: rc=0 elapsed=1.48s
+  W run 09: rc=0 elapsed=1.28s
+  W run 10: rc=0 elapsed=1.21s
+  W run 11: rc=0 elapsed=1.53s
+  W run 12: rc=0 elapsed=1.54s
+  W run 13: rc=0 elapsed=1.53s
+  W run 14: rc=0 elapsed=1.49s
+  W run 15: rc=0 elapsed=1.50s
+  W run 16: rc=0 elapsed=1.56s
+  W run 17: rc=0 elapsed=1.50s
+  W run 18: rc=0 elapsed=1.53s
+  W run 19: rc=0 elapsed=1.53s
+  W run 20: rc=0 elapsed=1.27s
+  ARM W TOTALS: crash(139)=0/20 pass(0)=20/20 other=0/20
+  --- verbatim run 01 output ---
+  | 
+  | running 1 test
+  | test adopted_declared_body_dispatch_executes_after_recovery ... ok
+  | 
+  | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s
+  | 
+
+--- arm P: recovery_declared_body_e2e-056da3913225b1e6 ---
+  P run 01: rc=0 elapsed=1.29s
+  P run 02: rc=0 elapsed=1.48s
+  P run 03: rc=0 elapsed=1.30s
+  P run 04: rc=0 elapsed=1.53s
+  P run 05: rc=0 elapsed=1.48s
+  P run 06: rc=0 elapsed=1.52s
+  P run 07: rc=0 elapsed=1.27s
+  P run 08: rc=0 elapsed=1.50s
+  P run 09: rc=0 elapsed=1.51s
+  P run 10: rc=0 elapsed=1.51s
+  P run 11: rc=0 elapsed=1.52s
+  P run 12: rc=0 elapsed=1.42s
+  P run 13: rc=0 elapsed=1.22s
+  P run 14: rc=0 elapsed=1.53s
+  P run 15: rc=0 elapsed=1.49s
+  P run 16: rc=0 elapsed=1.52s
+  P run 17: rc=0 elapsed=1.50s
+  P run 18: rc=0 elapsed=1.48s
+  P run 19: rc=0 elapsed=1.48s
+  P run 20: rc=0 elapsed=1.51s
+  ARM P TOTALS: crash(139)=0/20 pass(0)=20/20 other=0/20
+  --- verbatim run 01 output ---
+  | 
+  | running 1 test
+  | test adopted_declared_body_dispatch_executes_after_recovery ... ok
+  | 
+  | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+  | 
+
+loadavg at end: 1.84 2.83 1.86 1/1169 2979146

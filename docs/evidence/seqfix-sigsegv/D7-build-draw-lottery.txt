@@ -1,0 +1,44 @@
+# D7 — the perturbation that actually moves the fault: THE BUILD DRAW, not the diff
+# Protocol: relink the SAME test target from the SAME unchanged source, N times.
+# Each draw's sha256 and its $? over one run. Source is constant throughout:
+#   HEAD=45686a3e7cfd46791a875abae7a2d5af8ff065be, tree clean.
+date: 2026-08-23T14:37:36+10:00  rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)  cargo=cargo 1.97.1 (c980f4866 2026-06-30)
+command per draw: touch crates/aion-server/tests/recovery_declared_body_e2e.rs
+                  cargo test --workspace --no-run -p aion-server --test recovery_declared_body_e2e
+
+draw 01: sha256=e9cd3101f9f3ee52b0072160c607437c41a3c5cc09701d8a6723bc9d131768ed size=141682248 rc=0 elapsed=1.5s
+draw 02: sha256=78a76d3b17dbfa9e853e46257f9099eeb0def3dd4fdd99e9729aeddbcfc906d1 size=141682248 rc=0 elapsed=1.5s
+draw 03: sha256=e7a627245ffd2263bbfe19c6aecd69772af56497687eee627d5c26cc761e0f0b size=141682248 rc=0 elapsed=1.5s
+draw 04: sha256=1bd9216aeb1e69e06382bcdf82bc16591c9d16da4e70deabafa3d5ebd65eabbc size=141682248 rc=0 elapsed=1.5s
+draw 05: sha256=da41ce49e75ce452aeb23c737bead1fb4040c47a9a95cd3f9a796ae7445fe163 size=141682248 rc=0 elapsed=1.2s
+draw 06: sha256=a0f482cb626b7785703df1fddda5705571aab6fc337dd2dbd9ab1cdfd23bf5c5 size=141682248 rc=0 elapsed=1.5s
+draw 07: sha256=19d28587c224fd65f72b81c1b96d76b57cf0e1672b1a5be2d0183987b5554f03 size=141682248 rc=0 elapsed=1.5s
+draw 08: sha256=163704d4150aca6c7d2239bea945d336d0da1f29271bcc8d2860a03c29d04401 size=141682248 rc=0 elapsed=1.5s
+draw 09: sha256=811c74f6a0e181118c6d7ca4935f7b074344ce14e2cbfc49db2a76548cda6931 size=141682248 rc=0 elapsed=1.5s
+draw 10: sha256=1908c3075b55752bbff8525da330c94ff3de7056933989fdd741e801a51d6905 size=141682248 rc=0 elapsed=1.5s
+draw 11: sha256=7ea21fa754213111dfb02f1d7620bdd8e2359e3fffcba1593e8849eba22be29f size=141682248 rc=0 elapsed=1.5s
+draw 12: sha256=6060abd8f4b1349d8da9a743965f2b56a773d4f6103477796f7ac678cf804895 size=141682248 rc=0 elapsed=1.5s
+draw 13: sha256=adc5bbafb3ce2d7e5f30018a4fb2ddfe1b352ec6ab385343cbf8211f3dde4935 size=141682248 rc=0 elapsed=1.5s
+draw 14: sha256=cdf63ccae3a2d678fa3e9bd51c8c5013aa9156ce2c9c9911dd4deee9e0c39fdf size=141682248 rc=0 elapsed=1.5s
+draw 15: sha256=b06cbeda6cbb84e1c88728249e6ff4b8a6a92b1878ea09e21614b2e351a82248 size=141682248 rc=0 elapsed=1.5s
+draw 16: sha256=8708c25939e65b298ca62a1dc8b45d522c2a853627e3b2e89532815e8ebce432 size=141682248 rc=0 elapsed=1.6s
+draw 17: sha256=7030b7edff3fa9bea45fd3d78cadea21a9ba7a471919a3e7d90b89fe6fcadb06 size=141682248 rc=0 elapsed=1.5s
+draw 18: sha256=db81b9b49a8e42cdd46af73696bb3e20eda996951e06cb56d2f96d879a4e120c size=141682248 rc=0 elapsed=1.5s
+draw 19: sha256=3f8cc30feb57a6ad3d9970397a1915d0f8da52f2b6ced6727ca1d4ab9730fa0c size=141682248 rc=0 elapsed=1.6s
+draw 20: sha256=9dff063469dbbb4d89106dde013c971e9a5f55f064df5121128156f89c7705f0 size=141682248 rc=0 elapsed=1.5s
+
+TOTALS over 20 independent link draws of ONE unchanged source tree:
+  crash(139)=0/20  pass(0)=20/20  other=0/20
+
+distinct sha256 among the 20 draws: 20 / 20
+distinct byte sizes:                1  (size=141682248)
+
+READING. Twenty relinks of one byte-constant tree produced twenty DIFFERENT
+binaries at one constant size. The link is not reproducible on this toolchain.
+None of these twenty draws faulted; the preserved round-3 draw faults 20/20
+(D1). A red draw is therefore rare rather than absent: 0/20 puts the 95%
+upper bound on the per-draw crash rate at ~14%, and the population is known
+to be non-empty because .fleet/gates/red-3.md drew from it.
+
+This is the rung that decides the flight: the discriminator is the DRAW,
+not the diff. See CAUSE.md.

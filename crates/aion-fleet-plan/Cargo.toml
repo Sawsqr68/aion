@@ -1,0 +1,36 @@
+[package]
+name = "aion-fleet-plan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The fleet-stages-v1 staged-chain plan contract: grammar, validation, the normalized ordering graph, the sealed conclusion verifier, and the replay-deterministic chain decision function."
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# No third-party dependency is added by this crate. `serde`/`serde_json`
+# carry the normalized graph and the recorded chain ledger across the sealed
+# script seam; `thiserror` is the codebase's library-error rule; `clap` is
+# the binary's argument surface. All four are existing workspace members of
+# the dependency table. The identifier charset is hand-written rather than
+# pulling in `regex`, which the workspace does not carry.
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "aion-fleet-plan"
+path = "src/bin/aion-fleet-plan.rs"
+
+[[bin]]
+name = "aion-fleet-chain-step"
+path = "src/bin/aion-fleet-chain-step.rs"

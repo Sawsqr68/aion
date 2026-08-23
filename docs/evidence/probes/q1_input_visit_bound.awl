@@ -1,0 +1,22 @@
+//! Q1 PROBE (plan §4.5, movement finding M2) — throwaway evidence, not
+//! product. Is a flow INPUT legal as the `max … visits` bound?
+//! `fleet_dev.awl:41-43` claims the bound is "a literal, by AWL's grammar";
+//! `check_max_visits` (crates/aion-awl/src/checker/calls.rs) refuses only a
+//! RUNTIME reference and `runtime_ref` treats a flow input as known. This
+//! document settles the claim against the real checker.
+workflow q1_input_visit_bound
+  input max_stages: Int
+  outcome done: type Note, route success
+
+type Note { text: String }
+
+type OpProbe { exit_code: Int, stdout: String, stderr: String }
+
+worker probe
+  action tick(label: String) -> OpProbe
+
+step spin
+  tick(label: "q1") -> t
+  outcome again: when visits < max_stages, route spin
+  outcome finish: otherwise, route done(text: t.stdout)
+  max max_stages visits

@@ -1,0 +1,26 @@
+//! Q2 PROBE (plan §4.5, movement finding M4) — throwaway evidence, not
+//! product. Two questions in one document:
+//!   (a) is a `child` call legal in a step that also carries `max … visits`
+//!       and a back-edge `route` to itself?
+//!   (b) what is observable when the child ends on a FAILURE outcome —
+//!       specifically, does `on failure` bind the child's typed outcome
+//!       label?
+//! M4 predicts: the failure edge fires, and the label is NOT bound
+//! (`OnFailure` in crates/aion-awl/src/ast/steps.rs carries only `body`).
+workflow q2_child_in_visit_cycle
+  input max_stages: Int
+  outcome done: type Note, route success
+  outcome stopped: type Note, route failure
+
+type Note { text: String }
+
+child run_stage(stage_id: String, base_commit: String) -> Note
+
+step spin
+  run_stage(stage_id: "s", base_commit: "0000000000000000000000000000000000000000") -> staged
+  outcome again: when visits < max_stages, route spin
+  outcome finish: otherwise, route done(text: staged.text)
+  max max_stages visits
+
+  on failure
+    route stopped(text: "the child ended on a failure outcome")

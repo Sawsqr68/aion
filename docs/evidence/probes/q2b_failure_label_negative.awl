@@ -1,0 +1,18 @@
+//! Q2(b) NEGATIVE PROBE: try to observe the child's typed failure label
+//! inside `on failure`. If M4 is right this must NOT check.
+workflow q2b_label_probe
+  input max_stages: Int
+  outcome done: type Note, route success
+  outcome stopped: type Note, route failure
+
+type Note { text: String }
+
+child run_stage(stage_id: String) -> Note
+
+step spin
+  run_stage(stage_id: "s") -> staged
+  outcome finish: otherwise, route done(text: staged.text)
+  max max_stages visits
+
+  on failure
+    route stopped(text: failure.label)

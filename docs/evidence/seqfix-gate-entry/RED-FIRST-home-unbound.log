@@ -1,0 +1,48 @@
+RED-FIRST — .fleet/gates/RED-LATEST.md (round 4): 'gate-entry.sh: line 3: HOME: unbound variable'
+venue: Linux 6.19.9-arch1-1 x86_64; shell the harness uses: sh -> /usr/bin/bash
+harness invocation (fleet/bin/fleet-gates.sh): sh "$gate_entry"  — shebang ignored, run under sh
+gate-entry.sh sha256 BEFORE: ef5b82a83eaead5a2ac42e6a026df99bb6bc0acdb9f2917ab4c787283c6f1804
+gate-entry.sh sha256 AFTER : 5d7ff2ec36e4bf162e61b34e46e632841a8506c4f59183c2603765a934679d74
+rust-toolchain.toml pins   : 1.97.1
+
+=== A0 — ORIGINAL prologue, HOME unset: the red, reproduced verbatim ===
+/tmp/prologue-orig.sh: line 3: HOME: unbound variable
+exit=1
+
+=== A0b — ORIGINAL prologue, HOME set: passes, which is why rounds 1-3 never saw this ===
+exit=0
+(no output above = the export succeeded)
+
+=== A — FIXED prologue, HOME unset: resolves via passwd, PINNED toolchain ===
+GATE TOOLCHAIN: cargo 1.97.1 from /home/rocketfish/.cargo/bin (rust-toolchain.toml pins 1.97.1)
+exit=0
+
+=== B — FIXED prologue, HOME set ===
+GATE TOOLCHAIN: cargo 1.97.1 from /home/rocketfish/.cargo/bin (rust-toolchain.toml pins 1.97.1)
+exit=0
+
+=== C — FIXED prologue, CARGO_HOME set, HOME unset ===
+GATE TOOLCHAIN: cargo 1.97.1 from /home/rocketfish/.cargo/bin (rust-toolchain.toml pins 1.97.1)
+exit=0
+
+=== D — NEGATIVE CONTROL: a non-pinned cargo must be REFUSED, never silently used ===
+    (this is the false green that merely deleting the $HOME line would have produced:
+     without the rustup shim on PATH, /usr/bin/cargo 1.94.0 answers instead of pinned 1.97.1)
+GATE-RED: cargo is '1.94.0', rust-toolchain.toml pins '1.97.1' (named cause: toolchain_mismatch)
+exit=1
+
+=== E — NEGATIVE CONTROL: no cargo resolvable via CARGO_HOME, HOME or passwd ===
+GATE-RED: no rustup cargo bin via CARGO_HOME, HOME or passwd (named cause: toolchain_absent)
+exit=1
+
+=== F — NEGATIVE CONTROL: rust-toolchain.toml declares no channel ===
+GATE-RED: rust-toolchain.toml declares no channel (named cause: toolchain_unpinned)
+exit=1
+
+=== G — the four pre-existing gate checks are unchanged; BASE untouched ===
+diff of lines 48-76 (everything after the prologue) against HEAD:
+IDENTICAL — no check weakened, no BASE change, no filter, no exclude
+
+=== H — deliverable presence is identical under either candidate BASE ===
+BASE c590712f57a2fe8353c6cd42823200587f25d70e: crates/*.rs=38 docs/evidence/=40 total=113
+BASE 957de0a1: crates/*.rs=38 docs/evidence/=40 total=110
