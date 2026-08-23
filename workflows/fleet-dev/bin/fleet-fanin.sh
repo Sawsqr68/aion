@@ -11,6 +11,33 @@ fleet_root_guard "$1" "$2"; csv_guard "$3"
 repo="$1/$2/repo"
 [ -d "$repo/.git" ] || op_guard_fail "no repo at $repo"
 cd "$repo" || op_guard_fail "cannot enter $repo"
+# Spawn-guard marker reconciliation (carrier kill #6, speech r3 ae8f57df,
+# 2026-08-23): a 0.17.0 norn dev-control session plants
+# .aion-held-execution.json in the tree it guards, and a session that dies
+# mid-flight leaves it as a corpse the clean-tree check below then trips
+# over — the rig forbids the leg to touch it, so fanin must reconcile it
+# with the engine's own spawn-guard semantics: a DEAD planter's claim is
+# cleared (preserved, never rm'd — the bytes are the attribution); a LIVE
+# pid refuses by name (fail-closed: a reused pid earns a hand check, an
+# auto-clear could merge over a genuinely held tree). RETIREMENT: #148
+# (aion 0.21.0) moves claims out of the tree entirely — this block dies
+# with that deploy, on the deploy checklist by name.
+marker=".aion-held-execution.json"
+if [ -e "$marker" ]; then
+    git ls-files --error-unmatch -- "$marker" >/dev/null 2>&1 && op_guard_fail "$marker is TRACKED in this tree — not a spawn-guard corpse; refusing to touch it"
+    mpid=$(jq -r '.pid // empty' "$marker" 2>/dev/null)
+    case "$mpid" in ''|*[!0-9]*) op_guard_fail "$marker exists but carries no parseable pid — refusing fanin over an unattributable claim: $(cat "$marker" 2>/dev/null | head -c 400)" ;; esac
+    if kill -0 "$mpid" 2>/dev/null; then
+        mwf=$(jq -r '.workflow_id // "unknown"' "$marker" 2>/dev/null)
+        mact=$(jq -r '.activity_id // "unknown"' "$marker" 2>/dev/null)
+        op_guard_fail "live spawn-guard claim holds this tree: pid $mpid (workflow $mwf, activity $mact) is still running — fanin refuses rather than merge over a held tree"
+    fi
+    preserved="$1/$2/held-execution-marker-cleared.json"
+    mv "$marker" "$preserved" || op_guard_fail "dead spawn-guard marker (pid $mpid gone) could not be preserved to $preserved"
+    marker_note=" [reconciled dead spawn-guard marker: planter pid $mpid gone; bytes preserved at $preserved]"
+else
+    marker_note=""
+fi
 dirty=$(git status --porcelain 2>&1)
 [ -n "$dirty" ] && op_guard_fail "primary tree is not clean before fanin: $dirty"
 merged=""
@@ -46,4 +73,4 @@ done
 for sha in $(git show HEAD:.fleet/legs-merged.md | tr '|' '\n' | tr -d ' ' | grep -E '^[0-9a-f]{40}$'); do
     git cat-file -e "$sha^{commit}" 2>/dev/null || op_guard_fail "recorded sha does not resolve to a commit: $sha"
 done
-op_emit 0 "merged in order:$merged; branch refs recorded in .fleet/legs-merged.md" ""
+op_emit 0 "merged in order:$merged; branch refs recorded in .fleet/legs-merged.md$marker_note" ""
