@@ -12,8 +12,8 @@ use crate::runtime::nif_context::NifContext;
 use crate::runtime::nif_result_term::{NifRefusal, error_result_term, ok_result_term};
 use aion_core::ActivityId;
 use beamr::native::ProcessContext;
-use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::Term;
+use beamr::term::heap_borrow::HeapBorrow;
 
 /// NIF backing `aion_flow_ffi:dispatch_activity/3`.
 pub(super) fn dispatch_activity_impl(
@@ -131,7 +131,10 @@ pub(super) fn await_activity_result_impl(
     await_activity_result_with_context(&state, context, &runtime.runtime, ctx, &correlation)
 }
 
-fn decode_dispatch_args(args: &[Term], heap: HeapBorrow<'_>) -> Result<(String, String, String), ()> {
+fn decode_dispatch_args(
+    args: &[Term],
+    heap: HeapBorrow<'_>,
+) -> Result<(String, String, String), ()> {
     if args.len() != 3 {
         return Err(());
     }

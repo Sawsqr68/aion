@@ -5,8 +5,8 @@ use std::time::Duration;
 use crate::runtime::nif_result_term::{error_result_term, ok_result_term};
 use aion_core::{Event, TimerId};
 use beamr::native::ProcessContext;
-use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::Term;
+use beamr::term::heap_borrow::HeapBorrow;
 use chrono::{DateTime, Utc};
 
 use crate::durability::{Command, CorrelationKey, DurabilityError, Resolution, ResolveOutcome};
@@ -180,54 +180,70 @@ fn consume_one_wake_marker(ctx: &mut ProcessContext) {
 
 /// NIF backing `aion_flow_ffi:start_timer/2`.
 pub(super) fn start_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    timer_call("start_timer", 2, args, ctx, |state, mut context, args, heap| {
-        let timer_id = decode_timer_id_arg("start_timer timer_id", args[0], heap)?;
-        let duration = decode_duration_arg("start_timer duration", args[1], heap)?;
-        let recorded_now = recorded_now(&context);
-        let fire_at = add_duration(recorded_now, duration)?;
-        // UNOBSERVED seam. `start_timer` arms a timer and returns its handle
-        // immediately; it never waits for the terminal. Recorded resolution can
-        // reach `TimerFired`, an event the live path had not recorded when it
-        // returned this same handle, so advancing here would be a
-        // replay-only position change (aion#1). The terminal becomes visible
-        // where it is awaited.
-        match context.resolve_command_unobserved(timer_command(timer_id.clone(), fire_at))? {
-            ResolveOutcome::Recorded(Resolution::TimerStarted | Resolution::TimerFired) => {
-                Ok(ok_result(timer_ref(&timer_id)))
+    timer_call(
+        "start_timer",
+        2,
+        args,
+        ctx,
+        |state, mut context, args, heap| {
+            let timer_id = decode_timer_id_arg("start_timer timer_id", args[0], heap)?;
+            let duration = decode_duration_arg("start_timer duration", args[1], heap)?;
+            let recorded_now = recorded_now(&context);
+            let fire_at = add_duration(recorded_now, duration)?;
+            // UNOBSERVED seam. `start_timer` arms a timer and returns its handle
+            // immediately; it never waits for the terminal. Recorded resolution can
+            // reach `TimerFired`, an event the live path had not recorded when it
+            // returned this same handle, so advancing here would be a
+            // replay-only position change (aion#1). The terminal becomes visible
+            // where it is awaited.
+            match context.resolve_command_unobserved(timer_command(timer_id.clone(), fire_at))? {
+                ResolveOutcome::Recorded(Resolution::TimerStarted | Resolution::TimerFired) => {
+                    Ok(ok_result(timer_ref(&timer_id)))
+                }
+                ResolveOutcome::Recorded(Resolution::TimerCancelled) => {
+                    Ok(error_result("cancelled"))
+                }
+                ResolveOutcome::Recorded(_) => Ok(error_result("start_timer history mismatch")),
+                ResolveOutcome::ResumeLive => {
+                    record_started(&context, recorded_now, timer_id.clone(), fire_at)?;
+                    schedule_timer(state, &context, timer_id.clone(), fire_at, TimerKind::Named)?;
+                    Ok(ok_result(timer_ref(&timer_id)))
+                }
             }
-            ResolveOutcome::Recorded(Resolution::TimerCancelled) => Ok(error_result("cancelled")),
-            ResolveOutcome::Recorded(_) => Ok(error_result("start_timer history mismatch")),
-            ResolveOutcome::ResumeLive => {
-                record_started(&context, recorded_now, timer_id.clone(), fire_at)?;
-                schedule_timer(state, &context, timer_id.clone(), fire_at, TimerKind::Named)?;
-                Ok(ok_result(timer_ref(&timer_id)))
-            }
-        }
-    })
+        },
+    )
 }
 
 /// NIF backing `aion_flow_ffi:cancel_timer/1`.
 pub(super) fn cancel_timer_impl(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    timer_call("cancel_timer", 1, args, ctx, |state, mut context, args, heap| {
-        let timer_id = decode_timer_id_arg("cancel_timer timer_id", args[0], heap)?;
-        let recorded_now = recorded_now(&context);
-        // UNOBSERVED seam. The live path issues the cancel through the timer
-        // service, which arbitrates fire-versus-cancel and owns the terminal's
-        // `recorded_at`; this NIF never learns that timestamp and so cannot
-        // advance to it. Advancing only on the replay side would be a
-        // replay-only position change, so neither side advances and the two
-        // agree (aion#1).
-        match context.resolve_command_unobserved(timer_command(timer_id.clone(), recorded_now))? {
-            ResolveOutcome::Recorded(Resolution::TimerCancelled | Resolution::TimerFired) => {
-                Ok(ok_result("cancelled"))
+    timer_call(
+        "cancel_timer",
+        1,
+        args,
+        ctx,
+        |state, mut context, args, heap| {
+            let timer_id = decode_timer_id_arg("cancel_timer timer_id", args[0], heap)?;
+            let recorded_now = recorded_now(&context);
+            // UNOBSERVED seam. The live path issues the cancel through the timer
+            // service, which arbitrates fire-versus-cancel and owns the terminal's
+            // `recorded_at`; this NIF never learns that timestamp and so cannot
+            // advance to it. Advancing only on the replay side would be a
+            // replay-only position change, so neither side advances and the two
+            // agree (aion#1).
+            match context
+                .resolve_command_unobserved(timer_command(timer_id.clone(), recorded_now))?
+            {
+                ResolveOutcome::Recorded(Resolution::TimerCancelled | Resolution::TimerFired) => {
+                    Ok(ok_result("cancelled"))
+                }
+                ResolveOutcome::Recorded(_) => Ok(error_result("cancel_timer history mismatch")),
+                ResolveOutcome::ResumeLive => {
+                    cancel_live_timer(state, &context, timer_id)?;
+                    Ok(ok_result("cancelled"))
+                }
             }
-            ResolveOutcome::Recorded(_) => Ok(error_result("cancel_timer history mismatch")),
-            ResolveOutcome::ResumeLive => {
-                cancel_live_timer(state, &context, timer_id)?;
-                Ok(ok_result("cancelled"))
-            }
-        }
-    })
+        },
+    )
 }
 
 fn timer_call<F>(
@@ -238,7 +254,12 @@ fn timer_call<F>(
     f: F,
 ) -> Result<Term, Term>
 where
-    F: FnOnce(&EngineNifState, NifContext, &[Term], HeapBorrow<'_>) -> Result<NifResult, NifTimerError>,
+    F: FnOnce(
+        &EngineNifState,
+        NifContext,
+        &[Term],
+        HeapBorrow<'_>,
+    ) -> Result<NifResult, NifTimerError>,
 {
     if args.len() != arity {
         return error_result_term(

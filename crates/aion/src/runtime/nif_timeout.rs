@@ -203,9 +203,8 @@ fn arm_scope(
     pid: u64,
     heap: beamr::term::heap_borrow::HeapBorrow<'_>,
 ) -> Result<(Term, u64), String> {
-    let duration =
-        decode_duration_arg("with_timeout deadline", args[0], heap)
-            .map_err(|error| error.to_string())?;
+    let duration = decode_duration_arg("with_timeout deadline", args[0], heap)
+        .map_err(|error| error.to_string())?;
     let fun = args[1];
     let mut context = build_context_for_pid(state, pid).map_err(|error| error.to_string())?;
     let now = recorded_now(&context);

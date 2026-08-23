@@ -579,7 +579,8 @@ mod tests {
         // Detached contexts allocate owned blocks that live as long as the
         // ProcessContext itself.
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
+        let (tag, value) =
+            decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -601,7 +602,8 @@ mod tests {
         let context = context_with_history(&runtime, 61, workflow_id, run_id(), &history)?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
+        let (tag, value) =
+            decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -632,7 +634,8 @@ mod tests {
         context.resolve_command_observed(sleep_command())?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
+        let (tag, value) =
+            decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
         assert_eq!(tag, "ok");
         assert_eq!(
             value,
@@ -656,7 +659,8 @@ mod tests {
         let context = context_with_history(&runtime, 63, workflow_id, run_id(), &history)?;
 
         let mut ctx = ProcessContext::new();
-        let (tag, value) = decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
+        let (tag, value) =
+            decode_result_tuple(now_from_context(&mut ctx, &context), ctx.borrow_terms())?;
 
         assert_eq!(tag, "ok");
         assert_eq!(
@@ -749,7 +753,13 @@ mod tests {
         )?;
         let mut live_now = Vec::new();
         let mut ctx = ProcessContext::new();
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
+        live_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &live.context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
         let scheduled_at_time = Utc
             .timestamp_millis_opt(scheduled_at)
             .single()
@@ -765,7 +775,13 @@ mod tests {
                 attempt: 1,
             },
         )?;
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
+        live_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &live.context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
         let completed_at_time = Utc
             .timestamp_millis_opt(completed_at)
             .single()
@@ -779,7 +795,13 @@ mod tests {
         // The OBSERVED await seam's live half: `await_activity_result` advances
         // to the terminal it just recorded and returns it to workflow code.
         live.context.observe_recorded_at(completed_at_time);
-        live_now.push(decode_result_tuple(now_from_context(&mut ctx, &live.context), ctx.borrow_terms())?.1);
+        live_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &live.context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
 
         // REPLAY: a fresh handle over the history live just produced.
         let replay_history = runtime.block_on(live.store.read_history(&workflow_id))?;
@@ -790,9 +812,21 @@ mod tests {
         // resolvers over the same history.
         let mut replay_context = replay.context;
         let mut replay_now = Vec::new();
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context), ctx.borrow_terms())?.1);
+        replay_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &replay_context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
         replay_context.resolve_command_unobserved(command.clone())?;
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &replay_context), ctx.borrow_terms())?.1);
+        replay_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &replay_context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
         let mut await_context = NifContext::new_with_history_store(
             72,
             replay.registry.as_ref(),
@@ -801,7 +835,13 @@ mod tests {
             crate::runtime::SignalDeliveryConfig::default(),
         )?;
         await_context.resolve_command_observed(command)?;
-        replay_now.push(decode_result_tuple(now_from_context(&mut ctx, &await_context), ctx.borrow_terms())?.1);
+        replay_now.push(
+            decode_result_tuple(
+                now_from_context(&mut ctx, &await_context),
+                ctx.borrow_terms(),
+            )?
+            .1,
+        );
 
         assert_eq!(
             live_now, replay_now,
@@ -942,14 +982,22 @@ mod tests {
         let first_values = vec![
             decode_result_tuple(now_from_context(&mut ctx, &first), ctx.borrow_terms())?.1,
             decode_result_tuple(random_from_context(&mut ctx, &first), ctx.borrow_terms())?.1,
-            decode_result_tuple(random_int_from_context(&mut ctx, &first, 1, 100), ctx.borrow_terms())?.1,
+            decode_result_tuple(
+                random_int_from_context(&mut ctx, &first, 1, 100),
+                ctx.borrow_terms(),
+            )?
+            .1,
         ];
 
         let replay = context_with_history(&runtime, 44, workflow_id, run_id, &history)?;
         let replay_values = vec![
             decode_result_tuple(now_from_context(&mut ctx, &replay), ctx.borrow_terms())?.1,
             decode_result_tuple(random_from_context(&mut ctx, &replay), ctx.borrow_terms())?.1,
-            decode_result_tuple(random_int_from_context(&mut ctx, &replay, 1, 100), ctx.borrow_terms())?.1,
+            decode_result_tuple(
+                random_int_from_context(&mut ctx, &replay, 1, 100),
+                ctx.borrow_terms(),
+            )?
+            .1,
         ];
 
         assert_eq!(first_values, replay_values);

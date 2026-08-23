@@ -10,8 +10,8 @@
 use beamr::native::ProcessContext;
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
-use beamr::term::heap_borrow::HeapBorrow;
 use beamr::term::boxed::Cons;
+use beamr::term::heap_borrow::HeapBorrow;
 
 use crate::runtime::nif_activity::runtime_context;
 use crate::runtime::nif_collect::{

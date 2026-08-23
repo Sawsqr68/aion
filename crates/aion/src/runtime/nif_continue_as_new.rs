@@ -56,12 +56,13 @@ fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Resul
         runtime.runtime.signal_delivery(),
     )
     .map_err(|error| context_error_term(process_context, &error))?;
-    let input_text = decode_string_arg(args[0], process_context.borrow_terms()).map_err(|error| {
-        NifRefusal::reported(error_result_term(
-            process_context,
-            &format!("continue_as_new input: {error}"),
-        ))
-    })?;
+    let input_text =
+        decode_string_arg(args[0], process_context.borrow_terms()).map_err(|error| {
+            NifRefusal::reported(error_result_term(
+                process_context,
+                &format!("continue_as_new input: {error}"),
+            ))
+        })?;
     let input = json_payload(process_context, &input_text, "continue_as_new", "input")?;
     let parent_run_id = context.run_id().clone();
     let input_for_record = input.clone();

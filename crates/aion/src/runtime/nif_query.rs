@@ -370,12 +370,18 @@ pub(crate) fn register_query(args: &[Term], ctx: &mut ProcessContext) -> Result<
 }
 
 /// Decode the shared `(query_id, text)` argument shape of the reply NIFs.
-fn decode_reply_args(name: &str, args: &[Term], heap: HeapBorrow<'_>) -> Result<(String, String), String> {
+fn decode_reply_args(
+    name: &str,
+    args: &[Term],
+    heap: HeapBorrow<'_>,
+) -> Result<(String, String), String> {
     if args.len() != 2 {
         return Err(format!("{name}: expected 2 arguments, got {}", args.len()));
     }
-    let query_id = decode_string_arg(args[0], heap).map_err(|error| format!("{name} id: {error}"))?;
-    let text = decode_string_arg(args[1], heap).map_err(|error| format!("{name} payload: {error}"))?;
+    let query_id =
+        decode_string_arg(args[0], heap).map_err(|error| format!("{name} id: {error}"))?;
+    let text =
+        decode_string_arg(args[1], heap).map_err(|error| format!("{name} payload: {error}"))?;
     Ok((query_id, text))
 }
 
@@ -395,7 +401,8 @@ pub(crate) fn reply_query(args: &[Term], ctx: &mut ProcessContext) -> Result<Ter
 }
 
 pub(crate) fn reply_query_error(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, Term> {
-    let (query_id, message) = match decode_reply_args("reply_query_error", args, ctx.borrow_terms()) {
+    let (query_id, message) = match decode_reply_args("reply_query_error", args, ctx.borrow_terms())
+    {
         Ok(parts) => parts,
         Err(error) => return error_result_term(ctx, &error),
     };
