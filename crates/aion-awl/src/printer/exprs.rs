@@ -74,7 +74,7 @@ pub(super) fn arg_text(arg: &Arg) -> String {
     format!("{}: {}", arg.name, expr_text(&arg.value))
 }
 
-pub(super) fn string_literal(value: &str) -> String {
+pub(crate) fn string_literal(value: &str) -> String {
     let mut out = String::with_capacity(value.len() + 2);
     out.push('"');
     for ch in value.chars() {
@@ -104,7 +104,7 @@ const fn binary_op_text(op: BinaryOp) -> &'static str {
     }
 }
 
-pub(super) fn duration_text(duration: &DurationLiteral) -> String {
+pub(crate) fn duration_text(duration: &DurationLiteral) -> String {
     let unit = match duration.unit {
         DurationUnit::Seconds => "s",
         DurationUnit::Minutes => "m",
@@ -114,7 +114,7 @@ pub(super) fn duration_text(duration: &DurationLiteral) -> String {
     format!("{}{unit}", duration.magnitude)
 }
 
-pub(super) fn type_ref_text(ty: &TypeRef) -> String {
+pub(crate) fn type_ref_text(ty: &TypeRef) -> String {
     match ty {
         TypeRef::Named { name, .. } => name.clone(),
         TypeRef::List { inner, .. } => format!("[{}]", type_ref_text(inner)),

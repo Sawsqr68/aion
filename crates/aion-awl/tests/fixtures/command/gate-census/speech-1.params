@@ -1,0 +1,19 @@
+# FIXTURE: diff-census parameter set — docs dispatch-rig speech-1 python wire.
+# SOURCE-REPO: docs
+# SOURCE-PATH: dispatch-rigs/speech-1-python-wire/KIT-gate-entry.sh
+# SOURCE-COMMIT: e98ca99
+# SOURCE-SHA256: e1544910aee3378d3fbab17856235f8bb1bd7a7b6ca0dec54b497a2babaa7a5a
+# SPECIMEN-FILE: .fleet/fixtures/gate-scripts/speech-1.KIT-gate-entry.sh
+# SPECIMEN-LINE: 26
+# BASE-LINE: 23
+# NORMALIZATION: as haem-wall — command substitution body, shell quoting removed.
+# NOTE: this rig's BASE is the sentinel `__CUT_COMMIT__`, substituted into the
+#   script text before dispatch. The shape expresses it faithfully because a
+#   base pin arrives as a declared PARAMETER — which is the cure for the
+#   sentinel, not an accommodation of it: text substitution into a script is
+#   the defect class a declared parameter removes.
+param base_pin = __CUT_COMMIT__
+argv git
+argv diff
+argv --name-only
+argv __CUT_COMMIT__..HEAD

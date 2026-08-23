@@ -1,0 +1,20 @@
+//! FIXTURE: absorbed production `parameter_default`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `parameter_default_values_may_use_earlier_parameters`.
+//! JUST-SPECIMEN: @foo a b=a:
+//! WHAT DIFFERS: nothing about the shape. A default may reference a parameter
+//!   declared before it, exactly as the suite case establishes.
+
+workflow just_parameter_default
+  outcome done: type String, route success
+
+command foo(a: String, b: String = "{{a}}")
+  program "echo"
+  admits "--"
+  operand second: String = "{{b}}"
+
+step go
+  route done("ok")

@@ -1,0 +1,22 @@
+//! FIXTURE: conformance refusal — a default reaching FORWARD.
+//! EXPECT: refuse parameter_undeclared
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `parameter_default_values_may_not_use_later_parameters`.
+//! JUST-SPECIMEN: @foo a b=c c='':
+//! WHAT DIFFERS: nothing. The suite case establishes that Just refuses this
+//!   too (`error: variable `c` not defined`), so the two agree — which is
+//!   exactly what a conformance fixture is for: an author who knows the Just
+//!   rule finds the same rule here, and a drift becomes a red test.
+
+workflow just_default_reaching_forward
+  outcome done: type String, route success
+
+command foo(a: String, b: String = "{{c}}", c: String = "")
+  program "echo"
+  admits "--"
+  operand x: String = "{{b}}"
+
+step go
+  route done("ok")

@@ -139,6 +139,11 @@ fn print_document(printer: &mut Printer, document: &Document) {
     for subflow in &document.subflows {
         print_subflow(printer, subflow);
     }
+    // Commands print with the other DECLARATIONS, before the flow: a reader
+    // meets what a document declares and then what it does.
+    for command in &document.commands {
+        print_command(printer, command);
+    }
     for step in &document.steps {
         print_step(printer, 0, step);
     }
@@ -171,10 +176,35 @@ fn print_worker_document(printer: &mut Printer, document: &Document) {
     for subflow in &document.subflows {
         print_subflow(printer, subflow);
     }
+    // Commands print with the other DECLARATIONS, before the flow: a reader
+    // meets what a document declares and then what it does.
+    for command in &document.commands {
+        print_command(printer, command);
+    }
     for step in &document.steps {
         print_step(printer, 0, step);
     }
     printer.leads(0, &document.epilogue);
+}
+
+/// Print one `command` declaration: its header line, then its clauses in the
+/// language's own order.
+///
+/// The clause ORDER is canonical, not source order: a canonical printer that
+/// preserved the order an author happened to write clauses in would have two
+/// renderings of one declaration, and `parse ∘ print = id` would hold while
+/// `print ∘ parse ∘ print = print` did not.
+fn print_command(printer: &mut Printer, command: &crate::command::CommandDecl) {
+    printer.leads(0, &command.lead);
+    printer.docs(0, &command.docs);
+    printer.line(
+        0,
+        &crate::command::command_header(command),
+        command.trailing.as_ref(),
+    );
+    for line in crate::command::command_body_lines(command) {
+        printer.line(1, &line, None);
+    }
 }
 
 /// Print one `subflow` declaration: the header with its typed parameters,

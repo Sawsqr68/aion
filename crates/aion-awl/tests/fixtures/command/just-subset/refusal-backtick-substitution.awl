@@ -1,0 +1,22 @@
+//! FIXTURE: refused form `backtick_substitution`.
+//! EXPECT: refuse backtick_substitution
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/backticks.rs`,
+//!   sha256 ff2f3e01abf698998dc6541608983fce70d29e92ec98e8b935df66248d095ac6;
+//!   case `trailing_newlines_are_stripped`.
+//! JUST-SPECIMEN: foos := `print('foo' * 4)`
+//! WHY REFUSED: backtick substitution runs a shell at evaluation time. The
+//!   determinism boundary does not admit it: a workflow is re-executed on
+//!   replay, and a value that shelled out would differ between runs with no
+//!   recorded activity standing behind it.
+
+workflow just_backtick
+  outcome done: type String, route success
+
+command foos
+  program "echo"
+  admits "--"
+  operand out: String = "`print('foo' * 4)`"
+
+step go
+  route done("ok")

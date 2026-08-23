@@ -9,6 +9,7 @@
 mod ast;
 pub mod builtins;
 mod checker;
+pub mod command;
 mod compile;
 mod emitter;
 mod fold;
@@ -69,8 +70,10 @@ pub use harness_config::{
     compile_harness,
 };
 pub use lexer::{
-    ANSWER_WORD, DurationUnit, IN_WORD, Keyword, LexError, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD,
-    SEND_WORD, Span, TO_WORD, Token, TokenKind, lex,
+    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, DurationUnit, ENV_WORD, HARDENING_WORD,
+    IN_WORD, Keyword, LexError, OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD,
+    POSITIONAL_WORDS, PROGRAM_WORD, QUERY_WORD, REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD,
+    Span, TO_WORD, Token, TokenKind, lex,
 };
 pub use parser::{ParseError, parse};
 pub use positions::{

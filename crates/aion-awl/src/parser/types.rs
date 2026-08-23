@@ -280,7 +280,7 @@ fn parse_field(
 }
 
 /// Parse a type reference: `Name`, `[T]`, or a postfix-`?` optional.
-pub(super) fn parse_type_ref(stream: &mut Stream) -> Result<TypeRef, ParseError> {
+pub(crate) fn parse_type_ref(stream: &mut Stream) -> Result<TypeRef, ParseError> {
     let base = match stream.peek() {
         Some(token) => {
             let span = token.span;
@@ -332,7 +332,7 @@ pub(super) fn parse_type_ref(stream: &mut Stream) -> Result<TypeRef, ParseError>
 }
 
 /// The source span of a type reference.
-pub(super) fn type_ref_span(ty: &TypeRef) -> Span {
+pub(crate) fn type_ref_span(ty: &TypeRef) -> Span {
     match ty {
         TypeRef::Named { span, .. }
         | TypeRef::List { span, .. }

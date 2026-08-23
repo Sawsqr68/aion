@@ -8,6 +8,7 @@
 //! refuse any that do not. The strings sit at column zero so the AWL
 //! indentation inside them is the document's own.
 
+mod decl_commands;
 mod decl_document;
 mod decl_workers;
 mod flow_graph;
@@ -15,6 +16,7 @@ mod flow_iteration;
 mod flow_routing;
 mod values;
 
+pub(crate) use decl_commands::{ADMITTING_COMMAND, REFUSING_COMMAND};
 pub(crate) use decl_document::{
     CONST, FALSE, INPUT, JSON, OF, SCHEMA, SIGNAL, TRUE, TYPE, WORKFLOW,
 };

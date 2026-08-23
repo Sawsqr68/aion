@@ -18,7 +18,11 @@
 //! every word of the vocabulary is offered in at least one position and that
 //! every derived form is honest against the table it came from.
 
-use crate::lexer::{ANSWER_WORD, IN_WORD, Keyword, QUERY_WORD, RUN_WORD, SEND_WORD, TO_WORD};
+use crate::lexer::{
+    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
+    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, PROGRAM_WORD, QUERY_WORD,
+    REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
+};
 
 /// A position in the grammar where the cursor — or a word — may stand.
 ///
@@ -58,11 +62,13 @@ pub enum GrammarPosition {
     SchemaSource,
     /// After `run` in a declared action body: the capture selector.
     RunCapture,
+    /// Indented under `command`: the clauses of a declared command.
+    CommandBody,
 }
 
 impl GrammarPosition {
     /// Every position, in the order the table reads them.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::TopLevel,
         Self::WorkflowHeader,
         Self::WorkerBlock,
@@ -78,6 +84,7 @@ impl GrammarPosition {
         Self::TypeDoor,
         Self::SchemaSource,
         Self::RunCapture,
+        Self::CommandBody,
     ];
 
     /// The position's stable identifier, as the guide's JSON carries it.
@@ -99,6 +106,7 @@ impl GrammarPosition {
             Self::TypeDoor => "type-door",
             Self::SchemaSource => "schema-source",
             Self::RunCapture => "run-capture",
+            Self::CommandBody => "command-body",
         }
     }
 
@@ -121,6 +129,7 @@ impl GrammarPosition {
             Self::TypeDoor => "after = in a type declaration",
             Self::SchemaSource => "after schema in a value expression",
             Self::RunCapture => "after run in a declared action body",
+            Self::CommandBody => "in a command declaration",
         }
     }
 }
@@ -202,7 +211,10 @@ pub const fn keywords_offered_at(position: GrammarPosition) -> &'static [Keyword
         // below, which is where the parser actually accepts them.
         GrammarPosition::TypeBody | GrammarPosition::TypeReference => &[],
         GrammarPosition::RouteTarget | GrammarPosition::StepReference => &[K::Success, K::Failure],
-        GrammarPosition::SignalReference => &[K::Timeout],
+        // A signal reference takes `timeout` as the wait's ceiling; a command
+        // body takes it as the invocation's. Merged because the OFFER is the
+        // same word, not because the two positions mean the same thing.
+        GrammarPosition::SignalReference | GrammarPosition::CommandBody => &[K::Timeout],
         // The value stands, each witnessed through the real checker by
         // `tests/grammar_parser_gate.rs`: `const c = schema of T` and
         // `const c = json { … }` (const-value), `type T = schema { … }`
@@ -253,14 +265,36 @@ pub const fn positional_offered_at(position: GrammarPosition) -> &'static [&'sta
     match position {
         // `send name: Type` and `query name: Type` are header declarations
         // (`parser/send.rs`, `parser/query.rs`).
+        // `command` opens a top-level declaration positionally: the word
+        // stands in this tree's corpus today as a harness-section field name,
+        // so reserving it would break documents that exist.
+        GrammarPosition::TopLevel => &[COMMAND_WORD],
         GrammarPosition::WorkflowHeader => &[QUERY_WORD, SEND_WORD],
         GrammarPosition::WorkerBlock => &[RUN_WORD],
         // `in` belongs here because `distribute <var> in <collection>` is a
         // step-body line; it is the only place an author types the word.
         GrammarPosition::StepBody => &[SEND_WORD, ANSWER_WORD, IN_WORD],
         GrammarPosition::SignalReference => &[TO_WORD],
-        GrammarPosition::TopLevel
-        | GrammarPosition::TypeBody
+        // Every clause of a command body, in the order the language reads
+        // them. `specimen` stands only under `refuses`, and `path` and
+        // `open_files` only under `hardening`, but completion offers a body's
+        // whole vocabulary and the parser rules on where each may actually
+        // stand.
+        GrammarPosition::CommandBody => &[
+            PROGRAM_WORD,
+            ADMITS_WORD,
+            REFUSES_WORD,
+            SPECIMEN_WORD,
+            OPTION_WORD,
+            OPERAND_WORD,
+            ENV_WORD,
+            CWD_WORD,
+            HARDENING_WORD,
+            PATH_WORD,
+            OPEN_FILES_WORD,
+            OWNER_WORD,
+        ],
+        GrammarPosition::TypeBody
         | GrammarPosition::RouteTarget
         | GrammarPosition::StepReference
         | GrammarPosition::PipeStage
@@ -335,15 +369,19 @@ pub enum GrammarForm {
     /// Stands only where a statement names its target — a route's
     /// destination, an ordering dependency, or a signal's addressee.
     TargetWord,
+    /// Stands inside a `command` declaration, naming one clause of the
+    /// invocation it declares.
+    CommandClause,
 }
 
 impl GrammarForm {
     /// Every form, in the order a reader meets them in a document: the
     /// declarations, the clauses under them, the statements, then the
     /// in-expression vocabularies.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Declaration,
         Self::HeaderClause,
+        Self::CommandClause,
         Self::Statement,
         Self::PipelineStage,
         Self::ConditionWord,
@@ -362,6 +400,7 @@ impl GrammarForm {
             Self::PipelineStage => "pipeline-stage",
             Self::ConditionWord => "condition-word",
             Self::TargetWord => "target-word",
+            Self::CommandClause => "command-clause",
         }
     }
 
@@ -377,6 +416,7 @@ impl GrammarForm {
             Self::PipelineStage => "Pipeline stage",
             Self::ConditionWord => "Condition word",
             Self::TargetWord => "Target word",
+            Self::CommandClause => "Command clause",
         }
     }
 
@@ -400,6 +440,9 @@ impl GrammarForm {
             Self::ConditionWord => "Words that stand inside a when condition.",
             Self::TargetWord => {
                 "Words that stand only where a statement names its target: a route's destination, an ordering dependency, or a signal's addressee."
+            }
+            Self::CommandClause => {
+                "Words that stand inside a command declaration, naming one clause of the invocation it declares."
             }
         }
     }
@@ -432,6 +475,9 @@ pub fn form_of(word: &str) -> Option<GrammarForm> {
     }
     if stands_in(GrammarPosition::WorkflowHeader) || stands_in(GrammarPosition::WorkerBlock) {
         return Some(GrammarForm::HeaderClause);
+    }
+    if stands_in(GrammarPosition::CommandBody) {
+        return Some(GrammarForm::CommandClause);
     }
     if stands_in(GrammarPosition::PipeStage) {
         return Some(GrammarForm::PipelineStage);

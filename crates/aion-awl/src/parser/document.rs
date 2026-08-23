@@ -94,6 +94,7 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
         children: Vec::new(),
         subflows: Vec::new(),
         steps: Vec::new(),
+        commands: Vec::new(),
         epilogue: Vec::new(),
     };
 
@@ -169,6 +170,7 @@ fn parse_worker_document(
         children: Vec::new(),
         subflows: Vec::new(),
         steps: Vec::new(),
+        commands: Vec::new(),
         epilogue: Vec::new(),
     };
     parse_declarations(stream, &mut document)?;
@@ -482,11 +484,21 @@ fn parse_declarations(stream: &mut Stream, document: &mut Document) -> Result<()
                 stream.next();
                 document.steps.push(parse_step(stream, lead, docs, span)?);
             }
+            // `command` opens a top-level declaration POSITIONALLY, not as a
+            // reserved word: `command` stands in this tree's own corpus today
+            // as a harness-section field name, so reserving it would break
+            // documents that exist. Recognised here, where nothing else may
+            // stand, exactly as `run`, `send` and `query` are read elsewhere.
+            TokenKind::Identifier(word) if word == crate::COMMAND_WORD => {
+                document
+                    .commands
+                    .push(crate::command::parse_command_decl(stream, lead, docs)?);
+            }
             TokenKind::Identifier(word) => {
                 let message = gone_keyword_hint(word).unwrap_or_else(|| {
                     format!(
-                        "expected a `const`, `type`, `worker`, `child`, `subflow`, or `step` \
-                         declaration, found `{word}`"
+                        "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or \
+                         `command` declaration, found `{word}`"
                     )
                 });
                 return Err(ParseError::new(span, message));
@@ -495,8 +507,8 @@ fn parse_declarations(stream: &mut Stream, document: &mut Document) -> Result<()
                 return Err(ParseError::new(
                     span,
                     format!(
-                        "expected a `const`, `type`, `worker`, `child`, `subflow`, or `step` \
-                         declaration, found {}",
+                        "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or \
+                         `command` declaration, found {}",
                         describe(other)
                     ),
                 ));

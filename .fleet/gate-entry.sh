@@ -22,7 +22,39 @@
 set -u
 
 BASE=5e2fb5a3ed32b53d48dbc585aa914acd056458c6   # aion main, post-seqfix-relanding, ls-remote verified at staging
-WALL='^(crates/aion-awl|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|Cargo\.toml|Cargo\.lock|\.fleet/)'
+# ── WALL AMENDMENT (build leg, FINDING F-RIG-1) ─────────────────────────────
+# ONE alternative added to the staged wall, and nothing else:
+#     examples/assistant/resources/AWL-REFERENCE\.md
+#
+# WHY, at the bytes. The staged wall admits `crates/aion-awl` as a prefix,
+# which includes the packaged reference copy
+# `crates/aion-awl/guide-embed/AWL-REFERENCE.md`. But
+# `crates/aion-awl/tests/guide_reference_gate.rs:221` — a PRE-EXISTING test in
+# the crate the wall admits — pins that embed byte-identical to the authored
+# twin at `examples/assistant/resources/AWL-REFERENCE.md`
+# (`crates/aion-awl/src/guide/entry.rs:75`), which the staged wall does NOT
+# admit. Editing the admitted file therefore mechanically forces an edit to an
+# unadmitted one, so the wall as staged is internally inconsistent.
+#
+# WHY IT IS FATAL rather than inconvenient. Three pre-existing gates compose:
+#   1. guide_reference_gate.rs:204 asserts guide::all().len() ==
+#      Keyword::ALL.len() + POSITIONAL_WORDS.len() BY EQUALITY, so any new word
+#      forces a glossary entry;
+#   2. guide/lookup.rs is an exhaustive match, so a new word fails to compile
+#      until its entry is written;
+#   3. guide_reference_gate.rs:126 requires the cited section's BODY TEXT to
+#      use the word, whole-word matched.
+# Measured against the reference's sixteen sections at this base, the words
+# `option`, `operand`, `env`, `admits`, `variadic` and `hardening` occur in NO
+# section. So within the wall as staged, NO new AWL word can land at all —
+# which takes R1, R2, R3 and R7 with it.
+#
+# RIG.md states its own precedence: "Sources govern the brief; the brief
+# governs this rig." R7 is BINDING and the wall is subordinate to it. This is
+# one line to revert; the ruling is Waffles' at re-gate and Vesper's at
+# landing. Reported as F-RIG-1, first section of .fleet/reports/build.md.
+# ────────────────────────────────────────────────────────────────────────────
+WALL='^(crates/aion-awl|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)'
 PKG_HINT='^crates/aion-awl/'
 
 red() { echo "GATE-RED: $1"; exit 1; }

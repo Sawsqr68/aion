@@ -306,6 +306,7 @@ fn every_offering_position_is_reachable_through_completions() {
             GrammarPosition::RunCapture,
             "\nworker shell\n  action x() -> Y\n    run ",
         ),
+        (GrammarPosition::CommandBody, "\ncommand more\n  "),
     ];
     let covered: Vec<GrammarPosition> = probes.iter().map(|(position, _)| *position).collect();
     for position in GrammarPosition::ALL {

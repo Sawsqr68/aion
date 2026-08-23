@@ -126,6 +126,8 @@ pub(crate) const FAILURE_HANDLING: Section = Section::new(11, "Failure handling"
 pub(crate) const SENDING_SIGNALS: Section = Section::new(12, "Sending signals to other workflows");
 /// §13 of the reference.
 pub(crate) const QUERY_SURFACE: Section = Section::new(13, "The read-only query surface");
+/// §17 of the reference.
+pub(crate) const COMMAND_DECLARATIONS: Section = Section::new(17, "Command declarations");
 
 /// One word of AWL, as the language reference explains it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

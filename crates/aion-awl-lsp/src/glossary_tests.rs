@@ -230,3 +230,146 @@ fn every_offered_word_of_the_language_is_documented() {
         "a declared name is no word of the language and must carry no documentation"
     );
 }
+
+/// R7's LSP row, held against THE TABLE rather than against a copy.
+///
+/// Every word the command-declaration surface adds must hover to the guide's
+/// own sentence and citation. The expected text is read from
+/// `aion_awl::guide` on each run, so this cannot pass against a tooltip that
+/// paraphrased the reference — the only way it goes green is if hover renders
+/// what the one table says.
+#[test]
+fn every_command_word_hovers_to_the_guide_sentence_from_the_table() {
+    let source = "\
+//! Census the files a flight changed.
+workflow gate_census
+  outcome censused: type String, route success
+
+command diff_census(base_pin: String, cargo_bin: String)
+  program \"git\" \"diff\"
+  refuses \"--\"
+  specimen \"-x\"
+  option \"--name-only\"
+  operand range: String = \"{{base_pin}}..HEAD\"
+  env GIT_PAGER = \"cat\"
+  cwd \"{workspace_root}\"
+  hardening
+    path \"{{cargo_bin}}\"
+    open_files 65536
+  timeout 10m owner \"waffles\"
+
+step census
+  route censused(\"ok\")
+";
+    let words = [
+        "command",
+        "program",
+        "refuses",
+        "specimen",
+        "option",
+        "operand",
+        "env",
+        "cwd",
+        "hardening",
+        "path",
+        "open_files",
+    ];
+    for word in words {
+        let Some(entry) = aion_awl::guide::for_word(word) else {
+            unreachable!("`{word}` must have a glossary entry");
+        };
+        let at = source
+            .find(&format!("\n  {word} "))
+            .map(|index| index + 3)
+            .or_else(|| source.find(&format!("\n  {word}\n")).map(|index| index + 3))
+            .or_else(|| {
+                source
+                    .find(&format!("\n    {word} "))
+                    .map(|index| index + 5)
+            })
+            .or_else(|| source.find(&format!("\n{word} ")).map(|index| index + 1));
+        let Some(offset) = at else {
+            unreachable!("the fixture must carry `{word}` opening a line");
+        };
+        let text = hover_text(hover_at(source, position_at(source, offset)));
+        assert!(
+            text.contains(entry.summary()),
+            "hovering `{word}` must render the guide's own sentence; got:\n{text}"
+        );
+        assert!(
+            text.contains(&entry.citation()),
+            "hovering `{word}` must carry the guide's own citation; got:\n{text}"
+        );
+        assert!(
+            text.contains("AWL reference §17"),
+            "`{word}` must cite the command-declaration section; got:\n{text}"
+        );
+    }
+}
+
+/// The exception is narrow: the same word standing as an author's own name
+/// hovers to nothing, so the rule the module doc states is still the rule.
+#[test]
+fn a_command_word_used_as_a_name_still_hovers_to_nothing() {
+    let source = "\
+//! A harness section, where `command` is a field name and not a declaration.
+workflow launcher
+  outcome done: type String, route success
+
+worker crew
+  action ask(prompt: String) -> String
+  harness
+    kind acp
+    command \"claude\"
+
+step go
+  route done(\"ok\")
+";
+    let Some(offset) = source.find("    command \"claude\"").map(|index| index + 4) else {
+        unreachable!("the fixture must carry the field name");
+    };
+    assert_eq!(
+        hover_text(hover_at(source, position_at(source, offset))),
+        "",
+        "`command` inside a harness section is a field name; hover must claim nothing"
+    );
+
+    // The control: hover DOES answer in this fixture, so a green above cannot
+    // mean hover is simply broken here.
+    let Some(control) = source.find("workflow launcher") else {
+        unreachable!("the fixture must carry the control word");
+    };
+    assert!(!hover_text(hover_at(source, position_at(source, control))).is_empty());
+}
+
+/// COMPLETION: a cursor inside a command body is offered the body's own
+/// vocabulary, delegated from the one table and never re-typed here.
+#[test]
+fn completion_inside_a_command_body_offers_the_bodys_vocabulary() {
+    let source = "\
+//! Census.
+workflow gate_census
+  outcome censused: type String, route success
+
+command diff_census(base_pin: String)
+  program \"git\" \"diff\"
+  
+step census
+  route censused(\"ok\")
+";
+    let Some(offset) = source.find("\n  \nstep").map(|index| index + 3) else {
+        unreachable!("the fixture must carry an empty indented line in the command body");
+    };
+    let position = position_at(source, offset);
+    let offered: Vec<String> = completions(source, position)
+        .into_iter()
+        .map(|item| item.label)
+        .collect();
+    let expected = aion_awl::guide::words_offered_at(aion_awl::guide::GrammarPosition::CommandBody);
+    for word in expected {
+        assert!(
+            offered.iter().any(|label| label == word),
+            "`{word}` is offered in a command body by the table but not by completion: {offered:?}"
+        );
+    }
+}

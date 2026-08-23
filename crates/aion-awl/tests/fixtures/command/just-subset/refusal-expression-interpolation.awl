@@ -1,0 +1,22 @@
+//! FIXTURE: refused form `expression_interpolation`.
+//! EXPECT: refuse interpolation_malformed
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/interpolation.rs`,
+//!   sha256 361740d3b249bbb8bfb67361402b320d1282cf37c90e1a77998e0bbdc88fa753;
+//!   case `closing_curly_brace_can_abut_interpolation_close`.
+//! JUST-SPECIMEN: echo {{if 'a' == 'b' { 'c' } else { 'd' }}}
+//! WHY REFUSED: an expression inside `{{…}}` is a templating language.
+//!   Interpolation here is CLOSED over declared parameters and is a
+//!   construction surface, not an evaluator. This is the fence Q5 set, and
+//!   this fixture is what keeps a later convenience from quietly widening it.
+
+workflow just_expression_interpolation
+  outcome done: type String, route success
+
+command foo
+  program "echo"
+  admits "--"
+  operand out: String = "{{if 'a' == 'b'}}"
+
+step go
+  route done("ok")

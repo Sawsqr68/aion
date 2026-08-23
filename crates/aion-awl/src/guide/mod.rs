@@ -13,6 +13,7 @@
 //! reference, because a paragraph maintained in a Rust string literal is a
 //! paragraph nobody reviews as documentation.
 
+mod commands;
 mod declarations;
 mod entry;
 mod examples;

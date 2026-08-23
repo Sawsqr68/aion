@@ -1,7 +1,9 @@
 //! Pins on the vocabulary inventories every consumer outside the lexer reads.
 
 use super::tokens::{
-    ANSWER_WORD, IN_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, TO_WORD,
+    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
+    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, POSITIONAL_WORDS,
+    PROGRAM_WORD, QUERY_WORD, REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
 };
 
 /// The window of `tokens.rs` holding `as_word`'s match arms: one arm per
@@ -97,7 +99,20 @@ fn the_positional_words_are_named_without_being_reserved() {
             QUERY_WORD,
             ANSWER_WORD,
             RUN_WORD,
-            IN_WORD
+            IN_WORD,
+            COMMAND_WORD,
+            PROGRAM_WORD,
+            ADMITS_WORD,
+            REFUSES_WORD,
+            SPECIMEN_WORD,
+            OPTION_WORD,
+            OPERAND_WORD,
+            ENV_WORD,
+            CWD_WORD,
+            HARDENING_WORD,
+            PATH_WORD,
+            OPEN_FILES_WORD,
+            OWNER_WORD
         ],
         "the inventory must hold every named positional word, or a consumer reading it offers \
          fewer words than the parser accepts"

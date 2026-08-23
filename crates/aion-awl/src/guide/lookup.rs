@@ -12,9 +12,12 @@
 //! [`POSITIONAL_WORDS`] inventory.
 
 use crate::lexer::{
-    ANSWER_WORD, IN_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, TO_WORD,
+    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
+    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, POSITIONAL_WORDS,
+    PROGRAM_WORD, QUERY_WORD, REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
 };
 
+use super::commands as cmd;
 use super::declarations as decl;
 use super::entry::GuideEntry;
 use super::flow;
@@ -101,6 +104,19 @@ pub fn for_positional_word(word: &str) -> Option<GuideEntry> {
         ANSWER_WORD => Some(flow::ANSWER),
         RUN_WORD => Some(decl::RUN),
         IN_WORD => Some(flow::IN),
+        COMMAND_WORD => Some(cmd::COMMAND),
+        PROGRAM_WORD => Some(cmd::PROGRAM),
+        ADMITS_WORD => Some(cmd::ADMITS),
+        REFUSES_WORD => Some(cmd::REFUSES),
+        SPECIMEN_WORD => Some(cmd::SPECIMEN),
+        OPTION_WORD => Some(cmd::OPTION),
+        OPERAND_WORD => Some(cmd::OPERAND),
+        ENV_WORD => Some(cmd::ENV),
+        CWD_WORD => Some(cmd::CWD),
+        HARDENING_WORD => Some(cmd::HARDENING),
+        PATH_WORD => Some(cmd::PATH),
+        OPEN_FILES_WORD => Some(cmd::OPEN_FILES),
+        OWNER_WORD => Some(cmd::OWNER),
         _ => None,
     }
 }

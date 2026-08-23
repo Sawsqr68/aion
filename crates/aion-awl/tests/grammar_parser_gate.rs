@@ -25,8 +25,9 @@
 //!   pipeline, exactly as `guide_tests.rs` runs the glossary's examples.
 //!
 //! COVERAGE, stated exactly: this gate covers `top-level` in both
-//! directions; `workflow-header` and `worker-block` in both directions
-//! (admitted openers plus a witness per offered mid-line word); and the
+//! directions; `workflow-header`, `worker-block` and `command-body` in both
+//! directions (admitted openers plus a witness per offered mid-line word);
+//! and the
 //! four value positions (`const-value`, `type-door`, `schema-source`,
 //! `run-capture`) in the offered direction — every offered word carries a
 //! checker-passing witness whose token stream shows the word in the claimed
@@ -68,8 +69,14 @@ const NARRATION: &str = "//! Probe document for the grammar gate.\n";
 /// reads as "admitted" and the equality assertions below go loudly red —
 /// the gate fails safe rather than quietly matching nothing.
 const OPENER_REFUSAL: &str = "expected the `workflow` or `worker` header";
+// Moved with the parser when the command-declaration surface landed: the
+// dispatcher now admits `command` and its diagnostic names it, so the prefix
+// this gate matches on had to follow. The ASSERTIONS below are unchanged —
+// this constant is the gate's grip on the parser's own sentence, not a claim
+// about what the parser should admit, and the equality checks are what would
+// have caught a wording change that did not correspond to a dispatch change.
 const DECLARATION_REFUSAL: &str =
-    "expected a `const`, `type`, `worker`, `child`, `subflow`, or `step` declaration";
+    "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or `command` declaration";
 const HEADER_REFUSAL: &str =
     "expected `timeout`, `input`, `signal`, `send`, `query`, or `outcome` in the workflow header";
 
@@ -374,3 +381,168 @@ fn the_header_offer_is_openers_plus_witnessed_midline_words() {
 
 #[path = "grammar_parser_gate/worker.rs"]
 mod worker;
+
+/// Whether the parser admits `word` opening a line inside a command body.
+///
+/// Refusal is read from the error's SPAN rather than a message prefix, for the
+/// same reason the worker-item probe does: a word the command body does not
+/// admit may be refused inside the block or may end the block and be refused
+/// by the top-level dispatcher, and both land the error exactly on the probe
+/// word, while an admitted clause fails later on its own missing continuation.
+fn admitted_as_command_clause(word: &str) -> bool {
+    let probe = format!("{word} probe_tail");
+    let source = format!(
+        "{NARRATION}workflow probe\n  outcome done: type String, route success\n\ncommand \
+         probe_command\n  {probe}\n\nstep go\n  route done(\"ok\")\n"
+    );
+    let Some(word_offset) = source.find(&probe) else {
+        return false;
+    };
+    match aion_awl::parse(&source) {
+        Ok(_) => true,
+        Err(error) => error.span.start != word_offset,
+    }
+}
+
+/// A mid-line or nested witness: a command declaration the checker accepts,
+/// in which the word stands where it actually stands.
+struct CommandWitness {
+    word: &'static str,
+    declaration: &'static str,
+}
+
+/// The words offered in a command body WITHOUT opening a body line, each
+/// witnessed standing where the parser really takes it.
+///
+/// `path` and `open_files` stand one level deeper, inside the `hardening`
+/// block; `owner` stands mid-line on the `timeout` clause. They are offered in
+/// the body because that is where an author's cursor is when they need them —
+/// the same reason `type`, `route`, `success` and `failure` are offered in a
+/// workflow header without opening a header line.
+const COMMAND_WITNESSES: &[CommandWitness] = &[
+    CommandWitness {
+        word: "path",
+        declaration: "command probe_command(bin: String)\n  program \"git\"\n  admits \"--\"\n  \
+                      hardening\n    path \"{{bin}}\"",
+    },
+    CommandWitness {
+        word: "open_files",
+        declaration: "command probe_command\n  program \"git\"\n  admits \"--\"\n  hardening\n    \
+                      open_files 65536",
+    },
+    CommandWitness {
+        word: "owner",
+        declaration: "command probe_command\n  program \"git\"\n  admits \"--\"\n  timeout 10m \
+                      owner \"the gate's author\"",
+    },
+];
+
+/// COMMAND BODY, both directions: every word the parser admits opening a
+/// command-body line must be offered there, and every offered word must
+/// either be such an opener or carry a checker-passing witness showing where
+/// it really stands.
+///
+/// The same class the workflow header gets, applied to the position the
+/// command-declaration surface added — so the panel and the completion list
+/// cannot claim a clause the parser refuses, and cannot omit one it takes.
+#[test]
+fn the_command_body_offer_is_openers_plus_witnessed_words() {
+    assert!(
+        admitted_as_command_clause("program") && admitted_as_command_clause("operand"),
+        "the control failed: the probe cannot recognise an admitted clause"
+    );
+    assert!(
+        !admitted_as_command_clause("sleep") && !admitted_as_command_clause("recipe"),
+        "the control failed: the probe cannot recognise a refused word"
+    );
+
+    let offered: BTreeSet<&str> = words_offered_at(GrammarPosition::CommandBody)
+        .into_iter()
+        .collect();
+    let openers: BTreeSet<&str> = vocabulary()
+        .into_iter()
+        .filter(|word| admitted_as_command_clause(word))
+        .collect();
+    let witnessed: BTreeSet<&str> = COMMAND_WITNESSES
+        .iter()
+        .map(|witness| witness.word)
+        .collect();
+
+    let mut wrong = Vec::new();
+    for opener in &openers {
+        if !offered.contains(opener) {
+            wrong.push(format!(
+                "`{opener}` opens a command-body line but the table does not offer it there"
+            ));
+        }
+    }
+    for word in &offered {
+        if !openers.contains(word) && !witnessed.contains(word) {
+            wrong.push(format!(
+                "`{word}` is offered in a command body, opens no body line, and carries no \
+                 witness — the panel would print a false \"stands in a command declaration\""
+            ));
+        }
+    }
+    for witness in COMMAND_WITNESSES {
+        if !offered.contains(witness.word) {
+            wrong.push(format!(
+                "`{}` carries a witness but is no longer offered in a command body; the witness \
+                 is stale",
+                witness.word
+            ));
+            continue;
+        }
+        let source = format!(
+            "{NARRATION}workflow probe\n  outcome done: type String, route success\n\n{}\n\nstep \
+             go\n  route done(\"ok\")\n",
+            witness.declaration
+        );
+        let complaints = check_document(&source);
+        if !complaints.is_empty() {
+            wrong.push(format!(
+                "`{}`'s witness does not check clean: {complaints:?}",
+                witness.word
+            ));
+            continue;
+        }
+        if !uses_word(&source, witness.word) {
+            wrong.push(format!(
+                "`{}`'s witness never carries the word as a token",
+                witness.word
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// AMENDMENT 1, STRUCTURAL. No recipe, dependency, or assembly form is
+/// REACHABLE from a gate-leg command declaration: each named form is refused
+/// by name, with its own cause, and the reason rides in the diagnostic text.
+///
+/// One test per named form, because a single test over a list would go green
+/// on the day one form quietly started parsing while the others still failed.
+#[test]
+fn every_assembly_form_is_refused_by_name_with_its_reason() {
+    for word in ["recipe", "depends", "needs", "after", "steps", "then"] {
+        let source = format!(
+            "{NARRATION}workflow probe\n  outcome done: type String, route success\n\ncommand \
+             probe_command\n  program \"git\"\n  admits \"--\"\n  {word} \"x\"\n\nstep go\n  \
+             route done(\"ok\")\n"
+        );
+        let Err(error) = aion_awl::parse(&source) else {
+            unreachable!("`{word}` must be refused inside a command body");
+        };
+        assert!(
+            error.message.contains("named cause: recipe_form_refused"),
+            "`{word}` must be refused BY NAME as an assembly form, not by falling through to an \
+             unknown-clause diagnostic; got: {}",
+            error.message
+        );
+        assert!(
+            error.message.contains("a reader"),
+            "the refusal must carry the review property as its reason; got: {}",
+            error.message
+        );
+    }
+}

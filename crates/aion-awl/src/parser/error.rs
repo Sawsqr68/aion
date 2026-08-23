@@ -13,7 +13,7 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub(super) fn new(span: Span, message: impl Into<String>) -> Self {
+    pub(crate) fn new(span: Span, message: impl Into<String>) -> Self {
         Self {
             span,
             message: message.into(),

@@ -1,0 +1,23 @@
+//! FIXTURE: absorbed production `typed_parameter`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `parameter_default_values_may_use_earlier_parameters`.
+//! JUST-SPECIMEN: @foo a b=a:
+//! WHAT DIFFERS: Just's parameters are untyped, so the suite case exercises
+//!   the SHAPE (a declaration taking named parameters, referenced by name in
+//!   the body) and not the typing. The type annotation is AWL's own addition
+//!   and is exercised by the type-mismatch refusal beside this fixture.
+
+workflow just_typed_parameter
+  outcome done: type String, route success
+
+command foo(a: String, b: String)
+  program "echo"
+  admits "--"
+  operand first: String = "{{a}}"
+  operand second: String = "{{b}}"
+
+step go
+  route done("ok")
