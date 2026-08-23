@@ -3,6 +3,35 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.22.0 — 2026-08-24
+
+**The AWL command surface.** Two cuts of the AWL authoring surface land
+together: the typed command-declaration surface (cut 1) and the declared
+recipe surface (cut 2). Both ship with their teaching material — the ops
+console's authoring guide and the assistant's `AWL-REFERENCE.md` twin move
+in the same landings as the code, so the surface is documented the moment
+it exists.
+
+- **Typed command-declaration surface (cut 1).** Gate-leg commands and the
+  diff-census family: commands are declared and typechecked rather than
+  assembled as free text, with the census surface reporting what a
+  declaration actually covers. Refusal causes are a closed vocabulary —
+  an unknown declaration is a check error carrying a span, never a silent
+  acceptance.
+
+- **Declared recipe surface (cut 2).** Assembly acts, wall projection,
+  census, and receipts: a recipe is a declared object whose verdict is a
+  recorded `VerdictRecord`, the compare surface is generic over what it
+  compares, and `record_of` is one-way by construction — a gate leg
+  consumes a baseline as a RECORD, never as a recipe declaration. The
+  amendment-1 fence (record is assembly-side, check is gate-leg-side) is
+  enforced by fixture, not convention.
+
+- **Teaching surface moves with the code.** The ops console authoring
+  guide asset and `examples/assistant/resources/AWL-REFERENCE.md` are
+  inside both cuts' gate walls, with a conformance test refusing drift
+  between the guide asset and its source of truth.
+
 ## 0.21.0 — 2026-08-23
 
 **A stability wave.** The fleet-plan contract joins the workspace as a
