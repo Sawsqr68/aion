@@ -1159,3 +1159,467 @@ carry them to the lanes that own them, with the bytes to act on.
 second commit on top of it, so the terminal gate run — the one that measures
 the tree containing THIS paragraph — is reported in the round's reply, not
 quoted here: a document cannot contain the output of a run that measures it.
+
+## 14. FIX ROUND 2 — the differential's park classifier, and F-RIG-3
+
+Appended by the second fix round. §§1–13 are unchanged; this section is round
+2's own record.
+
+### 14.1 The red, verbatim
+
+`.fleet/gates/RED-LATEST.md` (= `red-2.md`, byte-identical, md5
+`978a15ccb8a78f681c7b667a3cf25a8b`), committed by the runner at `35808d94`
+("gates: red round 2 — findings verbatim"). Steps 0–4b were GREEN in that same
+run — `HOME absent from the caller's environment … supplied from the passwd
+entry: /home/rocketfish` (round 1's F-RIG-2 amendment doing exactly its job),
+`pin HONORED`, `TREE: CLEAN` at `31f616a864f58d890734f831c97a3b2b43735281`,
+`census OK (97 files within the wall, 59 in the deliverable crate family)`,
+`clippy clean`, `new test annotations in diff: 71`. Round 1's 69 aion-home
+refusals did not recur. One test fired:
+
+```
+        FAIL [   6.669s] (3244/5472) aion-rs::awl_bc4_differential covered::flagship_awl_hello_matches
+
+    thread 'covered::flagship_awl_hello_matches' (3344632) panicked at crates/aion/tests/awl_bc4_differential/covered.rs:431:5:
+    flagship not clean:
+    differential report: 0 succeeded, 0 failed-path, 0 cancelled, 0 timer-parked, 0 excluded, 0 refused, 0 AGREED-REFUSAL, 1 DIVERGENCES, 0 INFRA
+      DIVERGENCE flagship/valid/awl_hello event[0] : reference="disposition=Parked" direct="disposition=Completed"
+
+     Summary [ 143.404s] 3259/5472 tests run: 3258 passed (3 slow, 3 leaky), 1 failed, 0 skipped
+error: test run failed
+GATE-RED: cargo nextest run --workspace rc=100 (named cause: suite_red)
+```
+
+This is the family §13.5 reported as F-CUT2-4 and handed on: run B there was
+`DIVERGENCE header-types/valid/max_arity_record event[0] :
+reference="disposition=Completed" direct="disposition=Parked"` — the same
+divergence, the other way round, on a different fixture. §13.5 recorded that
+the fixture's own bytes did not explain the classification and declined to
+invent a mechanism. **That was the right call on the evidence then held and the
+wrong disposition of the finding**: the mechanism is real, it is in the
+oracle's own classifier, and this round measured it. Both rounds are the same
+defect.
+
+### 14.2 The cause, measured at the bytes
+
+`Disposition::Parked` has exactly one producer,
+`crates/aion/tests/awl_bc4_differential/run.rs`, and it requires three things
+at once — no terminal event, `is_running` true, and a non-empty
+`pending_timers`:
+
+```rust
+        if !pending.is_empty()
+            && stable >= STABLE_READS
+            && is_running(&engine, workflow_type, handle.workflow_id()).await?
+        {
+            break outcome(history, Disposition::Parked);
+        }
+```
+
+`flagship/valid/awl_hello` is `name |> greet |> .greeting |> shout |> route
+shouted`. It declares no `sleep`, no `wait`, no timeout;
+`grep -ci 'timer\|sleep\|timeout'
+crates/aion-awl/tests/mir-goldens/flagship/valid/awl_hello.mir` → `0`. So the
+first question is where a pending timer came from at all. **Dumped from the
+reference run's actual trail** (temporary instrumentation, since removed):
+
+```
+REF[0] WorkflowStarted { envelope: { seq: 1, recorded_at: …49.438423740Z, … }, workflow_type: "awl_hello", … run_id: RunId(4377b823-1c7a-4dcd-b4a1-d3c99ac25d5f) … }
+REF[1] TimerStarted   { envelope: { seq: 2, recorded_at: …49.438423740Z, … }, timer_id: TimerId(Named("deadline:4377b823-1c7a-4dcd-b4a1-d3c99ac25d5f")), fire_at: …50:49.438423740Z }
+REF[2] ActivityScheduled … greet
+…
+REF[8] WorkflowCompleted { seq: 9 … }
+REF[9] TimerCancelled  { seq: 10, timer_id: TimerId(Named("deadline:4377b823-…")), cause: WorkflowIntent }
+```
+
+`ref_timers=["timer:named:deadline:4377b823-…"]` — **a run that COMPLETED
+reports an outstanding timer**. Two distinct defects meet there:
+
+1. **Every fixture in this corpus arms a run deadline.** The differential's
+   reference project declares a workflow timeout on *every* entry —
+   `crates/aion/tests/awl_bc4_differential/harness.rs:338`, inside
+   `write_workflow_toml`:
+
+   ```
+   "[[workflow]]\nentry_module = \"{module}\"\nentry_function = \"run\"\n\
+    timeout_seconds = 60\ninput_schema = …
+   ```
+
+   so `Package::declared_timeout()` is `Some(60s)` for all 112, and
+   `record_declared_deadline` (`crates/aion/src/lifecycle/start.rs:413-430`)
+   appends the reserved `deadline:{run_id}` `TimerStarted` at **seq 2** of
+   every single run, 58 s beyond the oracle's own 15 s `RUN_DEADLINE` — so it
+   never fires and is outstanding for the entire life of every run.
+
+2. **`pending_timers` was blind to cancellation.** It read only `TimerFired`:
+
+   ```rust
+   let fired: Vec<&TimerId> = history.iter().filter_map(|event| match event {
+       Event::TimerFired { timer_id, .. } => Some(timer_id), _ => None }).collect();
+   ```
+
+   but a terminal transition retires the deadline by **cancelling** it
+   (`aion::time::retire_run_deadline`; `TimerCancelled` at REF[9] above), never
+   by firing it. Hence a completed run reporting a live timer.
+
+Put together: the timer half of "positive park evidence" was satisfied by
+**every fixture, from its second event to its terminal**, and `is_running` is
+true for any non-terminal run by definition. The whole discrimination between
+*parked* and *merely slow* therefore rested on `stable >= STABLE_READS` —
+three consecutive unchanged reads at `POLL = 20ms`, i.e. **60 ms of history
+silence**. A box running 16 nextest processes, several of them booting BEAM
+VMs and running `gleam build`, hands 60 ms of silence to any run at all. The
+gate's own numbers say so: this test took **6.669 s** in the red run against
+**0.912 s** in isolation at this desk.
+
+That is the full mechanism, and it is symmetric — whichever backend loses the
+CPU is the one that reads as `Parked`, which is exactly why round 1 saw
+`direct=Parked` and round 2 saw `reference=Parked`.
+
+**The deductive step is closed, not assumed.** `awl_hello`'s trail carries
+exactly ONE `TimerStarted` in its entire history, the deadline. When the gate
+classified that run `Parked`, the pending set it matched on could not have been
+anything else. Nothing here is inferred from the message alone.
+
+### 14.3 The mechanism, demonstrated deterministically
+
+Reproducing the race on demand is a coin toss (25 flagship runs under 28 CPU
+spinners: 0 failures; 12 runs pinned to one contended core: 0 failures — the
+box has to be loaded the way a whole-workspace run loads it). So it was
+demonstrated by **removing the timing term and changing nothing else** —
+`STABLE_READS: 3 → 0`, one constant, on the otherwise-unmodified pre-fix tree:
+
+```
+$ sed -i 's/const STABLE_READS: u32 = 3;/const STABLE_READS: u32 = 0;/' …/run.rs
+$ cargo nextest run -p aion-rs --test awl_bc4_differential -E 'test(flagship_awl_hello_matches)'
+    panicked at crates/aion/tests/awl_bc4_differential/covered.rs:436:5:
+    differential report: 0 succeeded, … 1 timer-parked, … 0 DIVERGENCES, 0 INFRA
+    test result: FAILED. 0 passed; 1 failed
+```
+
+A fixture with no timer in its lowering, classified **timer-parked**, with the
+timing guard as the only thing that had been holding it back. The same control
+on the FIXED tree:
+
+```
+$ # STABLE_READS = 0 again, post-fix
+$ cargo nextest run -p aion-rs --test awl_bc4_differential -E 'test(flagship_awl_hello_matches)'
+    test result: ok. 1 passed; 0 failed
+```
+
+The fix does not make the flake rarer. With the timing guard **entirely
+removed** the misclassification is unreachable, because no fixture without a
+timer of its own has any park evidence left to match.
+
+Also measured, and reported because it is the honest bound on the above: under
+28 spinners, a probe that logged the park predicate instead of taking it fired
+4 158 times across the covered set, on exactly **three** workflow types —
+`confirm_gate`, `wait_and_sleep`, `wait_timeout_optional`, every hit carrying
+`pending=["timer:named:deadline:<run>", "timer:anonymous:0"]`. Those are the
+three genuinely parked fixtures, parking on their own `timer:anonymous:0`. CPU
+contention alone did not starve a completing fixture for 60 ms at this desk;
+the fleet's mixed load did, twice.
+
+### 14.4 The fix
+
+`crates/aion/tests/awl_bc4_differential/run.rs`, and nothing else in the tree.
+
+* **`pending_timers` now retires last-event-wins over BOTH retirement events**,
+  `TimerFired` *and* `TimerCancelled` — the same law
+  `aion::time::outstanding_deadline_timer` already applies to the deadline it
+  recovers (`crates/aion/src/time/deadline.rs:79-98`). A completed run no
+  longer reports a live timer.
+* **`park_evidence` is new and is what the park decision now consumes**: the
+  outstanding timers *minus* the engine's run deadline, tested with
+  `aion::time::is_deadline_timer`. The `deadline:` prefix is engine-minted
+  only — the author NIF choke point `decode_timer_id_arg` refuses any
+  author-supplied timer name under it (`crates/aion/src/time/deadline.rs:24-28`)
+  — so a `deadline:` timer in history is *always* the per-run deadline and
+  never a workflow timer. Excluding it cannot hide a park a workflow authored.
+  That is a guarantee of the engine's own identifier discipline, not a
+  heuristic.
+* **The RECORD is deliberately unchanged.** `RunOutcome::pending_timers` still
+  carries the full outstanding set, deadline included, so the two backends
+  still compare their whole timer sets and `EXPECTED_TIMER_PARKED`'s pinned
+  evidence — `["timer:anonymous:0", "timer:named:deadline:<run>"]` for all
+  three parked fixtures — is byte-identical to what it was. The park DECISION
+  narrowed; the park EVIDENCE did not.
+
+**Red-first, as the brief requires.** Five tests land in
+`run::park_evidence_tests`, and against the pre-fix rules four of them fail:
+
+```
+        PASS (1/5) … a_fired_timer_is_not_outstanding
+        FAIL (2/5) … a_cancelled_timer_is_not_outstanding
+        FAIL (3/5) … a_workflow_started_timer_is_park_evidence_beside_the_deadline
+             left: [TimerId(Named("deadline:00000000-0000-0000-0000-000000002222")), TimerId(Anonymous(0))]
+        FAIL (4/5) … the_engine_run_deadline_is_never_park_evidence
+        FAIL (5/5) … a_timer_restarted_after_retirement_is_outstanding_again
+     Summary 5 tests run: 1 passed, 4 failed
+```
+
+The one that passes pre-fix is the rule that was already right (a fired timer
+is retired), kept under test so the retirement rewrite cannot silently lose it.
+On the fixed tree all five pass, and so do all 42 tests in the binary,
+including `covered_set_is_byte_identical` over the full 112-fixture corpus with
+its bucket inventory and pinned park evidence:
+
+```
+        PASS [   1.220s] (36/42) aion-rs::awl_bc4_differential covered::flagship_awl_hello_matches
+        PASS [  80.471s] (42/42) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+     Summary [  80.471s] 42 tests run: 42 passed (1 slow), 0 skipped
+```
+
+**It is not a suppression in any spelling.** No `#[ignore]`, no `--skip`, no
+filter, no `allow`/`expect`, no retry, no fixture removed from the oracle, no
+`EXCLUDED_OUT_OF_ORACLE` entry, no widened tolerance, no sleep. Every one of
+the 5 472 tests still runs and must still pass, and the corpus's park bucket
+still asserts its exact three names with their exact timer identities. What
+changed is that a run must now present evidence of a park to be called parked.
+
+### 14.5 F-RIG-3 — the wall amendment, by the minimal exact delta
+
+**The finding.** The staged wall cannot contain this fix:
+
+```
+^(crates/aion-awl|crates/aion-cli|apps/aion-ops-console/…/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)
+```
+
+`crates/aion/tests/awl_bc4_differential/run.rs` matches no alternative
+(`crates/aion-awl` and `crates/aion-cli` are prefixes of *hyphenated* siblings;
+neither is a prefix of `crates/aion/`). And no in-wall byte can fix the defect:
+the cause is the oracle's classifier, `crates/aion-awl` holds only the fixture
+and the compiler, and neither of those is wrong — `awl_hello` lowers correctly
+on both backends, which is precisely why the *trails* never diverged and only
+the *disposition label* did. Editing the fixture to dodge a harness defect, or
+adding it to `EXCLUDED_OUT_OF_ORACLE`, would be suppression. This is the
+F-RIG-class condition named in the fix-round instruction: **a pre-existing test
+forces an edit outside the staged wall.**
+
+**The amendment.** One alternative added to `WALL` in `.fleet/gate-entry.sh`,
+spelled out as a full path — not the crate, not the test directory, not a
+prefix:
+
+```
++crates/aion/tests/awl_bc4_differential/run\.rs
+```
+
+plus the rationale block above it. Measured:
+
+```
+$ git diff --no-ext-diff --stat -- .fleet/gate-entry.sh
+ .fleet/gate-entry.sh | 22 +++++++++++++++++++++-
+```
+
+(21 of those lines are the comment block; one is the `WALL` line.)
+
+What the amendment does NOT do, stated so a re-gate can check it:
+
+* `BASE`, `PKG_HINT`, step 0 (round 1's F-RIG-2 block), and steps 1–4 are
+  **byte-identical** to the round-1 script. The census logic, the positive
+  control, the pin-honored assertion, the new-test control and the suite
+  invocation are untouched.
+* No other path is admitted. `crates/aion` remains out of bounds everywhere
+  else — `crates/aion/src/**` and every other file under
+  `crates/aion/tests/**` still red-fire `wall_breach`.
+* The escapee set is **exactly** the one file admitted, measured against the
+  staged wall over the whole round (committed diff + working tree):
+
+  ```
+  $ { git diff --no-ext-diff --name-only ${BASE}...HEAD; git status --porcelain | awk '{print $2}'; } \
+      | sort -u | grep -Ev "<STAGED WALL>"
+  crates/aion/tests/awl_bc4_differential/run.rs
+  ```
+
+### 14.6 A SECOND red, found by this round's verification and fixed at its cause
+
+The first whole-workspace run of the fixed tree did **not** go green, and the
+test that fired was not the one round 2 named:
+
+```
+        FAIL [  11.142s] (2990/5477) aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts
+
+    thread '…' panicked at crates/aion-cli/tests/tail_follow_e2e/fixtures.rs:206:5:
+    selected-run attempt 2 was suppressed after prior replay poisoned current attempts; selected-generation child workflow socket was not followed; selected-run attempt 2 live transcript was not printed; stdout: ["[parent 00000000 activity:activity:7 attempt:1] retained-backfill-parent: {\"line\":\"visible through retained HTTP backfill\"}"]; tail status signal: 9 (SIGKILL); stderr:
+```
+
+It passed in **0.144 s** at position 1003 in round 2's own gate run, passes in
+**0.101 s** in isolation, and is byte-identical to BASE
+(`git diff --no-ext-diff --stat ${BASE}...HEAD -- crates/aion-cli/tests/tail_follow_e2e*`
+is empty). It is IN the wall — `crates/aion-cli` is a staged alternative — so
+it needed no amendment, only a diagnosis.
+
+**The cause: a lost wakeup, not a tight timeout.** The fixture's handshakes ran
+on `tokio::sync::Notify::notify_waiters`, which stores **no permit**: a
+notification that arrives before the other side has registered is discarded and
+the waiter blocks to its timeout. The parent socket handler announces its own
+attach and only THEN starts waiting for the test's release:
+
+```rust
+        state.parent_attached.notify_waiters();
+        state.emit_fanout.notified().await;      // crates/aion-cli/tests/tail_follow_e2e.rs:418-419
+```
+
+while the test, woken by that announcement, immediately calls
+`emit_fanout.notify_waiters()`. On a 16-way run the handler can be preempted
+between those two lines, the release lands with nobody registered, and the
+handler waits forever — so it never sends the replayed parent events, the tail
+never opens the selected child socket or the selected parent attempt's
+transcript socket, and the test's two 5 s timeouts both expire. 5 + 5 + the
+1 s line drain is the 11.142 s in the receipt above; the SIGKILL is the test's
+own teardown, not a crash.
+
+**Reproduced deterministically, both ways.** Rather than re-rolling the dice,
+the adverse ordering was forced — one `sleep(400ms)` inserted between the
+handler's announce and its wait, nothing else changed:
+
+```
+PRE-FIX handshake, adverse ordering forced:
+        FAIL [  11.060s] (1/1) aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts
+    selected-run attempt 2 was suppressed after prior replay poisoned current attempts; selected-generation child workflow socket was not followed; selected-run attempt 2 live transcript was not printed; stdout: ["[parent 00000000 activity:activity:7 attempt:1] retained-backfill-parent: …"]; tail status signal: 9 (SIGKILL); stderr:
+
+POST-FIX handshake, SAME forced ordering:
+        PASS [   0.502s] (1/1) aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts
+```
+
+The pre-fix reproduction is the observed failure **byte-for-byte** — same three
+violations, same captured stdout, same `signal: 9 (SIGKILL)`, 11.060 s against
+the suite's 11.142 s. That closes it as diagnosis rather than conjecture.
+
+**The fix, at the primitive.** No timeout was lengthened, no retry added, no
+sleep left behind. Each handshake is now the primitive its waiter count
+demands:
+
+| signal | direction | waiters | before | after |
+|---|---|---|---|---|
+| `parent_attached` | server → test | 1 | `notify_waiters` | `notify_one` (stores a permit) |
+| `emit_fanout` | test → server | 1 | `notify_waiters` | `notify_one` (stores a permit) |
+| `emit_live` | test → server | **2** | `notify_waiters` | `watch::channel` (latched) |
+
+`emit_live` is the one that could not become `notify_one`: two transcript
+sockets wait on it (the child's and the selected parent attempt's), and
+`notify_one` would wake exactly one of them. A `watch` latches its value, so
+every receiver observes the emit whenever it asks — early or late, one waiter
+or ten. The send is now also checked (`send(true)?`) instead of being a
+fire-and-forget that cannot fail loudly, and the receiver's dropped-sender case
+is handled explicitly rather than swallowed.
+
+Verified: 8 consecutive runs of the binary, `2 tests run: 2 passed` each,
+0.101–0.109 s; `cargo clippy -p aion-cli --all-targets -- -D warnings` clean.
+
+**F-CLI-1.** Recorded as a finding against a pre-existing surface this cut did
+not author: three `notify_waiters` rendezvous in `tail_follow_e2e` were lost
+wakeups, latent since the file was written and reachable by any sufficiently
+loaded run. It is the same defect CLASS as F-SRV-2 from §13.5 (a lost wakeup in
+`ConnectedWorkerRegistry`) — different crate, same primitive misuse. Worth the
+owning lane's sweep for other `notify_waiters` rendezvous.
+
+### 14.7 Verification — both whole-suite runs, both reported
+
+Both runs are `cargo nextest run --workspace` in the REPRODUCED gate
+environment — `env -i PATH=…`, exactly what aion hands a declared body, with
+`HOME` reaching it the way step 0's F-RIG-2 amendment supplies it. The red one
+is quoted because a verification that quotes only its green run is not a
+verification.
+
+| # | tree | result |
+|---|---|---|
+| F | the `run.rs` park-evidence fix alone | `3005/5477 tests run: 3004 passed (4 slow, 3 leaky), 1 failed` — the F-CLI-1 lost wakeup of §14.6, at test 2990, `2472/5477 tests were not run due to test failure` |
+| G | both fixes | **`5477 tests run: 5477 passed (6 slow, 3 leaky), 0 skipped`, RC=0** |
+
+Run F is the one that found the second defect; it is reported as it landed,
+including the 2 472 tests its fail-fast never reached. Run G is the whole
+workspace green end to end, 5 477 of 5 477, on the tree this commit records.
+
+The count moved 5 472 → **5 477**: the five `run::park_evidence_tests` this
+round adds. No test was removed, skipped, filtered or ignored — `0 skipped` on
+both runs, and the round-2 gate's own `0 skipped` for comparison.
+
+Named individually, because they are the tests the two rounds were about — and
+note the timing on the first line: **6.785 s**, against the **6.669 s** it took
+while going red in round 2's gate. The run that answers the red was as loaded
+as the run that produced it. The fix is not the box being quieter.
+
+```
+        PASS [   6.785s] (3251/5477) aion-rs::awl_bc4_differential covered::flagship_awl_hello_matches
+        PASS [ 113.726s] (5475/5477) aion-rs::awl_bc4_differential covered::covered_set_is_byte_identical
+        PASS [  14.000s] (3249/5477) aion-rs::awl_bc4_differential adversarial::adversarial_differential_is_byte_identical
+        PASS [   0.150s] (1005/5477) aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts
+        PASS [   0.049s] (3194/5477) … run::park_evidence_tests::a_cancelled_timer_is_not_outstanding
+        PASS [   0.028s] (3195/5477) … run::park_evidence_tests::a_fired_timer_is_not_outstanding
+        PASS [   0.033s] (3196/5477) … run::park_evidence_tests::a_timer_restarted_after_retirement_is_outstanding_again
+        PASS [   0.046s] (3197/5477) … run::park_evidence_tests::a_workflow_started_timer_is_park_evidence_beside_the_deadline
+        PASS [   0.047s] (3200/5477) … run::park_evidence_tests::the_engine_run_deadline_is_never_park_evidence
+```
+
+The other two tests §13.5's F-CUT2-4 carried forward also passed in run G, in a
+run that reached every one of them —
+`engine_query::query_racing_completion_yields_payload_or_typed_error_without_events`
+at `0.935s` (3333/5477) and
+`aion-server::unserved_park_cluster_event the_grpc_outbox_leg_announces_its_park`
+at `0.017s` (5034/5477). The latter is F-SRV-2's lost wakeup: it did not fire
+in this round's runs, nothing here fixes it, and it stands reported to
+aion-server's lane exactly as §13.5 left it. Passing is not evidence that a
+race is absent, and this report does not claim otherwise.
+
+### 14.8 Findings
+
+* **F-CUT2-4 — re-dispositioned, not re-filed.** §13.5 carried the
+  `awl_bc4_differential` divergence to aion-rs's lane as an unexplained
+  load-sensitive observation. It is now diagnosed and fixed at its cause here.
+  The two other tests named in F-CUT2-4 —
+  `engine_query::query_racing_completion_yields_payload_or_typed_error_without_events`
+  (seen once, in one run of five) and
+  `aion-server::unserved_park_cluster_event::the_grpc_outbox_leg_announces_its_park`
+  (F-SRV-2, diagnosed to a lost wakeup in `ConnectedWorkerRegistry`) are
+  **untouched and still stand as reported**: both are out of wall, in crates
+  byte-identical to BASE, and neither appeared in round 2's gate.
+* **F-RIG-3 — the staged wall could not contain a pre-existing test's own
+  defect.** Recorded above with its bytes and its exact delta. The wall's
+  cut-1 lesson (F-RIG-1: admit byte-pinned twins up front) generalises: a wall
+  drawn around a deliverable also has to admit whatever *pre-existing test of
+  another crate* the deliverable's own suite runs, because the gate runs the
+  whole workspace. Cut 2 has now paid that twice — F-RIG-2 for the
+  environment, F-RIG-3 for the classifier.
+* **F-CLI-1 — three lost-wakeup rendezvous in `tail_follow_e2e`, fixed here.**
+  In wall, so no amendment; diagnosed and reproduced deterministically in
+  §14.6. Latent since the file was written, and the same primitive misuse as
+  F-SRV-2 — worth the owning lane sweeping its other `notify_waiters`
+  rendezvous.
+* **F-AION-1 (out of wall, to aion-rs's lane, not fixed here).** The
+  differential's reference project declares `timeout_seconds = 60` on every
+  entry (`harness.rs:338`) whether or not the fixture authored a timeout. That
+  is what makes `header-types/valid/workflow_timeout`'s *own* declared timeout
+  invisible to the differential: the manifest the reference project writes
+  overrides it, so the fixture proves its lowering and not its timeout
+  semantics. Not this cut's to change — moving it would move the corpus's
+  recorded trails — but it is named here with its bytes so the owning lane can
+  decide.
+
+### 14.9 Requirements — no movement
+
+No BRIEF-R1..R8 requirement changed in this round. **Not one byte of the
+deliverable moved**: `crates/aion-awl` is byte-identical to the tree round 2
+gated, as is every `crates/aion-cli` SOURCE file — the whole of
+`crates/aion-cli/src/awl_recipe/`, `src/awl.rs`, `src/main.rs`, and the
+`awl_recipe_verb_e2e` suite. §§6, 7, 8 and 12 stand exactly as written. This
+round touched three files, two of them pre-existing tests of surfaces this cut
+does not author, and the gate script:
+
+```
+ .fleet/gate-entry.sh                          |  22 +-
+ crates/aion-cli/tests/tail_follow_e2e.rs      |  95 ++++++--
+ crates/aion/tests/awl_bc4_differential/run.rs | 297 +++++++++++++++++++++++---
+```
+
+Of those, only `crates/aion/tests/awl_bc4_differential/run.rs` needed the
+F-RIG-3 wall amendment; `crates/aion-cli/tests/tail_follow_e2e.rs` was already
+inside the staged wall.
+
+`cargo fmt --all` applied before commit (autoformat discipline; ⛔ no fmt
+gate). `cargo clippy --workspace --all-targets -- -D warnings` clean.
+
+⚠️ **Stated plainly, as in §13.5.** This section is part of the commit that
+answers round 2's red, so the terminal gate run — the one measuring the tree
+that contains THIS paragraph — is reported in the round's reply, not quoted
+here: a document cannot contain the output of a run that measures it.

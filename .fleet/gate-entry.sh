@@ -30,8 +30,28 @@ BASE=1bab95477cb86d498d07bb8da445f00351b87972   # aion main CONTAINING cut-1's l
 # the brief's ratified placement, fold B — front crate stays dependency-clean,
 # measured by the report's manifest delta). crates/aion-awl stays a prefix by
 # design (admits -lsp, -package, siblings). Positive control unchanged.
+#
+# F-RIG-3 AMENDMENT (cut-2 fix round 2) — ONE FILE ADDED, NOT A PREFIX:
+#   crates/aion/tests/awl_bc4_differential/run.rs
+# Round 2's only red was suite_red on aion-rs::awl_bc4_differential
+# covered::flagship_awl_hello_matches, diverging on `reference=Parked` vs
+# `direct=Completed` for a fixture (flagship/valid/awl_hello) whose lowering
+# contains no timer at all. The cause is that test's OWN disposition
+# classifier: run.rs called a run `Parked` on any outstanding TimerStarted,
+# and the differential's reference project declares `timeout_seconds = 60` on
+# EVERY entry (harness.rs:338), so the engine's run-scoped `deadline:{run_id}`
+# timer is outstanding on every fixture from its second event until its
+# terminal. That left three unchanged 20ms history reads as the only thing
+# separating "parked" from "slow", and a loaded box supplies 60ms of silence
+# to any run. No byte inside the staged wall can fix it: crates/aion-awl holds
+# the fixture and the compiler, and neither is wrong. Changing the fixture, or
+# excluding it from the oracle, would be suppression, not a fix. So the wall
+# is amended by the MINIMAL exact delta — that one file, spelled out in full,
+# NOT the crate and NOT the test directory — and the finding is recorded with
+# its bytes in .fleet/reports/build.md §14. Nothing else about the wall moves;
+# crates/aion remains out of bounds everywhere else.
 # ────────────────────────────────────────────────────────────────────────────
-WALL='^(crates/aion-awl|crates/aion-cli|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)'
+WALL='^(crates/aion-awl|crates/aion-cli|crates/aion/tests/awl_bc4_differential/run\.rs|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)'
 PKG_HINT='^crates/aion-awl/'
 
 red() { echo "GATE-RED: $1"; exit 1; }
