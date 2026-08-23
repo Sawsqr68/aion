@@ -659,6 +659,8 @@ instances of this cut's receipt kind. Line 3 touches no recipe grammar.**
 | **F-CUT2-3** | `crates/aion-cli/tests/embedded_assistant_launchable_e2e.rs` spawned the real `aion` binary with **no `AION_HOME`**, so the shipped document's `cwd "{workspace_root}"` resolved through the operator's ambient `$HOME`. Two consequences, both defects: the test's verdict was a property of the BOX (green on a desk, red under any runner whose child environment carries no `HOME`), and passing it CREATED `clones/` inside the operator's real `~/.aion` as a side effect. **This is the red the gate fired**, and it is IN THE WALL. Fixed at its cause in fix round 1: every `aion` spawn in the file now states a test-owned `AION_HOME` (a `tempfile::TempDir` thrown away with the test), which is the idiom the other twelve `AION_HOME`-stating e2e files in this crate already use. §13. |
 | **F-RIG-2** | The fleet's `gates` action runs `gate-entry.sh` as an AWL **declared body**, whose environment aion clears to `PATH` alone — so `HOME` never reaches the gate under the fleet, though it does at every desk. 69 workspace tests refuse without it; 67 of them are OUTSIDE this cut's wall and byte-identical to BASE. **F-RIG-class: the staged wall cannot contain the fix.** Amended by the minimal exact delta — a step 0 that states the home the rest of the toolchain already resolves through passwd, and only when the caller supplied none. **The WALL regex is NOT touched and no out-of-wall byte is modified.** §13. |
 | **F-SRV-1** | `aion_server::config::aion_home` reads `$HOME` directly with **no passwd fallback** (`crates/aion-server/src/config/home.rs:62`), while `cargo` and `rustup` on the same box resolve their homes through the passwd entry and are unaffected by an absent `HOME`. That asymmetry is what made round 1's red look like a tree defect. Reported with bytes, **NOT patched**: `crates/aion-server` is outside this cut's wall and the question — whether an aion home should fall back to the passwd entry — is aion-server's lane to rule, not this cut's to decide in passing. §13. |
+| **F-CUT2-4** | Three PRE-EXISTING load-sensitive failures were observed across four whole-suite runs of the fixed tree, each in a crate this cut does not touch, each ONCE or TWICE, none reproducible in isolation, and none present in the run that ended `5472 passed`. Same class as F-CUT2-2 and recorded the same way — not repaired, because repairing another lane's timing-sensitive tests is outside this cut's wall. §13.5 names all four runs and every failure verbatim. |
+| **F-SRV-2** | **A real product race, found while diagnosing F-CUT2-4 and reported rather than patched.** `ConnectedWorkerRegistry::wait_for_worker` (`crates/aion-server/src/worker/registry.rs:908`) is `self.worker_arrived.notified().await`, and its doc contract at `:903–907` promises *"Returns immediately if a registration occurred since the last call."* The notifying side is `self.worker_arrived.notify_waiters();` (`:890`). **`notify_waiters()` stores no permit** — it wakes only tasks ALREADY parked in `notified()` — so the contract is false: a registration that lands between a caller's registry re-check and its `.notified().await` is LOST, and the dispatch parks unbounded until some *other* worker registers. `dispatch.rs:321` and `:473` are the two dispatch-path callers. That is what `aion-server::unserved_park_cluster_event the_grpc_outbox_leg_announces_its_park` catches intermittently: it passes in **0.005 s** in isolation (3/3) and hits its 30 s `EVENT_DEADLINE` only when it happens to be scheduled beside the three 40–95 s outbox e2e tests. **NOT patched**: `crates/aion-server` is outside this cut's wall, and a wake-primitive change in a durable engine's dispatch path is not a drive-by from a language-surface cut — `notify_one` wakes exactly one waiter where `notify_waiters` wakes all, so the correct repair (a generation counter, or `watch`) is aion-server's lane to design. §13.5. |
 
 ---
 
@@ -1078,3 +1080,82 @@ and `crates/aion-integration-norn` were not touched, and `aion_home`'s missing
 passwd fallback was not patched. F-SRV-1 records that question with its bytes
 for aion-server's own lane; adopting 67 of another lane's tests to answer an
 environment problem is not a minimal delta and is not this cut's brief.
+
+### 13.5 Verification after the fix — four whole-suite runs, all four reported
+
+Every run below is `cargo nextest run --workspace` on the fixed tree
+(`904ae176`) in the REPRODUCED gate environment — `env -i PATH=…`, exactly
+what aion hands a declared body — with `HOME` reaching it only through the
+step-0 amendment. Reported in full, including the two that went red, because
+a verification that quotes only its green runs is not a verification.
+
+| # | invocation | result |
+|---|---|---|
+| A | `--no-fail-fast`, HOME UNSET (the round-1 environment, pre-fix tree) | `5472 tests run: 5403 passed (6 slow), 69 failed` — the 69 aion-home refusals of §13.3 |
+| B | the gate itself (fail-fast) | RED at test 3262: `aion-rs::awl_bc4_differential adversarial::adversarial_differential_is_byte_identical` |
+| C | `--no-fail-fast` | `5472 tests run: 5470 passed (7 slow, 3 leaky), 2 failed` |
+| D | the gate itself (fail-fast) | RED at test 5468: `aion-server::unserved_park_cluster_event the_grpc_outbox_leg_announces_its_park` |
+| E | `--no-fail-fast` | **`5472 tests run: 5472 passed (6 slow, 3 leaky), 0 skipped`, RC=0** |
+
+**What the amendment proved.** Across runs C, D and E — 16 416 test
+executions — there is **not one** `cannot resolve Aion home` refusal
+anywhere, including the 61 `crates/aion-server` tests and the 6
+`crates/aion-integration-norn` tests that run A refused. Run A died at test
+890 under the gate's fail-fast; runs B–E reach 3 262, 5 472, 5 468 and 5 472.
+The step-0 environment delta does exactly what it claims and nothing else.
+
+**The failures that remain, named verbatim.** Four distinct tests, in three
+crates, none of them this cut's (F-CUT2-4):
+
+```
+B: FAIL (3262/5472) aion-rs::awl_bc4_differential adversarial::adversarial_differential_is_byte_identical
+     DIVERGENCE header-types/valid/max_arity_record event[0] : reference="disposition=Completed" direct="disposition=Parked"
+C: FAIL (3324/5472) aion-rs::engine_query query_racing_completion_yields_payload_or_typed_error_without_events
+C: FAIL (5468/5472) aion-server::unserved_park_cluster_event the_grpc_outbox_leg_announces_its_park
+D: FAIL (5468/5472) aion-server::unserved_park_cluster_event the_grpc_outbox_leg_announces_its_park
+     Error: "released outbox-leg dispatch did not resolve"
+```
+
+Each is measured, not waved at:
+
+* **`adversarial_differential_is_byte_identical`** — passes in **4.755 s** in
+  isolation and passed in runs A (21.337 s), C and E. Its divergence is
+  `disposition=Parked` on a fixture whose lowered MIR carries **no timer at
+  all** (`grep -ci 'timer\|sleep\|timeout'
+  crates/aion-awl/tests/mir-goldens/header-types/valid/max_arity_record.mir`
+  → `0`), while `run.rs`'s only `Parked` producer (`:164`) requires a
+  `TimerStarted` with no `TimerFired`. The fixture's own bytes therefore do
+  NOT explain the classification, and this report does not invent a mechanism
+  it did not measure — the observation is handed to aion-rs's lane as it
+  stands. The same file already documents one load-sensitive
+  `Parked`-misclassification of this family (`covered.rs:114`).
+* **`query_racing_completion_yields_payload_or_typed_error_without_events`** —
+  seen once, in C, in 0.250 s. The test's own name states the race it drives.
+* **`the_grpc_outbox_leg_announces_its_park`** — the one that repeated (C and
+  D, both at exactly 30.01 s, both at scheduling position 5468, beside the
+  three 40 s/90 s/95 s `outbox_delivery_contract_e2e` tests). It passes in
+  **0.005 s** in isolation (3 runs of 3) and passed at position 5029 in runs
+  A and E. Diagnosed to its bytes as **F-SRV-2**, a genuine lost-wakeup in
+  `ConnectedWorkerRegistry` — a real defect this round found and reported
+  rather than papered over.
+
+**None of the three is this cut's.** All three crates are byte-identical to
+BASE:
+
+```
+$ git diff --no-ext-diff --stat 1bab95477cb86d498d07bb8da445f00351b87972...HEAD \
+    -- crates/aion crates/aion-server crates/aion-integration-norn
+$ echo $?
+0
+```
+
+and the build leg's own two runs of this identical suite were `5472 passed`
+and `5472 passed` (§11). Run E reproduces that on the fixed tree. Repairing
+another lane's timing-sensitive tests — or its dispatch-path wake primitive —
+is not a minimal delta and is not this cut's brief; F-CUT2-4 and F-SRV-2
+carry them to the lanes that own them, with the bytes to act on.
+
+⚠️ **Stated plainly.** Runs A–E attest commit `904ae176`. This section is a
+second commit on top of it, so the terminal gate run — the one that measures
+the tree containing THIS paragraph — is reported in the round's reply, not
+quoted here: a document cannot contain the output of a run that measures it.
