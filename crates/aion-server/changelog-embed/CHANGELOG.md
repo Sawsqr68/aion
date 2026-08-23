@@ -5,7 +5,25 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
-## 0.19.0 — 2026-08-21
+## 0.20.0 — 2026-08-23
+
+**The beamr 0.20.0 floor.** A dependency-floor release, one motion across
+the estate: beamr 0.19.3 → 0.20.0 (the accessor-lifetimes release — the
+heap-backed binary accessors now take a `HeapBorrow<'heap>` witness),
+haematite 0.9.0 → 0.11.0 (the release cut declaring `beamr ^0.20.0` on both
+edges), and the liminal family moved from a git pin to its registry 0.10.0
+wave (`liminal-rs` 0.7.0, `liminal-server` 0.10.0, `liminal-sdk` 0.9.0 —
+all declaring the same floors), so every resolved graph holds exactly one
+beamr.
+
+aion's own public surfaces do not move: the witness threading lives inside
+the engine's `runtime` boundary module (helpers, the timer dispatch
+closure, payload/outcome/delivery conversion). The exception-reason path
+reads through an ETS-owned copy because beamr 0.20.0 gives a
+`NativeHandler` no heap borrow (beamr#36); that bridge drops out when the
+upstream accessor ships. Gate evidence for the migration tree lives at
+`gate-logs/beamr-020-bump/` (clippy `-D warnings` clean, full workspace
+suite green, with the voided first run adjudicated in place).
 
 **Breaking.** This release moves public surfaces in six crates
 (cargo-semver-checks: 23 findings against 0.18.1), all deliberate:
