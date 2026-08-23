@@ -86,6 +86,13 @@ pub struct Document {
     pub steps: Vec<Step>,
     /// `command` declarations in source order.
     pub commands: Vec<crate::command::CommandDecl>,
+    /// `recipe` declarations in source order — the assembly surface.
+    pub recipes: Vec<crate::command::recipe::RecipeDecl>,
+    /// `wall` declarations in source order. One wall, one home: each is
+    /// projected into every rendering rather than restated per role.
+    pub walls: Vec<crate::command::recipe::WallDecl>,
+    /// `artifact` declarations in source order — the reference census's rows.
+    pub artifacts: Vec<crate::command::recipe::ArtifactDecl>,
     /// Trailing trivia at the very end of the document.
     pub epilogue: Vec<Lead>,
 }

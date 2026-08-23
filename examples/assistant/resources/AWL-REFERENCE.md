@@ -1072,3 +1072,135 @@ unrepresentable rather than discouraged. There is no production for a recipe
 body, none for a dependency edge, none for multi-step assembly. The reason is
 the review property: a reader of a gate leg sees the exact command that ran,
 and a command assembled from parts at run time is a command nobody saw.
+
+## 18. Recipe declarations
+
+A `recipe` declaration is an ASSEMBLY act: it orders declared work. It stands
+at the top level beside `command`, and so do the two kinds of thing it reaches
+for — a `wall` and an `artifact`.
+
+```awl
+wall changed_paths
+  allows "crates/aion-awl"
+  allows ".fleet/"
+  excludes "mutation vocabulary"
+
+artifact gate_entry ".fleet/gate-entry.sh"
+  digest "1e1e3ad2ae66bb0bef5b82a8e154491032ee3d7598ac361a731a5f0917b47a6b"
+  excludes "RECORD-RUN-PENDING"
+
+recipe stage_the_flight
+  parameter branch: String per_item
+  parameter control_expect: String re_derive derives "origin/main:workflows/investigate/investigate_worker.awl" extract "line 22"
+  step self_test
+    requires "workers serving the queue"
+    fires artifact gate_entry expecting "deliverable_absent"
+  step push
+    after self_test
+    runs command push_branch
+```
+
+**A recipe body is never a script.** A step names work that was declared
+elsewhere: `runs command <name>` names a `command` declared at the top level,
+`captures <name>: <Type> of artifact <name>` reads a declared artifact into a
+typed result, and `fires artifact <name> expecting "…"` executes a declared
+demonstration artifact and compares its answer TYPED. A shell string in a step
+body is unparseable rather than discouraged — `runs "cargo test"` is refused at
+the parse layer with `shell_string_body`, because a command assembled from
+parts at run time is a command no reader saw.
+
+**The fence runs both ways.** No recipe, dependency edge, or assembly form is
+reachable from inside a `command` declaration (§17's own note), and no
+`command` declaration may stand inside a recipe body — that is
+`command_declaration_nested`. Declare the command at the top level and let a
+step name it, so the command a reader of the document meets is the command that
+ran.
+
+### Parameter kinds, and the one that is re-derived
+
+`parameter <name>: <Type> [= "<default>"] <kind>` declares one of a recipe's
+typed parameters. The kind is one of exactly four, and the taxonomy is read off
+live composer rigs rather than invented:
+
+* `skeleton` — fixed across every dispatch of the rig.
+* `per_item` — supplied per dispatch.
+* `both` — partly fixed, partly per dispatch.
+* `re_derive` — READ AT THE FIRE MINUTE from a declared source, never copied.
+
+A `re_derive` parameter carries its derivation on the same line: `derives
+"<source address>" extract "<extraction>"`. The address and what is taken out
+of it are two declared things, because an address that encoded its own
+extraction would carry two truths in one string. The extraction is `line <n>`
+(counted from 1) or `whole`, and nothing an evaluator would be needed for.
+
+The reason the value is read then and not earlier is the law this kind exists
+to carry: at the dispatch minute, not the compose minute — they drift. A
+`re_derive` parameter with no derivation is `derivation_missing`; a `re_derive`
+parameter carrying a hand literal is `literal_where_derived`, the same cause
+§17 raises for a hand-written base pin and for the same reason.
+
+**One source, one declared projection.** Two parameters that declare the same
+value are `double_carry`. A parameter that states a value the DISPATCH already
+declares — `workspace_root`, `run_name`, `repo`, `repo_url`, `base_ref`,
+`result_branch`, `leg_ids_csv`, `task_queue`, `namespace`, `workflow_type`,
+`node_label` — is `venue_value_restated`: consume it by declaring the parameter
+with no default and letting the dispatch supply it. Binding a recipe to a venue
+is the deploy surface's act, and this declaration adds no new hole for one.
+
+### Steps, edges, and preconditions
+
+`step <name>` opens one act. `after <step>` is its dependency edge, and it is
+the same `after` §6 already uses for an ordering dependency — one word, one
+meaning. The edges form a DAG: a cycle is `dependency_cycle`, refused with the
+cycle rendered and a span to look at, and an edge naming a step the recipe does
+not declare is `reference_undeclared`.
+
+`requires "<precondition>"` declares one at-fire precondition. The executing
+side answers each declared precondition by name at the moment of firing; one
+that was never answered is `precondition_unmet`, because an unanswered
+precondition is not a met one and a box's occupancy changes between staging and
+firing.
+
+### Walls, projected from one declaration
+
+`wall <name>` declares a wall once. `allows "<pattern>"` names a path pattern
+it admits; `excludes "<term>"` names bytes that must not appear. The
+declaration is PROJECTED into both renderings a wall has — the sentence a role
+reads and the anchored alternation a paths census enforces — so the two cannot
+disagree. Which paths a lane's wall admits stays authored, here, in the
+declaration: the builder owns the projection and never the content.
+
+A projection that would emit an excluded term is `excluded_term`, with the term
+as its observed bytes. A wall that allows nothing is `wall_allows_nothing` — a
+wall admitting nothing and an absent wall are different claims and must not
+read alike.
+
+### Artifacts, and the reference census
+
+`artifact <name> "<address>"` declares something a recipe reaches for outside
+the document. `digest "<sha256>"` declares what its bytes hash to, and the fire
+step MEASURES the deployed bytes against that digest before a single step runs:
+a disagreement is `census_mismatch`, carrying declared and observed hashes
+both. A digest that is not 64 lowercase hexadecimal characters is
+`artifact_digest_malformed`.
+
+`restores "<path>"` declares a path a fired artifact must leave byte-identical.
+The restoration is byte-compared, never assumed; an inexact one is
+`restore_inexact`. `excludes "<sentinel>"` names bytes whose presence says the
+artifact was never filled — a ground still carrying `RECORD-RUN-PENDING` is
+`slot_unfilled` at the fire minute, not a surprise at the venue.
+
+### What composing and firing refuse
+
+Composing binds values to a recipe's parameters. A slot nothing filled and with
+no default, or a bound value still carrying a skeleton's `<<PLACEHOLDER>>` or
+`__SENTINEL__`, is `slot_unfilled` — refused BY NAME before anything runs.
+
+Firing is its own layer, and the order is load-bearing: the receipt opens
+FIRST, then the preconditions, then the reference census, then the re-derived
+parameters, then the steps in dependency order. A receipt names the tree it
+measured — the tree, its head, and whether that tree was clean — and those
+three are mandatory at construction, so a receipt that cannot say what it
+measured is unrepresentable. A refused fire still produces its receipt, because
+a stage nobody can audit is the failure receipt-first ordering exists to
+prevent.

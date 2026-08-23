@@ -1,0 +1,35 @@
+//! FIXTURE: absorbed production `recipe_dependency`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/dependencies.rs`,
+//!   sha256 538ea0952b3d76f57966c0b72e8477ca1786d1911d265cb490f72a41173cadfa;
+//!   case `recipe_doubly_nested_module_dependencies`.
+//! JUST-SPECIMEN: baz: foo::bar::baz
+//! WHAT DIFFERS: the edge is absorbed as `after`, the word this language
+//!   ALREADY uses for an ordering dependency on another step — one word, one
+//!   meaning, rather than a synonym minted for the recipe layer. Just's
+//!   module-qualified target (`foo::bar::baz`) is NOT absorbed: an edge names
+//!   a step of THIS recipe, so the edge set stays closed and a sweep can
+//!   follow every one of them. The same suite case supplies
+//!   `refusal-dependency-edge.awl`, which stands: an edge is unrepresentable
+//!   inside a gate-leg command declaration and representable here.
+
+workflow just_recipe_dependency
+  outcome done: type String, route success
+
+command echo_it
+  program "echo"
+  admits "--"
+
+recipe baz
+  step foo
+    runs command echo_it
+  step bar
+    after foo
+    runs command echo_it
+  step baz
+    after bar
+    runs command echo_it
+
+step go
+  route done("ok")

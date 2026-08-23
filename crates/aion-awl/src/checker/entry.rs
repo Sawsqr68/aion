@@ -46,6 +46,19 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
         ctx.errors
             .push(CheckError::new(refusal.span(), refusal.rendered()));
     }
+    // The assembly surface is checked for both families and by its own
+    // rules, for the same reason and through the same crossing: its
+    // refusals arrive already rendered, cause code and observed bytes
+    // included.
+    for refusal in crate::command::recipe::check_assembly(
+        &document.recipes,
+        &document.walls,
+        &document.artifacts,
+        &document.commands,
+    ) {
+        ctx.errors
+            .push(CheckError::new(refusal.span(), refusal.rendered()));
+    }
     let mut errors = std::mem::take(&mut ctx.errors);
     // The contract this document DERIVES has to be enforceable, not merely
     // well-typed. A derived schema no validator can compile does not fail at

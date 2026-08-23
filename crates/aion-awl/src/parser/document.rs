@@ -10,10 +10,9 @@ use crate::{Keyword, Span, TokenKind, lex};
 use super::ParseError;
 use super::exprs::{expr_span, parse_expr};
 use super::hints::gone_keyword_hint;
-use super::steps::parse_step;
 use super::stream::{Stream, describe};
-use super::types::{parse_type_decl, parse_type_ref, type_ref_span};
-use super::workers::{expect_duration, parse_child, parse_worker};
+use super::types::{parse_type_ref, type_ref_span};
+use super::workers::{expect_duration, parse_worker};
 
 /// The declaration words a workflow header admits, as they read in the
 /// "found something else" diagnostic. One constant so the two arms that raise
@@ -95,6 +94,9 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
         subflows: Vec::new(),
         steps: Vec::new(),
         commands: Vec::new(),
+        recipes: Vec::new(),
+        walls: Vec::new(),
+        artifacts: Vec::new(),
         epilogue: Vec::new(),
     };
 
@@ -109,7 +111,7 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
             ),
         ));
     }
-    parse_declarations(&mut stream, &mut document)?;
+    super::declarations::parse_declarations(&mut stream, &mut document)?;
     document.epilogue = stream.take_leads()?;
     if let Some(token) = stream.peek() {
         return Err(ParseError::new(
@@ -171,9 +173,12 @@ fn parse_worker_document(
         subflows: Vec::new(),
         steps: Vec::new(),
         commands: Vec::new(),
+        recipes: Vec::new(),
+        walls: Vec::new(),
+        artifacts: Vec::new(),
         epilogue: Vec::new(),
     };
-    parse_declarations(stream, &mut document)?;
+    super::declarations::parse_declarations(stream, &mut document)?;
     document.epilogue = stream.take_leads()?;
     if let Some(token) = stream.peek() {
         return Err(ParseError::new(
@@ -431,96 +436,10 @@ fn parse_outcome_decl(
     })
 }
 
-/// Parse the top-level declarations after the header: consts, types,
-/// workers, children, and steps, in any interleaving (the printer
-/// canonicalizes the grammar's order).
-fn parse_declarations(stream: &mut Stream, document: &mut Document) -> Result<(), ParseError> {
-    loop {
-        let lead = stream.take_leads()?;
-        let docs = stream.take_docs();
-        let Some(token) = stream.peek() else {
-            if let Some(doc) = docs.first() {
-                return Err(ParseError::new(
-                    doc.span,
-                    "`///` doc lines attach to the declaration that follows; nothing follows",
-                ));
-            }
-            stream.push_back_leads(lead);
-            return Ok(());
-        };
-        let span = token.span;
-        match &token.kind {
-            TokenKind::Keyword(Keyword::Const) => {
-                stream.next();
-                document
-                    .consts
-                    .push(parse_const_decl(stream, lead, docs, span)?);
-            }
-            TokenKind::Keyword(Keyword::Type) => {
-                stream.next();
-                document
-                    .types
-                    .push(parse_type_decl(stream, lead, docs, span)?);
-            }
-            TokenKind::Keyword(Keyword::Worker) => {
-                stream.next();
-                document
-                    .workers
-                    .push(parse_worker(stream, lead, docs, span)?);
-            }
-            TokenKind::Keyword(Keyword::Child) => {
-                stream.next();
-                document
-                    .children
-                    .push(parse_child(stream, lead, docs, span)?);
-            }
-            TokenKind::Keyword(Keyword::Subflow) => {
-                stream.next();
-                document
-                    .subflows
-                    .push(super::flow::parse_subflow(stream, lead, docs, span)?);
-            }
-            TokenKind::Keyword(Keyword::Step) => {
-                stream.next();
-                document.steps.push(parse_step(stream, lead, docs, span)?);
-            }
-            // `command` opens a top-level declaration POSITIONALLY, not as a
-            // reserved word: `command` stands in this tree's own corpus today
-            // as a harness-section field name, so reserving it would break
-            // documents that exist. Recognised here, where nothing else may
-            // stand, exactly as `run`, `send` and `query` are read elsewhere.
-            TokenKind::Identifier(word) if word == crate::COMMAND_WORD => {
-                document
-                    .commands
-                    .push(crate::command::parse_command_decl(stream, lead, docs)?);
-            }
-            TokenKind::Identifier(word) => {
-                let message = gone_keyword_hint(word).unwrap_or_else(|| {
-                    format!(
-                        "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or \
-                         `command` declaration, found `{word}`"
-                    )
-                });
-                return Err(ParseError::new(span, message));
-            }
-            other => {
-                return Err(ParseError::new(
-                    span,
-                    format!(
-                        "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or \
-                         `command` declaration, found {}",
-                        describe(other)
-                    ),
-                ));
-            }
-        }
-    }
-}
-
 /// Parse one `const name = <value>` declaration after the `const` keyword
 /// (at `const_span`) has been consumed. The value is a general expression
 /// here; the checker restricts it to compile-time forms.
-fn parse_const_decl(
+pub(super) fn parse_const_decl(
     stream: &mut Stream,
     lead: Vec<Lead>,
     docs: Vec<DocLine>,

@@ -1,776 +1,856 @@
-# BUILD LEG REPORT — awl-cut1 flight1
+# BUILD LEG REPORT — awl-cut2 flight1: recipes / staging assembly
 
-Leg: `build` (the only leg). Brief `.fleet/BRIEF.md` (Calliope, owner-grilled
-by Vesper); rig `.fleet/RIG.md` (Waffles); plan `.fleet/plan.md`; leg brief
-`.fleet/legs/build.md`.
+Written by the build leg on rocketfish. Every citation disambiguates
+`BRIEF-Rn` (`.fleet/BRIEF.md`, R1–R8), `DESIGN-Rn` (the design brief's own
+R1–R8) and `CUT1-Rn` (cut-1's brief, `git show 1bab9547:.fleet/BRIEF.md`).
+A bare `Rn` is two different requirements and is not written here.
 
-**Tree receipt.** Base `5e2fb5a3ed32b53d48dbc585aa914acd056458c6`, verified an
-ancestor of this leg's HEAD. Toolchain: `rust-toolchain.toml` pins `1.97.1`;
-`rustc --version` = `1.97.1 (8bab26f4f 2026-07-14)`; `rustup show
-active-toolchain` names
-`/home/rocketfish/fleet/runs/awl-cut1-flight1/legs/build/rust-toolchain.toml`
-as the override origin — the pin is HONORED from the pin file, not by
-default-coincidence.
+⚠️ This path previously held **cut-1's** report, carried into main by that
+landing. This leg replaces it wholly.
 
 ---
 
-## F-RIG-1 — the staged wall makes the staged cut ungreenable; amended by exactly one path
+## 0. C-1 FIRST — `excluded_term` is NOT in cut-1's enum
 
-⛔ **Waffles will be running an amended `gate-entry.sh` at re-gate.** This is
-the first section of the report because of that.
+**BRIEF-R4 says:** *"a projection that would emit an excluded term is a
+composer refusal (`excluded_term`, cut-1's enum — consumed, not
+re-minted)"*.
 
-**The defect, at the bytes.** The rig's wall admits `crates/aion-awl` as a
-prefix, which includes the packaged reference copy
-`crates/aion-awl/guide-embed/AWL-REFERENCE.md`. But
-`crates/aion-awl/tests/guide_reference_gate.rs:221` — a **pre-existing** test
-in the crate the wall admits — pins that embed byte-identical to the authored
-twin at `examples/assistant/resources/AWL-REFERENCE.md`
-(`crates/aion-awl/src/guide/entry.rs:75`), which the staged wall does **not**
-admit:
+**Measured, at cut-1's landed bytes.** `git show
+1bab9547:crates/aion-awl/src/command/cause.rs` — `CommandCause::ALL` is
+`[Self; 35]` at line 186 and **none of the 35 is `excluded_term`**. A
+whole-tree search at the base for `excluded_term|ExcludedTerm` returns
+**zero** hits in `crates/`; at this flight's HEAD before any code was
+written it returned exactly one, `.fleet/BRIEF.md:215` — the brief's own
+line describing it.
 
-```
-crates/aion-awl/tests/guide_reference_gate.rs:221
-fn embedded_reference_matches_the_authored_document() -> TestResult {
-    let authored = fs::read_to_string(repo_path(guide::REFERENCE_PATH))?;
-    assert!(guide::reference_text() == authored, …)
-```
+**Disposition, per BRIEF's own refusal-causes wall** (*"every new cause this
+cut needs joins cut-1's closed enum BY DESIGN CHANGE recorded in the
+report"*): the cut **MINTS** `excluded_term` into `CommandCause` as a
+recorded design change, filed at the new **Compose** layer, with its red
+specimen (`crates/aion-awl/tests/recipe_wall.rs`
+`a_projection_that_would_emit_an_excluded_term_refuses`). BRIEF-R4's
+"consumed, not re-minted" wording is reported as **divergent from the
+landed bytes** rather than quietly satisfied. No source is fought: the
+design's §6 law (new codes are a design change) governs and is followed.
 
-Editing the admitted file therefore mechanically forces an edit to an
-unadmitted one. The wall as written is internally inconsistent.
-
-**Why fatal rather than inconvenient.** Three pre-existing gates compose into
-a hard chain, all measured on this tree:
-
-1. `guide_reference_gate.rs:204` — `the_inventory_covers_the_whole_vocabulary`
-   asserts `guide::all().len() == Keyword::ALL.len() + POSITIONAL_WORDS.len()`
-   **by equality**. Any new word forces a glossary entry.
-2. `guide/lookup.rs:25` — `for_keyword` is an exhaustive `match`, and
-   `for_positional_word` is pinned against the lexer's own inventory. A new
-   word fails to compile or fails the count until its entry is written.
-3. `guide_reference_gate.rs:126` —
-   `every_cited_section_actually_discusses_the_word` requires the cited
-   section's **body text** to use the word, whole-word matched (`:151`).
-
-Measured against the reference's sixteen sections at base: `command`,
-`program`, `argv` and `shell` occur in §4/§16 and `cwd` in §16, but
-**`option`, `operand`, `env`, `admits`, `variadic` and `hardening` occur in NO
-section**. So within the wall as staged, **no new AWL word can land at all** —
-which takes R1, R2, R3 and R7 with it. That is the whole cut, not a partial
-landing question.
-
-**Disposition.** RIG.md states its own precedence: *"Sources govern the brief;
-the brief governs this rig."* R7 is BINDING and the wall is subordinate to it.
-This leg added **exactly one alternative** to the wall regex in
-`.fleet/gate-entry.sh` — `examples/assistant/resources/AWL-REFERENCE\.md` —
-and nothing else, with the reasoning written into the gate script itself
-(`.fleet/gate-entry.sh:25–56`) so nobody can read that script without seeing
-it. **One line to revert.** The ruling is Waffles' at re-gate and Vesper's at
-landing.
-
-**What D1 did NOT license.** No other path was added. This leg did not touch
-`crates/aion-cli/tests/console_guide_asset.rs`, `tools/tree-sitter-awl/**`, or
-`editors/**`; it did not relax, reword or delete any existing gate; and it did
-not choose word spellings to dodge a documentation check. The census below
-shows zero files outside the amended wall.
+**Waffles and Vesper: this changes what the cut was permitted to mint.** It
+is the first item here for that reason.
 
 ---
 
-## §0 — HAS THIS ALREADY HAPPENED? (the census, run by this leg against its own HEAD)
+## 1. The rest of the CUT-1 CONFORMANCE READ, with movement named
 
-**Pathspec, stated:** the whole worktree, excluding `.git/`, `target/` and
-`node_modules/`. Nothing else excluded.
+Read at the landed bytes at BASE `1bab95477cb86d498d07bb8da445f00351b87972`
+and re-affirmed at this leg's HEAD. **No file under `crates/` moved between
+BASE and the leg's first line of code** (`git diff BASE...HEAD` named 17
+files, every one under `.fleet/`), so the bytes read are the bytes cut-1's
+own gate went green on.
 
-| construct sought | where searched | result |
+| consumed shape (BRIEF's name) | landed at | verdict |
 |---|---|---|
-| a command-declaration construct in the AWL grammar | `crates/aion-awl/src/lexer/**`, `crates/aion-awl/src/parser/**` | **ZERO.** `Keyword` (`lexer/tokens.rs:101`) carried 58 variants; none was `command`, `program`, `option`, `operand`, `env`, `cwd` or `admits`. `POSITIONAL_WORDS` (`:70`) was `[&str; 6]` and carried none of them. The top-level dispatch (`parser/document.rs:450–495`) admitted exactly `const`/`type`/`worker`/`child`/`subflow`/`step`. |
-| an argv emitter | `crates/`, `sdks/`, `gleam/` | **ZERO in the AWL family.** 15 `argv` hits under `crates/aion-awl*`, every one a doc comment or a fixture narration; not one constructs an argv. Every functional `argv` is downstream plumbing outside the family (`aion-integration-norn/src/harness.rs`, `aion-cli/src/main.rs`, `aion-fleet-plan/src/verify.rs`, `aion-integration-acp/src/harness.rs`). None derives an argv from an AWL declaration. |
-| an `admits_dash` / end-of-options property, ANY spelling | whole worktree, case-insensitive: `admits[_-]?dash`, `end[_-]?of[_-]?options`, `double[_-]?dash`, `dash[_-]?dash`, `opt(ion)?s?[_-]terminator` | **ZERO** outside `.fleet/`. Measured count outside `.fleet/`: **0**. The 8 hits inside `.fleet/` are the brief, plan and leg brief describing what does not exist. |
-| `{{`-interpolation handling outside string display | `crates/aion-awl*` | **ZERO as a language construct.** The 104 figure is LINES containing `{{` under `crates/aion-awl/src` (re-measured on the verification pass: 109 occurrences in `src/**/*.rs`, 195 across the whole crate — the counts differ by pathspec and by line-vs-occurrence, so the instrument is stated here rather than the bare number). Every one is a Rust `format!` brace escape emitting literal Gleam braces (`emitter/codecs.rs`, `forks.rs`, `flows.rs`, …) or a doc-comment escape (`ast/command.rs:190,245`). The conclusion is what the census turns on and it is unchanged: no `{{name}}` was ever lexed, parsed or resolved — searched for a token or production (`DoubleBrace`, `InterpolationOpen`, a `"{{"` literal) at base, ZERO. |
-| Just-grammar conformance fixtures | whole worktree | **ZERO.** The only `justfile` in the tree is `.meridian/workflows/onatopp-dev-norn/justfile`, a Meridian dispatch script. `CONTRIBUTING.md:32` mentions justfiles only to say the repo has none. No CC0 suite was vendored anywhere. |
+| command-declaration **types** | `src/command/decl.rs:44` `CommandDecl` and family | **CONFORMS.** Recipe step bodies reference `CommandDecl` **by name**, never by copy. |
+| the **admits-`--`** property | `decl.rs:135,149`; emitter places the marker unconditionally (`emit.rs:141`) | **CONFORMS**, and is CONSUMED unchanged: a `runs command` step emits through cut-1's own `check_command` + `emit`, so a step runs exactly the argv `aion awl check` proved sound (pinned by `recipe_fire.rs` `a_runs_command_step_hands_the_emitted_argv_to_the_runner`, which asserts `["git","push","--","fleet/awl-cut2-result"]`). |
+| the **refusal cause enum** | `cause.rs:76`, `ALL: [Self; 35]`, `layer()` exhaustive, `error.rs:253 refuse` derives the layer FROM the cause | **CONFORMS** as a closed, layer-named vocabulary — with **C-1** above. |
+| **`literal_where_derived`** | cause `cause.rs:128`, wire string `"literal_where_derived"`, `derived.rs:65` three closed shapes | **CONFORMS as a cause; DIVERGES as a trigger — C-2 below.** |
+| the **fixture harness** | `tests/command_just_subset.rs` + `src/command/just_subset.rs` tables | **CONFORMS** and was extended in place: `ABSORBED_PRODUCTIONS` 4 → 7, `REFUSED_FORMS` 6 → 8, five new fixtures, all gated by the harness's own coverage and provenance tests. |
 
-**Triage of the one adjacent hit that is NOT the contract.**
-`crates/aion-awl/src/ast/command.rs:1–272` (+ `command_tests.rs`) is a
-pre-existing **string**-command surface for declared `run "…"` action bodies.
-It is prior art and it is not this cut:
+### C-2 — `literal_where_derived` diverges as a MECHANISM, not as a cause
 
-* it **scans**, it never emits — `command.rs:24–27` says so outright
-  ("Nothing here renders a command back into a string");
-* its interpolation is `$name` / `${name}` (`:169–210`), not `{{…}}`, and it
-  mirrors the worker SDK's `CommandTemplate::parse` (`:10–14`);
-* it has no options/operands distinction, no types, no `--` property, no env,
-  cwd or timeout — it carries only `references` and `program_end` (`:44–51`).
+Cut-1 fires the cause on the literal's **SHAPE** (`derived.rs:65`, three
+closed shapes scanned word by word). BRIEF-R2's acceptance needs a
+**DECLARATION-driven** trigger: a re-derive slot fed *any* hand literal.
+`"main"` is invisible to `derived_shape_in` and is exactly as wrong in a
+re-derive slot as a copied sha.
 
-It therefore neither satisfies nor blocks R1–R3. **The wall-flight2 defect
-family was live in this tree**: nothing there could place `--`, because
-nothing there constructed an argv at all.
+**Disposition — CONSUMED, not re-minted, and proven both ways.**
+`crates/aion-awl/tests/recipe_parameters.rs`
+`literal_where_derived_fires_against_a_re_derive_slot_fed_a_literal`
+asserts three things in one test: the haem-wall exhibit's hand-copied
+control token refuses (cut-1's shape rule would also have caught it),
+`"main"` in a re-derive slot **also** refuses (only the declaration trigger
+catches it), and `"main"` in a `skeleton` slot is **ordinary text** — so
+cut-1's closed shape set is provably not widened. `src/command/derived.rs`
+and `src/command/check_fills.rs` are **byte-identical to BASE** (verified by
+`diff`). Cause code and wire string unchanged.
 
-**A second adjacent hit, triaged (not in the plan's census, found by this leg).**
-`crates/aion-cli/tests/awl_corpus_gate.rs` is a pre-existing corpus gate that
-runs `aion awl check` over every LIVING `.awl` document. It is **not** R8's
-instrument and is not a substitute: it excludes `fixtures`, `golden`,
-`templates`, `docs/design`, `docs/archive`, `docs/evidence` and `gate-logs` by
-class, and it asks a different question (does a living document still check
-clean) than R8's (does every pre-existing document read the SAME before and
-after). Its floor is 35 documents; R8's corpus is 431. Left untouched; R8's
-instrument lands beside it, and the two exclusion sets are stated in each
-file's own header so no reader mistakes one for the other.
+### C-3 — the amendment-1 fence is load-bearing and SURVIVED byte-identically
+
+`src/command/words.rs`, `src/command/parse.rs` and
+`tests/fixtures/command/just-subset/refusal-recipe-body.awl` are
+**byte-identical to BASE** (verified by `diff` against `1bab9547`). The
+existing `grammar_parser_gate.rs`
+`every_assembly_form_is_refused_by_name_with_its_reason` still passes over
+all six `ASSEMBLY_WORDS`, and this cut adds its own copy of that assertion
+in `recipe_declarations.rs` so the fence is pinned from the assembly side
+too.
+
+### C-4 — one movement, named: the grammar gate's grip on the parser's sentence
+
+`tests/grammar_parser_gate.rs`'s `DECLARATION_REFUSAL` constant **moved**,
+because the dispatcher's diagnostic now names `recipe`, `wall` and
+`artifact` beside `command`. This is the movement cut-1's own comment
+anticipated (*"this constant is the gate's grip on the parser's own
+sentence, not a claim about what the parser should admit"*), and it is
+recorded here because it is an edit to a gate.
+
+**It was not a silent edit: leaving it behind made the gate go RED first.**
+Every probe read as "admitted", and both equality assertions failed loudly —
+the fail-safe the constant's comment describes, working. The new comment in
+the file records that.
 
 ---
 
-## §1 — SEAM RE-DERIVATION (re-run by this leg; a citation is a claim about a commit)
+## 2. THE CENSUS — has this already happened? (fresh, at this HEAD)
 
-The design brief's seams were derived at aion `c590712f5` (v0.20.0). This
-flight's base is `5e2fb5a3e`. Measured here:
+⛔ **Pathspec, stated.** The whole worktree at HEAD, excluding exactly
+`.git/`, `target/` and `node_modules/` and nothing else; text files only
+(`grep -I`). Narrower pathspecs named per row where the question is a
+language-surface one. Run fresh: cut-1's census answered a different
+question on a tree that has since moved.
+
+| construct sought (BRIEF's own five) | pathspec | result |
+|---|---|---|
+| a **recipe / dependency construct** in the AWL word tables | `crates/aion-awl/src/{lexer,parser,ast,command,guide}/**` + whole-tree `-w recipe` | **ZERO as a construct.** `POSITIONAL_WORDS` was `[&str; 19]` and carried no `recipe`, `needs`, `depends`, `steps`; `Keyword::ALL` (58) carried none either; the top-level dispatch admitted exactly `const`/`type`/`worker`/`child`/`subflow`/`step`/`command`. Every in-tree `recipe` hit was cut-1's own refusal machinery (triaged as C-3) or the English word in MIR codegen prose (`src/mir/func.rs`, `src/mir/lower/codec*.rs`, `src/mir/select/shells.rs`) — a template-shape noun, not a construct. |
+| any **wall-projection or prompt-assembly machinery** | whole worktree, `-i` on `wall_projection\|project_wall\|WallDecl\|prompt_assembly\|assemble_prompt\|PromptBuilder\|excluded.term\|negative vocabulary` | **ZERO.** The only `excluded_term` was `.fleet/BRIEF.md:215` (C-1). Every `-w wall` hit in `crates/` was wall-*clock* determinism prose (`aion-awl-package/tests/awl_assemble.rs`, `aion-cli/tests/authoring_quality_e2e.rs`) or cut-1's **`haem-wall` fixture NAME**. Nothing derived a prompt or a gate rendering from a declaration. |
+| a **sweep-by-claim** mechanism | whole worktree, `-i` on `sweep_by_claim\|sweep-by-claim\|SweepRecord\|sweep(` | **ZERO.** Three hits, all triaged: an author-domain action named `sweep` in a deliberately-invalid rev2 fixture (`tests/fixtures/rev2/loop-outcomes/invalid/pipe_route_in_loop_body.awl:12-16`); `plan_sweep` in the server's worker backpressure (`aion-server/src/worker/backpressure.rs:169,177,492` — a queue sweep, different domain, **outside this cut's wall**); a round-robin test name (`outbox_dispatcher.rs:2060`). None re-projects consumers from a corrected source declaration. |
+| a **reference-census / content-hash fire-precondition** surface | `crates/**` on `reference_census\|ReferenceCensus\|fire_precondition`; `crates/aion-awl*/src` on `content_hash\|ContentHash` | **ZERO in the front** — the count was literally 0 across `aion-awl/src` and `aion-awl-lsp/src`. Two adjacent hits triaged: `mir/lower/driver.rs:83 preconditions(...)` is a LOWERING precondition (a different sense), and `aion-package/src/hash.rs:89 content_hash(beams)` hashes a BEAM set for module namespacing — real prior art for the ALGORITHM and already a dependency of the front, but it answers "what is this package's identity", never "do the deployed bytes still match what a recipe declared". |
+| any **staging-receipt generator** | whole worktree, `-i receipt` over `crates/` and `scripts/` | **ZERO as a generator.** A tighter scan for `(struct\|enum\|fn\|impl) +[A-Za-z_]*[Rr]eceipt` over `crates/` and `scripts/` returned **0**. Every `receipt` hit is the author-domain NOUN in AWL examples, fixtures and MIR goldens — a user's `type Receipt { ok: Bool }`. Nothing wrote a record naming the tree, head and clean/dirty state it measured. |
+
+**Five constructs sought, five zeros, every hit triaged.**
+
+**One further adjacent surface, triaged as the nearest prior art.**
+`crates/aion-fleet-plan` — `src/verify.rs:55 ExactCommit`, `:90 Verdict`,
+`:125 verify_conclusion`, `src/error.rs:60 ConclusionCause` (exactly three
+codes) — is a SEALED VERIFIER of a stage-conclusion artifact at an exact
+commit. It is not a recipe surface, not a receipt generator, and is
+**outside this cut's wall**. It is **read as data** in exactly one place
+(`recipe_compare_genericity.rs`, cited by digest, re-hashed on the run) and
+**modified in none**.
+
+---
+
+## 3. STAGING CONFORMANCE — the rig's claims, measured
+
+1. **The gate's "changed in exactly three places" claim HOLDS.**
+   `git diff 1bab9547 731fa74a -- .fleet/gate-entry.sh` is 9 insertions /
+   33 deletions, of which exactly **two** are executable lines: `BASE`
+   (`5e2fb5a3e…` → `1bab9547…`) and `WALL` (gains `crates/aion-cli`). The
+   rest is the cut-1 F-RIG-1 comment block replaced by the cut-2 wall
+   rationale. **No amendment to the gate was needed by this cut and none
+   was made.**
+2. **Seam movement between BASE and HEAD: NONE.** 17 files, all under
+   `.fleet/`.
+3. **F-STAGE-1 (observation, reported, NOT repaired).** The rig commit
+   carried a **second, nested, byte-identical copy** of all four gate
+   specimens at `.fleet/fixtures/gate-scripts/gate-scripts/`. Harmless to
+   the gate and to `tests/command_gate_census.rs`, which cites the OUTER
+   path — but it is a second hand-copy of pinned bytes with no provenance
+   row, which is the very class BRIEF-R6's one-truth fence exists to close.
+   **Disposition:** reported; **not deleted** (staged bytes are staging's,
+   and the estate's never-destroy law binds); every fixture this cut wrote
+   cites the OUTER path.
+4. **Cosmetic, recorded, not amended:** `.fleet/gate-entry.sh:2` still
+   reads "AWL-CUT1 gate" in its header comment. No behaviour depends on it.
+
+---
+
+## 4. PLACEMENT AS TAKEN, and the MANIFEST DEPENDENCY DELTA (fold B)
+
+### D1 — the recipe family is a SUB-FAMILY of the command surface
+
+Taken: `crates/aion-awl/src/command/recipe/` (15 files), not a sibling
+`src/recipe/`. The ground is mechanical and measured in this tree:
+`CommandRefusal::refuse` — the single door that derives a refusal's LAYER
+FROM its CAUSE, so misfiling cannot be written — is `pub(super)`
+(`src/command/error.rs:276`). A sibling would have forced either widening
+cut-1's landed refusal door or building a second construction path for the
+same record. **The door was not widened.** (Where a test needed to build
+refusals from outside the surface, it used the PUBLIC per-layer
+constructors, which is what they are for — see
+`recipe_compare_genericity.rs`'s own note.)
+
+### D2 — the executing verb rides `crates/aion-cli` (the ratified placement)
+
+`aion awl recipe compose` and `aion awl recipe fire`, in a new module family
+`crates/aion-cli/src/awl_recipe/` (5 files) beside the existing AWL verbs —
+**not** by growing `awl.rs`, which was already 587 lines. The front declares
+three ports it does not implement (`ArtifactSource`, `SpecimenFirer`,
+`CommandRunner`, bundled as `Ports`); the CLI implements all three over a
+real tree and real processes.
+
+### THE DEPENDENCY DELTA, MEASURED
 
 ```
-git diff --no-ext-diff --stat c590712f5 5e2fb5a3e -- crates/aion-awl \
-    crates/aion-awl-lsp crates/aion-awl-package \
-    examples/assistant/resources/AWL-REFERENCE.md \
-    apps/aion-ops-console/src/features/authoring/assets/awl-guide.json
+crates/aion-awl/Cargo.toml, BASE 1bab9547 → HEAD:
+  [dependencies]      + sha2.workspace = true
+  [dev-dependencies]  - sha2.workspace = true
+crates/aion-cli/Cargo.toml:  NO CHANGE
+Cargo.lock:                  NO CHANGE
 ```
 
-→ **empty.** Five commits separate the two shas (`c7706858`, `f1f301b8`,
-`ed9da66f`, `603474bb`, `5e2fb5a3`); **none touches the AWL crate family or
-either teaching asset.** **MOVEMENT: NONE.** Every design-brief seam citation
-in the AWL family stands unchanged at this base. Reported as a fact, measured
-on this run, not inherited from the plan.
+**Required: zero execution-side additions. MET, and measurably so.**
+
+* The **only** delta on `crates/aion-awl` is `sha2` MOVED from
+  `[dev-dependencies]` to `[dependencies]`. It is not a new crate in the
+  front's graph — it was already in the crate's own dev graph and in the
+  workspace lockfile, which is why **`Cargo.lock` is unchanged**. Zero new
+  external edges.
+* `sha2` is a **digest function**, which is none of the three things the
+  fold-B axis names: no process, no runtime, no transport. The reference
+  census (BRIEF-R6) *measures deployed bytes against a declared content
+  digest*, so the front must hash; SHA-256 is the algorithm this workspace
+  already names for content identity (`aion_package::hash`, an `.aion`
+  format constraint), and minting a second one would have given the estate
+  two answers to "what do these bytes hash to". The manifest comment
+  records this argument at the point of the delta.
+* `crates/aion-cli` needed **no new dependency at all** — the executing
+  verb is built from `std` and what the CLI already links.
+* **The absence of execution machinery in the front is pinned by a TEST,
+  not by this paragraph.** `recipe_fire.rs`
+  `the_recipe_family_opens_no_file_and_spawns_no_process` reads all fifteen
+  recipe sources, strips comments, and refuses any reach for `std::fs`,
+  `std::process`, `std::net`, `Command::new`, `tokio`, `reqwest`, `tonic`,
+  `std::thread` or `std::env` — with a control proving the scan can find one
+  and does not read prose as code.
+
+**Verdict: the ratification holds at the bytes.** Reported as measured, not
+asserted.
 
 ---
 
-## §2 — PLACEMENT DECISION AS TAKEN (D2)
+## 5. DESIGN CHANGES — new causes and new layers, each with its reasoning
 
-**Decision: a module family inside `crates/aion-awl`, at
-`crates/aion-awl/src/command/`.** The brief's assumption is UPHELD; the
-sibling-crate fallback `crates/aion-awl-command` was not needed and was not
-created.
+Per BRIEF's refusal-causes wall, every new code is a **design change
+recorded here**, layer-named, `observed_bytes` always, forbidden causes
+unrepresentable at construction.
 
-**Reasoning, as taken:**
+### Two new LAYERS: `Compose` and `Fire` (`CommandLayer::ALL` 4 → 6)
 
-1. **The surface is a language surface.** It needs the crate's lexer
-   (`src/lexer/tokens.rs`), its token stream (`src/parser/stream.rs`), its
-   spans (`src/lexer/tokens.rs:3`), its type reader (`src/parser/types.rs`)
-   and its canonical printer's own escapers (`src/printer/exprs.rs`). A
-   sibling crate would either fork all five — five second accounts of the
-   grammar — or take a circular dependency.
-2. **R7's teaching machinery is inside this crate and cannot be reached from
-   outside it.** `src/guide/lookup.rs:96` resolves positional words against
-   `crate::lexer::POSITIONAL_WORDS`, and `guide::all()` is pinned by equality
-   against that inventory. A sibling crate cannot add a word to it.
-3. **The 500-line law is per file and is satisfied with room.** The family is
-   19 files; the largest is `clauses.rs` at **472** code lines (excluding
-   comments and blanks), the next `check.rs` at 382. `mod.rs` carries `mod`
-   declarations and re-exports and nothing else.
+The assembly surface acts at two moments cut-1 had no name for. Filing a
+fire-time census refusal under `Emit` would say that emitting an argv and
+measuring a deployed artifact are the same discipline. They are not, and a
+reader who cannot tell **"this was refused before anything ran"** from
+**"this was refused at the moment of firing"** cannot tell whether the world
+was touched.
 
-**What the placement cost, reported.** Four items in `crates/aion-awl` were
-promoted from `pub(super)` to `pub(crate)` so the sibling module could reach
-them rather than duplicate them: `parser::stream::{Stream, describe}`,
-`parser::types::{parse_type_ref, type_ref_span}`, `parser::error::ParseError::new`,
-and `printer::exprs::{duration_text, string_literal, type_ref_text}`. Each is
-a widening within the crate only — nothing became `pub` — and each is
-commented at its re-export with why duplication was the worse answer. This is
-the one visible cost of the module choice and it is on the record for the
-item-5 pricing decision, which remains the owner's at landing.
+* **Compose** — an assembly act was composed and refused BEFORE anything
+  ran. Nothing has been fired and nothing will be.
+* **Fire** — the moment of firing refused: census, precondition,
+  comparison, claim.
+
+`CommandLayer::ALL` is `[Self; 6]`; `error.rs` gains `CommandComposeError`
+and `CommandFireError` through the same macro, so the six types stay
+structurally identical; `error_tests.rs`'s
+`every_cause_constructs_at_its_own_layer_and_nowhere_else` now proves the
+misfiling refusal across all six.
+
+### 25 new CAUSES (`CommandCause::ALL` 35 → 60)
+
+**Parse (5)** — forms that are UNREPRESENTABLE, not discouraged:
+`recipe_body_empty`, `assembly_clause_unknown`, `shell_string_body`,
+`command_declaration_nested`, `parameter_kind_unknown`.
+
+**Check (11)** — the declaration parses and what it says is wrong:
+`dependency_cycle`, `reference_undeclared`, `derivation_missing`,
+`extraction_unknown`, `double_carry`, `venue_value_restated`,
+`artifact_digest_malformed`, `wall_allows_nothing`, `recipe_step_restated`,
+`assembly_declaration_restated`, `recipe_states_no_step`.
+
+**Compose (2)**: `slot_unfilled`, `excluded_term` (C-1).
+
+**Fire (7)**: `census_mismatch`, `artifact_unreadable`, `restore_inexact`,
+`stage_compare_mismatch`, `object_moved_before_claim`,
+`precondition_unmet`, `step_command_failed`.
+
+Two of these need their reasoning stated rather than assumed:
+
+* **`census_mismatch` answers BOTH BRIEF-R4's "the check refuses a digest
+  mismatch" and BRIEF-R6's "a census-mismatch specimen refuses the fire".**
+  A second code for the same condition — declared digest ≠ observed digest,
+  measured at the same moment by the same code — would be the mirror image
+  of a catch-all: two names for one thing. So there is one cause, raised per
+  census row with both hashes, and BRIEF-R4's separate wording is reported
+  here rather than answered with a duplicate code. `artifact_digest_malformed`
+  is a genuinely different, check-time ruling: a digest that could never
+  match anything.
+* **`step_command_failed` was minted late and deliberately.** Before it, the
+  receipt printed *"ran declared command `push_branch`"* for a step the CLI
+  had not actually run — a receipt asserting something that was not so. The
+  cure was not to soften the wording but to add the `CommandRunner` port,
+  actually run the emitted argv, and give a failed run a named refusal.
+  `recipe_fire.rs` now pins the receipt line to the real argv and exit
+  status.
+
+**RED FIRST, mechanically enforced.** `tests/command_refusals.rs`
+`every_cause_has_a_refusing_specimen` iterates the ENUM, so a cause minted
+without a refusing specimen fails the build. All 16 parse/check causes have
+document specimens in `SPECIMENS`; the 9 compose/fire causes are in
+`NON_DOCUMENT_CAUSES` and are specimened in their own families
+(`recipe_compose.rs`, `recipe_wall.rs`, `recipe_fire.rs`).
+
+### One TAXONOMY that is deliberately NOT a word of the language
+
+The four parameter kinds (`skeleton`, `per_item`, `both`, `re_derive`) are
+**enumerated VALUES**, written as bare identifiers in the one position after
+a parameter's type. They are **not** added to `POSITIONAL_WORDS`, because
+that inventory is the OPENER vocabulary the grammar table and completion
+read, and offering `skeleton` as a completion at the top of a recipe body
+would describe a language the parser does not accept. They are taught in
+AWL-REFERENCE §18 and in the `parameter` entry's checked example, and an
+unknown kind is refused BY NAME with the admitted set printed
+(`parameter_kind_unknown`). Recorded as a decision, not left implicit.
+Measured ground: `both` already stands in **25** `.awl` documents of this
+tree.
 
 ---
 
-## §3 — WHAT LANDED, REQUIREMENT BY REQUIREMENT
+## 6. THE SURFACE, requirement by requirement
 
-### R1 — structural argv, with the DECLARED admits-`--` property ✅
+### BRIEF-R1 — recipe declarations, structurally fenced
 
-`crates/aion-awl/src/command/decl.rs` — `CommandDecl` is a typed list:
-`program` (literal invocation words, never fills), `options` (named by their
-exact flag, optionally typed+filled), `operands` (positional, named, typed,
-filled). No field is a string a shell re-parses; the emitter's product is a
-`Vec<String>` of whole elements.
+Fifteen new POSITIONAL words, each measured over the discovered `**/*.awl`
+corpus before it was chosen (`runs` 36 documents, `parameter` 20,
+`requires` 12, `artifact` 8, `derives` 6, `wall`/`digest`/`fires` 3 each,
+`recipe` 2, `allows`/`captures`/`extract` 1 each; only `excludes`,
+`restores`, `expecting` stand nowhere). Reserving any non-zero row would
+break documents that exist.
 
-The end-of-options property is **declared, author-stated, per invocation**,
-spelled `admits "--"` / `refuses "--"`, and it is **mandatory**: absence is
-`end_of_options_unstated`, restatement is `end_of_options_restated`. No
-command sits in an unstated middle.
+* `recipe`, `wall`, `artifact` open top-level declarations; `parameter`,
+  `allows`, `excludes`, `digest`, `restores`, `runs`, `captures`, `fires`,
+  `requires` open clauses; `derives`, `extract`, `expecting` stand mid-line.
+* **`after` is REUSED, not re-spelled.** It already means "an ordering
+  dependency on another step" everywhere else in this language; minting a
+  synonym for the recipe layer would give one meaning two words. Likewise
+  `step` (reserved) opens a recipe's steps and `of` (reserved) reads a
+  capture's source. Confirmed at S3 as the plan's D2 required.
+* **Parse, check, and round-trip** are proven by
+  `recipe_declarations.rs::the_assembly_surface_round_trips_through_the_canonical_printer`:
+  `print(parse(x)) == x` byte for byte, and `print ∘ parse ∘ print = print`.
+* **A cyclic dependency is a check error WITH A SPAN**, and the diagnostic
+  renders the cycle (`a -> b -> c -> a`). The graph walk is an
+  explicit-stack DFS, pinned by a 2 000-step chain that must produce an
+  order rather than a stack overflow.
+* **A shell-string body is UNPARSEABLE** — three forms tested, each refused
+  at the parse layer with `shell_string_body` and the review property in the
+  diagnostic.
+* **⛔ Amendment 1, structural, proven in BOTH directions.** Inward: all six
+  `ASSEMBLY_WORDS` still refuse inside a gate-leg command declaration with
+  `recipe_form_refused` and their reason, over bytes identical to BASE.
+  Outward: a `command` declaration inside a recipe body is refused with
+  `command_declaration_nested`, so a recipe cannot smuggle a gate-leg
+  declaration into a place no reader of the top level meets — which would
+  make the recipe layer reachable from a gate leg by a second route.
+* **Every absorbed production has a conformance fixture.**
+  `ABSORBED_PRODUCTIONS` 4 → 7 (`recipe_declaration`, `recipe_dependency`,
+  `recipe_parameter_kind`), `REFUSED_FORMS` 6 → 8 (`shell_string_body`,
+  `nested_command_declaration`). Five new fixtures, each carrying suite
+  provenance (repo, CC0 licence, commit `b20386ab…`, a suite file digest,
+  the quoted `JUST-SPECIMEN`) or `AUTHORED` with its **absence from the
+  suite named** — the two authored ones say exactly why Just can carry no
+  specimen (untyped parameters; no declaration nesting). The tables' own
+  doc comment records that the recipe-side absorbed rows are **not** in
+  contradiction with the refused rows: same shapes, two contexts, one fence
+  between them.
 
-*Byte-verified acceptance* (`tests/command_emit.rs`):
+### BRIEF-R2 (DESIGN-R4b) — parameter kinds with declared derivations
 
-* `an_admitting_invocation_carries_the_marker_before_its_operands` — the
-  canonical wall-flight2 cure emits exactly
-  `["git", "tag", "--", "-v2.0", "HEAD"]`;
-* `the_marker_is_placed_whatever_the_operands_turn_out_to_be` — the marker is
-  placed for an ordinary operand too. **Unconditional by construction**: there
-  is no path in `emit()` that reaches an admitting invocation's operands
-  without pushing the marker first;
-* `a_refusing_invocation_never_carries_the_marker` — the diff census emits
-  `["git","diff","--no-ext-diff","--name-only","<pin>..HEAD"]` and asserts the
-  absence of `--`;
-* `a_refusing_invocation_refuses_a_leading_dash_operand` — emit-layer refusal
-  `leading_dash_operand`, observed bytes `-x..HEAD`;
-* the mandatory specimen: `leading_dash_specimen_missing` is a **check** error
-  with a span, and `command_specimen.rs` FIRES the specimen through the real
-  emitter, so what protects a refusing invocation is executed, not asserted in
-  prose.
+Every acceptance criterion has a test in `recipe_parameters.rs`:
 
-**FINDING F-UNIT-1 — the declared unit is the INVOCATION, not the bare
-program. RESOLVED as the plan predicted, and it is a disagreement with nothing
-— it is a fact the sources' own canonical fixtures force.** `git tag --
-<name> <sha>` is R1's cure (admits), while the four pinned specimens' census
-leg is `git diff --name-only "${BASE}"..HEAD`
-(`.fleet/fixtures/gate-scripts/seqlegs-impl.gate-entry.sh:15`), where a `--`
-before the revision operand would reinterpret `BASE..HEAD` as a **pathspec**
-and silently change what the census measures. One `git` cannot be both. The
-surface therefore declares `program "git" "tag"` and `program "git" "diff"`
-as distinct invocations, and the module doc
-(`src/command/decl.rs:16–28`) carries the reasoning at the seam. Nothing in
-the design brief's R1 says otherwise; had it, the source would govern.
+* each kind parses and checks — read off `issue-investigations.README.md`
+  at `b1db6ae3…`, whose own table rows are asserted at the bytes;
+* a re-derive parameter without a derivation is `derivation_missing` (and a
+  derivation on any other kind is refused too — a source nothing would read);
+* **a derivation resolves at FIRE time**: the source is MUTATED between
+  compose and fire and the fired value follows the SOURCE. The law is the
+  corpus's own words, quotable from the pinned README: *"At the dispatch
+  minute (not the compose minute — they drift)"*;
+* the double-carry specimen refuses with the doubled value as observed
+  bytes — measured in this cut's own exhibits (`leg_ids_csv` = `"build"`
+  beside `legs[0].id` = `"build"`, in BOTH the KIT and the haem-wall INPUT);
+* `literal_where_derived` fires against a re-derive slot fed a literal,
+  cause code and wire string **unchanged from cut-1's enum** (C-2).
 
-### R2 — typed, check-time, closed interpolation ✅
+The extraction grammar is CLOSED to two forms (`line <n>`, `whole`);
+anything else is `extraction_unknown` with the admitted set printed, and an
+extraction past the end of its source refuses rather than supplying an empty
+value that reads like a real one.
 
-`src/command/fill.rs`. `{{parameter}}` resolves only over declared, typed
-parameters, at check/compile time, into whole-cloth argv.
+### BRIEF-R3 (DESIGN-R4a, L2) — slot refusal and sweep-by-claim
 
-* **Backticks REFUSED**, at the PARSE layer, with their own cause
-  `backtick_substitution` and the observed bytes. A `Fill` carrying a backtick
-  is not a value that exists.
-* `literal_where_derived` (`src/command/derived.rs`) — a hand literal in a
-  fill for which a derivation exists is refused **carrying the literal as
-  observed bytes**. The shape set is CLOSED and small, and stated: a 40-hex
-  git object name, a 64-hex content digest, and the fleet control-token shape.
-  `derived_tests.rs` pins both directions — the three shapes are caught
-  wherever they sit in a literal, and sixteen ordinary strings
-  (`HEAD`, `main`, `--name-only`, `deadbeef`, a 39-hex run, an uppercase-hex
-  run, a near-miss control token…) are left alone, because a rule that guessed
-  would teach authors to route around it.
-* File contents enter as addresses, never spliced strings (stated at
-  `fill.rs:26–30`; there is no production that reads a file).
-* **Q5's fence is restated in the module doc so nobody widens it later**
-  (`fill.rs:10–19`): no conditionals, no loops, no filters, no calls, no
-  nesting. `an_interpolation_that_is_not_a_bare_parameter_name_is_refused`
-  pins ten refused forms including `{{base | upper}}`, `{{env('HOME')}}` and
-  `{{ if x }}`.
-* **Determinism asserted, not assumed**:
-  `the_same_declaration_and_parameters_emit_byte_identical_argv` resolves the
-  same declaration sixteen times and compares.
-* An undeclared parameter reference is a check error with a span
-  (`parameter_undeclared`).
+* **An unfilled slot refuses with the slot name in observed bytes.** This is
+  `build-input.py`'s exit-2 behaviour absorbed and typed — and the
+  normalization is NAMED rather than smoothed over: `sleepreap` guards its
+  argument count and exits 2 while `liminal22` has **no** argv guard and
+  raises an `IndexError` for the same mistake. Both become one typed
+  refusal, which is what expressing them buys.
+* A bound value still carrying a skeleton sentinel refuses too — all six
+  sentinel shapes the corpus actually carries (`<<ISSUE_NUMBER>>`,
+  `<<ISSUE_TITLE>>`, `<<TRUTHFUL_TRIGGER …>>`, `__CTL_TOKEN__`,
+  `__RIG_COMMIT__`, `__CUT_COMMIT__`), with a control proving the sentinel
+  rule reads a real value as a real value.
+* Every unfilled slot is reported at once, not one per run.
+* **SWEEP BY CLAIM**: three consumers, one source, one correction, one
+  record listing all three. The record carries its **completeness claim's
+  derivation** — *"assembly is FROM declarations, so a step reaches a source
+  only by NAMING it and the edge set is therefore the set of declared names
+  — a consumer that did not name its source would not be a consumer of
+  it"* — and the sweep is proven able to reach NOTHING, so a green above is
+  not merely "it always answers".
 
-### R3 — env, cwd, hardening, timeout as declarations ✅
+### BRIEF-R4 (DESIGN-R6) — wall projection
 
-* **Env is structural.** `env NAME = "value"`. The `K=V` string-prefix form is
-  **unparseable** — `env "PAGER=cat"` is refused by the GRAMMAR
-  (`env_string_prefix`, parse layer), not by a lint.
-  `env_cwd_and_hardening_resolve_structurally` additionally asserts that no
-  emitted argv element ever contains `=` from an env binding.
-* **Hardening has one home.** `hardening` with `path` and `open_files`.
-  Declared twice in one scope is `hardening_restated` (check layer, naming the
-  line of the first). An empty block is `hardening_empty` — an empty block and
-  an absent one are different claims and must not read alike.
-  The specimens show why hardening is a per-flight parameter and not a
-  constant: only `seqlegs-impl.gate-entry.sh:3–4` hardens
-  (`export PATH=$HOME/.cargo/bin:$PATH`, `ulimit -n 65536`); the other three
-  harden not at all.
-* **Cwd is declared; `{workspace_root}` is the one admitted placeholder**,
-  consumed from the existing rule (`crate::workspace_root::WORKSPACE_ROOT_PLACEHOLDER`)
-  and NOT extended. Any other brace placeholder is `cwd_placeholder_unknown`
-  (specimen: `cwd "{repo_root}/src"`, observed bytes `{repo_root}`). **No new
-  venue-binding holes**: the resolved `Argv.cwd` carries the placeholder
-  UNEXPANDED, because expanding it is the executing side's act against its own
-  workspace.
-* **TIMEOUT ABSENCE IS LEGAL AND NO DEFAULT WAS INVENTED.**
-  `a_declaration_with_no_timeout_emits_no_timeout` asserts `timeout_ms == None`,
-  `timeout_owner == None`, `open_files == None`, `hardened_path == None`,
-  `cwd == None` and an empty env for a declaration that states none. The field
-  is `Option<i64>` and nothing anywhere substitutes a number. A declared
-  timeout names an `owner`; an unowned one is `timeout_owner_empty`, because a
-  ceiling nobody owns is the shape an invented default takes.
+* **ONE declaration, TWO renderings, fixture-compared** at the haem-wall
+  allowlist's pinned bytes: the prompt sentence and the anchored
+  alternation `^(gates\.json|known-carries*|…|\.fleet/)` are both asserted
+  in full, and every declared pattern is proven present in both.
+* The enforcement rendering escapes what a path carries by ACCIDENT (`.`,
+  `+`, `(`…) and leaves `*` alone, because a rig writes `known-carries*`
+  meaning "and what follows" — escaping it would enforce a wall narrower
+  than the one the prompt describes.
+* **An excluded-term specimen refuses at projection** with the term as
+  observed bytes, and names WHERE the term stands. The wall's own NAME is
+  scanned too. A control proves a clean wall projects.
+* **The structured diff** of two declaration states is produced by test and
+  names every changed projection (`["prompt","enforcement"]`), with a
+  control proving two identical states diff to nothing, and a third case
+  proving a diff against an unprojectable state IS the projection refusal
+  rather than a swallowed one.
+* **The L6 declared-artifact kind**: an artifact carries its digest, and a
+  `restores` artifact is BYTE-COMPARED after firing — `restore_inexact` when
+  it is not exact, with the before-digest in the refusal. L6's honest bound
+  is carried verbatim in AWL-REFERENCE §18's neighbourhood and nowhere is
+  the claim widened past *"phrasing was the wrong axis here"*.
+* ⛔ **The builder owns projection, never content.** Which paths a lane's
+  wall admits stays authored, in the declaration. Said in the module doc and
+  in §18.
 
-### R4 — the refusal vocabulary, layer-named, closed ✅
+### BRIEF-R5 (DESIGN-R5 + R7) — specimen firing, generic compare, receipts
 
-`src/command/cause.rs` + `src/command/error.rs`.
+* **A specimen-fire step against the known-answer red passes and its
+  receipt carries the TYPED comparison** — the exhibit is
+  `speech1.STAGING.md` step 4's own words, asserted at the pinned bytes.
+* **A mismatch refuses the stage with BOTH SIDES' BYTES**, and the receipt
+  records the comparison that stopped it.
+* **Receipts are GENERATED, never typed.** `MeasuredTree::new` refuses an
+  unnamed head or tree; `Receipt::new` refuses an unnamed recipe. A receipt
+  that cannot say what it measured is **unrepresentable**, and the test
+  asserts the three refusals by value.
+* **RECEIPT-FIRST is preserved as law**: a refused fire STILL yields its
+  receipt, asserted on the census-mismatch, precondition and
+  stage-compare paths, and proven end to end through the binary.
+* **The re-read discipline has a red test**: the object is mutated between
+  write and claim and `object_moved_before_claim` fires with both digests;
+  a green control proves an object that stayed put is claimable.
 
-* **35 cause codes**, a closed enum with a stable `as_str()` wire rendering
-  and a `CommandCause::ALL` inventory pinned against the layer partition.
-* **Four layers, four distinct error types** — `CommandParseError`,
-  `CommandCheckError`, `CommandEmitError`, `CommandSpecimenError`. Never one
-  catch-all. `CommandCause::layer()` is an exhaustive match with no wildcard,
-  so a cause added without a layer fails to compile.
-* **Every refusal carries `observed_bytes`**, a span and its cause;
-  `rendered()` puts all three in the diagnostic an author reads.
-* **Constructor discipline, tested**: `every_cause_constructs_at_its_own_layer_and_nowhere_else`
-  builds all 35 at their own layer and asserts a **typed error** for all 105
-  wrong-layer attempts. `a_constructor_fed_an_empty_diagnostic_returns_a_typed_error`
-  refuses an empty diagnostic — a refusal that says nothing is a catch-all
-  wearing a specific cause's name. `the_vocabulary_carries_no_catch_all_code`
-  pins the ABSENCE of `other`/`unknown`/`error`/`failed`/`invalid`/`bad`/`misc`.
-* **No `unwrap`/`expect`/`panic` in library code.** The internal door
-  (`CommandRefusal::refuse`) derives the LAYER FROM THE CAUSE, so misfiling is
-  not caught — it is unwritable. `the_internal_door_files_every_cause_at_its_own_layer`
-  proves it for all 35.
-* **RED FIRST, mechanised.** `tests/command_refusals.rs::every_cause_has_a_refusing_specimen`
-  iterates the ENUM and fails the build if any code lacks a specimen. 30
-  causes have document specimens; each is asserted to refuse with its own
-  cause AND its own observed bytes, and
-  `every_specimen_refuses_at_the_layer_its_cause_names` proves the parse/check
-  split is real.
+### BRIEF-R6 (DESIGN-R8) — declared serviceability, the reference census
 
-**FINDING F-CAUSE-1 — `specimen_wrong_cause` is SHADOWED BY CONSTRUCTION,
-recorded honestly.** Its red arm is unreachable in this cut, and the reason is
-structural: `fire_specimen` binds every declared parameter with a value shaped
-to its declared type, so `argument_missing`, `argument_undeclared` and
-`argument_type_mismatch` cannot arise during a firing, and
-`leading_dash_operand` is precisely the cause the specimen stands for. The
-code is KEPT rather than removed, because collapsing "did not refuse" into
-"refused wrongly" is exactly the catch-all the layer-naming law forbids, and
-the emit vocabulary is expected to grow. What is asserted is what can be: the
-code is constructible, renders its own wire string, and is filed at the
-specimen layer (`command_specimen.rs:the_wrong_cause_code_is_filed_at_the_specimen_layer_though_its_red_arm_is_shadowed`).
-This is the same honesty the rig's own probe battery applies to its two
-unreachable arms (`toolchain_mismatch`, `suite_empty`). Reported, not hidden.
+* **A census-mismatch specimen refuses the fire with declared vs observed
+  hashes**, and the row is in the receipt marked `DISAGREES`.
+* **A fire with a clean census proceeds and its receipt lists the census
+  measured**, address by address, in the order the recipe's steps reach for
+  them.
+* An artifact a recipe fires with **no declared digest** cannot pass the
+  census — absence is a legal declared state for an artifact nobody fires,
+  and is not one for an artifact a fire step reaches.
+* **At-fire preconditions**: `speech1.STAGING.md` step 9's three-arm
+  re-check, declared. Unanswered **and** answered-not-met both refuse with
+  `precondition_unmet`.
+* ⛔ **The one-truth fence, mechanical**: all eleven `DISPATCH_DECLARED`
+  names refuse when RESTATED and are CONSUMABLE with no default — both
+  directions, name by name, in one test.
+* ⛔ **No new venue-binding hole.** Cut-1's `cwd_placeholder_unknown` still
+  refuses a second placeholder and `{workspace_root}` is still admitted,
+  both re-verified — and the recipe surface is proven to carry **no
+  brace-placeholder machinery of its own** by reading its own sources. The
+  fence is CONSUMED, never re-implemented.
 
-### R5 — own parser over the absorbed Just subset, CC0 suite as conformance fixtures ✅
+### BRIEF-R7 — the composer corpus, EXPRESSIBLE (see §7 for the claim)
 
-`src/command/just_subset.rs` names the absorbed subset (4 productions) and the
-refused list (6 forms) as tables the fixture harness reads, so a row added
-without a fixture fails.
+### BRIEF-R8 — teaching, byte-identity, estate discipline
 
-**The CC0 suite was taken AT THE BYTES, not from memory.** `casey/just` was
-cloned at commit `b20386abdbae867a49cdff6c3c0f2b547faa9b23`; `Cargo.toml:12`
-declares `license = "CC0-1.0"` and `LICENSE` is the CC0 1.0 Universal text.
-Every derived fixture cites the repo, the commit, the file, and that file's
-SHA-256:
+* Fifteen new words, each with a guide sentence, a **checked** example
+  (three new whole documents, all passing the real parse+check pipeline and
+  pinned CANONICAL against the printer), a grammar-table position, and
+  AWL-REFERENCE **§18** in **both** copies (`examples/assistant/resources/`
+  and `crates/aion-awl/guide-embed/`, pinned byte-identical by the existing
+  gate).
+* Four new `GrammarPosition`s (`RecipeBody`, `RecipeStep`, `WallBody`,
+  `ArtifactBody`) and one new `GrammarForm` (`AssemblyClause`), each
+  reachable through a real cursor probe — the LSP's own reachability pin
+  forced a cue to exist rather than letting the table claim a position no
+  author can reach.
+* **LSP surfacing**: hover was widened from a hard-coded `COMMAND_SECTION =
+  17` to a per-opener lookup **read from the entries themselves**, so a
+  cluster that moves section takes its clause scoping with it. Twelve of the
+  fifteen words hover to the guide's own sentence and citation, DERIVED from
+  the guide (a sixteenth word fails the build until the fixture carries it);
+  the three that stand MID-LINE (`derives`, `extract`, `expecting`) are
+  surfaced by COMPLETION with the same sentence and citation, exactly as
+  cut-1's `owner` is. Cross-cluster scoping is pinned too: `digest` in a
+  command body and `program` in an artifact body both hover to nothing, with
+  a control proving `digest` does hover where it belongs.
+* Console asset regenerated by `aion awl guide --json`; its gate is READ,
+  not edited.
+* **Byte-identity**: the round-trip corpus is DISCOVERED repo-wide at run
+  time — **448 documents** at this HEAD, **431 baseline documents re-read
+  identically**, 17 additions reported (cut-1's 12 + this cut's 5 new
+  just-subset fixtures). `AWL_CORPUS_BLESS` was **never set**.
+  `workflows/fleet-dev/fleet_dev.awl` is **byte-identical to BASE**.
+* `cargo clippy --workspace --all-targets -- -D warnings` **clean, rc=0**,
+  with **no `#[allow]`, `#[expect]`, `#[deny]`, `#[ignore]`, `_var` rename
+  or `#[cfg(any())]` anywhere** — every one of the 25+ pedantic findings was
+  fixed in the code (patterns nested, functions split, `write!` for string
+  building, ports bundled, `panic!` → `unreachable!` in tests, `Result`s
+  replaced by report structs where a step must always produce an outcome).
+* `cargo fmt --all` **APPLIED** before commit. ⛔ No fmt-check gate.
+* **500-line law**: every new file is under 500 code lines. Two PRE-EXISTING
+  files were pushed over by this cut's additions and were split rather than
+  left over: `parser/document.rs` (482 → 503 → **410**, dispatcher extracted
+  to `parser/declarations.rs`) and `printer/document.rs` (482 → 531 →
+  **484**, assembly rendering extracted to `printer/assembly.rs`).
+  `mod.rs` files carry declarations and re-exports only. `thiserror` for
+  every new error type; no `unwrap`/`expect`/`panic` in library code.
 
-| suite file | sha256 |
+---
+
+## 7. BRIEF-R7 — THE FIXTURE SET'S COMPLETENESS CLAIM
+
+Every exhibit is cited by source **REPO**, **PATH** and **DIGEST**, and
+**every digest is re-hashed on the run** (`recipe_corpus.rs`), so a fixture
+comparing against remembered text fails rather than passes. The exhibits
+are the flight tree's pinned copies at `.fleet/fixtures/corpus/`, and the
+fixtures cite the OUTER path (never F-STAGE-1's nested duplicate).
+
+**Source repo: `https://github.com/ablative-io/docs.git` at commit `3c7cbb6`.**
+
+| clause | exhibit (flight tree) | source path (docs repo) | sha256 |
+|---|---|---|---|
+| R7(a) | `sleepreap.build-input.py` | `dispatch-rigs/sleepreap/build-input.py` | `032ee3d7598ac361a731a5f0917b47a6b1ea7c32c3cc3b9670b3c11c32db23b7` |
+| R7(a) | `liminal22.build-input.py` | `dispatch-rigs/liminal22/build-input.py` | `b51f60f780e542dffbaa6879db2294ccd3fa050e8138b33e87e1ef3cd0d06351` |
+| R7(b) | `skeleton.input.json` | `dispatch-rigs/issue-investigations/skeleton.input.json` | `4e90bc3bf2e3c2f74546c794cc4b87b183fcf60672065668720552edb2eb1218` |
+| R7(b) | `issue-investigations.README.md` | `dispatch-rigs/issue-investigations/README.md` | `b1db6ae3dfa3d261a29923ed091d56657c3978fc2bf453d3a3f6ae12d973fc65` |
+| R7(c) | `speech1.STAGING.md` | `dispatch-rigs/speech-1-python-wire/STAGING.md` | `1150e466b0c3264da1ac6ce93d9301287d89a492c60615b88b4b9b420f7e5f4a` |
+| R7(d) | `haem-wall.INPUT-FINAL.json` | `dispatch-rigs/haem-wall/INPUT-FINAL.json` | `77f0333fcea03ada0c017af9fdea725231c3e2aecce8ade71781571daff9115d` |
+| R7(e) | `speech1.KIT-input-template.json` | `dispatch-rigs/speech-1-python-wire/KIT-input-template.json` | `1a95315217b431ae7d1956183da51098e02ddc671d3e7ab737d0593df429f5ed` |
+
+**All seven staged exhibits are expressed. Every clause (a)–(e) is answered
+by at least one exhibit** — asserted, not counted by hand.
+
+### Known corpus members EXCLUDED, each with the reason
+
+1. **`speech1.STAGING.md` steps 7–8, the author≠reviewer handoff (lines
+   28–29)** — OPERATOR LAW, not mechanism. Design §8 keeps it written words;
+   the builder owns projection, never content.
+2. **`speech1.STAGING.md`'s fire, verdict and landing authority (lines
+   41–43)** — OPERATOR LAW. Fire authority and venue choice are the
+   operator's, per Cally's clearance precedent. Absorbing them would make a
+   declaration decide who may act.
+3. **`speech1.STAGING.md` step 5's token mint (lines 24–25)** —
+   SECURITY-ADJACENT. Minting and rotation requirements come FROM Cally
+   Ray's lane and are never proposed here. The pointer stands exactly as the
+   design brief carries it.
+4. **`speech1.STAGING.md`'s sequencing wall** — OPERATOR LAW. A sequencing
+   wall names which lane may proceed; that is a scheduling decision an owner
+   makes, not a step a recipe fires.
+5. **The four cut-1 gate-script specimens at
+   `.fleet/fixtures/gate-scripts/`** — OUT OF CLAUSE. They are cut-1's R6
+   corpus, already expressed by cut-1's gate-census fixtures. BRIEF-R7 names
+   five exhibit groups and none is a gate script; the rig carries them
+   because BRIEF-R5/R7 fixtures MAY cite them, and this set cites their
+   family only through the known-answer red in `recipe_fire.rs`.
+
+Each exclusion is asserted against the pinned bytes: the excluded lines are
+proven to be lines the checklist actually carries, so the list cannot go
+stale silently.
+
+### Inexpressibility findings
+
+**None found for clauses (a)–(e).** Every behaviour the five exhibit groups
+carry was expressible on the declared surface, and each expression is
+asserted against the original's behaviour at the bytes (refusal codes,
+projected content, fill results), with normalizations named — the one
+normalization being the `sleepreap`/`liminal22` argv divergence, named in §6
+under BRIEF-R3.
+
+**F-R6-1 (cut-1's, INHERITED and still OPEN):** hardening is expressible as
+a value but not as a presence. This cut does not close it and did not
+attempt to; it is a design question carried forward.
+
+---
+
+## 8. THE RATCHET RULING — the affirmative duty's outcome, and FOLD A
+
+⛔ **The ratchet family is UNTOUCHED.** No `liminal22` or `sleepreap` script
+was converted or retired; none of the five checks was absorbed. `git status`
+carries no path under any ratchet rig. The cut's only contact is the
+affirmative duty below.
+
+### The named exemplar — a ratchet-SHAPED record flows through as DATA
+
+`recipe_compare_genericity.rs` reads
+`crates/aion-fleet-plan/src/error.rs` — a sealed verifier **outside this
+cut's wall**, read and never modified — cited by digest and **re-hashed on
+the run**:
+
+```
+repo   https://github.com/ablative-io/aion.git
+path   crates/aion-fleet-plan/src/error.rs
+sha256 a7354955ae389394555199b167340677d45e4217fcffea831a19ac387488e0a0
+```
+
+Its **absent-vs-malformed pair as two distinct causes** (`conclusion_missing`
+/ `conclusion_malformed`, plus `conclusion_undeclared`) and a **named-hole
+verdict** (`deliverable_absent`) both flow through the compare surface as
+data. The test first proves each code is **FOREIGN** —
+`CommandCause::from_code` answers `None` for every one of them — which is
+what makes the exemplar mean something: a compare typed over cut-1's enum
+could not have carried them at all.
+
+**The ruling is NOT falsified.** The compare stays generic without absorbing
+any check.
+
+### FOLD A — genericity proven at the MECHANISM, two ways the exemplar cannot fake
+
+1. **`the_compare_consumes_every_member_of_the_vocabulary_uniformly`**
+   enumerates the full closed vocabulary **PROGRAMMATICALLY from
+   `CommandCause::ALL`** — so a cause a later design change adds joins this
+   test **without an amendment** — converts each into a record, and asserts
+   uniform consumption member by member: every record matches itself in all
+   three parts, disagrees with every other, and the layer comparison is
+   proven to be a string comparison and nothing cleverer. All **60** members,
+   3 540 cross-comparisons.
+2. **`the_compare_surface_matches_on_no_cause_identity`** reads the compare
+   surface's OWN SOURCE (`aion_awl::command::recipe::source_text()`), strips
+   comment lines, and refuses any mention of `CommandCause`, of any of the
+   60 wire strings, **or of the exemplar's own three foreign codes**. A
+   control proves the comment stripper did not throw the source away.
+
+That second assertion is the one fold A exists for: an implementation that
+special-cased exactly the exemplar's members would pass every other test
+here and be precisely the enumeration the duty forbids.
+
+**The design consequence, recorded (plan D3):** the compare surface is typed
+over a **record shape** (`VerdictRecord`: a non-empty stable code, its layer,
+its observed bytes), with `CommandCause` converting **INTO** it and never out
+of it. The one-way door lives in its own file (`recipe/record.rs`) precisely
+so the genericity assertion above can run — a conversion beside the compare
+would have made the mechanism unprovable, and an assertion that cannot run
+is not an assertion.
+
+**When line 3 lifts the five checks, they land as new PRODUCERS into an
+already-generic consumer, and their per-leg signature files land as
+instances of this cut's receipt kind. Line 3 touches no recipe grammar.**
+
+---
+
+## 9. FINDINGS
+
+| id | finding |
 |---|---|
-| `tests/parameters.rs` | `44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56` |
-| `tests/interpolation.rs` | `361740d3b249bbb8bfb67361402b320d1282cf37c90e1a77998e0bbdc88fa753` |
-| `tests/backticks.rs` | `ff2f3e01abf698998dc6541608983fce70d29e92ec98e8b935df66248d095ac6` |
-| `tests/dependencies.rs` | `538ea0952b3d76f57966c0b72e8477ca1786d1911d265cb490f72a41173cadfa` |
-| `tests/export.rs` | `cbaf93ebf7b825941f8db3e0da490db1b57ede9d96771ac6bfb47ef3add7aa49` |
-
-11 fixtures under `crates/aion-awl/tests/fixtures/command/just-subset/`, each
-quoting the `JUST-SPECIMEN` it was derived from and, where AWL differs, saying
-what differs and why. **`every_fixture_records_its_provenance`** refuses a
-fixture that cites a suite file with no sha256 — the gate that keeps this from
-degrading into remembered bytes. **No authored-for-absence fixture was needed:
-the suite carried a specimen for every absorbed production and every refused
-form.**
-
-Refused suite cases are carried as REFUSAL fixtures, not skipped. Two are
-worth naming: `parameter_default_values_may_not_use_later_parameters` becomes
-a `parameter_undeclared` refusal fixture — Just refuses it too, so the two
-agree and a drift becomes red; and
-`closing_curly_brace_can_abut_interpolation_close` becomes the
-`expression_interpolation` refusal, which is the fixture that keeps Q5's fence
-from being widened one convenience at a time.
-
-Every refused form named in the design's refused list has its own refusal
-test, BY NAME, with its reason in the diagnostic
-(`grammar_parser_gate.rs::every_assembly_form_is_refused_by_name_with_its_reason`,
-six forms).
-
-### R6 — the diff-census family is EXPRESSIBLE, proven at the bytes ✅ (with one finding)
-
-⛔ **EXPRESSIBILITY PROOF, NOT DEPLOYMENT.** No `.fleet/` script retired, no
-rig converted, no deployed document moved. `workflows/fleet-dev/fleet_dev.awl`
-is byte-identical (asserted by the R8 corpus manifest and confirmed by an
-empty `git diff` on the path).
-
-**ONE declared shape** —
-`crates/aion-awl/tests/fixtures/command/gate-census/shape.awl` — plus **FOUR
-parameter sets**. All four specimens' digests were re-verified against the RIG
-table and match:
-
-| specimen | digest (re-hashed this run) | matches RIG table |
-|---|---|---|
-| `haem-wall.gate-entry.sh` | `1e1e3ad2d189b5b2c8fb07b6e302e5cc3505ac7fa7f84ac5561020e30ff10a1e` | ✅ |
-| `haem-wall-r2.gate-entry.sh` | `ae66bb0b6819f36f46515017640b8bd6eea3e5009add725a3d70ab4209256832` | ✅ |
-| `seqlegs-impl.gate-entry.sh` | `ef5b82a83eaead5a2ac42e6a026df99bb6bc0acdb9f2917ab4c787283c6f1804` | ✅ |
-| `speech-1.KIT-gate-entry.sh` | `e1544910aee3378d3fbab17856235f8bb1bd7a7b6ca0dec54b497a2babaa7a5a` | ✅ |
-
-`tests/command_gate_census.rs` does three things, in order: it **re-hashes**
-each carried specimen against the digest its fixture cites (so a specimen
-edited after the fixture was written fails rather than passing against a stale
-copy); it **re-reads the cited line** of the cited specimen on this run; and
-it byte-compares the shape's emitted argv against that line, normalized only
-by the two normalizations each fixture declares in its own header. The
-normalizer carries its own control
-(`the_normalizer_rejects_a_command_line_that_is_not_the_census`).
-
-All four rigs run the byte-identical census command
-`git diff --name-only "${BASE}"..HEAD`, and the shape emits it for each pin.
-The two declared normalizations, both about the shell rather than the command:
-(1) the specimen line is a `changed=$(…)` assignment, so the compared text is
-the substitution's body; (2) `"${BASE}"` is one shell word whose quotes exist
-only to survive word splitting, which this surface does not perform.
-
-**FINDING F-R6-1 — env hardening is expressible as a VALUE but not as a
-PRESENCE, so one shape cannot cover all four rigs' hardening dimension.**
-Reported, not papered over. At the bytes: `seqlegs-impl.gate-entry.sh:3–4`
-carries `export PATH=$HOME/.cargo/bin:$PATH` and `ulimit -n 65536`; the other
-three specimens carry neither. A command declaration either states a
-`hardening` block or does not, and presence is not a value — an empty declared
-PATH is not an inherited PATH, and inventing "empty means inherit" would be
-exactly the assumed default the estate's law forbids. The shape therefore
-covers the census ARGV for all four (which is what R6 asks the fixtures to
-compare) and the hardening dimension for one. Closing it needs either a
-declared-optional-presence form or two shapes, and that is a design question,
-not an implementation one. Recorded in the fixture header itself
-(`seqlegs-impl.params`, `INEXPRESSIBLE:`) so it cannot be read past.
-
-**Two RESULT §A1 dimensions are out of the census command's argv BY
-CONSTRUCTION, stated so they read as considered rather than missed.** The
-deliverable set and the allowlist are applied by the gate leg's own
-grep/wall step to the census OUTPUT — they never reach `git diff`'s argv — and
-battery-or-not is a different leg entirely (clippy/nextest for seqlegs, pytest
-for speech-1, none for the two haematite rounds), which is a different command
-shape and not the diff-census family.
-
-**Noted, not a finding:** `speech-1`'s BASE is the sentinel `__CUT_COMMIT__`,
-text-substituted into the script before dispatch. The shape expresses it
-faithfully because a base pin arrives as a declared PARAMETER — which is the
-cure for the sentinel rather than an accommodation of it.
-
-### R7 — structural teaching rows for every new word ✅
-
-**Thirteen new words**, every one POSITIONAL rather than reserved. That is a
-measurement, not a preference: `command` alone stands in **54** `.awl`
-documents of this tree today as a harness-section field name, and `cwd` (38),
-`path` (52), `refuses` (23), `program` (5), `env` (4), `operand` (3) and
-`option` (1) stand in others. Reserving any would break documents that exist —
-the lexer's own stated doctrine for `run`, `send`, `to`, `query`, `answer`
-and `in`.
-
-Each of the thirteen (`command`, `program`, `admits`, `refuses`, `specimen`,
-`option`, `operand`, `env`, `cwd`, `hardening`, `path`, `open_files`, `owner`)
-lands with **all four rows**:
-
-1. **Guide sentence + checked examples** — `src/guide/commands.rs`, examples in
-   `src/guide/examples/decl_commands.rs`. Both example documents run through
-   the crate's REAL parse+check pipeline and are pinned CANONICAL against the
-   printer by the pre-existing `every_entry_example_passes_the_real_checker`.
-2. **Grammar-table position** — a new `GrammarPosition::CommandBody` (16th) and
-   a new `GrammarForm::CommandClause` (8th), with `form_of` filing `command`
-   as a Declaration and its clauses as command clauses.
-3. **AWL-REFERENCE §17 "Command declarations"** — written into
-   `examples/assistant/resources/AWL-REFERENCE.md` and copied to
-   `crates/aion-awl/guide-embed/AWL-REFERENCE.md`. The pre-existing
-   `every_cited_section_actually_discusses_the_word` verifies, whole-word, that
-   §17's body uses every one of the thirteen. **This is the build-failure law,
-   already mechanized — and it is what F-RIG-1 is about.**
-4. **LSP hover + completion** — both derived from the one table, never a copy.
-
-**The LSP hover exception, argued rather than carved.** `glossary.rs` answers
-hover for reserved words only, because a positional word lexes as an
-identifier and hover cannot know whether it carries its language meaning. For
-the command cluster hover CAN know: each word is recognised only as the first
-word of a line, and whether that line opens a top-level declaration or stands
-inside a `command` block is readable from the text before the cursor — the
-same reading completion already performs. So hover answers under exactly that
-condition and stays silent otherwise. Two tests, both directions:
-`every_command_word_hovers_to_the_guide_sentence_from_the_table` reads the
-expected text FROM `aion_awl::guide` on each run (against the table, not a
-copy), and `a_command_word_used_as_a_name_still_hovers_to_nothing` proves
-`command` inside a `harness` section still claims nothing, with a positive
-control beside it.
-
-**Console asset regenerated** via `aion awl guide --json` and compared by the
-pre-existing `crates/aion-cli/tests/console_guide_asset.rs`, which was READ,
-not edited.
-
-⛔ **Tree-sitter is NOT in this cut's acceptance** and was not touched.
-`builtins::BUILTIN_TYPES` is unchanged, so `tests/editor_assets.rs:171` and
-the Zed mirror pin are untouched; new words are positional words, never
-builtin types. *Stated for the record:* the tree-sitter grammar therefore does
-not colour the thirteen new words. That is the expected consequence of the
-ruling, not an omission.
-
-### R8 — byte-identity and estate discipline ✅
-
-**The corpus is DISCOVERED, repo-wide by extension, at run time, and LISTED.**
-`crates/aion-awl/tests/corpus_roundtrip.rs`. Its exclusion set is three
-classes and no file list: dot-directories, `target`, `node_modules`. Nothing
-else — fixture corpora, deliberately-invalid documents, dated evidence and
-design records are all IN, because a document that is supposed to be refused
-must go on being refused with the same message.
-
-**The completeness claim, printed by the test on every run:**
-
-```
-corpus discovered by extension over <repo>: 443 documents across 5 roots
-  — crates/ 357, docs/ 47, examples/ 16, gate-logs/ 4, workflows/ 19
-431 baseline documents re-read identically; 443 discovered in total
-documents added since the baseline: 12   (all of them this cut's own fixtures)
-```
-
-The baseline manifest
-(`crates/aion-awl/tests/fixtures/corpus/manifest.txt`, 431 records) was
-generated **BEFORE any grammar change**, at base grammar — the only order in
-which a before-and-after claim means anything. It records, per document, the
-SHA-256 of `print(parse(source))` on success (387 documents) or the exact
-error line, column and message on failure (44 documents), so the pin covers
-the PRINTER as well as the parser.
-
-**Result: all 431 pre-existing documents read exactly as they did at the
-baseline. Zero regressions.** The instrument also fails if a baseline ROOT
-stops being reached, and carries its own control
-(`the_comparison_rejects_an_outcome_the_tree_does_not_produce`).
-
-**The brief's amendment-2 suspicion is confirmed at the bytes:** `examples/`
-and `workflows/` together are **35 of 431 — 8%**, so a hand-enumerated claim
-over those two roots would have missed **92%** of the corpus it claimed to
-cover.
-
-* `cargo clippy --workspace --all-targets -- -D warnings` — **clean**. Twelve
-  findings were fixed by fixing the code; **no `#[allow]`, `#[expect]`,
-  `#[deny]`, `#[ignore]`, `_var` rename or `#[cfg(any())]` was added
-  anywhere.** The two `single_match_else` findings were fixed by extracting
-  named functions (`check_sole_hole`/`check_mixed_fill`,
-  `supplied_value`/`defaulted_value`), which improved the code.
-* `cargo fmt --all` **APPLIED** before commit. ⛔ No `fmt --check` gate was
-  added. (Recorded contrast: `seqlegs-impl.gate-entry.sh:29` still runs
-  `cargo fmt --all --check` as a gate leg; it is carried as a specimen of the
-  pre-ruling shape, never as a model.)
-* **No file over 500 code lines.** Largest new file: `clauses.rs`, 472.
-  Largest file this cut EDITED: `printer/document.rs` and `parser/document.rs`,
-  both 482. No file was pushed over by this cut.
-* `mod.rs` is `mod` declarations and re-exports only.
-* `thiserror` for every new error type; no `unwrap`/`expect`/`panic` in
-  library code.
+| **C-1** | `excluded_term` is **not** in cut-1's landed enum, though BRIEF-R4 says it is. MINTED here as a recorded design change. **Changes what this cut was permitted to mint.** §0. |
+| **C-2** | `literal_where_derived` diverges as a MECHANISM: cut-1's trigger is the literal's SHAPE, BRIEF-R2 needs a DECLARATION-driven one. The cause is CONSUMED unchanged and the declaration trigger added; cut-1's closed shape set is provably not widened. §1. |
+| **C-4** | `grammar_parser_gate.rs`'s `DECLARATION_REFUSAL` constant MOVED with the parser's sentence. It went RED first — the fail-safe working — and the move is recorded in the file. §1. |
+| **F-STAGE-1** | The rig carried a byte-identical nested duplicate of all four gate specimens at `.fleet/fixtures/gate-scripts/gate-scripts/`. Reported, **not deleted**; every fixture cites the OUTER path. §3. |
+| **F-R7D-1** | BRIEF-R4 calls the haem-wall exhibit the **"×4-copies"** case. **MEASURED at the pinned bytes** (`77f0333f…`): the allowlist stands **VERBATIM TWICE** (`fix_prompt`, `legs[0].prompt`), is **referred to without restatement twice more** (`fix_prompt` again — *"nothing committed outside the allowlist"*; `judge_prompt` — *"every changed path inside the allowlist"*), and is enforced a **fifth** time by the gate script the rig names. Two verbatim copies, two references, one mechanical rendering. The fixture states what it measured and asserts the counts; the brief's phrase is reported as divergent, never rounded to fit. Two further one-declaration-many-projections pairs sit in the same file and are asserted too (`control_prompt` ≡ `counsel_control_prompt`; `control_expect` ≡ `counsel_control_expect`, both carrying the hand-copied control token). |
+| **F-R6-1** | Cut-1's, INHERITED and still OPEN: hardening is expressible as a value but not as a presence. Not closed by this cut. |
+| **F-CUT2-1** | `crates/aion-cli/src/main.rs` is **2 011 code lines**, over the 500-line law. **Pre-existing** (2 010 at BASE); this cut added exactly one line, `mod awl_recipe;`. Reported rather than repaired: splitting the CLI's composition root is not this cut's wall or its brief. |
+| **F-CUT2-2** | `aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts` **FAILED once** under full-suite parallel load (11.158 s; `tail status signal: 9 (SIGKILL)`) while three 60 s+ cargo-build tests saturated the box, and **PASSES in isolation in 0.102 s**. The test and its fixtures are **untouched by this cut** (`git status` carries no path under `crates/aion-cli/tests/tail_follow_e2e*`). Recorded as a load-sensitive pre-existing flake, not repaired — repairing another lane's e2e is outside this cut's wall. The gate's own suite run is the authority; §11 records what it said. |
 
 ---
 
-## §4 — CO-MOVES: existing tests this cut had to move, and why each is a same-direction change
+## 10. WALLS — held
 
-⛔ **No gate was edited to make it pass.** Four pre-existing tests moved, each
-because it is an EQUALITY pin that a new word necessarily changes, and each
-was designed to force exactly this. The assertions are unchanged in every
-case; only the pinned value moved.
-
-1. **`crates/aion-awl/tests/grammar_parser_gate.rs:71` `DECLARATION_REFUSAL`.**
-   The parser's dispatch now admits `command` and its diagnostic names it. The
-   gate matches that sentence as a prefix, and its own doc says: *"if the
-   parser rewords one, every probe reads as 'admitted' and the equality
-   assertions below go loudly red — the gate fails safe rather than quietly
-   matching nothing."* It did exactly that, on the full-suite run, before this
-   constant was moved. The equality assertions are untouched, and
-   `the_refusal_diagnostics_name_what_the_parser_actually_admits` still proves
-   the sentence and the dispatch name the same set.
-2. **`src/guide/grammar_tests.rs`** — `POSITION_VARIANTS` 15→16,
-   `FORM_VARIANTS` 7→8, two new ordinals, one new `CommandClause` arm. The
-   test's own doc says a new variant *"fails to COMPILE here until it is given
-   an ordinal"*. It did.
-3. **`src/guide/grammar_tests.rs::positions_are_read_from_both_halves_of_the_table_in_order`**
-   — `positions_of("timeout")` gained a fifth position, because `timeout` is
-   REUSED by the command surface rather than respelled. The vector is pinned
-   whole on purpose and now names the fifth.
-4. **`src/lexer/tokens_tests.rs`** — `POSITIONAL_WORDS` 6→19 entries.
-
-Two ADDITIONS strengthen existing gates rather than relaxing them:
-`the_command_body_offer_is_openers_plus_witnessed_words` extends
-`grammar_parser_gate` to cover the new position in BOTH directions (the same
-class the workflow header gets), and
-`every_assembly_form_is_refused_by_name_with_its_reason` proves Amendment 1
-per named form. The gate's own COVERAGE paragraph was updated to say so.
-
-**Two real defects the new gate caught, both fixed:**
-
-* `after` is a RESERVED word, so it never reached the identifier arm where the
-  assembly-word list is checked, and a dependency edge spelled `after` fell
-  through to a generic `clause_unknown`. `parse_clause` now reads the word
-  whether the lexer made it a keyword or an identifier, so every refused form
-  is refused BY NAME. A specimen was added for the keyword spelling.
-* `path`, `open_files` and `owner` were offered at `CommandBody` but open no
-  body line (`path`/`open_files` stand inside the `hardening` block, `owner`
-  mid-line on the `timeout` clause). That is precisely the false
-  "stands in a command declaration" the gate exists to catch. They are now
-  modelled as WITNESSED words, each carrying a checker-passing witness
-  document, exactly as the workflow header's mid-line words are.
+* ⛔ **Amendment 1, structural** — held and proven in both directions; cut-1's
+  fence bytes are identical to BASE.
+* ⛔ **Ratchet family untouched** — no script converted or retired, no check
+  absorbed; the affirmative duty is the only contact and the ruling is not
+  falsified.
+* ⛔ **Expressibility, NOT deployment** — no composer retired, no rig
+  converted, no checklist deleted, no deployed artifact moved.
+  `workflows/fleet-dev/fleet_dev.awl` byte-identical to BASE. The strike
+  list is the contract of the cutover, staging's to own.
+* ⛔ **No shims, no compat** — the surface lands whole; nothing is added
+  alongside anything.
+* ⛔ **The builder owns projection, never content** — per-lane wall SETS stay
+  authored in the declaration.
+* ⛔ **Teardown deletion authority not widened** — this cut deletes nothing
+  and declares no deletion.
+* **Q5 consumed, not implemented** — venue binding stays the deploy
+  surface's; no new venue-binding hole beyond `{workspace_root}`, pinned by
+  test.
+* **Security-adjacent** — nothing here proposes token minting or rotation.
+  The mint step is a NAMED EXCLUSION of the R7 fixture set (§7), with the
+  pointer to Cally Ray's lane stated.
+* ⛔ **No lint/test suppressions in any spelling** — zero `#[allow]`,
+  `#[expect]`, `#[deny]`, `#[ignore]`, `_var` rename or `#[cfg(any())]`
+  added.
+* ⛔ **No blocking sleep sized to an expected duration** — none added. The
+  executing verb runs processes to completion with `Command::status()`;
+  nothing is spawned in the background, so nothing needs killing, and no
+  ceiling this side invented was imposed.
+* ⛔ **Nothing outside the wall modified** — every changed and new path
+  matches the gate's wall regex; F-STAGE-1's duplicates are left in place.
 
 ---
 
-## §5 — WALLS, EACH CONFIRMED HELD
+## 11. RECEIPTS
 
-* ⛔ **Amendment 1, STRUCTURAL** — held. No recipe, dependency or assembly form
-  is REPRESENTABLE in a gate-leg command declaration. Six named forms
-  (`recipe`, `depends`, `needs`, `after`, `steps`, `then`), each refused by
-  name with cause `recipe_form_refused`, each with its own test, and the
-  review-property reason rides in the diagnostic text ("a reader of a gate leg
-  sees the exact command that ran").
-* ⛔ **Amendment 2, the ratchet family** — held. `liminal22` and `sleepreap`
-  are untouched; no script retired, no check absorbed. Verified: zero matches
-  for either name in the diff.
-* ⛔ **No deployed artifact moves** — held. `fleet_dev.awl` byte-identical; no
-  `.fleet/` script retired; the sealed scripts untouched. The only `.fleet/`
-  change is F-RIG-1's one wall alternative plus this report and the fixtures
-  the rig itself staged.
-* ⛔ **No shims, no compat, no dual paths** — held. The surface landed whole.
-  The pre-existing `ast/command.rs` string scanner was neither wrapped nor
-  extended nor deprecated; it serves a different construct (`run "…"` bodies)
-  and is untouched.
-* **Wall projection (design R6) is OUT** — not implemented; ruled to the
-  recipes cut.
-* **Q5 consumed, not implemented** — no venue-binding holes beyond the
-  existing `{workspace_root}`; the closed-delta-set fence is mechanical in
-  `check_cwd`.
-* **Security-adjacent surfaces** — not analyzed; pointers to Cally Ray stand.
+### Housekeeping
+
+**Target directory cleaned before the final commit**, as the housekeeping
+rule requires:
+
+```
+du -sh target   BEFORE:  20G
+cargo clean            → Removed 30746 files, 20.0GiB total
+du -sh target   AFTER:   0 (directory removed)
+```
+
+`target/` is gitignored (`.gitignore:2`), so the clean does not touch the
+tree the gate attests. The gate run recorded below rebuilt it from cold —
+that is the honest cost of cleaning before the commit rather than after —
+and the flight cleans it again once the gate has spoken for the last time.
+
+### Suite
+
+```
+cargo nextest run --workspace
+Summary [211.830s] 5472 tests run: 5472 passed (6 slow, 3 leaky), 0 skipped
+```
+
+An earlier full run of the same tree reported one failure —
+`aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts`,
+recorded as **F-CUT2-2** in §9. It passed on this run and passes in
+isolation in 0.102 s. Both runs are reported; neither is hidden.
+
+### Clippy
+
+```
+cargo clippy --workspace --all-targets -- -D warnings   →  rc=0
+```
+
+### `git ls-tree HEAD` — every deliverable path
+
+```
+$ git ls-tree HEAD -- <every deliverable path>
+100644 blob a47367839cd6d9842eb92d36cf691dc734d4468f	apps/aion-ops-console/src/features/authoring/assets/awl-guide.json
+100644 blob 98a077f1d18fcfedf9f88b4cbdb85632441e4bf1	crates/aion-awl-lsp/src/completion.rs
+100644 blob 4e6292c621bdf8c615e04f9872a5bfa780feea2b	crates/aion-awl-lsp/src/glossary.rs
+100644 blob c513da93b6086fe21d65340f308c11a945b64253	crates/aion-awl/Cargo.toml
+100644 blob 566345c5481472510ae2429272b5635a9320a141	crates/aion-awl/guide-embed/AWL-REFERENCE.md
+100644 blob 8d63731488de3f1e821c1de467b60ad4c4d3d533	crates/aion-awl/src/command/cause.rs
+100644 blob 97e8db2370d4a1306fb583ce0552f663e4784aad	crates/aion-awl/src/command/error.rs
+100644 blob 673cedb46e96aea0ac53708c5eccffdd6fb71925	crates/aion-awl/src/command/just_subset.rs
+100644 blob caab78990ecf8cce2a339616c909bd29086df483	crates/aion-awl/src/command/mod.rs
+040000 tree 80b9d39955974c4e04888e7512ad31ea34a71488	crates/aion-awl/src/command/recipe
+100644 blob b3a65a654482c31d0c4e70bbdc05cdc3c0fd57e2	crates/aion-awl/src/guide/entry.rs
+100644 blob 3bcff46dce004b3db5b26233f24573821bea98d9	crates/aion-awl/src/guide/examples/decl_recipes.rs
+100644 blob dbda87db299de8d73a01e863ff8ca3a42e2ed25d	crates/aion-awl/src/guide/grammar.rs
+100644 blob 1d998931f937c984a64957ffdbda869cd0b94de2	crates/aion-awl/src/guide/lookup.rs
+100644 blob b6a5505fe202407db605395bab4b42209c8d0015	crates/aion-awl/src/guide/recipes.rs
+100644 blob 74f1083870da47c5ae4d187cbd245f2c09ab3faf	crates/aion-awl/src/lexer/tokens.rs
+100644 blob 3a168f80c5d463d9e97fbbc70b54323c92d8685e	crates/aion-awl/src/parser/declarations.rs
+100644 blob 95ec54bb352c873d5f08244c613e669282135e98	crates/aion-awl/src/printer/assembly.rs
+100644 blob 39b38ede89555870e9e9aa50c965f54dd8456204	crates/aion-awl/tests/command_refusals.rs
+040000 tree f4a8fe3238ca6392e450d4623afd2579442e51b3	crates/aion-awl/tests/recipe
+100644 blob c38623fb5266b07cddb24a50770e9c158123a4d5	crates/aion-awl/tests/recipe_compare_genericity.rs
+100644 blob fb2826c6c8ab83af19539e77860867e0b372a1ec	crates/aion-awl/tests/recipe_compose.rs
+100644 blob cb8bffec60e710f295ce2324afd724212345f035	crates/aion-awl/tests/recipe_corpus.rs
+100644 blob d54248ecfcb18a2674a32e818b12e25a1ef19ca3	crates/aion-awl/tests/recipe_declarations.rs
+100644 blob 430520cfdd780972a19fe57bccb3f2c4189f9d56	crates/aion-awl/tests/recipe_fire.rs
+100644 blob c426213637b89461d94239f03bf67cf50a7c0786	crates/aion-awl/tests/recipe_parameters.rs
+100644 blob a6292152930cb4f93bf1ea530d97d30ea66968fa	crates/aion-awl/tests/recipe_wall.rs
+100644 blob 2d3015734b093ffe99a36b62a84a6fcffcb9bcb3	crates/aion-cli/src/awl.rs
+040000 tree 757a4e7029f3955ea59cc88484d403b475c2e0ea	crates/aion-cli/src/awl_recipe
+100644 blob 0429340a33852acd2e7aaa715797393a8a1b061d	crates/aion-cli/tests/awl_recipe_verb_e2e.rs
+100644 blob 566345c5481472510ae2429272b5635a9320a141	examples/assistant/resources/AWL-REFERENCE.md
+
+$ git ls-tree HEAD -- crates/aion-awl/src/command/recipe/ (the surface, file by file)
+100644 blob ee8f412dd2764a3d309f8ec1d76e2d79bb967e1c	crates/aion-awl/src/command/recipe/census.rs
+100644 blob 615e37f985b201ebb5b376d8e4c66c9d9557587d	crates/aion-awl/src/command/recipe/check.rs
+100644 blob 5cb8d0687ca258b6b16d10dde8a0a2d7d2615060	crates/aion-awl/src/command/recipe/compare.rs
+100644 blob bb96201c60bfb8c5487bc13cca8af893e574f802	crates/aion-awl/src/command/recipe/compose.rs
+100644 blob 7f1701bbcacea4437f5f80b93bbda59af0af946f	crates/aion-awl/src/command/recipe/decl.rs
+100644 blob 0eaac792448ad3b85ab4e8a4cd62c372c3bd4139	crates/aion-awl/src/command/recipe/derivation.rs
+100644 blob 75af787531bfaf101ea49fddd22be43a77211f18	crates/aion-awl/src/command/recipe/fire.rs
+100644 blob 3765fb672432c3bba952ccb5e0a06cbf257ce8ec	crates/aion-awl/src/command/recipe/graph.rs
+100644 blob 25fc1e35ee546d0c3db2a3e5a7c88e123eeab03f	crates/aion-awl/src/command/recipe/mod.rs
+100644 blob 0968f76959a9ed44df8bb432e14dd8e3c15b53a7	crates/aion-awl/src/command/recipe/parse.rs
+100644 blob 6bb59aa491d83b9f70e3a506c4ca3a655c61177a	crates/aion-awl/src/command/recipe/print.rs
+100644 blob 1d795d51e27f21a4d339f24c11b98a437f8e81b0	crates/aion-awl/src/command/recipe/project.rs
+100644 blob ef264c64fdc4944740cc96146cac2dd9ca0c8df6	crates/aion-awl/src/command/recipe/receipt.rs
+100644 blob 0031c915b30eb8ab39ae5844826bfd5f637539e3	crates/aion-awl/src/command/recipe/record.rs
+100644 blob 5cb4d5248ad4b312d46b35c7918cc894314a56eb	crates/aion-awl/src/command/recipe/sweep.rs
+100644 blob 7d026d5a8be948433909d24c1bbe9194eb5be958	crates/aion-awl/src/command/recipe/words.rs
+
+$ git ls-tree HEAD -- crates/aion-cli/src/awl_recipe/ (the executing verb)
+100644 blob 0334dda4740f17b3af35e51eabc73aa170ac0a6f	crates/aion-cli/src/awl_recipe/args.rs
+100644 blob 25fc9c7dab24540df90b4243410c1b2de5b32099	crates/aion-cli/src/awl_recipe/firer.rs
+100644 blob d2af18a94f4c87935a2d59dca0dcdfc47391634c	crates/aion-cli/src/awl_recipe/mod.rs
+100644 blob 07c8481be3d16ca40c01976f868f7b3732034dda	crates/aion-cli/src/awl_recipe/run.rs
+100644 blob f24b9063f72bd245c601c37a62e6e9284356b11c	crates/aion-cli/src/awl_recipe/tree.rs
+
+$ git ls-tree HEAD -- crates/aion-awl/tests/fixtures/command/just-subset/ (recipe-side conformance fixtures)
+100644 blob c92d573de56063365500f522bf182de402590df8	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-declaration.awl
+100644 blob c3c54dc31b2da4763a9e2479f40c475616c6a7f2	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-dependency.awl
+100644 blob 8ab879006809c4797a0ed70f0784abb19a406832	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-parameter-kind.awl
+100644 blob 09124d5529503cc10a8b9500d524a09272cf49f5	crates/aion-awl/tests/fixtures/command/just-subset/refusal-nested-command-declaration.awl
+100644 blob b3e6e9af64cd995483f7916d0aac38e7b9ed924c	crates/aion-awl/tests/fixtures/command/just-subset/refusal-recipe-body.awl
+100644 blob ec78b861f9bc70a25f3a09277c7b7ff23598a8b7	crates/aion-awl/tests/fixtures/command/just-subset/refusal-shell-string-body.awl
+```
+
+The report you are reading cannot quote its own blob hash. Its receipt is
+`git ls-tree HEAD .fleet/reports/build.md` at the landing commit.
+
+### Gate
+
+`.fleet/gate-entry.sh`, run by this leg on the CLEAN COMMITTED tree at
+`dc25d7607ae597d924ac4c82e0b28626f8b310cf` — the commit carrying the whole
+surface. Compilation lines elided; nothing else is:
+
+```
+== 1. toolchain ==
+  pinned: 1.97.1
+  active: rustc 1.97.1 (8bab26f4f 2026-07-14)
+  source: 1.97.1-x86_64-unknown-linux-gnu (overridden by '/home/rocketfish/fleet/runs/awl-cut2-flight1/legs/build/rust-toolchain.toml')
+  pin HONORED: active toolchain is sourced from the pin file
+== 2. tree receipt ==
+  HEAD: dc25d7607ae597d924ac4c82e0b28626f8b310cf
+  TREE: CLEAN
+== 3. paths census ==
+  census OK (91 files within the wall, 59 in the deliverable crate family)
+== 4a. clippy ==
+  clippy clean
+== 4b. new-test control ==
+  new test annotations in diff: 71
+== 4c. suite ==
+  suite names ~5472 test(s)
+     Summary [ 209.619s] 5472 tests run: 5472 passed (7 slow, 3 leaky), 0 skipped
+GATE-GREEN: toolchain 1.97.1 pin-honored from rust-toolchain.toml; tree CLEAN at dc25d7607ae597d924ac4c82e0b28626f8b310cf; census within wall with deliverable present; clippy -D warnings clean; 71 new test annotations; 5472 tests named and green against base 1bab95477cb86d498d07bb8da445f00351b87972
+```
+
+`GATE_RC=0`.
+
+⚠️ **Stated plainly, because a receipt that overstates itself is worse than
+none.** The run above attests the commit that carries the SURFACE. This
+report is a second commit on top of it, and the exit-condition run — the
+gate against the final tree, this file included — is the flight's terminal
+green and is reported in the leg's reply rather than quoted here: a document
+cannot contain the output of a run that measures it. Every `git ls-tree`
+receipt above is valid at the final HEAD as well, because none of the paths
+it names changed between the two commits.
 
 ---
 
-## §5b — INDEPENDENT VERIFICATION PASS (re-run against the committed tree)
+## 12. REQUIREMENTS NOT COMPLETED
 
-The surface was re-verified from the bytes rather than from this report's own
-claims. What was re-measured, and what it returned:
+**None.** BRIEF-R1 through BRIEF-R8 are complete, each with the acceptance
+criteria its clause names, and every divergence from the brief's own wording
+is reported above as a finding rather than absorbed. The two open questions
+this cut carries forward without closing — **F-R6-1** (cut-1's, inherited)
+and **F-CUT2-1** (a pre-existing 500-line violation in another crate's
+composition root) — are named as findings, not as thinning: neither is a
+BRIEF-Rn acceptance criterion of this cut.
 
-| claim re-tested | instrument | result |
-|---|---|---|
-| the census's five zeros | re-run at BASE, not at HEAD (a census at HEAD would only find this cut's own code) | **CONFIRMED.** `Keyword::ALL` is `[Self; 58]` with none of the new words; `POSITIONAL_WORDS` is `[&str; 6]`; 15 `argv` hits in the family, every one prose; `admits[_-]?dash\|end[_-]?of[_-]?options\|double[_-]?dash\|…` ZERO tree-wide; no CC0 suite vendored |
-| seam re-derivation | `git diff --stat c590712f5 5e2fb5a3e` over the AWL family + both teaching assets | **CONFIRMED EMPTY.** Five intervening commits, none in the family |
-| the four specimen digests | `sha256sum` re-run against the RIG table | **4/4 MATCH** |
-| the four cited specimen lines | read directly out of the carried scripts | **CONFIRMED.** All four carry the byte-identical `changed=$(git diff --name-only "${BASE}"..HEAD)`; base pins as cited |
-| F-RIG-1's necessity | `guide::REFERENCE_PATH` vs the staged wall regex | **CONFIRMED.** `REFERENCE_PATH = "examples/assistant/resources/AWL-REFERENCE.md"`, pinned byte-identical to the embed by a pre-existing test inside the admitted crate, and absent from the staged wall. The two copies are `cmp`-identical today |
-| 500-line law | code lines, comments and blanks stripped | **CONFIRMED.** Largest new file `clauses.rs` 472; largest edited 482 |
-| no bypasses added | the whole diff, added lines only | **ZERO** `#[allow]` / `#[expect]` / `#[deny]` / `#[ignore]` / `#[cfg(any())]` |
-| no panics in library code | every changed non-test `src/*.rs` | **ZERO** `unwrap`/`expect`/`panic!`/`todo!`. The two `stream.expect(` hits are the pre-existing `Result`-returning parser method (`parser/stream.rs:365`), used with `?` |
-| walls | the diff | ratchet family ZERO hits; tree-sitter/editors ZERO; `BUILTIN_TYPES` unchanged; `fleet_dev.awl` byte-identical; no `.fleet/` script retired |
-| autoformat discipline | `cargo fmt --all --check` | rc=0 — applied, and still NOT a gate leg |
-
-**One gap was found and closed, one number was made precise.**
-
-* **GAP, closed:** `emit()` guards the marker push with
-  `command.admits_end_of_options() && !decl.operands.is_empty()`. The
-  operand-carrying fixtures cannot reach the empty-operand branch, the checker
-  imposes no operand-count requirement (so the branch is REACHABLE, not dead),
-  and no test pinned it — a live branch in the load-bearing cure whose
-  behaviour a later refactor could change silently. Now pinned by
-  `an_admitting_invocation_with_no_operands_emits_no_marker`: `git tag --list`
-  emits no marker, because with no operands there is no options/operands
-  boundary to mark. This makes the word "unconditional" precise — it is a
-  claim about operand CONTENT (the marker never depends on what an operand
-  turns out to be), not a claim that a marker appears where no operand
-  boundary exists. New-test count 63 → **64**.
-* **PRECISION:** the census's `{{` figure is 104 LINES under
-  `crates/aion-awl/src`, not 104 occurrences (109 in `src/**/*.rs`, 195
-  across the crate). Corrected in §0 with the instrument stated, since a
-  number a reader cannot reproduce is not evidence. The census's conclusion is
-  untouched.
-
-Nothing else in this report failed re-measurement.
-
-## §6 — FINDINGS INDEX
-
-| id | finding | disposition |
-|---|---|---|
-| **F-RIG-1** | The staged wall is internally inconsistent and makes the staged cut ungreenable for ANY new AWL word. | Amended by exactly one path, documented in the gate script, one line to revert. **Waffles' ruling at re-gate; Vesper's at landing.** |
-| **F-UNIT-1** | The declared end-of-options unit is the INVOCATION (program + subcommand), not the bare program. | Resolved in the design as taken; forced by the sources' own canonical fixtures (`git tag` admits, `git diff` must not). No disagreement with any source. |
-| **F-R6-1** | Env hardening is expressible as a VALUE but not as a PRESENCE, so one shape cannot cover the four rigs' hardening dimension. | Reported at the bytes, recorded in the fixture header. Needs a design answer (optional-presence form, or two shapes), not an implementation one. |
-| **F-CAUSE-1** | `specimen_wrong_cause` has no reachable red arm in this cut's emit vocabulary. | Shadowed by construction, recorded honestly, code retained (collapsing it would be the catch-all the law forbids). Same shape as the rig's own two shadowed probe arms. |
-| **F-CENSUS-1** | A second adjacent construct exists: `crates/aion-cli/tests/awl_corpus_gate.rs`. | Triaged in §0 — a different question over a different corpus (35-document floor vs 431). Not a substitute for R8's instrument; untouched. |
-| **F-RACE-1** (supersedes F-VENUE-1) | `bridge_dispatch_reaches_liminal_worker_and_resolves` asserts a post-condition that production code establishes AFTER it wakes the caller — a real ordering race in a pre-existing `aion-server` test, not merely a loaded box. | Reported WITH BYTES below. **Outside this cut's wall** (`aion-server` is untouched), so this leg cannot fix it and did not try. Hand-on to the server family. |
-
-**No requirement was thinned.** R1–R8 all landed. Nothing was deferred, and
-there is no partial requirement to report.
-
-### F-RACE-1, in detail — a real ordering race, not just a contended box
-
-Three full `cargo nextest run --workspace` runs on this venue while its load
-average sat between 14 and 19 (on 16 CPUs, the load being this leg's own
-back-to-back suite runs draining) each failed exactly one test, and a
-DIFFERENT one each time:
-
-| run | failing test | isolated re-run |
-|---|---|---|
-| 1 | `aion-server::bridge_liminal_dispatch_e2e bridge_dispatch_reaches_liminal_worker_and_resolves` | 7/7 PASS |
-| 2 | `aion-cli::new_agent_e2e scaffolded_agent_deploys_but_start_is_refused_unscoped` (`grpc transport failed at 127.0.0.1:41141`) | 10/10 PASS |
-| 3 | `aion-rs::engine_query query_racing_completion_yields_payload_or_typed_error_without_events` | 14/14 PASS |
-
-All three boot a server, bind a port, or race a completion; none is in the AWL
-crate family, and this cut touches no server, transport or scheduling surface.
-After waiting for the load average to fall below 3.0, the SAME commit ran
-**5391/5391 green**. Recorded so the next runner does not read a contended box
-as a red tree — and so that if it recurs on a quiet box, that is a real
-finding rather than a repeat of this one.
-
-**IT RECURRED ON A QUIET BOX, so by this finding's own stated test it is a real
-finding — and the verification pass ran it down to the two lines.** The gate
-was started at load average **0.04** (16 CPUs, nothing else running but the
-fleet's own long-lived workers). It went RED on run 1 of this pass with the
-same test as run 1 above, and the assertion is not a timeout — it is a
-counter:
-
-```
-thread '…bridge_dispatch_reaches_liminal_worker_and_resolves' panicked at
-crates/aion-server/tests/bridge_liminal_dispatch_e2e/bridge_liminal_dispatch_cases.rs:70:5:
-assertion `left == right` failed: completed liminal dispatches must clear their in-flight tracking
-  left: 1
- right: 0
-```
-
-**The race, at the bytes.** In `crates/aion-server/src/worker/bridge.rs` the
-completion path does these two things IN THIS ORDER:
-
-1. `:1588` `pending.complete_fenced(…)` — which ends at `:337` with
-   `self.complete(workflow_id, activity_id, run_id, result)`, and THAT is what
-   resolves the dispatch the test is awaiting. The test task becomes runnable
-   here.
-2. `:1605` `heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)`
-   — which is what removes the entry (`heartbeat.rs:520`,
-   `state.tasks.remove(&key)`) that the test's final assertion counts
-   (`heartbeat.rs:591`, `in_flight_count`).
-
-The test asserts at its line 70, immediately after the second dispatch's
-`await` returns. That await is satisfied by step 1. On a multi-threaded
-runtime the woken test task can therefore run the assertion before step 2
-executes — the counter reads 1, and the test fails. Load makes it likelier by
-widening the scheduling gap; load is not the cause. Measured this pass:
-**10/10 PASS in isolation** on the same tree, which is the signature of an
-ordering race rather than a broken invariant — the production code does clear
-the entry, just not before it wakes the caller.
-
-⛔ **This leg did not fix it, and the restraint is deliberate.**
-`crates/aion-server/` is OUTSIDE this cut's wall — `git diff --name-only
-5e2fb5a3e HEAD -- crates/aion-server/` is EMPTY, so nothing this cut did can
-have caused it, and touching it now would be a wall breach committed to make a
-gate green, which is precisely the move the estate's discipline forbids. It is
-handed on, named, with the two line numbers, for the server family to fix at
-the seam of its choosing (the honest fix is on the test side: assert the
-bookkeeping after it is observable, not immediately after the reply resolves).
-
-**Consequence for the re-gate, stated plainly:** this test can red a gate on a
-tree that is entirely innocent of it, on a quiet box. A runner who sees
-exactly this failure should re-run before concluding anything about the tree
-under test.
-
-**GATE RECEIPT — the build pass, on the committed tree:**
-
-```
-GATE-GREEN: toolchain 1.97.1 pin-honored from rust-toolchain.toml;
-tree CLEAN at f37a05d885894707c8a294e49413ad324d37c209;
-census within wall with deliverable present; clippy -D warnings clean;
-63 new test annotations; 5391 tests named and green
-against base 5e2fb5a3ed32b53d48dbc585aa914acd056458c6
-```
-
-**GATE RECEIPT — the verification pass (this report's final state):** recorded
-in §8 below, which is written last precisely so it quotes a run rather than a
-prediction. Legs 1 and 2 of that pass are on the record above: the first went
-RED on F-RACE-1 and is reported rather than buried, because a gate that reds on
-an innocent tree is a fact the next runner needs more than a tidy receipt.
-
----
-
-## §7 — EVIDENCE SUMMARY
-
-* **64** new test annotations under `crates/aion-awl*`.
-* **35** cause codes, every one with a refusing specimen or an honestly
-  recorded shadowing.
-* **431/431** pre-existing AWL documents re-read byte-identically.
-* **4/4** gate-script specimens re-hashed against the RIG table and matched;
-  four parameter sets byte-compared against their own cited lines.
-* **11** Just-subset conformance fixtures, every one citing `casey/just` at
-  `b20386abdbae867a49cdff6c3c0f2b547faa9b23` (CC0-1.0) with its source file's
-  SHA-256.
-* **13** new words, each with guide sentence, checked example, grammar
-  position, AWL-REFERENCE §17 row, and LSP hover + completion.
-* `cargo clippy --workspace --all-targets -- -D warnings` clean, with no
-  suppression of any kind added.
-* **5391/5391** workspace tests green on the committed tree, gate GREEN.
-
-— the build leg. To Waffles for the landing re-gate (**read F-RIG-1 first —
-you will be running an amended script**), then Vesper for owner review and
-landing, then Calliope for the conformance read.
+— the build leg, rocketfish.

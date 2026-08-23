@@ -1,6 +1,7 @@
 //! The canonical printer: one shape per document, lossless comments and
 //! doc lines, `parse ∘ print = id` and `print ∘ parse ∘ print = print`.
 
+mod assembly;
 mod document;
 mod exprs;
 mod harness;

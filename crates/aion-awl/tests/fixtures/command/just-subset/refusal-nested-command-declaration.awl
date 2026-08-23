@@ -1,0 +1,24 @@
+//! FIXTURE: refused form `nested_command_declaration`.
+//! EXPECT: refuse command_declaration_nested
+//! PROVENANCE: AUTHORED.
+//! ABSENT FROM SUITE: Just has no declaration nesting to carry a specimen of.
+//!   The form exists only because AWL has two declaration layers — the
+//!   command half a gate leg consumes, and the assembly half it cannot reach
+//!   — and this is amendment 1's CONVERSE fence.
+//! WHY REFUSED: a command is declared at the TOP LEVEL and referenced by a
+//!   step. Nesting one inside a recipe would put a gate-leg declaration where
+//!   no reader of the top level meets it, which would make the recipe layer
+//!   reachable from a gate leg by a second route.
+
+workflow just_nested_command_declaration
+  outcome done: type String, route success
+
+recipe stage
+  command inner
+    program "echo"
+    admits "--"
+  step run_it
+    runs command inner
+
+step go
+  route done("ok")

@@ -1,0 +1,33 @@
+//! FIXTURE: absorbed production `recipe_parameter_kind`.
+//! EXPECT: accept
+//! PROVENANCE: AUTHORED.
+//! ABSENT FROM SUITE: Just's recipe parameters are untyped and carry no kind,
+//!   so no suite case can exercise a TYPED parameter with a declared field
+//!   kind. The SHAPE absorbed is Just's `recipe param="value"`; the kind and
+//!   the type are AWL's own, and the taxonomy is read off the live composer
+//!   corpus rather than invented — ablative-io/docs at 3c7cbb6,
+//!   `dispatch-rigs/issue-investigations/README.md`, sha256
+//!   b1db6ae3dfa3d261a29923ed091d56657c3978fc2bf453d3a3f6ae12d973fc65, the
+//!   "Which fields are skeleton, which are per-issue" table.
+//! WHAT DIFFERS: every parameter carries one of exactly four declared kinds,
+//!   and a `re_derive` parameter carries the source and extraction it is read
+//!   from AT THE FIRE MINUTE — the law that table states in its own words:
+//!   "at the dispatch minute (not the compose minute — they drift)".
+
+workflow just_recipe_parameter_kind
+  outcome done: type String, route success
+
+command echo_it
+  program "echo"
+  admits "--"
+
+recipe compose_investigation
+  parameter control_prompt: String = "read the file and reply" skeleton
+  parameter issue: String per_item
+  parameter investigate_prompt: String both
+  parameter control_expect: String re_derive derives "origin/main:workflows/investigate/investigate_worker.awl" extract "line 22"
+  step dispatch
+    runs command echo_it
+
+step go
+  route done("ok")

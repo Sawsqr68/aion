@@ -84,6 +84,39 @@ pub const OPEN_FILES_WORD: &str = "open_files";
 /// The word naming who owns a declared timeout, positionally.
 pub const OWNER_WORD: &str = "owner";
 
+/// The word that opens a `recipe` declaration, positionally.
+pub const RECIPE_WORD: &str = "recipe";
+/// The word declaring one of a recipe's typed parameters, positionally.
+pub const PARAMETER_WORD: &str = "parameter";
+/// The word naming a re-derive parameter's source address, positionally.
+pub const DERIVES_WORD: &str = "derives";
+/// The word naming what a derivation takes out of its source, positionally.
+pub const EXTRACT_WORD: &str = "extract";
+/// The word that opens a `wall` declaration, positionally.
+pub const WALL_WORD: &str = "wall";
+/// The word naming one path pattern a wall admits, positionally.
+pub const ALLOWS_WORD: &str = "allows";
+/// The word naming bytes that must not appear — a wall's negative
+/// vocabulary, an artifact's unfilled-slot sentinel — positionally.
+pub const EXCLUDES_WORD: &str = "excludes";
+/// The word that opens an `artifact` declaration, positionally.
+pub const ARTIFACT_WORD: &str = "artifact";
+/// The word naming a declared artifact's content digest, positionally.
+pub const DIGEST_WORD: &str = "digest";
+/// The word naming the path a restore artifact must restore byte-exactly,
+/// positionally.
+pub const RESTORES_WORD: &str = "restores";
+/// The word naming the declared command a recipe step runs, positionally.
+pub const RUNS_WORD: &str = "runs";
+/// The word naming the typed result a recipe step captures, positionally.
+pub const CAPTURES_WORD: &str = "captures";
+/// The word naming the declared artifact a recipe step fires, positionally.
+pub const FIRES_WORD: &str = "fires";
+/// The word naming a fired specimen's known answer, positionally.
+pub const EXPECTING_WORD: &str = "expecting";
+/// The word naming one at-fire precondition of a recipe step, positionally.
+pub const REQUIRES_WORD: &str = "requires";
+
 /// Every word AWL reads as an opener WITHOUT reserving it.
 ///
 /// These are not in [`Keyword`] on purpose, and that is not an oversight: the
@@ -105,7 +138,15 @@ pub const OWNER_WORD: &str = "owner";
 /// harness-section field name, and `cwd`, `path`, `program`, `env`, `option`,
 /// `operand` and `refuses` stand in others. Reserving any of them would break
 /// documents that exist.
-pub const POSITIONAL_WORDS: [&str; 19] = [
+///
+/// The recipe surface added fifteen more on the same measured ground, counted
+/// over the discovered `**/*.awl` corpus of this tree: `runs` stands in 36
+/// documents, `parameter` in 20, `requires` in 12, `artifact` in 8, `derives`
+/// in 6, `wall`, `digest` and `fires` in 3 each, `recipe` in 2, and `allows`,
+/// `captures` and `extract` in 1 each. Only `excludes`, `restores` and
+/// `expecting` stand nowhere, and reserving three words while recognising
+/// twelve positionally would be two grammars for one vocabulary.
+pub const POSITIONAL_WORDS: [&str; 34] = [
     SEND_WORD,
     TO_WORD,
     QUERY_WORD,
@@ -125,6 +166,21 @@ pub const POSITIONAL_WORDS: [&str; 19] = [
     PATH_WORD,
     OPEN_FILES_WORD,
     OWNER_WORD,
+    RECIPE_WORD,
+    PARAMETER_WORD,
+    DERIVES_WORD,
+    EXTRACT_WORD,
+    WALL_WORD,
+    ALLOWS_WORD,
+    EXCLUDES_WORD,
+    ARTIFACT_WORD,
+    DIGEST_WORD,
+    RESTORES_WORD,
+    RUNS_WORD,
+    CAPTURES_WORD,
+    FIRES_WORD,
+    EXPECTING_WORD,
+    REQUIRES_WORD,
 ];
 
 /// AWL keyword tokens.
