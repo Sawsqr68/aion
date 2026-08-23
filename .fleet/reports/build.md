@@ -708,9 +708,9 @@ du -sh target   AFTER:   0 (directory removed)
 ```
 
 `target/` is gitignored (`.gitignore:2`), so the clean does not touch the
-tree the gate attests. The gate run recorded below rebuilds it from cold —
+tree the gate attests. The gate run recorded below rebuilt it from cold —
 that is the honest cost of cleaning before the commit rather than after —
-and the flight cleans it again once the gate has spoken.
+and the flight cleans it again once the gate has spoken for the last time.
 
 ### Suite
 
@@ -732,14 +732,114 @@ cargo clippy --workspace --all-targets -- -D warnings   →  rc=0
 
 ### `git ls-tree HEAD` — every deliverable path
 
-LS_TREE_PLACEHOLDER
+```
+$ git ls-tree HEAD -- <every deliverable path>
+100644 blob a47367839cd6d9842eb92d36cf691dc734d4468f	apps/aion-ops-console/src/features/authoring/assets/awl-guide.json
+100644 blob 98a077f1d18fcfedf9f88b4cbdb85632441e4bf1	crates/aion-awl-lsp/src/completion.rs
+100644 blob 4e6292c621bdf8c615e04f9872a5bfa780feea2b	crates/aion-awl-lsp/src/glossary.rs
+100644 blob c513da93b6086fe21d65340f308c11a945b64253	crates/aion-awl/Cargo.toml
+100644 blob 566345c5481472510ae2429272b5635a9320a141	crates/aion-awl/guide-embed/AWL-REFERENCE.md
+100644 blob 8d63731488de3f1e821c1de467b60ad4c4d3d533	crates/aion-awl/src/command/cause.rs
+100644 blob 97e8db2370d4a1306fb583ce0552f663e4784aad	crates/aion-awl/src/command/error.rs
+100644 blob 673cedb46e96aea0ac53708c5eccffdd6fb71925	crates/aion-awl/src/command/just_subset.rs
+100644 blob caab78990ecf8cce2a339616c909bd29086df483	crates/aion-awl/src/command/mod.rs
+040000 tree 80b9d39955974c4e04888e7512ad31ea34a71488	crates/aion-awl/src/command/recipe
+100644 blob b3a65a654482c31d0c4e70bbdc05cdc3c0fd57e2	crates/aion-awl/src/guide/entry.rs
+100644 blob 3bcff46dce004b3db5b26233f24573821bea98d9	crates/aion-awl/src/guide/examples/decl_recipes.rs
+100644 blob dbda87db299de8d73a01e863ff8ca3a42e2ed25d	crates/aion-awl/src/guide/grammar.rs
+100644 blob 1d998931f937c984a64957ffdbda869cd0b94de2	crates/aion-awl/src/guide/lookup.rs
+100644 blob b6a5505fe202407db605395bab4b42209c8d0015	crates/aion-awl/src/guide/recipes.rs
+100644 blob 74f1083870da47c5ae4d187cbd245f2c09ab3faf	crates/aion-awl/src/lexer/tokens.rs
+100644 blob 3a168f80c5d463d9e97fbbc70b54323c92d8685e	crates/aion-awl/src/parser/declarations.rs
+100644 blob 95ec54bb352c873d5f08244c613e669282135e98	crates/aion-awl/src/printer/assembly.rs
+100644 blob 39b38ede89555870e9e9aa50c965f54dd8456204	crates/aion-awl/tests/command_refusals.rs
+040000 tree f4a8fe3238ca6392e450d4623afd2579442e51b3	crates/aion-awl/tests/recipe
+100644 blob c38623fb5266b07cddb24a50770e9c158123a4d5	crates/aion-awl/tests/recipe_compare_genericity.rs
+100644 blob fb2826c6c8ab83af19539e77860867e0b372a1ec	crates/aion-awl/tests/recipe_compose.rs
+100644 blob cb8bffec60e710f295ce2324afd724212345f035	crates/aion-awl/tests/recipe_corpus.rs
+100644 blob d54248ecfcb18a2674a32e818b12e25a1ef19ca3	crates/aion-awl/tests/recipe_declarations.rs
+100644 blob 430520cfdd780972a19fe57bccb3f2c4189f9d56	crates/aion-awl/tests/recipe_fire.rs
+100644 blob c426213637b89461d94239f03bf67cf50a7c0786	crates/aion-awl/tests/recipe_parameters.rs
+100644 blob a6292152930cb4f93bf1ea530d97d30ea66968fa	crates/aion-awl/tests/recipe_wall.rs
+100644 blob 2d3015734b093ffe99a36b62a84a6fcffcb9bcb3	crates/aion-cli/src/awl.rs
+040000 tree 757a4e7029f3955ea59cc88484d403b475c2e0ea	crates/aion-cli/src/awl_recipe
+100644 blob 0429340a33852acd2e7aaa715797393a8a1b061d	crates/aion-cli/tests/awl_recipe_verb_e2e.rs
+100644 blob 566345c5481472510ae2429272b5635a9320a141	examples/assistant/resources/AWL-REFERENCE.md
+
+$ git ls-tree HEAD -- crates/aion-awl/src/command/recipe/ (the surface, file by file)
+100644 blob ee8f412dd2764a3d309f8ec1d76e2d79bb967e1c	crates/aion-awl/src/command/recipe/census.rs
+100644 blob 615e37f985b201ebb5b376d8e4c66c9d9557587d	crates/aion-awl/src/command/recipe/check.rs
+100644 blob 5cb8d0687ca258b6b16d10dde8a0a2d7d2615060	crates/aion-awl/src/command/recipe/compare.rs
+100644 blob bb96201c60bfb8c5487bc13cca8af893e574f802	crates/aion-awl/src/command/recipe/compose.rs
+100644 blob 7f1701bbcacea4437f5f80b93bbda59af0af946f	crates/aion-awl/src/command/recipe/decl.rs
+100644 blob 0eaac792448ad3b85ab4e8a4cd62c372c3bd4139	crates/aion-awl/src/command/recipe/derivation.rs
+100644 blob 75af787531bfaf101ea49fddd22be43a77211f18	crates/aion-awl/src/command/recipe/fire.rs
+100644 blob 3765fb672432c3bba952ccb5e0a06cbf257ce8ec	crates/aion-awl/src/command/recipe/graph.rs
+100644 blob 25fc1e35ee546d0c3db2a3e5a7c88e123eeab03f	crates/aion-awl/src/command/recipe/mod.rs
+100644 blob 0968f76959a9ed44df8bb432e14dd8e3c15b53a7	crates/aion-awl/src/command/recipe/parse.rs
+100644 blob 6bb59aa491d83b9f70e3a506c4ca3a655c61177a	crates/aion-awl/src/command/recipe/print.rs
+100644 blob 1d795d51e27f21a4d339f24c11b98a437f8e81b0	crates/aion-awl/src/command/recipe/project.rs
+100644 blob ef264c64fdc4944740cc96146cac2dd9ca0c8df6	crates/aion-awl/src/command/recipe/receipt.rs
+100644 blob 0031c915b30eb8ab39ae5844826bfd5f637539e3	crates/aion-awl/src/command/recipe/record.rs
+100644 blob 5cb4d5248ad4b312d46b35c7918cc894314a56eb	crates/aion-awl/src/command/recipe/sweep.rs
+100644 blob 7d026d5a8be948433909d24c1bbe9194eb5be958	crates/aion-awl/src/command/recipe/words.rs
+
+$ git ls-tree HEAD -- crates/aion-cli/src/awl_recipe/ (the executing verb)
+100644 blob 0334dda4740f17b3af35e51eabc73aa170ac0a6f	crates/aion-cli/src/awl_recipe/args.rs
+100644 blob 25fc9c7dab24540df90b4243410c1b2de5b32099	crates/aion-cli/src/awl_recipe/firer.rs
+100644 blob d2af18a94f4c87935a2d59dca0dcdfc47391634c	crates/aion-cli/src/awl_recipe/mod.rs
+100644 blob 07c8481be3d16ca40c01976f868f7b3732034dda	crates/aion-cli/src/awl_recipe/run.rs
+100644 blob f24b9063f72bd245c601c37a62e6e9284356b11c	crates/aion-cli/src/awl_recipe/tree.rs
+
+$ git ls-tree HEAD -- crates/aion-awl/tests/fixtures/command/just-subset/ (recipe-side conformance fixtures)
+100644 blob c92d573de56063365500f522bf182de402590df8	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-declaration.awl
+100644 blob c3c54dc31b2da4763a9e2479f40c475616c6a7f2	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-dependency.awl
+100644 blob 8ab879006809c4797a0ed70f0784abb19a406832	crates/aion-awl/tests/fixtures/command/just-subset/absorbed-recipe-parameter-kind.awl
+100644 blob 09124d5529503cc10a8b9500d524a09272cf49f5	crates/aion-awl/tests/fixtures/command/just-subset/refusal-nested-command-declaration.awl
+100644 blob b3e6e9af64cd995483f7916d0aac38e7b9ed924c	crates/aion-awl/tests/fixtures/command/just-subset/refusal-recipe-body.awl
+100644 blob ec78b861f9bc70a25f3a09277c7b7ff23598a8b7	crates/aion-awl/tests/fixtures/command/just-subset/refusal-shell-string-body.awl
+```
 
 The report you are reading cannot quote its own blob hash. Its receipt is
 `git ls-tree HEAD .fleet/reports/build.md` at the landing commit.
 
 ### Gate
 
-GATE_PLACEHOLDER
+`.fleet/gate-entry.sh`, run by this leg on the CLEAN COMMITTED tree at
+`dc25d7607ae597d924ac4c82e0b28626f8b310cf` — the commit carrying the whole
+surface. Compilation lines elided; nothing else is:
+
+```
+== 1. toolchain ==
+  pinned: 1.97.1
+  active: rustc 1.97.1 (8bab26f4f 2026-07-14)
+  source: 1.97.1-x86_64-unknown-linux-gnu (overridden by '/home/rocketfish/fleet/runs/awl-cut2-flight1/legs/build/rust-toolchain.toml')
+  pin HONORED: active toolchain is sourced from the pin file
+== 2. tree receipt ==
+  HEAD: dc25d7607ae597d924ac4c82e0b28626f8b310cf
+  TREE: CLEAN
+== 3. paths census ==
+  census OK (91 files within the wall, 59 in the deliverable crate family)
+== 4a. clippy ==
+  clippy clean
+== 4b. new-test control ==
+  new test annotations in diff: 71
+== 4c. suite ==
+  suite names ~5472 test(s)
+     Summary [ 209.619s] 5472 tests run: 5472 passed (7 slow, 3 leaky), 0 skipped
+GATE-GREEN: toolchain 1.97.1 pin-honored from rust-toolchain.toml; tree CLEAN at dc25d7607ae597d924ac4c82e0b28626f8b310cf; census within wall with deliverable present; clippy -D warnings clean; 71 new test annotations; 5472 tests named and green against base 1bab95477cb86d498d07bb8da445f00351b87972
+```
+
+`GATE_RC=0`.
+
+⚠️ **Stated plainly, because a receipt that overstates itself is worse than
+none.** The run above attests the commit that carries the SURFACE. This
+report is a second commit on top of it, and the exit-condition run — the
+gate against the final tree, this file included — is the flight's terminal
+green and is reported in the leg's reply rather than quoted here: a document
+cannot contain the output of a run that measures it. Every `git ls-tree`
+receipt above is valid at the final HEAD as well, because none of the paths
+it names changed between the two commits.
 
 ---
 
