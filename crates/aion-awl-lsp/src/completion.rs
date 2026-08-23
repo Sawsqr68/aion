@@ -19,7 +19,8 @@ use std::collections::BTreeSet;
 use aion_awl::builtins::BUILTIN_TYPES;
 use aion_awl::guide::GrammarPosition;
 use aion_awl::{
-    COMMAND_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, Token, TokenKind,
+    ARTIFACT_WORD, COMMAND_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RECIPE_WORD, RUN_WORD,
+    SEND_WORD, Token, TokenKind, WALL_WORD,
 };
 use lsp_types::{CompletionItem, CompletionItemKind, Position};
 
@@ -145,6 +146,11 @@ fn context_at(source: &str, cursor: usize, line: (usize, usize)) -> Context {
     }
     match enclosing_declaration(source, line_start) {
         Some(word) if word == COMMAND_WORD => Context::CommandBody,
+        Some(word) if word == RECIPE_WORD => {
+            recipe_context(source, line_start, prefix.len() - prefix.trim_start().len())
+        }
+        Some(word) if word == WALL_WORD => Context::WallBody,
+        Some(word) if word == ARTIFACT_WORD => Context::ArtifactBody,
         Some(word) if word == Keyword::Worker.as_word() => Context::WorkerBlock,
         Some(word) if word == Keyword::Type.as_word() => Context::TypeBody,
         Some(word) if word == Keyword::Workflow.as_word() || word == Keyword::Child.as_word() => {
@@ -152,6 +158,38 @@ fn context_at(source: &str, cursor: usize, line: (usize, usize)) -> Context {
         }
         _ => Context::StepBody,
     }
+}
+
+/// Inside a recipe, whether the cursor stands in the recipe's own body or
+/// one level deeper, inside one of its steps.
+///
+/// Decided by the nearest line above that is indented LESS than the cursor's
+/// — the line the cursor's line stands under. A `step` there means the
+/// cursor is writing that step's clauses; anything else means it is writing
+/// the recipe's own.
+fn recipe_context(source: &str, line_start: usize, indent: usize) -> Context {
+    for line in source[..line_start].lines().rev() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let line_indent = line.len() - line.trim_start().len();
+        if line_indent == 0 {
+            // The recipe's own header line: nothing deeper stood between.
+            break;
+        }
+        if line_indent >= indent {
+            continue;
+        }
+        return if line
+            .trim_start()
+            .starts_with(&format!("{} ", Keyword::Step.as_word()))
+        {
+            Context::RecipeStep
+        } else {
+            Context::RecipeBody
+        };
+    }
+    Context::RecipeBody
 }
 
 /// The last whole word in `head`, or `None` when it ends in punctuation.
@@ -290,14 +328,20 @@ fn names_for(context: Context, harvest: &Harvest) -> Vec<&Declared> {
         // capture selector or the command string; a type door wants its own
         // body. A command body's own names — its parameters — are not in the
         // harvest, which reads a document's declarations rather than one
-        // declaration's parameter list. None of these is a place one of the
-        // harvested names can stand.
-        Context::TopLevel
+        // declaration's parameter list; a recipe's step names its own steps
+        // for the same reason, and a recipe, wall or artifact body offers
+        // its clause words and nothing the document declared. None of these
+        // is a place one of the harvested names can stand.
+        Context::RecipeStep
+        | Context::TopLevel
         | Context::WorkerBlock
         | Context::TypeDoor
         | Context::SchemaSource
         | Context::RunCapture
-        | Context::CommandBody => Vec::new(),
+        | Context::CommandBody
+        | Context::RecipeBody
+        | Context::WallBody
+        | Context::ArtifactBody => Vec::new(),
     };
     groups.into_iter().flatten().collect()
 }

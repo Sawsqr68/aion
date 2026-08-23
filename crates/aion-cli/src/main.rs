@@ -23,6 +23,7 @@ use crate::start::{start_workflow, start_workflow_handle};
 mod assistant;
 mod awl;
 mod awl_guide;
+mod awl_recipe;
 mod awl_scaffold;
 mod check_deterministic;
 mod console;

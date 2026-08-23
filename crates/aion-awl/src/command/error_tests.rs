@@ -8,8 +8,8 @@ use crate::Span;
 
 use super::super::cause::{CommandCause, CommandLayer};
 use super::{
-    CauseMisfiled, CommandCheckError, CommandEmitError, CommandParseError, CommandRefusal,
-    CommandSpecimenError,
+    CauseMisfiled, CommandCheckError, CommandComposeError, CommandEmitError, CommandFireError,
+    CommandParseError, CommandRefusal, CommandSpecimenError,
 };
 
 fn span() -> Span {
@@ -83,20 +83,25 @@ fn a_constructor_fed_an_empty_diagnostic_returns_a_typed_error() {
 #[test]
 fn every_cause_constructs_at_its_own_layer_and_nowhere_else() {
     for cause in CommandCause::ALL {
-        let built = match cause.layer() {
-            CommandLayer::Parse => {
-                CommandParseError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
-            }
-            CommandLayer::Check => {
-                CommandCheckError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
-            }
-            CommandLayer::Emit => {
-                CommandEmitError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
-            }
-            CommandLayer::Specimen => {
-                CommandSpecimenError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
-            }
-        };
+        let built =
+            match cause.layer() {
+                CommandLayer::Parse => {
+                    CommandParseError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
+                }
+                CommandLayer::Check => {
+                    CommandCheckError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
+                }
+                CommandLayer::Emit => {
+                    CommandEmitError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
+                }
+                CommandLayer::Compose => CommandComposeError::new(cause, span(), "bytes", "why")
+                    .map(CommandRefusal::from),
+                CommandLayer::Fire => {
+                    CommandFireError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
+                }
+                CommandLayer::Specimen => CommandSpecimenError::new(cause, span(), "bytes", "why")
+                    .map(CommandRefusal::from),
+            };
         let built = built.unwrap_or_else(|misfiled| {
             unreachable!("{cause} must construct at its own layer: {misfiled}")
         });
@@ -118,6 +123,11 @@ fn every_cause_constructs_at_its_own_layer_and_nowhere_else() {
                 }
                 CommandLayer::Emit => {
                     CommandEmitError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
+                }
+                CommandLayer::Compose => CommandComposeError::new(cause, span(), "bytes", "why")
+                    .map(CommandRefusal::from),
+                CommandLayer::Fire => {
+                    CommandFireError::new(cause, span(), "bytes", "why").map(CommandRefusal::from)
                 }
                 CommandLayer::Specimen => CommandSpecimenError::new(cause, span(), "bytes", "why")
                     .map(CommandRefusal::from),

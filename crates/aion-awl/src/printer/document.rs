@@ -144,6 +144,7 @@ fn print_document(printer: &mut Printer, document: &Document) {
     for command in &document.commands {
         print_command(printer, command);
     }
+    super::assembly::print_assembly(printer, document);
     for step in &document.steps {
         print_step(printer, 0, step);
     }
@@ -181,6 +182,7 @@ fn print_worker_document(printer: &mut Printer, document: &Document) {
     for command in &document.commands {
         print_command(printer, command);
     }
+    super::assembly::print_assembly(printer, document);
     for step in &document.steps {
         print_step(printer, 0, step);
     }

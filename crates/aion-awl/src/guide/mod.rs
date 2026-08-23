@@ -20,6 +20,7 @@ mod examples;
 mod flow;
 mod grammar;
 mod lookup;
+mod recipes;
 mod reference;
 mod values;
 

@@ -13,6 +13,7 @@ mod fill;
 mod just_subset;
 mod parse;
 mod print;
+pub mod recipe;
 mod specimen;
 mod words;
 
@@ -26,8 +27,8 @@ pub use decl::{
 pub use derived::{DerivedShape, derived_shape_in};
 pub use emit::{ArgumentValue, Argv, ParameterSet, emit};
 pub use error::{
-    CauseMisfiled, CommandCheckError, CommandEmitError, CommandParseError, CommandRefusal,
-    CommandSpecimenError,
+    CauseMisfiled, CommandCheckError, CommandComposeError, CommandEmitError, CommandFireError,
+    CommandParseError, CommandRefusal, CommandSpecimenError,
 };
 pub use fill::{Fill, FillSegment};
 pub use just_subset::{
@@ -37,4 +38,5 @@ pub use just_subset::{
 
 pub(crate) use parse::parse_command_decl;
 pub use print::{command_body_lines, command_header, print_command_decl};
+pub(crate) use recipe::{parse_artifact_decl, parse_recipe_decl, parse_wall_decl};
 pub use specimen::fire_specimen;

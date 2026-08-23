@@ -10,6 +10,7 @@
 
 mod decl_commands;
 mod decl_document;
+mod decl_recipes;
 mod decl_workers;
 mod flow_graph;
 mod flow_iteration;
@@ -20,6 +21,7 @@ pub(crate) use decl_commands::{ADMITTING_COMMAND, REFUSING_COMMAND};
 pub(crate) use decl_document::{
     CONST, FALSE, INPUT, JSON, OF, SCHEMA, SIGNAL, TRUE, TYPE, WORKFLOW,
 };
+pub(crate) use decl_recipes::{ASSEMBLY_SOURCES, RECIPE_PARAMETERS, RECIPE_STEPS};
 pub(crate) use decl_workers::{
     ACTION, ADVISORY, AGENT, BACKOFF, CHILD, EVERY, FALLBACK, NODE, RETRY, RUN, SPAWN, SUBFLOW,
     TIMEOUT, WORKER,

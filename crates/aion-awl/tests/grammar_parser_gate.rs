@@ -69,14 +69,18 @@ const NARRATION: &str = "//! Probe document for the grammar gate.\n";
 /// reads as "admitted" and the equality assertions below go loudly red —
 /// the gate fails safe rather than quietly matching nothing.
 const OPENER_REFUSAL: &str = "expected the `workflow` or `worker` header";
-// Moved with the parser when the command-declaration surface landed: the
-// dispatcher now admits `command` and its diagnostic names it, so the prefix
-// this gate matches on had to follow. The ASSERTIONS below are unchanged —
-// this constant is the gate's grip on the parser's own sentence, not a claim
-// about what the parser should admit, and the equality checks are what would
-// have caught a wording change that did not correspond to a dispatch change.
-const DECLARATION_REFUSAL: &str =
-    "expected a `const`, `type`, `worker`, `child`, `subflow`, `step`, or `command` declaration";
+// Moved with the parser when the command-declaration surface landed, and
+// again when the recipe surface did: the dispatcher now admits `command`,
+// `recipe`, `wall` and `artifact`, and its diagnostic names all four, so the
+// prefix this gate matches on had to follow. The ASSERTIONS below are
+// unchanged — this constant is the gate's grip on the parser's own sentence,
+// not a claim about what the parser should admit, and the equality checks are
+// what would have caught a wording change that did not correspond to a
+// dispatch change. (They did: leaving this constant behind made every probe
+// read as "admitted" and both equality assertions went loudly red, which is
+// the fail-safe the comment above describes working.)
+const DECLARATION_REFUSAL: &str = "expected a `const`, `type`, `worker`, `child`, `subflow`, \
+     `step`, `command`, `recipe`, `wall`, or `artifact` declaration";
 const HEADER_REFUSAL: &str =
     "expected `timeout`, `input`, `signal`, `send`, `query`, or `outcome` in the workflow header";
 

@@ -1,0 +1,29 @@
+//! FIXTURE: absorbed production `recipe_declaration`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `star_may_follow_default`, whose declaration is `foo bar='baz' *bob:`.
+//! JUST-SPECIMEN: foo bar='baz' *bob:
+//! WHAT DIFFERS: the SHAPE is absorbed and the BODY is not. Just's recipe body
+//!   is a script; AWL's recipe body is a list of steps, and each step names
+//!   DECLARED work. The same suite case supplies the refusal fixture
+//!   `refusal-recipe-body.awl`, which is not a contradiction: a recipe body is
+//!   unrepresentable inside a gate-leg COMMAND declaration (amendment 1) and a
+//!   recipe declaration stands at the TOP LEVEL, where a reader meets it.
+
+workflow just_recipe_declaration
+  outcome done: type String, route success
+
+command echo_it(bar: String)
+  program "echo"
+  admits "--"
+  operand text: String = "{{bar}}"
+
+recipe foo
+  parameter bar: String = "baz" skeleton
+  step run_it
+    runs command echo_it
+
+step go
+  route done("ok")

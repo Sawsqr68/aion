@@ -128,6 +128,8 @@ pub(crate) const SENDING_SIGNALS: Section = Section::new(12, "Sending signals to
 pub(crate) const QUERY_SURFACE: Section = Section::new(13, "The read-only query surface");
 /// §17 of the reference.
 pub(crate) const COMMAND_DECLARATIONS: Section = Section::new(17, "Command declarations");
+/// §18 of the reference.
+pub(crate) const RECIPE_DECLARATIONS: Section = Section::new(18, "Recipe declarations");
 
 /// One word of AWL, as the language reference explains it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -56,7 +56,15 @@ pub struct AbsorbedProduction {
 }
 
 /// Exactly the absorbed subset. Adding a row is a design change.
-pub const ABSORBED_PRODUCTIONS: [AbsorbedProduction; 4] = [
+///
+/// The last three rows are the recipe half, and they are not in
+/// contradiction with [`REFUSED_FORMS`]'s first three: a recipe body, a
+/// dependency edge and a multi-step assembly are UNREPRESENTABLE inside a
+/// gate-leg command declaration (amendment 1, structural) and representable
+/// at the TOP LEVEL, where a reader of the document meets them. Same shapes,
+/// two contexts, one fence between them — and each fixture header says which
+/// context it is a fixture of.
+pub const ABSORBED_PRODUCTIONS: [AbsorbedProduction; 7] = [
     AbsorbedProduction {
         id: "typed_parameter",
         summary: "A declaration takes named parameters, which are the only names its fills may \
@@ -84,6 +92,30 @@ pub const ABSORBED_PRODUCTIONS: [AbsorbedProduction; 4] = [
         awl_form: "operand range: String = \"{{base}}..HEAD\"",
         just_form: "echo {{ b }}",
     },
+    AbsorbedProduction {
+        id: "recipe_declaration",
+        summary: "A recipe is declared at the top level, with typed parameters and an ordered \
+                  body of steps. The SHAPE is absorbed; the body is not — a step names declared \
+                  work, never a script line.",
+        awl_form: "recipe foo",
+        just_form: "foo bar='baz' *bob:",
+    },
+    AbsorbedProduction {
+        id: "recipe_dependency",
+        summary: "A step runs after another step of the same recipe. Absorbed as `after`, the \
+                  word this language already uses for an ordering dependency — one word, one \
+                  meaning, no synonym minted for the recipe layer.",
+        awl_form: "step bar\n  after foo",
+        just_form: "baz: foo::bar::baz",
+    },
+    AbsorbedProduction {
+        id: "recipe_parameter_kind",
+        summary: "A recipe parameter carries a declared field kind, and a `re_derive` one \
+                  carries the source it is read from at the fire minute.",
+        awl_form: "parameter control_expect: String re_derive derives \"origin/main:f\" extract \
+                   \"line 22\"",
+        just_form: "recipe param=\"value\"",
+    },
 ];
 
 /// One form named in the design's refused list, with the cause that refuses
@@ -103,7 +135,7 @@ pub struct RefusedForm {
 /// Every refused form, each with a refusal test. The absence-of-escape
 /// discipline: a form on this list is refused BY NAME, never by falling
 /// through to a general "unknown" diagnostic.
-pub const REFUSED_FORMS: [RefusedForm; 6] = [
+pub const REFUSED_FORMS: [RefusedForm; 8] = [
     RefusedForm {
         id: "recipe_body",
         just_form: "foo:\\n  echo hello",
@@ -144,5 +176,21 @@ pub const REFUSED_FORMS: [RefusedForm; 6] = [
         reason: "a `K=V` string is a prefix some shell would have to split, and splitting is what \
                  this surface exists to remove",
         cause: CommandCause::EnvStringPrefix,
+    },
+    RefusedForm {
+        id: "shell_string_body",
+        just_form: "foo:\\n  echo hello",
+        reason: "a recipe step runs DECLARED work; a shell string in a step body is the \
+                 argv-re-split family one level up, and a command assembled from parts at run \
+                 time is a command no reader saw",
+        cause: CommandCause::ShellStringBody,
+    },
+    RefusedForm {
+        id: "nested_command_declaration",
+        just_form: "(no Just form: Just has no declaration nesting)",
+        reason: "amendment 1's converse fence — a command is declared at the top level and \
+                 referenced by a step, so nesting one inside a recipe would put a gate-leg \
+                 declaration where no reader of the top level meets it",
+        cause: CommandCause::CommandDeclarationNested,
     },
 ];

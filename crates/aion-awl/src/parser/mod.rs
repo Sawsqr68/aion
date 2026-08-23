@@ -3,6 +3,7 @@
 
 mod action_body;
 mod args;
+mod declarations;
 mod document;
 mod error;
 mod exprs;

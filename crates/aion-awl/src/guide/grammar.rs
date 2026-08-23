@@ -19,9 +19,11 @@
 //! every derived form is honest against the table it came from.
 
 use crate::lexer::{
-    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
-    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, PROGRAM_WORD, QUERY_WORD,
-    REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
+    ADMITS_WORD, ALLOWS_WORD, ANSWER_WORD, ARTIFACT_WORD, CAPTURES_WORD, COMMAND_WORD, CWD_WORD,
+    DERIVES_WORD, DIGEST_WORD, ENV_WORD, EXCLUDES_WORD, EXPECTING_WORD, EXTRACT_WORD, FIRES_WORD,
+    HARDENING_WORD, IN_WORD, Keyword, OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD,
+    PARAMETER_WORD, PATH_WORD, PROGRAM_WORD, QUERY_WORD, RECIPE_WORD, REFUSES_WORD, REQUIRES_WORD,
+    RESTORES_WORD, RUN_WORD, RUNS_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD, WALL_WORD,
 };
 
 /// A position in the grammar where the cursor — or a word — may stand.
@@ -64,11 +66,20 @@ pub enum GrammarPosition {
     RunCapture,
     /// Indented under `command`: the clauses of a declared command.
     CommandBody,
+    /// Indented under `recipe`: the clauses of a declared assembly.
+    RecipeBody,
+    /// Indented under a recipe's `step`: what that step depends on, requires,
+    /// and does.
+    RecipeStep,
+    /// Indented under `wall`: what the wall admits and what it excludes.
+    WallBody,
+    /// Indented under `artifact`: its digest, its restoration, its sentinels.
+    ArtifactBody,
 }
 
 impl GrammarPosition {
     /// Every position, in the order the table reads them.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 20] = [
         Self::TopLevel,
         Self::WorkflowHeader,
         Self::WorkerBlock,
@@ -85,6 +96,10 @@ impl GrammarPosition {
         Self::SchemaSource,
         Self::RunCapture,
         Self::CommandBody,
+        Self::RecipeBody,
+        Self::RecipeStep,
+        Self::WallBody,
+        Self::ArtifactBody,
     ];
 
     /// The position's stable identifier, as the guide's JSON carries it.
@@ -107,6 +122,10 @@ impl GrammarPosition {
             Self::SchemaSource => "schema-source",
             Self::RunCapture => "run-capture",
             Self::CommandBody => "command-body",
+            Self::RecipeBody => "recipe-body",
+            Self::RecipeStep => "recipe-step",
+            Self::WallBody => "wall-body",
+            Self::ArtifactBody => "artifact-body",
         }
     }
 
@@ -130,6 +149,10 @@ impl GrammarPosition {
             Self::SchemaSource => "after schema in a value expression",
             Self::RunCapture => "after run in a declared action body",
             Self::CommandBody => "in a command declaration",
+            Self::RecipeBody => "in a recipe declaration",
+            Self::RecipeStep => "in a recipe's step",
+            Self::WallBody => "in a wall declaration",
+            Self::ArtifactBody => "in an artifact declaration",
         }
     }
 }
@@ -204,12 +227,23 @@ pub const fn keywords_offered_at(position: GrammarPosition) -> &'static [Keyword
             // condition words start here too.
             K::When,
         ],
-        // A type body's two slots — field name and field type — admit no
-        // keyword at all (`parser/types.rs`), and a type reference after a
-        // colon admits only a type identifier, a list, or `?`. Both offer
-        // NOTHING: the words once filed here stand in the value positions
-        // below, which is where the parser actually accepts them.
-        GrammarPosition::TypeBody | GrammarPosition::TypeReference => &[],
+        // Four positions admit no reserved word at all. A type body's two
+        // slots — field name and field type — take none (`parser/types.rs`),
+        // and a type reference after a colon admits only a type identifier, a
+        // list, or `?`; the words once filed there stand in the value
+        // positions below, which is where the parser actually accepts them. A
+        // wall body and an artifact body take only their own positional
+        // clause words.
+        GrammarPosition::TypeBody
+        | GrammarPosition::TypeReference
+        | GrammarPosition::WallBody
+        | GrammarPosition::ArtifactBody => &[],
+        // A recipe body's own opener set is `parameter` plus the reserved
+        // `step`; a step's dependency edge reuses the reserved `after`,
+        // which already means "an ordering dependency on another step"
+        // everywhere else in this language.
+        GrammarPosition::RecipeBody => &[K::Step],
+        GrammarPosition::RecipeStep => &[K::After, K::Of],
         GrammarPosition::RouteTarget | GrammarPosition::StepReference => &[K::Success, K::Failure],
         // A signal reference takes `timeout` as the wait's ceiling; a command
         // body takes it as the invocation's. Merged because the OFFER is the
@@ -268,7 +302,7 @@ pub const fn positional_offered_at(position: GrammarPosition) -> &'static [&'sta
         // `command` opens a top-level declaration positionally: the word
         // stands in this tree's corpus today as a harness-section field name,
         // so reserving it would break documents that exist.
-        GrammarPosition::TopLevel => &[COMMAND_WORD],
+        GrammarPosition::TopLevel => &[COMMAND_WORD, RECIPE_WORD, WALL_WORD, ARTIFACT_WORD],
         GrammarPosition::WorkflowHeader => &[QUERY_WORD, SEND_WORD],
         GrammarPosition::WorkerBlock => &[RUN_WORD],
         // `in` belongs here because `distribute <var> in <collection>` is a
@@ -294,6 +328,24 @@ pub const fn positional_offered_at(position: GrammarPosition) -> &'static [&'sta
             OPEN_FILES_WORD,
             OWNER_WORD,
         ],
+        // `derives` and `extract` stand mid-line on a `parameter` clause,
+        // and are offered in the body for the same reason `owner` is offered
+        // in a command body: that is where an author's cursor is when they
+        // need them.
+        GrammarPosition::RecipeBody => &[PARAMETER_WORD, DERIVES_WORD, EXTRACT_WORD],
+        // `command` and `artifact` stand mid-line, naming what the step
+        // reaches for; `expecting` stands mid-line on a `fires` clause.
+        GrammarPosition::RecipeStep => &[
+            RUNS_WORD,
+            FIRES_WORD,
+            CAPTURES_WORD,
+            REQUIRES_WORD,
+            COMMAND_WORD,
+            ARTIFACT_WORD,
+            EXPECTING_WORD,
+        ],
+        GrammarPosition::WallBody => &[ALLOWS_WORD, EXCLUDES_WORD],
+        GrammarPosition::ArtifactBody => &[DIGEST_WORD, RESTORES_WORD, EXCLUDES_WORD],
         GrammarPosition::TypeBody
         | GrammarPosition::RouteTarget
         | GrammarPosition::StepReference
@@ -372,16 +424,20 @@ pub enum GrammarForm {
     /// Stands inside a `command` declaration, naming one clause of the
     /// invocation it declares.
     CommandClause,
+    /// Stands inside a `recipe`, `wall` or `artifact` declaration, naming
+    /// one clause of the assembly it declares.
+    AssemblyClause,
 }
 
 impl GrammarForm {
     /// Every form, in the order a reader meets them in a document: the
     /// declarations, the clauses under them, the statements, then the
     /// in-expression vocabularies.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Declaration,
         Self::HeaderClause,
         Self::CommandClause,
+        Self::AssemblyClause,
         Self::Statement,
         Self::PipelineStage,
         Self::ConditionWord,
@@ -401,6 +457,7 @@ impl GrammarForm {
             Self::ConditionWord => "condition-word",
             Self::TargetWord => "target-word",
             Self::CommandClause => "command-clause",
+            Self::AssemblyClause => "assembly-clause",
         }
     }
 
@@ -417,6 +474,7 @@ impl GrammarForm {
             Self::ConditionWord => "Condition word",
             Self::TargetWord => "Target word",
             Self::CommandClause => "Command clause",
+            Self::AssemblyClause => "Assembly clause",
         }
     }
 
@@ -443,6 +501,9 @@ impl GrammarForm {
             }
             Self::CommandClause => {
                 "Words that stand inside a command declaration, naming one clause of the invocation it declares."
+            }
+            Self::AssemblyClause => {
+                "Words that stand inside a recipe, wall, or artifact declaration, naming one clause of the assembly it declares."
             }
         }
     }
@@ -478,6 +539,13 @@ pub fn form_of(word: &str) -> Option<GrammarForm> {
     }
     if stands_in(GrammarPosition::CommandBody) {
         return Some(GrammarForm::CommandClause);
+    }
+    if stands_in(GrammarPosition::RecipeBody)
+        || stands_in(GrammarPosition::RecipeStep)
+        || stands_in(GrammarPosition::WallBody)
+        || stands_in(GrammarPosition::ArtifactBody)
+    {
+        return Some(GrammarForm::AssemblyClause);
     }
     if stands_in(GrammarPosition::PipeStage) {
         return Some(GrammarForm::PipelineStage);

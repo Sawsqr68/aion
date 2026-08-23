@@ -1,9 +1,12 @@
 //! Pins on the vocabulary inventories every consumer outside the lexer reads.
 
 use super::tokens::{
-    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
-    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, POSITIONAL_WORDS,
-    PROGRAM_WORD, QUERY_WORD, REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
+    ADMITS_WORD, ALLOWS_WORD, ANSWER_WORD, ARTIFACT_WORD, CAPTURES_WORD, COMMAND_WORD, CWD_WORD,
+    DERIVES_WORD, DIGEST_WORD, ENV_WORD, EXCLUDES_WORD, EXPECTING_WORD, EXTRACT_WORD, FIRES_WORD,
+    HARDENING_WORD, IN_WORD, Keyword, OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD,
+    PARAMETER_WORD, PATH_WORD, POSITIONAL_WORDS, PROGRAM_WORD, QUERY_WORD, RECIPE_WORD,
+    REFUSES_WORD, REQUIRES_WORD, RESTORES_WORD, RUN_WORD, RUNS_WORD, SEND_WORD, SPECIMEN_WORD,
+    TO_WORD, WALL_WORD,
 };
 
 /// The window of `tokens.rs` holding `as_word`'s match arms: one arm per
@@ -112,7 +115,22 @@ fn the_positional_words_are_named_without_being_reserved() {
             HARDENING_WORD,
             PATH_WORD,
             OPEN_FILES_WORD,
-            OWNER_WORD
+            OWNER_WORD,
+            RECIPE_WORD,
+            PARAMETER_WORD,
+            DERIVES_WORD,
+            EXTRACT_WORD,
+            WALL_WORD,
+            ALLOWS_WORD,
+            EXCLUDES_WORD,
+            ARTIFACT_WORD,
+            DIGEST_WORD,
+            RESTORES_WORD,
+            RUNS_WORD,
+            CAPTURES_WORD,
+            FIRES_WORD,
+            EXPECTING_WORD,
+            REQUIRES_WORD
         ],
         "the inventory must hold every named positional word, or a consumer reading it offers \
          fewer words than the parser accepts"
