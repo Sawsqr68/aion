@@ -1,0 +1,46 @@
+PROBE — which peer satisfied the quorum at the instant replicate_append returned?
+
+Temporary diagnostic patch on crates/aion/tests/aion_cluster_failover_showcase.rs,
+reverted immediately after this capture. It reads BOTH survivor stores at the
+point the round-5 assertion fires, and — when either is short — polls both until
+they converge. Binary: whole test target, default parallelism (the gate's shape).
+
+$ for i in 1..30: aion_cluster_failover_showcase --nocapture
+
+run 1  | PROBE t0: B=1 C=1 | 
+run 2  | PROBE t0: B=1 C=1 | 
+run 3  | PROBE t0: B=1 C=1 | 
+run 4  | PROBE t0: B=1 C=1 | 
+run 5  | PROBE t0: B=1 C=1 | 
+run 6  | PROBE t0: B=0 C=1 | PROBE converge: B after Some(580.586µs), C after Some(789.632µs)
+run 7  | PROBE t0: B=1 C=1 | 
+run 8  | PROBE t0: B=1 C=1 | 
+run 9  | PROBE t0: B=1 C=1 | 
+run 10 | PROBE t0: B=1 C=0 | PROBE converge: B after Some(295.209µs), C after Some(746.76µs)
+run 11 | PROBE t0: B=1 C=1 | 
+run 12 | PROBE t0: B=1 C=1 | 
+run 13 | PROBE t0: B=1 C=1 | 
+run 14 | PROBE t0: B=1 C=1 | 
+run 15 | PROBE t0: B=0 C=1 | PROBE converge: B after Some(644.652µs), C after Some(962.3µs)
+run 16 | PROBE t0: B=1 C=1 | 
+run 17 | PROBE t0: B=1 C=1 | 
+run 18 | PROBE t0: B=1 C=1 | 
+run 19 | PROBE t0: B=1 C=1 | 
+run 20 | PROBE t0: B=0 C=1 | PROBE converge: B after Some(5.382815ms), C after Some(5.634667ms)
+run 21 | PROBE t0: B=1 C=1 | 
+run 22 | PROBE t0: B=1 C=1 | 
+run 23 | PROBE t0: B=1 C=1 | 
+run 24 | PROBE t0: B=1 C=1 | 
+run 25 | PROBE t0: B=1 C=1 | 
+run 26 | PROBE t0: B=1 C=1 | 
+run 27 | PROBE t0: B=1 C=1 | 
+run 28 | PROBE t0: B=1 C=1 | 
+run 29 | PROBE t0: B=1 C=1 | 
+run 30 | PROBE t0: B=0 C=1 | PROBE converge: B after Some(387.64µs), C after Some(628.454µs)
+
+TALLY over 30 runs:
+  B=1 C=1 (both applied before the probe's own read) : 25
+  B=0 C=1 (C ALONE carried the quorum; B had nothing) :  4   <- the round-5 red
+  B=1 C=0 (B alone carried it; C lagged)              :  1   <- the SAME race, mirrored
+
+B's observed convergence delay when it lost the race: 295us, 387us, 580us, 644us, 5.38ms.

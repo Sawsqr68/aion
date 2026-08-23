@@ -1,0 +1,40 @@
+ARM B — the SAME repro loop at base c590712f, THE FLIGHT DIFF ABSENT
+
+$ git worktree add /tmp/seqfix-base c590712f57a2fe8353c6cd42823200587f25d70e
+$ cargo build -p aion-rs --test aion_cluster_failover_showcase   (exit 0)
+$ git -C /tmp/seqfix-base rev-parse HEAD
+c590712f57a2fe8353c6cd42823200587f25d70e
+$ git -C /tmp/seqfix-base status --porcelain      # clean
+
+The two arms are genuinely different binaries:
+  arm A (flight HEAD) sha256 c7f989207a2890caa46af11048461312334a29f5ae4aa2341290a6251f63e6e8
+  arm B (base       ) sha256 24ca7b11e85c9da0a92878c713b1f24941971c07216ceb34a998b4b1d7ef257b
+
+run 1 PASS
+run 2 PASS
+run 3 PASS
+run 4 PASS
+run 5 PASS
+run 6 FAIL
+test inflight_workflow_completes_on_survivor_after_owner_death ... FAILED
+  survivor B already holds the in-flight history (0 event):
+  left: 0
+ right: 1
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+run 7 PASS
+run 8 PASS
+run 9 PASS
+run 10 PASS
+run 11 PASS
+run 12 FAIL
+test inflight_workflow_completes_on_survivor_after_owner_death ... FAILED
+  survivor B already holds the in-flight history (0 event):
+  left: 0
+ right: 1
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+run 13 PASS
+... (runs 13-30 all PASS)
+RESULT (base arm): PASS=28 FAIL=2 of 30
+
+VERDICT: the round-5 red reproduces with the flight diff ABSENT. It is a
+pre-existing race in the test's premise, not something this flight introduced.

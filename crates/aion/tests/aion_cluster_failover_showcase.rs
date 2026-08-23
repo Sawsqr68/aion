@@ -22,7 +22,10 @@
 //!   * ACT 2 — A runs the committed `hello_world` Gleam workflow to completion;
 //!     every durable event is `replicate_append`ed to the quorum. We verify the
 //!     survivor B holds the FULL history by reading B's store directly — the
-//!     state really replicated, not just landed locally on A.
+//!     state really replicated, not just landed locally on A. That read waits for
+//!     B to CONVERGE (bounded by `OP_TIMEOUT`), because a quorum of 3 is A plus
+//!     ONE of {B,C}: see `await_replicated` for why reading a named survivor
+//!     instantly is a race the protocol never promised to win.
 //!   * ACT 3 — KILL node A: stop its responder and exclude it from all future
 //!     membership. A is, for every protocol purpose, DEAD. The only live copies
 //!     of the workflow are on {B,C}.
@@ -102,6 +105,10 @@ const NODE_C: &str = "node-c@127.0.0.1";
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const OP_TIMEOUT: Duration = Duration::from_secs(5);
 const SHARD: usize = 0;
+/// The single re-read cadence for every "wait for the cluster to get there" loop
+/// in this harness — link handshakes and replica convergence alike. One number,
+/// named once, so the two waits cannot drift apart.
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 // ---------------------------------------------------------------------------
 // The host-side activity, identical to the single-node showcase: it builds the
@@ -178,7 +185,58 @@ fn wait_until(timeout: Duration, mut predicate: impl FnMut() -> bool) -> bool {
         if Instant::now() >= deadline {
             return false;
         }
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(POLL_INTERVAL);
+    }
+}
+
+/// Read `store` until it holds at least `expected` events for `workflow_id`,
+/// returning that history; error if it has not converged within [`OP_TIMEOUT`].
+///
+/// ## Why a survivor read is a CONVERGENCE read, not an instantaneous one
+///
+/// `HaematiteStore::append` routes through haematite's `replicate_append`, which
+/// commits on a STRICT MAJORITY of the membership counting the proposer's own ack
+/// — `quorum_size(3) == 2`, so owner A plus EXACTLY ONE of {B, C}. The batch
+/// proposal is fire-and-forget to BOTH peers, so the peer that did not carry the
+/// quorum has not necessarily applied it when `append` returns; it applies on its
+/// next `respond_to_inbound_writes` drain. Naming one survivor and reading it the
+/// instant the append returns therefore samples a race that the protocol never
+/// promised to win: measured over 30 runs of this binary (transcript at
+/// `docs/evidence/seqfix-quorum-visibility/PROBE-quorum-asymmetry.txt`), C alone
+/// carried the quorum in 4 runs — B held nothing — and B alone carried it in 1,
+/// with the losing peer converging 295us to 5.4ms later.
+///
+/// Convergence of every in-quorum replica IS the guarantee, so it is what this
+/// waits on, bounded by the same [`OP_TIMEOUT`] that bounds every other cluster
+/// operation in this harness. The proof stays non-vacuous and STRICTLY stronger
+/// than a bare quorum check: a survivor that never receives the batch fails the
+/// test by name and count, so "the state really replicated to B" is still what is
+/// being demonstrated — the caller's own assertions on the returned history are
+/// untouched.
+fn await_replicated(
+    runtime: &tokio::runtime::Runtime,
+    store: &Arc<dyn EventStore>,
+    workflow_id: &WorkflowId,
+    expected: usize,
+    peer: &str,
+) -> Result<Vec<Event>, Box<dyn Error>> {
+    let deadline = Instant::now() + OP_TIMEOUT;
+    loop {
+        // A read error is a genuine backend failure, not "not replicated yet":
+        // propagate it instead of spinning to the deadline against a broken store.
+        let history = runtime.block_on(store.read_history(workflow_id))?;
+        if history.len() >= expected {
+            return Ok(history);
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "survivor {peer} never converged on the replicated history within \
+                 {OP_TIMEOUT:?}: holds {} of the {expected} committed event(s)",
+                history.len()
+            )
+            .into());
+        }
+        std::thread::sleep(POLL_INTERVAL);
     }
 }
 
@@ -406,8 +464,16 @@ fn aion_workflow_survives_owner_node_death_on_haematite_cluster() -> TestResult 
 
     // PROVE the state really replicated: read the FULL history straight from the
     // survivor B's store. B is not the owner; this is the raw replicated copy.
+    // Read for CONVERGENCE, not instantaneously: the final append's quorum may
+    // have been carried by C, leaving B a drain behind (see `await_replicated`).
     let b_store_read: Arc<dyn EventStore> = Arc::clone(&node_b.store) as Arc<dyn EventStore>;
-    let history_on_b = runtime.block_on(b_store_read.read_history(&workflow_id))?;
+    let history_on_b = await_replicated(
+        &runtime,
+        &b_store_read,
+        &workflow_id,
+        history_on_a.len(),
+        NODE_B,
+    )?;
     println!(
         "  SAME history read directly from survivor B's store ({} events):",
         history_on_b.len()
@@ -547,8 +613,11 @@ fn aion_workflow_survives_owner_node_death_on_haematite_cluster() -> TestResult 
 // `WorkflowCompleted`) into the cluster, without duplicating the start.
 //
 // This is kept as a SEPARATE test so the primary stays deterministic. The start
-// event is written through the adapter (deterministic, no mid-activity timing
-// race), so this test is itself deterministic.
+// event is written through the adapter, so there is no mid-activity timing race
+// in WHAT gets recorded. The one thing that is NOT instantaneous is WHEN a named
+// survivor has applied it — a 3-node quorum is A plus one of {B,C} — so the
+// survivor read waits for convergence via `await_replicated`; every assertion
+// below it is then deterministic.
 #[test]
 fn inflight_workflow_completes_on_survivor_after_owner_death() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
@@ -600,16 +669,20 @@ fn inflight_workflow_completes_on_survivor_after_owner_death() -> TestResult {
         package_version: aion_core::PackageVersion::new(package.content_hash().to_string()),
     };
     let a_store: Arc<dyn EventStore> = Arc::clone(&node_a.store) as Arc<dyn EventStore>;
-    // The start replicates to the quorum {B,C} as it is appended on A.
+    // The start replicates as it is appended on A: `replicate_append` commits on a
+    // strict majority of the 3-node membership — A plus ONE of {B,C} — and the
+    // other peer applies the identical batch on its next inbound-write drain.
     runtime.block_on(a_store.append(WriteToken::recorder(), &workflow_id, &[start], 0))?;
     println!("  node A recorded ONLY WorkflowStarted (run is mid-flight, not done).");
     println!("  workflow id = {workflow_id}");
 
-    // The mid-flight start replicated to survivor B.
+    // The mid-flight start replicates to survivor B. Whether B or C carried the
+    // quorum is not the cluster's promise; B CONVERGING on the committed batch is,
+    // so that is what is waited on and asserted (see `await_replicated`).
     let b_store: Arc<dyn EventStore> = Arc::clone(&node_b.store) as Arc<dyn EventStore>;
-    let pre = runtime.block_on(b_store.read_history(&workflow_id))?;
+    let pre = await_replicated(&runtime, &b_store, &workflow_id, 1, NODE_B)?;
     println!(
-        "  survivor B already holds the in-flight history ({} event):",
+        "  survivor B holds the replicated in-flight history ({} event):",
         pre.len()
     );
     println!("{}", render_history(&pre));

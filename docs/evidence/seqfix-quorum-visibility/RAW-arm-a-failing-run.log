@@ -1,0 +1,42 @@
+
+running 11 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::dependency_failure_titles_are_classified_by_layer ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test inflight_workflow_completes_on_survivor_after_owner_death ... FAILED
+test aion_workflow_survives_owner_node_death_on_haematite_cluster ... ok
+
+failures:
+
+---- inflight_workflow_completes_on_survivor_after_owner_death stdout ----
+
+==================================================================
+ STRETCH — an IN-FLIGHT workflow finishes on the survivor node
+==================================================================
+
+--- ACT 1: node A owns shard 0; a workflow is started but NOT finished ---
+  node A recorded ONLY WorkflowStarted (run is mid-flight, not done).
+  workflow id = 0cf373c6-702b-4722-87f8-de5120d62a8c
+  survivor B already holds the in-flight history (0 event):
+
+
+thread 'inflight_workflow_completes_on_survivor_after_owner_death' (3508755) panicked at crates/aion/tests/aion_cluster_failover_showcase.rs:616:5:
+assertion `left == right` failed: B must hold exactly the replicated WorkflowStarted
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    inflight_workflow_completes_on_survivor_after_owner_death
+
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+

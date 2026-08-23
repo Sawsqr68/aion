@@ -1,0 +1,37 @@
+ARM A — repro on THIS FLIGHT'S TREE (HEAD, flight diff present)
+Whole test binary, default parallelism — the gate's own shape.
+$ target/debug/deps/aion_cluster_failover_showcase   x15
+
+BINARY: target/debug/deps/aion_cluster_failover_showcase-4d9496f5f7f1c843
+run 1 PASS
+run 2 PASS
+run 3 PASS
+run 4 FAIL
+test inflight_workflow_completes_on_survivor_after_owner_death ... FAILED
+  survivor B already holds the in-flight history (0 event):
+thread 'inflight_workflow_completes_on_survivor_after_owner_death' (3508755) panicked at crates/aion/tests/aion_cluster_failover_showcase.rs:616:5:
+  left: 0
+ right: 1
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+run 5 PASS
+run 6 PASS
+run 7 PASS
+run 8 PASS
+run 9 PASS
+run 10 PASS
+run 11 PASS
+run 12 PASS
+run 13 PASS
+run 14 PASS
+run 15 PASS
+RESULT: PASS=14 FAIL=1 of 15
+
+The failure is BYTE-FOR-BYTE the gate's round-5 red: same test, same line 616,
+same left: 0 / right: 1. Reproduced in-tree.
+
+CONTROL — the same test ALONE, by name, never fails:
+  cargo test -p aion-rs --test aion_cluster_failover_showcase inflight_... : 12 PASS / 0 FAIL
+  binary, single test, 48-process CPU load                                 : 20 PASS / 0 FAIL
+  => CPU starvation alone does NOT reproduce it. The variable is the two
+     cluster showcases running CONCURRENTLY in one process, which is exactly
+     what 'cargo test --workspace' does and what --exact never does.
