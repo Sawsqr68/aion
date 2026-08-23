@@ -65,14 +65,19 @@ pub(crate) fn hover_at(source: &str, position: Position) -> Option<Hover> {
     })
 }
 
-/// The glossary entry for a command-declaration word standing where the parser
+/// The glossary entry for a declared-surface word standing where the parser
 /// recognises it, or `None` when the identifier is just a name.
 ///
-/// The two recognised positions, and nothing else: `command` as the first word
-/// of a line at column zero, and a clause word as the first word of an
-/// indented line whose enclosing declaration is a `command`. An author's own
-/// `cwd:` field inside a `harness` section fails both and hovers to nothing,
-/// which is the whole point.
+/// The two recognised positions, and nothing else: a DECLARATION OPENER as
+/// the first word of a line at column zero, and a clause word as the first
+/// word of an indented line whose enclosing declaration is one this cluster
+/// opens. An author's own `cwd:` field inside a `harness` section fails both
+/// and hovers to nothing, which is the whole point.
+///
+/// The clause word is additionally scoped to the SECTION its own opener
+/// cites, so a `digest` typed inside a `command` body hovers to nothing and
+/// a `program` typed inside an `artifact` body does too. The scoping is read
+/// from the entries themselves rather than from a list here.
 fn command_word_entry(source: &str, word: &str, start: usize) -> Option<GuideEntry> {
     let (line_start, _) = crate::completion::line_bounds(source, start);
     if source.get(line_start..start)?.trim_start() != "" {
@@ -81,24 +86,46 @@ fn command_word_entry(source: &str, word: &str, start: usize) -> Option<GuideEnt
         return None;
     }
     let indented = start > line_start;
-    if word == aion_awl::COMMAND_WORD {
+    if let Some(opener) = DECLARED_SURFACE_OPENERS
+        .into_iter()
+        .find(|opener| *opener == word)
+    {
         return (!indented)
-            .then(|| guide::for_positional_word(word))
+            .then(|| guide::for_positional_word(opener))
             .flatten();
     }
-    if !indented
-        || crate::completion::enclosing_declaration(source, line_start)
-            != Some(aion_awl::COMMAND_WORD)
-    {
+    if !indented {
         return None;
     }
-    guide::for_positional_word(word).filter(|entry| entry.section().number() == COMMAND_SECTION)
+    let enclosing = crate::completion::enclosing_declaration(source, line_start)?;
+    let section = section_of(enclosing)?;
+    guide::for_positional_word(word).filter(|entry| entry.section().number() == section)
 }
 
-/// The reference section the command-declaration cluster cites. Read from the
-/// entries themselves so hover answers for exactly the cluster and not for
-/// whichever positional word happens to be typed inside a command block.
-const COMMAND_SECTION: u8 = 17;
+/// The top-level words this cluster opens a declaration with.
+///
+/// `command` is cut-1's; `recipe`, `wall` and `artifact` are the assembly
+/// surface's. Each is a positional word, so each is recognised only at column
+/// zero — which is exactly the condition above.
+const DECLARED_SURFACE_OPENERS: [&str; 4] = [
+    aion_awl::COMMAND_WORD,
+    aion_awl::RECIPE_WORD,
+    aion_awl::WALL_WORD,
+    aion_awl::ARTIFACT_WORD,
+];
+
+/// The reference section a declaration opener's own cluster cites.
+///
+/// Read from the opener's glossary entry rather than written here, so a
+/// cluster that moves section takes its clause scoping with it and no
+/// constant falls behind.
+fn section_of(opener: &str) -> Option<u8> {
+    DECLARED_SURFACE_OPENERS
+        .into_iter()
+        .find(|candidate| *candidate == opener)
+        .and_then(guide::for_positional_word)
+        .map(|entry| entry.section().number())
+}
 
 /// The documentation a completion item carries for `word`.
 ///

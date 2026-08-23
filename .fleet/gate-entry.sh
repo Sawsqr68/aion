@@ -4,6 +4,7 @@
 # the venue where the pin-ignored defect was live until today.
 #
 # Order is load-bearing and is NOT to be reordered:
+#   0 environment (F-RIG-2 amendment, fix round 1 — see the block below)
 #   1 toolchain (named causes, pin-honored discrimination)
 #   2 tree receipt   3 paths census   4 suite (clippy, new-test control, nextest)
 #
@@ -21,43 +22,73 @@
 
 set -u
 
-BASE=5e2fb5a3ed32b53d48dbc585aa914acd056458c6   # aion main, post-seqfix-relanding, ls-remote verified at staging
-# ── WALL AMENDMENT (build leg, FINDING F-RIG-1) ─────────────────────────────
-# ONE alternative added to the staged wall, and nothing else:
-#     examples/assistant/resources/AWL-REFERENCE\.md
+BASE=1bab95477cb86d498d07bb8da445f00351b87972   # aion main CONTAINING cut-1's landing (land: awl-cut1), ls-remote verified at staging
+# ── CUT-2 WALL (staged; learns cut-1's F-RIG-1 lesson up front) ──────────────
+# Twin surfaces admitted from the start: the authored reference twin
+# (examples/assistant/resources/AWL-REFERENCE.md, pinned byte-identical by a
+# pre-existing test) and crates/aion-cli (the executing verb lands there per
+# the brief's ratified placement, fold B — front crate stays dependency-clean,
+# measured by the report's manifest delta). crates/aion-awl stays a prefix by
+# design (admits -lsp, -package, siblings). Positive control unchanged.
 #
-# WHY, at the bytes. The staged wall admits `crates/aion-awl` as a prefix,
-# which includes the packaged reference copy
-# `crates/aion-awl/guide-embed/AWL-REFERENCE.md`. But
-# `crates/aion-awl/tests/guide_reference_gate.rs:221` — a PRE-EXISTING test in
-# the crate the wall admits — pins that embed byte-identical to the authored
-# twin at `examples/assistant/resources/AWL-REFERENCE.md`
-# (`crates/aion-awl/src/guide/entry.rs:75`), which the staged wall does NOT
-# admit. Editing the admitted file therefore mechanically forces an edit to an
-# unadmitted one, so the wall as staged is internally inconsistent.
-#
-# WHY IT IS FATAL rather than inconvenient. Three pre-existing gates compose:
-#   1. guide_reference_gate.rs:204 asserts guide::all().len() ==
-#      Keyword::ALL.len() + POSITIONAL_WORDS.len() BY EQUALITY, so any new word
-#      forces a glossary entry;
-#   2. guide/lookup.rs is an exhaustive match, so a new word fails to compile
-#      until its entry is written;
-#   3. guide_reference_gate.rs:126 requires the cited section's BODY TEXT to
-#      use the word, whole-word matched.
-# Measured against the reference's sixteen sections at this base, the words
-# `option`, `operand`, `env`, `admits`, `variadic` and `hardening` occur in NO
-# section. So within the wall as staged, NO new AWL word can land at all —
-# which takes R1, R2, R3 and R7 with it.
-#
-# RIG.md states its own precedence: "Sources govern the brief; the brief
-# governs this rig." R7 is BINDING and the wall is subordinate to it. This is
-# one line to revert; the ruling is Waffles' at re-gate and Vesper's at
-# landing. Reported as F-RIG-1, first section of .fleet/reports/build.md.
+# F-RIG-3 AMENDMENT (cut-2 fix round 2) — ONE FILE ADDED, NOT A PREFIX:
+#   crates/aion/tests/awl_bc4_differential/run.rs
+# Round 2's only red was suite_red on aion-rs::awl_bc4_differential
+# covered::flagship_awl_hello_matches, diverging on `reference=Parked` vs
+# `direct=Completed` for a fixture (flagship/valid/awl_hello) whose lowering
+# contains no timer at all. The cause is that test's OWN disposition
+# classifier: run.rs called a run `Parked` on any outstanding TimerStarted,
+# and the differential's reference project declares `timeout_seconds = 60` on
+# EVERY entry (harness.rs:338), so the engine's run-scoped `deadline:{run_id}`
+# timer is outstanding on every fixture from its second event until its
+# terminal. That left three unchanged 20ms history reads as the only thing
+# separating "parked" from "slow", and a loaded box supplies 60ms of silence
+# to any run. No byte inside the staged wall can fix it: crates/aion-awl holds
+# the fixture and the compiler, and neither is wrong. Changing the fixture, or
+# excluding it from the oracle, would be suppression, not a fix. So the wall
+# is amended by the MINIMAL exact delta — that one file, spelled out in full,
+# NOT the crate and NOT the test directory — and the finding is recorded with
+# its bytes in .fleet/reports/build.md §14. Nothing else about the wall moves;
+# crates/aion remains out of bounds everywhere else.
 # ────────────────────────────────────────────────────────────────────────────
-WALL='^(crates/aion-awl|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)'
+WALL='^(crates/aion-awl|crates/aion-cli|crates/aion/tests/awl_bc4_differential/run\.rs|apps/aion-ops-console/src/features/authoring/assets/awl-guide\.json|examples/assistant/resources/AWL-REFERENCE\.md|Cargo\.toml|Cargo\.lock|\.fleet/)'
 PKG_HINT='^crates/aion-awl/'
 
 red() { echo "GATE-RED: $1"; exit 1; }
+
+# ── F-RIG-2 AMENDMENT (cut-2 fix round 1; the WALL is NOT touched) ───────────
+# The fleet's `gates` action runs this script as an AWL DECLARED BODY, and aion
+# clears a declared body's environment to PATH alone — `command.env_clear()` at
+# crates/aion-worker/src/shell/action.rs:178 with INHERITED_VARIABLE = "PATH"
+# (line 63) — while the fleet_ops_rf worker's `gates` action declares no `env`.
+# HOME therefore never reaches this script under the fleet, though it does on
+# every desk. cargo and rustup do not notice: the `home` crate falls back to
+# the passwd entry, which is why round 1 got as far as a suite at all. But
+# aion_server::config::aion_home reads $HOME DIRECTLY
+# (crates/aion-server/src/config/home.rs:62, no passwd fallback), so the
+# workspace suite refuses 69 tests with "cannot resolve Aion home: set
+# AION_HOME or HOME" — 61 in crates/aion-server, 6 in
+# crates/aion-integration-norn, 2 in crates/aion-cli. Sixty-seven of those sit
+# OUTSIDE this cut's wall in crates whose bytes are identical to BASE
+# (`git diff --no-ext-diff --stat ${BASE}...HEAD -- crates/aion-server
+# crates/aion-integration-norn` is empty), so round 1's red measured the RIG's
+# environment, never the tree. The wall is left exactly as staged and no
+# out-of-wall byte is touched; what is stated here is the home the rest of the
+# toolchain already resolves through passwd, and it is stated ONLY when the
+# caller supplied none — a caller carrying a HOME keeps its own, so the gate's
+# verdict is the same at Waffles' desk, at the owner's, and under the fleet.
+# The two IN-WALL tests are fixed at their own cause in the same commit: they
+# now state a test-owned AION_HOME instead of inheriting the operator's.
+echo "== 0. environment =="
+if [ -n "${HOME:-}" ]; then
+  echo "  HOME supplied by the caller: ${HOME}"
+else
+  HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+  [ -n "${HOME}" ] || red "the caller passed no HOME and the passwd entry for uid $(id -u) names no home directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  [ -d "${HOME}" ] || red "the passwd home ${HOME} is not a directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  export HOME
+  echo "  HOME absent from the caller's environment (aion clears a declared body's env to PATH); supplied from the passwd entry: ${HOME}"
+fi
 
 # ---------------------------------------------------------------- 1. TOOLCHAIN
 echo "== 1. toolchain =="

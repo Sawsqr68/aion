@@ -49,22 +49,41 @@ fn embedded_document_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../aion-server/assistant-embed/assistant.awl")
 }
 
+/// A test-owned aion home, thrown away with the test.
+///
+/// The shipped document's `harness` section sets `cwd "{workspace_root}"`, and
+/// resolving that placeholder asks the launching box for its aion home
+/// (`aion_server::config::aion_home` → `<home>/clones`, created at expansion).
+/// Reading that home from an ambient `HOME` makes the verdict a property of
+/// the BOX rather than of the document: green on a desk, red under any runner
+/// whose child environment carries no `HOME` — and green only by creating
+/// `clones/` inside the operator's own `~/.aion` as a side effect. The home
+/// this test means is therefore stated, exactly as every other launching e2e
+/// in this crate states its own.
+fn test_home() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+    Ok(tempfile::Builder::new()
+        .prefix("aion-209-home-")
+        .tempdir()?)
+}
+
 /// Runs `aion worker agent <document> --check` through the real binary.
 ///
 /// `--check` connects to nothing: the surface is derived and the harness
 /// resolved exactly as a serve would, then the verb stops before dialling —
 /// which is what makes this safe to run anywhere.
-fn run_check(document: &Path) -> Result<Output, Box<dyn std::error::Error>> {
+fn run_check(document: &Path, home: &Path) -> Result<Output, Box<dyn std::error::Error>> {
     Ok(std::process::Command::new(env!("CARGO_BIN_EXE_aion"))
         .args(["worker", "agent"])
         .arg(document)
         .arg("--check")
+        .env("AION_HOME", home)
         .output()?)
 }
 
 #[test]
 fn the_embedded_document_is_launchable_by_the_recommended_verb() -> TestResult {
-    let output = run_check(&embedded_document_path())?;
+    let home = test_home()?;
+    let output = run_check(&embedded_document_path(), home.path())?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
@@ -134,7 +153,8 @@ fn the_same_document_without_its_harness_section_is_refused() -> TestResult {
 
     // `--check` is a report, not a gate: it succeeds and says `harness: null`.
     // This is what discriminates the passing arm's `"norn"` from a default.
-    let check = run_check(&path)?;
+    let home = test_home()?;
+    let check = run_check(&path, home.path())?;
     assert!(
         check.status.success(),
         "`--check` reports rather than refuses; stderr was:\n{}",
@@ -159,6 +179,7 @@ fn the_same_document_without_its_harness_section_is_refused() -> TestResult {
             "--identity",
             "refusal-control",
         ])
+        .env("AION_HOME", home.path())
         .output()?;
 
     let stderr = String::from_utf8_lossy(&serve.stderr);
@@ -198,6 +219,7 @@ fn the_recommended_serve_invocation_reaches_the_dial_not_a_refusal() -> TestResu
     use std::process::Stdio;
     use std::sync::{Arc, Mutex};
 
+    let home = test_home()?;
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_aion"))
         .args(["worker", "agent"])
         .arg(embedded_document_path())
@@ -207,6 +229,7 @@ fn the_recommended_serve_invocation_reaches_the_dial_not_a_refusal() -> TestResu
             "--identity",
             "assistant-worker",
         ])
+        .env("AION_HOME", home.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;

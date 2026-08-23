@@ -230,21 +230,137 @@ pub const SPECIMENS: &[Specimen] = &[
                   command c\n  program \"git\"\n  admits \"--\"",
         observed: Some("c"),
     },
+    // -------------------------------------------- parse layer (assembly)
+    Specimen {
+        cause: CommandCause::RecipeBodyEmpty,
+        what: "a recipe that states nothing",
+        command: "recipe stage",
+        observed: Some("stage"),
+    },
+    Specimen {
+        cause: CommandCause::AssemblyClauseUnknown,
+        what: "a word that is not a recipe clause",
+        command: "recipe stage\n  wibble \"x\"",
+        observed: Some("wibble"),
+    },
+    Specimen {
+        cause: CommandCause::ShellStringBody,
+        what: "a recipe step body written as a shell string",
+        command: "recipe stage\n  step build\n    runs \"cargo test --workspace\"",
+        observed: Some("cargo test --workspace"),
+    },
+    Specimen {
+        cause: CommandCause::CommandDeclarationNested,
+        what: "a command declaration nested inside a recipe body",
+        command: "recipe stage\n  command inner",
+        observed: Some("command"),
+    },
+    Specimen {
+        cause: CommandCause::ParameterKindUnknown,
+        what: "a parameter kind outside the closed taxonomy",
+        command: "recipe stage\n  parameter branch: String nonesuch",
+        observed: Some("nonesuch"),
+    },
+    // -------------------------------------------- check layer (assembly)
+    Specimen {
+        cause: CommandCause::DependencyCycle,
+        what: "dependency edges that close a cycle",
+        command: "recipe stage\n  step first\n    after second\n    runs command push_branch\n  \
+                  step second\n    after first\n    runs command push_branch",
+        observed: Some("first -> second -> first"),
+    },
+    Specimen {
+        cause: CommandCause::ReferenceUndeclared,
+        what: "a dependency edge naming a step the recipe does not declare",
+        command: "recipe stage\n  step push\n    after nowhere\n    runs command push_branch",
+        observed: Some("nowhere"),
+    },
+    Specimen {
+        cause: CommandCause::DerivationMissing,
+        what: "a re-derive parameter with no declared derivation",
+        command: "recipe stage\n  parameter control_expect: String re_derive\n  step push\n    \
+                  runs command push_branch",
+        observed: Some("re_derive"),
+    },
+    Specimen {
+        cause: CommandCause::ExtractionUnknown,
+        what: "a derivation naming an extraction this surface does not perform",
+        command: "recipe stage\n  parameter control_expect: String re_derive derives \"origin/main:f\" \
+                  extract \"the third paragraph\"\n  step push\n    runs command push_branch",
+        observed: Some("the third paragraph"),
+    },
+    Specimen {
+        cause: CommandCause::DoubleCarry,
+        what: "two parameters declaring the same truth",
+        command: "recipe stage\n  parameter leg: String = \"build\" skeleton\n  \
+                  parameter leg_ids: String = \"build\" skeleton\n  step push\n    \
+                  runs command push_branch",
+        observed: Some("build"),
+    },
+    Specimen {
+        cause: CommandCause::VenueValueRestated,
+        what: "a recipe restating a value the dispatch already declares",
+        command: "recipe stage\n  parameter workspace_root: String = \"/home/aion/fleet/runs\" \
+                  skeleton\n  step push\n    runs command push_branch",
+        observed: Some("/home/aion/fleet/runs"),
+    },
+    Specimen {
+        cause: CommandCause::ArtifactDigestMalformed,
+        what: "an artifact digest that is not a content digest",
+        command: "artifact ground \"OPERATING-GROUND.md\"\n  digest \"not-a-digest\"",
+        observed: Some("not-a-digest"),
+    },
+    Specimen {
+        cause: CommandCause::WallAllowsNothing,
+        what: "a wall that admits no path at all",
+        command: "wall changed_paths\n  excludes \"mutation vocabulary\"",
+        observed: Some("changed_paths"),
+    },
+    Specimen {
+        cause: CommandCause::RecipeStepRestated,
+        what: "two steps of one recipe sharing a name",
+        command: "recipe stage\n  step push\n    runs command push_branch\n  step push\n    \
+                  runs command push_branch",
+        observed: Some("push"),
+    },
+    Specimen {
+        cause: CommandCause::AssemblyDeclarationRestated,
+        what: "two walls sharing a name",
+        command: "wall changed_paths\n  allows \".fleet/\"\n\nwall changed_paths\n  \
+                  allows \"crates/\"",
+        observed: Some("changed_paths"),
+    },
+    Specimen {
+        cause: CommandCause::RecipeStatesNoStep,
+        what: "a recipe that assembles nothing",
+        command: "recipe stage\n  parameter branch: String per_item",
+        observed: Some("stage"),
+    },
 ];
 
-/// The causes whose refusals are raised by the EMIT and SPECIMEN layers,
-/// which take a parameter set rather than a document and are therefore
-/// specimened directly in `command_emit.rs` and `command_specimen.rs` rather
-/// than through a document here.
+/// The causes whose refusals are raised by the EMIT, COMPOSE, FIRE and
+/// SPECIMEN layers, which take a parameter set, a composition, or a tree
+/// rather than a document, and are therefore specimened directly in
+/// `command_emit.rs`, `command_specimen.rs`, `recipe_compose.rs`,
+/// `recipe_wall.rs` and `recipe_fire.rs` rather than through a document here.
 ///
 /// `specimen_wrong_cause` is among them and is additionally SHADOWED: its red
 /// arm is unreachable in this cut's emit vocabulary, which
 /// `command_specimen.rs` records in full rather than hiding.
-pub const NON_DOCUMENT_CAUSES: [CommandCause; 6] = [
+pub const NON_DOCUMENT_CAUSES: [CommandCause; 15] = [
     CommandCause::ArgumentMissing,
     CommandCause::ArgumentUndeclared,
     CommandCause::ArgumentTypeMismatch,
     CommandCause::LeadingDashOperand,
+    CommandCause::SlotUnfilled,
+    CommandCause::ExcludedTerm,
+    CommandCause::CensusMismatch,
+    CommandCause::ArtifactUnreadable,
+    CommandCause::RestoreInexact,
+    CommandCause::StageCompareMismatch,
+    CommandCause::ObjectMovedBeforeClaim,
+    CommandCause::PreconditionUnmet,
+    CommandCause::StepCommandFailed,
     CommandCause::SpecimenAccepted,
     CommandCause::SpecimenWrongCause,
 ];

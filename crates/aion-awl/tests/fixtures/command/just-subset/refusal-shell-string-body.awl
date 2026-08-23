@@ -1,0 +1,21 @@
+//! FIXTURE: refused form `shell_string_body`.
+//! EXPECT: refuse shell_string_body
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `star_may_follow_default`, whose recipe body is `@echo {{bar}} {{bob}}`.
+//! JUST-SPECIMEN: foo:\n  echo hello
+//! WHY REFUSED: a recipe step runs DECLARED work. A shell string in a step
+//!   body is the argv-re-split family one level up: a command assembled from
+//!   parts at run time is a command no reader saw. The form is unparseable,
+//!   not linted.
+
+workflow just_shell_string_body
+  outcome done: type String, route success
+
+recipe foo
+  step build
+    runs "echo hello"
+
+step go
+  route done("ok")

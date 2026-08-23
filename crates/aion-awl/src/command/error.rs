@@ -1,10 +1,10 @@
-//! Four layer error types, and the constructor discipline that keeps them
+//! Six layer error types, and the constructor discipline that keeps them
 //! apart.
 //!
 //! The carrier-contract law says a parse failure, a check refusal, an emit
-//! refusal, and a specimen-fire failure are different layers with different
-//! causes. A law stated only in prose is a law that gets broken by the next
-//! edit, so it is enforced by types here:
+//! refusal, a compose refusal, a fire refusal and a specimen-fire failure are
+//! different layers with different causes. A law stated only in prose is a law
+//! that gets broken by the next edit, so it is enforced by types here:
 //!
 //! * each layer has its OWN error type — there is no shared `CommandError`
 //!   with a layer field somebody can set wrongly;
@@ -37,8 +37,8 @@ pub enum CauseMisfiled {
     /// The cause belongs to a different layer than the error being built.
     #[error(
         "cause `{cause}` belongs to the {actual} layer and cannot be carried by a {attempted} \
-         refusal — a parse failure, a check refusal, an emit refusal and a specimen-fire failure \
-         are different layers with different causes"
+         refusal — a parse failure, a check refusal, an emit refusal, a compose refusal, a fire \
+         refusal and a specimen-fire failure are different layers with different causes"
     )]
     WrongLayer {
         /// The cause the caller supplied.
@@ -61,7 +61,7 @@ pub enum CauseMisfiled {
     },
 }
 
-/// The parts every layer's refusal carries, so the four types cannot drift
+/// The parts every layer's refusal carries, so the six types cannot drift
 /// into carrying different evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Refusal {
@@ -114,9 +114,9 @@ impl Refusal {
 
 /// Declares one layer's error type over [`Refusal`].
 ///
-/// A macro rather than four hand-written copies because the four types must
-/// be structurally identical in everything except their layer — a hand-copied
-/// fourth type is exactly where the fifth field, or the missing empty-message
+/// A macro rather than six hand-written copies because the six types must be
+/// structurally identical in everything except their layer — a hand-copied
+/// sixth type is exactly where the fifth field, or the missing empty-message
 /// check, would appear.
 macro_rules! layer_error {
     ($name:ident, $layer:expr, $what:literal, $doc:literal) => {
@@ -203,6 +203,23 @@ layer_error!(
      sound; this is the refusal that keeps a sound declaration from emitting an unsound argv."
 );
 layer_error!(
+    CommandComposeError,
+    CommandLayer::Compose,
+    "compose-layer",
+    "An assembly act was composed and refused BEFORE anything ran.\n\nA slot nothing filled, or a \
+     projection that would emit a term a round measured out. Nothing has been fired and nothing \
+     will be, which is the whole difference between this layer and the fire layer below."
+);
+layer_error!(
+    CommandFireError,
+    CommandLayer::Fire,
+    "fire-layer",
+    "The moment of firing refused.\n\nA referenced artifact's deployed bytes no longer match the \
+     census, a declared precondition was never answered, a stage's typed comparison disagreed, or \
+     an object moved between the write and the claim. A reader must be able to tell this from a \
+     compose refusal, because only one of the two says the world was reached for."
+);
+layer_error!(
     CommandSpecimenError,
     CommandLayer::Specimen,
     "specimen-fire-layer",
@@ -229,6 +246,12 @@ pub enum CommandRefusal {
     /// A parameter set, or the argv it would produce, is refused.
     #[error(transparent)]
     Emit(#[from] CommandEmitError),
+    /// An assembly act was composed and refused before anything ran.
+    #[error(transparent)]
+    Compose(#[from] CommandComposeError),
+    /// The moment of firing refused.
+    #[error(transparent)]
+    Fire(#[from] CommandFireError),
     /// A declared refusal specimen did not refuse, or refused wrongly.
     #[error(transparent)]
     Specimen(#[from] CommandSpecimenError),
@@ -272,6 +295,8 @@ impl CommandRefusal {
             CommandLayer::Parse => Self::Parse(CommandParseError(refusal)),
             CommandLayer::Check => Self::Check(CommandCheckError(refusal)),
             CommandLayer::Emit => Self::Emit(CommandEmitError(refusal)),
+            CommandLayer::Compose => Self::Compose(CommandComposeError(refusal)),
+            CommandLayer::Fire => Self::Fire(CommandFireError(refusal)),
             CommandLayer::Specimen => Self::Specimen(CommandSpecimenError(refusal)),
         }
     }
@@ -283,6 +308,8 @@ impl CommandRefusal {
             Self::Parse(error) => error.cause(),
             Self::Check(error) => error.cause(),
             Self::Emit(error) => error.cause(),
+            Self::Compose(error) => error.cause(),
+            Self::Fire(error) => error.cause(),
             Self::Specimen(error) => error.cause(),
         }
     }
@@ -295,6 +322,8 @@ impl CommandRefusal {
             Self::Parse(_) => CommandLayer::Parse,
             Self::Check(_) => CommandLayer::Check,
             Self::Emit(_) => CommandLayer::Emit,
+            Self::Compose(_) => CommandLayer::Compose,
+            Self::Fire(_) => CommandLayer::Fire,
             Self::Specimen(_) => CommandLayer::Specimen,
         }
     }
@@ -306,6 +335,8 @@ impl CommandRefusal {
             Self::Parse(error) => error.span(),
             Self::Check(error) => error.span(),
             Self::Emit(error) => error.span(),
+            Self::Compose(error) => error.span(),
+            Self::Fire(error) => error.span(),
             Self::Specimen(error) => error.span(),
         }
     }
@@ -317,6 +348,8 @@ impl CommandRefusal {
             Self::Parse(error) => error.observed_bytes(),
             Self::Check(error) => error.observed_bytes(),
             Self::Emit(error) => error.observed_bytes(),
+            Self::Compose(error) => error.observed_bytes(),
+            Self::Fire(error) => error.observed_bytes(),
             Self::Specimen(error) => error.observed_bytes(),
         }
     }
@@ -328,6 +361,8 @@ impl CommandRefusal {
             Self::Parse(error) => error.message(),
             Self::Check(error) => error.message(),
             Self::Emit(error) => error.message(),
+            Self::Compose(error) => error.message(),
+            Self::Fire(error) => error.message(),
             Self::Specimen(error) => error.message(),
         }
     }
@@ -339,6 +374,8 @@ impl CommandRefusal {
             Self::Parse(error) => error.rendered(),
             Self::Check(error) => error.rendered(),
             Self::Emit(error) => error.rendered(),
+            Self::Compose(error) => error.rendered(),
+            Self::Fire(error) => error.rendered(),
             Self::Specimen(error) => error.rendered(),
         }
     }

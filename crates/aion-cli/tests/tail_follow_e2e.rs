@@ -23,7 +23,7 @@ use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status};
 
@@ -39,14 +39,44 @@ const CHILD_RUN: u128 = 0x2443;
 const PRIOR_PARENT_RUN: u128 = 0x2431;
 const PRIOR_CHILD_ID: u128 = 0x2432;
 
+/// The fixture's handshakes, and why each is the primitive it is.
+///
+/// 🔴 Every one of these is a rendezvous between the TEST task and a socket
+/// handler axum spawns on demand, and a rendezvous built on
+/// `Notify::notify_waiters` is a lost wakeup waiting for a loaded box:
+/// `notify_waiters` stores NO permit, so a notification that lands before the
+/// other side has registered is dropped and the waiter blocks until its
+/// timeout. That is not hypothetical here — it took
+/// `tail_follow_attributes_replay_only_after_the_selected_generation_starts`
+/// red on a 16-way suite run, on bytes identical to the ones that had passed
+/// at every lighter desk. So the signals are permit-storing or latched, and
+/// which one each is depends only on how many waiters it has:
+///
+/// * one waiter, signalled once -> `Notify::notify_one`, which DOES store a
+///   permit, so the wakeup survives arriving early;
+/// * more than one waiter -> [`watch`], which latches its value, so every
+///   receiver observes the emit whenever it gets around to asking.
 #[derive(Clone)]
 struct HttpFixture {
+    /// Server -> test, one waiter: the parent per-workflow socket attached.
     parent_attached: Arc<Notify>,
+    /// Test -> server, one waiter: release the replayed parent events.
     emit_fanout: Arc<Notify>,
+    /// Server -> test, one waiter: the child transcript socket attached.
     transcript_attached: Arc<Notify>,
+    /// Server -> test, one waiter: the selected parent attempt's transcript
+    /// socket attached.
     selected_parent_transcript_attached: Arc<Notify>,
+    /// Server -> test, one waiter: the selected child socket attached.
     selected_child_attached: Arc<Notify>,
-    emit_live: Arc<Notify>,
+    /// Test -> server, TWO waiters (the child transcript socket and the
+    /// selected parent attempt's transcript socket both wait on it), which is
+    /// why it is latched rather than notified: `notify_one` would wake exactly
+    /// one of the two and `notify_waiters` would wake only those already
+    /// registered.
+    emit_live: watch::Receiver<bool>,
+    /// Set by the prior-generation child socket if it is ever followed — the
+    /// thing this test exists to prove does NOT happen.
     prior_child_attached: Arc<AtomicBool>,
 }
 
@@ -164,13 +194,17 @@ async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
         .serve_with_incoming(TcpListenerStream::new(grpc_listener));
     let grpc_task = tokio::spawn(grpc);
 
+    // `--no-follow` never reaches a live transcript, so this emit is never
+    // sent; the sender is bound so the receiver's channel stays open for the
+    // life of the fixture rather than reporting a dropped producer.
+    let (emit_live_sender, emit_live) = watch::channel(false);
     let http_state = HttpFixture {
         parent_attached: Arc::new(Notify::new()),
         emit_fanout: Arc::new(Notify::new()),
         transcript_attached: Arc::new(Notify::new()),
         selected_parent_transcript_attached: Arc::new(Notify::new()),
         selected_child_attached: Arc::new(Notify::new()),
-        emit_live: Arc::new(Notify::new()),
+        emit_live,
         prior_child_attached: Arc::new(AtomicBool::new(false)),
     };
     let app = Router::new()
@@ -198,6 +232,7 @@ async fn tail_no_follow_does_not_append_json_null_to_its_transcript_output()
         .output()?;
     http_task.abort();
     grpc_task.abort();
+    drop(emit_live_sender);
 
     assert!(output.status.success(), "tail failed: {output:?}");
     let stdout = String::from_utf8(output.stdout)?;
@@ -228,7 +263,7 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
     let transcript_attached = Arc::new(Notify::new());
     let selected_parent_transcript_attached = Arc::new(Notify::new());
     let selected_child_attached = Arc::new(Notify::new());
-    let emit_live = Arc::new(Notify::new());
+    let (emit_live, emit_live_receiver) = watch::channel(false);
     let prior_child_attached = Arc::new(AtomicBool::new(false));
     let http_state = HttpFixture {
         parent_attached: parent_attached.clone(),
@@ -236,7 +271,7 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
         transcript_attached: transcript_attached.clone(),
         selected_parent_transcript_attached: selected_parent_transcript_attached.clone(),
         selected_child_attached: selected_child_attached.clone(),
-        emit_live: emit_live.clone(),
+        emit_live: emit_live_receiver,
         prior_child_attached: prior_child_attached.clone(),
     };
     let app = Router::new()
@@ -271,7 +306,13 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
     tokio::time::timeout(Duration::from_secs(10), parent_attached.notified())
         .await
         .map_err(|_| "tail did not attach its parent workflow socket")?;
-    emit_fanout.notify_waiters();
+    // `notify_one`, not `notify_waiters`: the parent socket handler reaches its
+    // `emit_fanout.notified().await` only AFTER announcing its own attach, so
+    // this release can legitimately arrive first. A stored permit survives
+    // that ordering; a waiters-only wakeup is simply lost, and the handler then
+    // never sends the replayed parent events at all — which is precisely the
+    // 5s + 5s timeout pair that took this test red.
+    emit_fanout.notify_one();
     let selected_child_followed =
         tokio::time::timeout(Duration::from_secs(5), selected_child_attached.notified())
             .await
@@ -283,7 +324,9 @@ async fn tail_follow_attributes_replay_only_after_the_selected_generation_starts
     .await
     .is_ok();
     if parent_attempt_attached {
-        emit_live.notify_waiters();
+        emit_live.send(true).map_err(|error| {
+            format!("no transcript socket was listening for the live emit: {error}")
+        })?;
     }
     let mut lines = Vec::new();
     while let Ok(line) = line_receiver.recv_timeout(Duration::from_secs(1)) {
@@ -415,7 +458,9 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
         if request.pointer("/per_workflow/resume_from_seq") != Some(&json!(1)) {
             return;
         }
-        state.parent_attached.notify_waiters();
+        // `notify_one` stores a permit, so the test cannot miss this attach by
+        // registering its waiter after the tail process has already connected.
+        state.parent_attached.notify_one();
         state.emit_fanout.notified().await;
         let Some(events) = replayed_parent_events() else {
             return;
@@ -444,11 +489,17 @@ async fn serve_socket(mut socket: WebSocket, state: HttpFixture) {
 async fn serve_transcript(
     mut socket: WebSocket,
     attached: Arc<Notify>,
-    emit_live: Arc<Notify>,
+    mut emit_live: watch::Receiver<bool>,
     event: aion_core::ActivityEvent,
 ) {
     attached.notify_one();
-    emit_live.notified().await;
+    // Latched: whether the emit was sent before or after this socket started
+    // waiting, `wait_for` observes it. A dropped sender means the test has
+    // finished and this socket has nothing left to do.
+    if let Err(error) = emit_live.wait_for(|emitted| *emitted).await {
+        eprintln!("tail fixture live-emit channel closed before the emit: {error}");
+        return;
+    }
     let frame = match serde_json::to_string(&StreamedActivityEvent::new(event)) {
         Ok(frame) => frame,
         Err(error) => {

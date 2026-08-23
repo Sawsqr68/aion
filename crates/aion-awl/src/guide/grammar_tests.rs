@@ -121,7 +121,6 @@ fn every_derived_form_is_honest_against_the_table() {
         .collect();
     for word in vocabulary {
         let positions = positions_of(word);
-        let stands_in = |position: GrammarPosition| positions.contains(&position);
         let form = form_of(word);
         assert!(
             form.is_some(),
@@ -130,6 +129,19 @@ fn every_derived_form_is_honest_against_the_table() {
         let Some(form) = form else {
             continue;
         };
+        assert_form_is_honest(word, form, &positions);
+    }
+}
+
+/// One word's form, held against the positions the table offers it in.
+///
+/// Its own function so the loop above reads as the sweep it is: this is the
+/// per-form claim, and it is exhaustive with no wildcard, so a form added to
+/// the taxonomy fails to compile here until someone says what standing in it
+/// means.
+fn assert_form_is_honest(word: &str, form: GrammarForm, positions: &[GrammarPosition]) {
+    let stands_in = |position: GrammarPosition| positions.contains(&position);
+    {
         match form {
             GrammarForm::Declaration => assert!(
                 stands_in(GrammarPosition::TopLevel),
@@ -185,6 +197,23 @@ fn every_derived_form_is_honest_against_the_table() {
                     && !stands_in(GrammarPosition::SchemaSource)
                     && !stands_in(GrammarPosition::RunCapture),
                 "`{word}` is filed a command clause but its positions say otherwise: {positions:?}"
+            ),
+            GrammarForm::AssemblyClause => assert!(
+                (stands_in(GrammarPosition::RecipeBody)
+                    || stands_in(GrammarPosition::RecipeStep)
+                    || stands_in(GrammarPosition::WallBody)
+                    || stands_in(GrammarPosition::ArtifactBody))
+                    && !stands_in(GrammarPosition::TopLevel)
+                    && !stands_in(GrammarPosition::StepBody)
+                    && !stands_in(GrammarPosition::WorkflowHeader)
+                    && !stands_in(GrammarPosition::WorkerBlock)
+                    && !stands_in(GrammarPosition::ConstValue)
+                    && !stands_in(GrammarPosition::TypeDoor)
+                    && !stands_in(GrammarPosition::SchemaSource)
+                    && !stands_in(GrammarPosition::RunCapture)
+                    && !stands_in(GrammarPosition::CommandBody),
+                "`{word}` is filed an assembly clause but its positions say otherwise: \
+                 {positions:?}"
             ),
             GrammarForm::TargetWord => assert!(
                 positions.iter().all(|position| {
@@ -247,6 +276,32 @@ fn the_canonical_words_land_in_their_forms() {
         // thing it can open, and `timeout` opens a step-body statement, which
         // outranks both the header and the command body.
         ("timeout", GrammarForm::Statement),
+        // The assembly openers stand at the top level, so the precedence
+        // files them declarations exactly as it files `command`.
+        ("recipe", GrammarForm::Declaration),
+        ("wall", GrammarForm::Declaration),
+        ("artifact", GrammarForm::Declaration),
+        // Their clauses stand only inside an assembly body.
+        ("parameter", GrammarForm::AssemblyClause),
+        ("derives", GrammarForm::AssemblyClause),
+        ("extract", GrammarForm::AssemblyClause),
+        ("allows", GrammarForm::AssemblyClause),
+        ("excludes", GrammarForm::AssemblyClause),
+        ("digest", GrammarForm::AssemblyClause),
+        ("restores", GrammarForm::AssemblyClause),
+        ("runs", GrammarForm::AssemblyClause),
+        ("captures", GrammarForm::AssemblyClause),
+        ("fires", GrammarForm::AssemblyClause),
+        ("expecting", GrammarForm::AssemblyClause),
+        ("requires", GrammarForm::AssemblyClause),
+        // `step` and `after` gain a recipe position and are NOT refiled:
+        // `step` opens a top-level declaration and `after` opens a step-body
+        // statement, and both outrank an assembly body. One word, one
+        // meaning, read where it stands.
+        ("after", GrammarForm::Statement),
+        // `of` gains the recipe-step position and stays a value word: it
+        // opens a declaration's value after `=`, which outranks it.
+        ("of", GrammarForm::ValueWord),
     ];
     for (word, expected) in filed {
         assert_eq!(
@@ -308,6 +363,10 @@ fn the_all_inventories_carry_every_variant() {
             GrammarPosition::SchemaSource => 13,
             GrammarPosition::RunCapture => 14,
             GrammarPosition::CommandBody => 15,
+            GrammarPosition::RecipeBody => 16,
+            GrammarPosition::RecipeStep => 17,
+            GrammarPosition::WallBody => 18,
+            GrammarPosition::ArtifactBody => 19,
         }
     }
     fn form_ordinal(form: GrammarForm) -> usize {
@@ -320,10 +379,11 @@ fn the_all_inventories_carry_every_variant() {
             GrammarForm::ValueWord => 5,
             GrammarForm::TargetWord => 6,
             GrammarForm::CommandClause => 7,
+            GrammarForm::AssemblyClause => 8,
         }
     }
-    const POSITION_VARIANTS: usize = 16;
-    const FORM_VARIANTS: usize = 8;
+    const POSITION_VARIANTS: usize = 20;
+    const FORM_VARIANTS: usize = 9;
 
     let mut seen = [false; POSITION_VARIANTS];
     for position in GrammarPosition::ALL {

@@ -166,6 +166,20 @@ pub(crate) enum AwlCommand {
         #[arg(long, conflicts_with_all = ["word", "json"])]
         reference: bool,
     },
+    /// Compose or FIRE a declared recipe — the executing verb of the
+    /// assembly surface.
+    ///
+    /// Declaration, check and projection are the language front's and happen
+    /// through `aion awl check` like everything else. This is where a recipe
+    /// is actually run: the two ports the front declares and does not
+    /// implement — a working tree to read bytes out of, and a process to
+    /// fire a declared artifact as — live here, and every refusal, every
+    /// comparison and every receipt is the front's, consumed.
+    Recipe {
+        /// What to do with the declared recipe.
+        #[command(subcommand)]
+        command: crate::awl_recipe::RecipeCommand,
+    },
     /// Run the AWL language server over stdio for editor integration.
     Lsp,
 }
@@ -208,6 +222,7 @@ pub(crate) fn run(command: &AwlCommand) -> ExitCode {
             json,
             reference,
         } => crate::awl_guide::run(word.as_deref(), *json, *reference),
+        AwlCommand::Recipe { command } => crate::awl_recipe::run(command),
         AwlCommand::Lsp => match aion_awl_lsp::run_stdio() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

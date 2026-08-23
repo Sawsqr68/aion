@@ -12,15 +12,19 @@
 //! [`POSITIONAL_WORDS`] inventory.
 
 use crate::lexer::{
-    ADMITS_WORD, ANSWER_WORD, COMMAND_WORD, CWD_WORD, ENV_WORD, HARDENING_WORD, IN_WORD, Keyword,
-    OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD, PATH_WORD, POSITIONAL_WORDS,
-    PROGRAM_WORD, QUERY_WORD, REFUSES_WORD, RUN_WORD, SEND_WORD, SPECIMEN_WORD, TO_WORD,
+    ADMITS_WORD, ALLOWS_WORD, ANSWER_WORD, ARTIFACT_WORD, CAPTURES_WORD, COMMAND_WORD, CWD_WORD,
+    DERIVES_WORD, DIGEST_WORD, ENV_WORD, EXCLUDES_WORD, EXPECTING_WORD, EXTRACT_WORD, FIRES_WORD,
+    HARDENING_WORD, IN_WORD, Keyword, OPEN_FILES_WORD, OPERAND_WORD, OPTION_WORD, OWNER_WORD,
+    PARAMETER_WORD, PATH_WORD, POSITIONAL_WORDS, PROGRAM_WORD, QUERY_WORD, RECIPE_WORD,
+    REFUSES_WORD, REQUIRES_WORD, RESTORES_WORD, RUN_WORD, RUNS_WORD, SEND_WORD, SPECIMEN_WORD,
+    TO_WORD, WALL_WORD,
 };
 
 use super::commands as cmd;
 use super::declarations as decl;
 use super::entry::GuideEntry;
 use super::flow;
+use super::recipes as rec;
 use super::values;
 
 /// What the language reference says about one reserved word.
@@ -117,6 +121,21 @@ pub fn for_positional_word(word: &str) -> Option<GuideEntry> {
         PATH_WORD => Some(cmd::PATH),
         OPEN_FILES_WORD => Some(cmd::OPEN_FILES),
         OWNER_WORD => Some(cmd::OWNER),
+        RECIPE_WORD => Some(rec::RECIPE),
+        PARAMETER_WORD => Some(rec::PARAMETER),
+        DERIVES_WORD => Some(rec::DERIVES),
+        EXTRACT_WORD => Some(rec::EXTRACT),
+        WALL_WORD => Some(rec::WALL),
+        ALLOWS_WORD => Some(rec::ALLOWS),
+        EXCLUDES_WORD => Some(rec::EXCLUDES),
+        ARTIFACT_WORD => Some(rec::ARTIFACT),
+        DIGEST_WORD => Some(rec::DIGEST),
+        RESTORES_WORD => Some(rec::RESTORES),
+        RUNS_WORD => Some(rec::RUNS),
+        CAPTURES_WORD => Some(rec::CAPTURES),
+        FIRES_WORD => Some(rec::FIRES),
+        EXPECTING_WORD => Some(rec::EXPECTING),
+        REQUIRES_WORD => Some(rec::REQUIRES),
         _ => None,
     }
 }
