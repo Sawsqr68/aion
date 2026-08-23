@@ -51,6 +51,7 @@
 //! [`AgentSession::wait_result`]: aion_integrations::AgentSession::wait_result
 
 pub mod advice;
+mod claim_area;
 pub mod harness;
 pub mod protocol;
 pub mod session;

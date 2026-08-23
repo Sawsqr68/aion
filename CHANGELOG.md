@@ -5,6 +5,11 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
+- **Norn held-execution claims no longer dirty worktrees.** The unchanged
+  `.aion-held-execution.json` reservation now lives below Aion's state area,
+  keyed by the canonical worktree path, while preserving live-sibling
+  exclusion, drop release, reattach, and exact-incarnation stale cleanup.
+
 ## 0.20.0 — 2026-08-23
 
 **The beamr 0.20.0 floor.** A dependency-floor release, one motion across

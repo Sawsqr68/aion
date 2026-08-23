@@ -459,8 +459,28 @@ fn listed_sessions(
 }
 
 /// The pid the spawn gate's marker names, once the agent holds the tree.
-fn marker_pid(tree: &Path) -> Result<u32, TestError> {
-    let marker: serde_json::Value = serde_json::from_slice(&std::fs::read(tree.join(MARKER))?)?;
+fn marker_pid(tree: &Path, aion_home: &Path) -> Result<u32, TestError> {
+    let claims = aion_home.join("spawn-claims");
+    let mut markers = Vec::new();
+    for entry in std::fs::read_dir(&claims)? {
+        let path = entry?.path().join(MARKER);
+        if path.is_file() {
+            markers.push(path);
+        }
+    }
+    if markers.len() != 1 {
+        return Err(format!(
+            "expected exactly one isolated spawn marker below {}, found {}",
+            claims.display(),
+            markers.len()
+        )
+        .into());
+    }
+    let marker: serde_json::Value = serde_json::from_slice(&std::fs::read(&markers[0])?)?;
+    let canonical = std::fs::canonicalize(tree)?;
+    if marker.get("tree").and_then(serde_json::Value::as_str) != canonical.to_str() {
+        return Err("the isolated spawn marker claims a different tree".into());
+    }
     let pid = marker
         .get("pid")
         .and_then(serde_json::Value::as_u64)
@@ -683,7 +703,7 @@ fn start_under_a_live_builder(
         Ok((isolation.provider.accepted() >= 1).then_some(()))
     })?;
 
-    let pid = marker_pid(&isolation.agent_tree)?;
+    let pid = marker_pid(&isolation.agent_tree, &isolation.server_home)?;
     let opened = isolation.sessions()?;
     let [(opened_id, opened_at)] = opened.as_slice() else {
         return Err(

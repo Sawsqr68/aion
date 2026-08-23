@@ -11,6 +11,7 @@ use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use serde_json::{Value, json};
 
+use crate::claim_area;
 const MARKER_NAME: &str = ".aion-held-execution.json";
 
 #[derive(Debug)]
@@ -21,6 +22,7 @@ struct ProcessIdentity {
 
 #[derive(Debug)]
 struct Marker {
+    tree: String,
     workflow_id: String,
     activity_id: String,
     pid: u32,
@@ -35,6 +37,7 @@ struct Marker {
 #[derive(Debug)]
 pub(crate) struct SpawnClaim {
     marker_path: PathBuf,
+    tree: String,
     armed: bool,
 }
 
@@ -42,7 +45,34 @@ impl SpawnClaim {
     /// Atomically reserve `cwd`, cleaning only a marker whose exact process
     /// incarnation is no longer live.
     pub(crate) fn acquire(cwd: &Path, spec: &AgentRunSpec) -> Result<Self, HarnessError> {
-        let marker_path = cwd.join(MARKER_NAME);
+        let area = claim_area::for_tree(cwd)?;
+        Self::acquire_in(&area, spec)
+    }
+
+    #[cfg(test)]
+    fn acquire_under(
+        cwd: &Path,
+        state_root: &Path,
+        spec: &AgentRunSpec,
+    ) -> Result<Self, HarnessError> {
+        let area = claim_area::for_tree_under(cwd, state_root)?;
+        Self::acquire_in(&area, spec)
+    }
+
+    fn acquire_in(area: &claim_area::ClaimArea, spec: &AgentRunSpec) -> Result<Self, HarnessError> {
+        let tree = area
+            .canonical_tree
+            .to_str()
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                HarnessError::configuration(format!(
+                    "canonical spawn-claim tree `{}` is not valid UTF-8",
+                    area.canonical_tree.display()
+                ))
+            })?;
+        std::fs::create_dir_all(&area.directory)
+            .map_err(|error| marker_io("create claim directory for", &area.directory, &error))?;
+        let marker_path = area.directory.join(MARKER_NAME);
         loop {
             match OpenOptions::new()
                 .write(true)
@@ -52,20 +82,29 @@ impl SpawnClaim {
                 Ok(mut file) => {
                     let pid = std::process::id();
                     let process = process_identity(pid)?;
-                    write_marker(&mut file, spec, pid, &process)?;
+                    write_marker(&mut file, &tree, spec, pid, &process)?;
                     return Ok(Self {
                         marker_path,
+                        tree,
                         armed: true,
                     });
                 }
                 Err(error) if error.kind() == ErrorKind::AlreadyExists => {
                     let marker = read_marker(&marker_path)?;
+                    if marker.tree != tree {
+                        return Err(HarnessError::configuration(format!(
+                            "spawn marker `{}` claims tree `{}` but key resolved for `{tree}`",
+                            marker_path.display(),
+                            marker.tree
+                        )));
+                    }
                     if marker_matches_live_process(&marker) {
                         let same_execution = marker.workflow_id == spec.workflow_id.to_string()
                             && marker.activity_id == spec.activity_id.to_string();
                         if same_execution {
                             return Ok(Self {
                                 marker_path,
+                                tree,
                                 armed: false,
                             });
                         }
@@ -104,7 +143,7 @@ impl SpawnClaim {
                 .create_new(true)
                 .open(&temporary)
                 .map_err(|error| marker_io("create replacement for", &temporary, &error))?;
-            write_marker(&mut file, spec, child_pid, &process)?;
+            write_marker(&mut file, &self.tree, spec, child_pid, &process)?;
             std::fs::rename(&temporary, &self.marker_path)
                 .map_err(|error| marker_io("replace", &self.marker_path, &error))
         })();
@@ -127,11 +166,13 @@ impl Drop for SpawnClaim {
 
 fn write_marker(
     file: &mut File,
+    tree: &str,
     spec: &AgentRunSpec,
     pid: u32,
     process: &ProcessIdentity,
 ) -> Result<(), HarnessError> {
     let marker = json!({
+        "tree": tree,
         "workflow_id": spec.workflow_id.to_string(),
         "activity_id": spec.activity_id.to_string(),
         "pid": pid,
@@ -180,6 +221,7 @@ fn read_marker(path: &Path) -> Result<Marker, HarnessError> {
             ))
         })?;
     Ok(Marker {
+        tree: field("tree")?,
         workflow_id: field("workflow_id")?,
         activity_id: field("activity_id")?,
         pid,
@@ -250,3 +292,7 @@ fn marker_io(action: &str, path: &Path, error: &std::io::Error) -> HarnessError 
         path.display()
     ))
 }
+
+#[cfg(test)]
+#[path = "spawn_guard_tests.rs"]
+mod tests;

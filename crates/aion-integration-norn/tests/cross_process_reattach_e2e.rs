@@ -18,6 +18,7 @@ use aion_integrations::{
     RunId, WorkflowId,
 };
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::process::Command;
@@ -34,6 +35,7 @@ const READY_ENV: &str = "AION_NORN_REATTACH_READY";
 const DONE_ENV: &str = "AION_NORN_REATTACH_DONE";
 const KEY_ENV: &str = "AION_NORN_REATTACH_KEY";
 const MARKER: &str = ".aion-held-execution.json";
+const HEX: &[u8; 16] = b"0123456789abcdef";
 const ACTIVITY_TYPE: &str = "norn-reattach";
 
 const SSE_BODY: &str = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"reattached\"},\"finish_reason\":null}]}\n\n\
@@ -207,6 +209,7 @@ fn helper_command(launch: HelperLaunch<'_>) -> TestResult<Command> {
         .env(NORN_BIN_ENV, binary)
         .env(TREE_ENV, tree)
         .env(HOME_ENV, home)
+        .env("AION_HOME", home.join(".aion"))
         .env(BASE_URL_ENV, base_url)
         .env(WORKFLOW_ENV, workflow_id.to_string())
         .env(RUN_ENV, run_id.to_string())
@@ -241,8 +244,19 @@ async fn wait_for_accepted(accepted: &AtomicUsize, minimum: usize) -> TestResult
     Err(format!("provider never accepted request {minimum}").into())
 }
 
-fn marker_pid(tree: &Path) -> TestResult<u32> {
-    let marker: Value = serde_json::from_slice(&std::fs::read(tree.join(MARKER))?)?;
+fn marker_path(tree: &Path, home: &Path) -> TestResult<PathBuf> {
+    let canonical = std::fs::canonicalize(tree)?;
+    let digest = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
+    let mut key = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        key.push(char::from(HEX[usize::from(byte >> 4)]));
+        key.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    Ok(home.join(".aion/spawn-claims").join(key).join(MARKER))
+}
+
+fn marker_pid(tree: &Path, home: &Path) -> TestResult<u32> {
+    let marker: Value = serde_json::from_slice(&std::fs::read(marker_path(tree, home)?)?)?;
     let pid = marker
         .get("pid")
         .and_then(Value::as_u64)
@@ -326,7 +340,7 @@ async fn replacement_worker_reattaches_the_surviving_norn_session() -> TestResul
     wait_for_path(&first_ready, "the first worker to start Norn").await?;
     wait_for_accepted(&provider.accepted, 1).await?;
     let pre_session = std::fs::read_to_string(&first_ready)?;
-    let surviving_pid = marker_pid(&tree)?;
+    let surviving_pid = marker_pid(&tree, &home)?;
 
     first.kill().await?;
     let first_status = first.wait().await?;

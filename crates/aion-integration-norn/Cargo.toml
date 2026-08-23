@@ -23,6 +23,7 @@ chrono = { workspace = true }
 futures = { workspace = true }
 nix = { version = "0.30", features = ["signal"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = [
     "io-util",
