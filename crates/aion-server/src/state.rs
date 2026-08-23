@@ -1167,6 +1167,65 @@ impl ServerState {
         tokio::spawn(sweeper.run(shutdown))
     }
 
+    /// Spawn the startup catch-up legs — owed timer fires, schedule-
+    /// coordinator catch-up, schedule recovery — behind already-open doors.
+    ///
+    /// [`boot_engine`] runs only the workflow-residency recovery leg before
+    /// the transports bind, because the catch-up backlog has no upper bound
+    /// (an estate watcher down for hours owes thousands of fires) and a boot
+    /// that blocks on it keeps every door shut for the whole sweep. Every
+    /// catch-up fire is the same idempotent record-once delivery the live
+    /// timer wheel performs against a serving engine, so running it
+    /// concurrently with the transports is the steady-state contract.
+    ///
+    /// The task stops when `shutdown` flips: catch-up left unfinished at
+    /// shutdown is exactly a boot interrupted mid-sweep, and the next boot's
+    /// sweep re-derives the remaining owed fires from durable state. A
+    /// catch-up error is reported with its remedy and does NOT kill the
+    /// serving process — the doors stay open, and a restart re-runs the
+    /// sweep from durable state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError`] when the state holds no engine handle (a state
+    /// built from parts without an engine) — such a state also never deferred
+    /// any recovery, so there is nothing to catch up.
+    pub fn spawn_startup_catchup(
+        &self,
+        mut shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<tokio::task::JoinHandle<()>, ServerError> {
+        let engine = self.engine()?;
+        Ok(tokio::spawn(async move {
+            tracing::info!(
+                "startup catch-up running behind open doors: owed timer fires, \
+                 schedule catch-up"
+            );
+            let catchup = engine.run_startup_catchup();
+            tokio::pin!(catchup);
+            tokio::select! {
+                result = &mut catchup => match result {
+                    Ok(()) => {
+                        tracing::info!("startup catch-up complete");
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            %error,
+                            "startup catch-up failed; owed timer fires and schedule \
+                             catch-up remain undelivered — restart the server to re-run \
+                             the sweep from durable state"
+                        );
+                    }
+                },
+                _ = shutdown.changed() => {
+                    tracing::info!(
+                        "startup catch-up interrupted by shutdown; the next boot's \
+                         sweep resumes from durable state"
+                    );
+                }
+            }
+        }))
+    }
+
     /// Spawn the liminal connection dead-man switch (the liveness probe) over
     /// `notifier`.
     ///
@@ -1401,13 +1460,20 @@ async fn boot_engine(assembly: EngineAssembly<'_>) -> Result<Arc<aion::Engine>, 
     };
     let engine = Arc::new(builder.build().await.map_err(ServerError::from)?);
     install_engine_backed_seams(assembly.seams, &engine, runtime.outbox.enabled);
-    // #266: startup recovery runs HERE — after every seam the decorated
+    // #266: workflow recovery runs HERE — after every seam the decorated
     // activity dispatcher consults is installed, never before. The build
     // above deferred it; running it earlier re-dispatched adopted
     // in-flight declared-body activities into an empty body source, and
     // they parked forever on their own queue (the fleet e2e pins this).
+    //
+    // Instant doors: ONLY the workflow-residency leg blocks the boot. The
+    // catch-up legs (owed timer fires, schedule catch-up) have no upper
+    // bound — an estate watcher can owe thousands of fires — and every fire
+    // goes through the same idempotent record-once path the live wheel
+    // uses, so the run loop starts them behind already-open doors via
+    // [`ServerState::spawn_startup_catchup`].
     engine
-        .run_startup_recovery()
+        .recover_workflows_on_startup()
         .await
         .map_err(ServerError::from)?;
     Ok(engine)

@@ -627,6 +627,9 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::StartupRecoveryAlreadyRan => {
             simple_engine_fields("StartupRecoveryAlreadyRan", source)
         }
+        EngineError::StartupCatchupBeforeWorkflowRecovery => {
+            simple_engine_fields("StartupCatchupBeforeWorkflowRecovery", source)
+        }
         EngineError::StartupRecoverySlotPoisoned => {
             simple_engine_fields("StartupRecoverySlotPoisoned", source)
         }
@@ -773,6 +776,9 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         // recovery slot is a server construction bug, never a caller's fault.
         E::StartupRecoveryNotDeferred => backend("StartupRecoveryNotDeferred", source),
         E::StartupRecoveryAlreadyRan => backend("StartupRecoveryAlreadyRan", source),
+        E::StartupCatchupBeforeWorkflowRecovery => {
+            backend("StartupCatchupBeforeWorkflowRecovery", source)
+        }
         E::StartupRecoverySlotPoisoned => backend("StartupRecoverySlotPoisoned", source),
         E::CleanupExecutorPoisoned => backend("CleanupExecutorPoisoned", source),
         E::CleanupExecutorShutdownTimedOut { .. } => {

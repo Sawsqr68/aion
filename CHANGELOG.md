@@ -32,6 +32,29 @@ only convert a slow handover into a refused boot.
 - `aion-store-haematite` now carries a 1.89 rustc floor (std file-lock
   probes); every other crate keeps the workspace's 1.85.
 
+**Instant doors: the transports bind before the startup catch-up.** A server
+restarted over a large owed-timer backlog (an estate watcher down for hours
+owes thousands of fires) used to keep every listener shut for the whole
+sweep — tens of minutes of healthy catch-up presenting as a dead server.
+Startup recovery is now staged: the workflow-residency leg (replay actives
+to resident) still completes before the doors open, so signals, queries,
+and cancels answer correctly from the first request; the unbounded legs —
+owed timer fires, schedule-coordinator catch-up, schedule recovery — run as
+a background task behind already-open doors. Every catch-up fire goes
+through the same idempotent record-once path the live timer wheel uses
+against a serving engine. A catch-up interrupted by shutdown resumes from
+durable state on the next boot; a catch-up error is reported with its
+remedy and never kills the serving process.
+
+- New staged engine surface for deferred builds:
+  `Engine::recover_workflows_on_startup` and `Engine::run_startup_catchup`,
+  with `Engine::run_startup_recovery` unchanged as the composed pair.
+  Ordering misuse answers the new typed
+  `StartupCatchupBeforeWorkflowRecovery` error.
+- The backlog is still delivered fire-by-fire; collapsing missed
+  fixed-cadence fires and durable catch-up progress marks are follow-up
+  work, deliberately not in this release.
+
 ## 0.22.0 — 2026-08-24
 
 **The AWL command surface.** Two cuts of the AWL authoring surface land
