@@ -69,13 +69,9 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     // the outbox path before any worker could exist, and the dispatcher worked
     // on them while waiting for one.
     {
-        let reader = HaematiteStore::open_or_create(
-            db_path.clone(),
-            haematite::NodeCacheBudget::Unlimited,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?;
+        let reader =
+            HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+                .await?;
         let history = reader.read_history(&workflow_id).await?;
         assert_eq!(
             count_kind(&history, |event| matches!(
@@ -145,13 +141,8 @@ async fn run_server_outbox_happy_path_fan_out_completes_once() -> Result<(), Tes
     drop(worker);
     server.stop_gracefully()?;
 
-    let reader = HaematiteStore::open_or_create(
-        db_path,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-    )
-    .await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let history = assert_fan_out_settled(&reader, &workflow_id).await?;
     assert_eq!(count_completed(&history), FAN_OUT);
     std::hint::black_box(run_id);
@@ -195,13 +186,9 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
 
     // Between the stop and the re-boot, at the bytes.
     {
-        let reader = HaematiteStore::open_or_create(
-            db_path.clone(),
-            haematite::NodeCacheBudget::Unlimited,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?;
+        let reader =
+            HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+                .await?;
         let states = row_states(&reader, &workflow_id, &[0, 1, 2, 3]).await?;
         assert!(
             states
@@ -246,13 +233,8 @@ async fn run_server_outbox_restart_rearms_stranded_rows() -> Result<(), TestErro
     drop(worker2);
     server2.stop_gracefully()?;
 
-    let reader = HaematiteStore::open_or_create(
-        db_path,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-    )
-    .await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?;
     let history = assert_fan_out_settled(&reader, &workflow_id).await?;
     assert_eq!(count_completed(&history), FAN_OUT);
     std::hint::black_box(run_id);
@@ -335,13 +317,9 @@ async fn run_server_outbox_live_reconciliation_rearms_stranded_claims_once() -> 
         Some((50, 100)),
     )
     .await?;
-    let reader = HaematiteStore::open_or_create(
-        db_path.clone(),
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-    )
-    .await?;
+    let reader =
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?;
     let mut worker = WorkerSession::connect(grpc).await?;
 
     let (workflow_id, run_id) = start_over_http(http).await?;
@@ -461,12 +439,7 @@ async fn force_rows_to_stale_claimed(
     workflow_id: &aion_core::WorkflowId,
     ordinals: &[u64],
 ) -> Result<(), TestError> {
-    let store = HaematiteStore::open(
-        data_dir,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-    )?;
+    let store = HaematiteStore::open(data_dir, haematite::NodeCacheBudget::Unlimited)?;
     let claimed_at = Utc::now() - chrono::Duration::seconds(60);
     for ordinal in ordinals {
         let dispatch_key = OutboxRow::dispatch_key_for(workflow_id, *ordinal);

@@ -1196,14 +1196,41 @@ mod tests {
 
                 [store]
                 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
             "#,
         )?;
         assert_eq!(
             unlimited.store.node_cache_budget,
             Some(haematite::NodeCacheBudget::Unlimited),
             "`unlimited` is a stated choice, never collapsed to absent"
+        );
+        Ok(())
+    }
+
+    /// The RETIRED lock-acquisition keys stay LEGAL: a configuration still
+    /// carrying them — the 0.22.0-era estate shape, including the bridge
+    /// values written during the 2026-08-24 incident — parses and loads.
+    /// They are warned and ignored at the haematite connect seam, never
+    /// refused, so no release turns an existing estate's config into a boot
+    /// failure over keys the server no longer reads.
+    #[test]
+    fn retired_lock_acquisition_keys_stay_legal() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br#"
+                [store]
+                backend = "haematite"
+                lock_acquisition_patience_ms = 60000
+                lock_acquisition_retry_cadence_ms = 500
+            "#,
+        )?;
+        assert_eq!(
+            config.store.lock_acquisition_patience_ms,
+            Some(60_000),
+            "the retired key parses instead of refusing as unknown"
+        );
+        assert_eq!(
+            config.store.lock_acquisition_retry_cadence_ms,
+            Some(500),
+            "both retired keys parse; nothing consumes them"
         );
         Ok(())
     }

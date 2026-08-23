@@ -222,8 +222,6 @@ backend = "haematite"
 # landing through a real worker, never caching; patience/cadence mirror the
 # estate's other e2e nodes.
 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 data_dir = "aion-data"
 
 [runtime]

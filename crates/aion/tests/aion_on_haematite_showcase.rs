@@ -229,30 +229,30 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     // the reopened, on-disk database.
     // ----------------------------------------------------------------------
     println!("\n--- ACT 4: reopen haematite from disk + rebuild the engine ---");
-    // haematite 0.4.1's A4 writer lock admits ONE live writer per data dir. A
-    // real restart releases it at process death (kernel-released flock); this
+    // haematite's A4 writer lock admits ONE live writer per data dir. A real
+    // restart releases it at process death (kernel-released flock); this
     // in-process simulation instead has to wait for the first engine's
     // background tasks to finish dropping their store handles after shutdown.
-    // That wait is the typed acquisition boundary's job and is the ONLY wait
-    // here: the ruling retries the real `Database::open` on its cadence for at
-    // most ten seconds, then returns haematite's own `DataDirLocked`
-    // untouched. Quiesce is normally milliseconds; ten seconds without release
-    // means teardown leaked a handle and the test MUST fail — which it does,
-    // on the error this returns. No string matching on the error text.
+    // The open now waits for the lock INDEFINITELY (ruled 2026-08-24: the
+    // holder is live or the kernel has already released), so the bound that
+    // catches a leaked handle must be the TEST's own: quiesce is normally
+    // milliseconds, and ten seconds without release means teardown leaked a
+    // handle in THIS process — a hang the timeout below converts back into a
+    // red with its own message.
     //
-    // showcase-ruled acquisition patience: ten seconds of cadenced real lock
-    // attempts covers this in-process teardown; not a library default.
-    let acquisition = aion_store_haematite::LockAcquisitionRuling::from_millis(10_000, 100)?;
-    // The acquisition blocks its thread for the whole span, so it runs on a
-    // blocking thread instead of this test's runtime thread.
-    let reopened = tokio::task::spawn_blocking(move || {
-        HaematiteStore::open(
-            &store_path,
-            haematite::NodeCacheBudget::Unlimited,
-            acquisition,
-        )
-    })
-    .await??;
+    // The open blocks its thread while waiting, so it runs on a blocking
+    // thread instead of this test's runtime thread.
+    let reopened = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            HaematiteStore::open(&store_path, haematite::NodeCacheBudget::Unlimited)
+        }),
+    )
+    .await
+    .map_err(|_elapsed| {
+        "reopen waited 10s for the writer lock: the first engine's teardown leaked a \
+         store handle in this process, so the kernel will never release the lock"
+    })???;
     let reopened_store: Arc<dyn EventStore> = Arc::new(reopened);
     println!("  haematite database REOPENED from disk (fresh handle).");
 

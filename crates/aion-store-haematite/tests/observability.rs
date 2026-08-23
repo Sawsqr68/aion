@@ -216,14 +216,7 @@ async fn list_activity_streams_enumerates_only_the_runs_streams_and_survives_reo
             .map_err(|error| StoreError::Backend(format!("commit failed: {error}")))?;
     }
     // Reopen the SAME on-disk database: the enumeration is identical.
-    let reopened = HaematiteStore::open(
-        &dir,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
-            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
-        })?,
-    )?;
+    let reopened = HaematiteStore::open(&dir, haematite::NodeCacheBudget::Unlimited)?;
     let summaries = reopened
         .list_activity_streams(&workflow(), &generation_one())
         .await?;
@@ -321,14 +314,7 @@ async fn two_generations_of_one_chain_never_share_a_durable_stream() -> Result<(
             .map_err(|error| StoreError::Backend(format!("commit failed: {error}")))?;
     }
 
-    let reopened = HaematiteStore::open(
-        &dir,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
-            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
-        })?,
-    )?;
+    let reopened = HaematiteStore::open(&dir, haematite::NodeCacheBudget::Unlimited)?;
     let second_generation = reopened.read_activity_events_from(&second_key, 0).await?;
     assert_eq!(
         second_generation.len(),
@@ -370,14 +356,7 @@ async fn observability_records_survive_reopen_and_are_invisible_to_replay() -> R
             .map_err(|error| StoreError::Backend(format!("commit failed: {error}")))?;
     }
     // Reopen the SAME on-disk database.
-    let reopened = HaematiteStore::open(
-        &dir,
-        haematite::NodeCacheBudget::Unlimited,
-        // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-        aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5).map_err(|error| {
-            StoreError::Backend(format!("lock acquisition ruling refused: {error}"))
-        })?,
-    )?;
+    let reopened = HaematiteStore::open(&dir, haematite::NodeCacheBudget::Unlimited)?;
 
     // The observability transcript survived kill-and-reopen.
     let records = reopened.read_activity_events_from(&key(0), 0).await?;

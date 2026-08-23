@@ -30,29 +30,19 @@ backend = "haematite"               # durable ablative event store (the default)
 # once you know your box, e.g.:
 #   node_cache_budget = { bytes = 1073741824 }   # 1 GiB
 node_cache_budget = "unlimited"
-# How long a boot keeps RETRYING the data directory's writer lock, and how often
-# it re-attempts. BOTH REQUIRED — the server refuses to start without them,
-# because haematite takes that lock with ONE non-blocking attempt: a boot landing
-# in the window where a departing process's forked child still holds an inherited
-# descriptor is refused outright, and how long THIS deployment may wait on that
-# is not something this file can know for you. The values below are a starting
-# point, not a guarantee: 250 ms is roughly twice the 93-150 ms window measured
-# in three samples on a sixteen-core box.
-#
-# If a boot fails with haematite's "data dir is locked by another live writer",
-# DIAGNOSE BEFORE TUNING. That message has two causes and only one of them is a
-# patience problem:
-#   * ANOTHER SERVER IS ALREADY RUNNING against this data directory. This is the
-#     common cause, and the refusal is protecting you: two live writers would
-#     corrupt the shard WALs. A longer patience only delays a correct refusal.
-#     Find the holder (`lsof <data_dir>/writer.lock`) and stop it.
-#   * THE INHERITED-DESCRIPTOR WINDOW described above, on a machine busier than
-#     the one these values were measured on. Only here is a longer patience the
-#     answer — and raise it to cover the window YOU measure, not by trial until
-#     the symptom stops.
-# Both spans must be positive and the cadence must not exceed the patience.
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
+# The data directory's writer lock needs no configuration: it is a
+# kernel-released flock, so its holder is either a live process (a draining
+# predecessor mid-handover, or another server on this data directory — the
+# boot waits and REPORTS AT INTERVALS naming the lock, so a log tail shows a
+# handover in progress, never a silent hang) or already dead, in which case
+# the kernel has released it and the boot proceeds at once. Two live writers
+# still cannot coexist — the waiter never opens while the lock is held. If a
+# boot reports waiting and you expected no other server, find the holder:
+#   lsof <data_dir>/writer.lock
+# (The former lock_acquisition_patience_ms / lock_acquisition_retry_cadence_ms
+# keys are retired: a patience ceiling only converted slow handovers into
+# refused boots. If your file still carries them they are warned and ignored,
+# never refused.)
 # The database directory defaults to `<AION_HOME>/data`, created on start.
 # One legacy exception: when AION_HOME is unset (a derived home) and a real
 # `./aion-data` directory sits in the server's working directory, that

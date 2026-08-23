@@ -47,5 +47,4 @@ mod namespace_shard;
 /// The [`HaematiteStore`] type and its `EventStore` trait implementations.
 pub mod store;
 
-pub use lock_acquisition::{LockAcquisitionRuling, LockAcquisitionRulingError};
 pub use store::{ClusterBootstrap, ClusterResponder, HaematiteStore, OutboxRowState};

@@ -3,6 +3,35 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.23.0 — 2026-08-24
+
+**Boot self-sufficiency: the writer-lock patience keys are retired.** The
+0.22.0 estate deploy surfaced the defect: `store.lock_acquisition_patience_ms`
+and `store.lock_acquisition_retry_cadence_ms` were required-with-no-default,
+so a config written before they existed refused to boot — and the patience
+ceiling itself guarded a hazard that cannot occur. The writer lock is a
+kernel-released flock: its holder is either a live process (a draining
+predecessor mid-handover, or another server on the same data directory) or
+already dead, in which case the kernel has released it. A bounded wait could
+only convert a slow handover into a refused boot.
+
+- **The keys are deleted from the surface.** `HaematiteStore::open` /
+  `open_or_create` no longer take a lock-acquisition ruling;
+  `LockAcquisitionRuling` and its error type are gone. Boot waits for the
+  writer lock indefinitely and **reports at intervals while it waits** —
+  naming the lock file and the elapsed wait, so a log tail shows a handover
+  in progress, never a silent hang. The wait probes lock availability with
+  its own cheap `try_lock` and re-runs the real open only when the lock
+  looks takeable, so waiting never multiplies recovery I/O. Two live
+  writers still cannot coexist: the waiter never opens while the lock is
+  held.
+- **Configs carrying the keys stay legal.** TOML keys and the
+  `AION_STORE_LOCK_ACQUISITION_*` environment variables are warned and
+  ignored — never refused — so an existing estate's config boots unchanged.
+  The first-run template documents the new behaviour.
+- `aion-store-haematite` now carries a 1.89 rustc floor (std file-lock
+  probes); every other crate keeps the workspace's 1.85.
+
 ## 0.22.0 — 2026-08-24
 
 **The AWL command surface.** Two cuts of the AWL authoring surface land

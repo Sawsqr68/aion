@@ -68,7 +68,7 @@ use crate::error::{
     serde_error,
 };
 use crate::keyspace;
-use crate::lock_acquisition::{LockAcquisitionRuling, open_database};
+use crate::lock_acquisition::open_database;
 
 /// Quorum-replication routing for a distributed [`HaematiteStore`].
 ///
@@ -298,7 +298,6 @@ impl HaematiteStore {
     pub async fn open_or_create(
         data_dir: impl Into<PathBuf>,
         node_cache_budget: NodeCacheBudget,
-        lock_acquisition: LockAcquisitionRuling,
     ) -> Result<Self, StoreError> {
         let data_dir = data_dir.into();
         tokio::task::spawn_blocking(move || {
@@ -308,7 +307,7 @@ impl HaematiteStore {
             // `tempfile::tempdir()` shape) down the `open` branch, where it
             // errors, from a constructor whose name promises creation.
             if data_dir.join("config.json").exists() {
-                Self::open(&data_dir, node_cache_budget, lock_acquisition)
+                Self::open(&data_dir, node_cache_budget)
             } else {
                 Self::create(data_dir, node_cache_budget)
             }
@@ -339,12 +338,10 @@ impl HaematiteStore {
     pub fn open(
         data_dir: impl AsRef<std::path::Path>,
         node_cache_budget: NodeCacheBudget,
-        lock_acquisition: LockAcquisitionRuling,
     ) -> Result<Self, StoreError> {
         let data_dir = data_dir.as_ref();
         crate::config_migration::adopt_node_cache_budget(data_dir, node_cache_budget)?;
-        let database =
-            open_database(data_dir, lock_acquisition).map_err(|error| database_error(&error))?;
+        let database = open_database(data_dir).map_err(|error| database_error(&error))?;
         Ok(Self::from_database(database))
     }
 
@@ -3069,10 +3066,10 @@ impl ReadableEventStore for HaematiteStore {
             let mut summaries = Vec::new();
             for workflow_id in workflow_ids {
                 let history = read_events(store, &workflow_id)?;
-                if let Some(summary) = WorkflowSummary::from_history(&history) {
-                    if filter.matches(&summary) {
-                        summaries.push(summary);
-                    }
+                if let Some(summary) = WorkflowSummary::from_history(&history)
+                    && filter.matches(&summary)
+                {
+                    summaries.push(summary);
                 }
             }
             summaries.sort_by(|left, right| {
@@ -4683,12 +4680,7 @@ mod tests {
             // Drop closes the store; haematite committed each write durably.
         }
 
-        let reopened = HaematiteStore::open(
-            &dir,
-            test_node_cache_budget()?,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            crate::LockAcquisitionRuling::from_millis(250, 5)?,
-        )?;
+        let reopened = HaematiteStore::open(&dir, test_node_cache_budget()?)?;
         assert_eq!(
             reopened.read_history(&workflow_id).await?.len(),
             1,
@@ -4770,12 +4762,7 @@ mod tests {
         std::fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
 
         // The migration path: open with a ruling in hand — green, data intact.
-        let reopened = HaematiteStore::open(
-            &dir,
-            test_node_cache_budget()?,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            crate::LockAcquisitionRuling::from_millis(250, 5)?,
-        )?;
+        let reopened = HaematiteStore::open(&dir, test_node_cache_budget()?)?;
         assert_eq!(
             reopened.read_history(&workflow_id).await?.len(),
             1,
@@ -4793,13 +4780,8 @@ mod tests {
 
         // And `open_or_create` routes an existing store through the same
         // adoption, so the server's fixture path is covered too.
-        let via_open_or_create = HaematiteStore::open_or_create(
-            &dir,
-            test_node_cache_budget()?,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            crate::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?;
+        let via_open_or_create =
+            HaematiteStore::open_or_create(&dir, test_node_cache_budget()?).await?;
         assert_eq!(
             via_open_or_create.read_history(&workflow_id).await?.len(),
             1,
