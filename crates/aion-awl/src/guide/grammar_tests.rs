@@ -85,6 +85,11 @@ fn offered_words_compose_keywords_then_positional_words() {
 /// the table — a reserved word and a positional word each resolve.
 #[test]
 fn positions_are_read_from_both_halves_of_the_table_in_order() {
+    // `timeout` is REUSED by the command-declaration surface rather than
+    // respelled, so it now stands in a fifth position. The vector is pinned
+    // whole on purpose: a word gaining or losing a position is a change to
+    // what every completion list offers, and it must be stated here rather
+    // than discovered later.
     assert_eq!(
         positions_of("timeout"),
         vec![
@@ -92,6 +97,7 @@ fn positions_are_read_from_both_halves_of_the_table_in_order() {
             GrammarPosition::WorkerBlock,
             GrammarPosition::StepBody,
             GrammarPosition::SignalReference,
+            GrammarPosition::CommandBody,
         ]
     );
     assert_eq!(positions_of("to"), vec![GrammarPosition::SignalReference]);
@@ -168,6 +174,18 @@ fn every_derived_form_is_honest_against_the_table() {
                 vec![GrammarPosition::Condition],
                 "`{word}` is filed a condition word but stands elsewhere too"
             ),
+            GrammarForm::CommandClause => assert!(
+                stands_in(GrammarPosition::CommandBody)
+                    && !stands_in(GrammarPosition::TopLevel)
+                    && !stands_in(GrammarPosition::StepBody)
+                    && !stands_in(GrammarPosition::WorkflowHeader)
+                    && !stands_in(GrammarPosition::WorkerBlock)
+                    && !stands_in(GrammarPosition::ConstValue)
+                    && !stands_in(GrammarPosition::TypeDoor)
+                    && !stands_in(GrammarPosition::SchemaSource)
+                    && !stands_in(GrammarPosition::RunCapture),
+                "`{word}` is filed a command clause but its positions say otherwise: {positions:?}"
+            ),
             GrammarForm::TargetWord => assert!(
                 positions.iter().all(|position| {
                     matches!(
@@ -214,6 +232,21 @@ fn the_canonical_words_land_in_their_forms() {
         ("is", GrammarForm::ConditionWord),
         ("otherwise", GrammarForm::ConditionWord),
         ("to", GrammarForm::TargetWord),
+        // `command` opens a top-level line, so the precedence files it a
+        // declaration exactly as it files `workflow` and `step`.
+        ("command", GrammarForm::Declaration),
+        // Its clauses stand only inside a command body.
+        ("program", GrammarForm::CommandClause),
+        ("admits", GrammarForm::CommandClause),
+        ("refuses", GrammarForm::CommandClause),
+        ("specimen", GrammarForm::CommandClause),
+        ("operand", GrammarForm::CommandClause),
+        ("open_files", GrammarForm::CommandClause),
+        // `timeout` stands in a command body too, and gaining that position
+        // does not refile it: the derivation files a word under the outermost
+        // thing it can open, and `timeout` opens a step-body statement, which
+        // outranks both the header and the command body.
+        ("timeout", GrammarForm::Statement),
     ];
     for (word, expected) in filed {
         assert_eq!(
@@ -274,6 +307,7 @@ fn the_all_inventories_carry_every_variant() {
             GrammarPosition::TypeDoor => 12,
             GrammarPosition::SchemaSource => 13,
             GrammarPosition::RunCapture => 14,
+            GrammarPosition::CommandBody => 15,
         }
     }
     fn form_ordinal(form: GrammarForm) -> usize {
@@ -285,10 +319,11 @@ fn the_all_inventories_carry_every_variant() {
             GrammarForm::ConditionWord => 4,
             GrammarForm::ValueWord => 5,
             GrammarForm::TargetWord => 6,
+            GrammarForm::CommandClause => 7,
         }
     }
-    const POSITION_VARIANTS: usize = 15;
-    const FORM_VARIANTS: usize = 7;
+    const POSITION_VARIANTS: usize = 16;
+    const FORM_VARIANTS: usize = 8;
 
     let mut seen = [false; POSITION_VARIANTS];
     for position in GrammarPosition::ALL {

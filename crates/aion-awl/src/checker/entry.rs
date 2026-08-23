@@ -36,6 +36,16 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
         DocumentFamily::Workflow => workflow_passes(&mut ctx, document),
         DocumentFamily::Worker => worker_passes(&mut ctx),
     }
+    // Command declarations are checked for BOTH families and by their own
+    // rules: the surface has its own closed cause vocabulary, and folding its
+    // refusals into the general check pass would erase the cause codes and
+    // the observed bytes an author (and a fixture) matches on. They cross into
+    // the document's diagnostic channel already rendered, cause and bytes
+    // included, so nothing is lost in the crossing.
+    for refusal in crate::command::check_commands(&document.commands) {
+        ctx.errors
+            .push(CheckError::new(refusal.span(), refusal.rendered()));
+    }
     let mut errors = std::mem::take(&mut ctx.errors);
     // The contract this document DERIVES has to be enforceable, not merely
     // well-typed. A derived schema no validator can compile does not fail at

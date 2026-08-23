@@ -1,0 +1,20 @@
+//! FIXTURE: refused form `multi_step_assembly`.
+//! EXPECT: refuse recipe_form_refused
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `variadic_parameter_passed_to_dependency_is_joined_with_spaces`.
+//! JUST-SPECIMEN: foo *args: (bar args)
+//! WHY REFUSED: assembling a command from parts at run time produces a command
+//!   no reader saw, which is the review property a gate leg exists to have.
+
+workflow just_multi_step_assembly
+  outcome done: type String, route success
+
+command foo(args: [String])
+  program "echo"
+  admits "--"
+  then "bar"
+
+step go
+  route done("ok")

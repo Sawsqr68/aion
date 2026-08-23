@@ -18,7 +18,9 @@ use std::collections::BTreeSet;
 
 use aion_awl::builtins::BUILTIN_TYPES;
 use aion_awl::guide::GrammarPosition;
-use aion_awl::{Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, Token, TokenKind};
+use aion_awl::{
+    COMMAND_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, Token, TokenKind,
+};
 use lsp_types::{CompletionItem, CompletionItemKind, Position};
 
 use crate::analysis::byte_offset_at;
@@ -70,7 +72,7 @@ pub(crate) fn completions(source: &str, position: Position) -> Vec<CompletionIte
 }
 
 /// The byte range of the line containing `cursor`, excluding its newline.
-fn line_bounds(source: &str, cursor: usize) -> (usize, usize) {
+pub(crate) fn line_bounds(source: &str, cursor: usize) -> (usize, usize) {
     let cursor = cursor.min(source.len());
     let start = source[..cursor].rfind('\n').map_or(0, |index| index + 1);
     let end = source[cursor..]
@@ -142,6 +144,7 @@ fn context_at(source: &str, cursor: usize, line: (usize, usize)) -> Context {
         return Context::TopLevel;
     }
     match enclosing_declaration(source, line_start) {
+        Some(word) if word == COMMAND_WORD => Context::CommandBody,
         Some(word) if word == Keyword::Worker.as_word() => Context::WorkerBlock,
         Some(word) if word == Keyword::Type.as_word() => Context::TypeBody,
         Some(word) if word == Keyword::Workflow.as_word() || word == Keyword::Child.as_word() => {
@@ -161,7 +164,7 @@ fn last_word(head: &str) -> Option<&str> {
 
 /// The first word of the nearest unindented line above `line_start`, which is
 /// the declaration the cursor's line belongs to.
-fn enclosing_declaration(source: &str, line_start: usize) -> Option<&str> {
+pub(crate) fn enclosing_declaration(source: &str, line_start: usize) -> Option<&str> {
     source[..line_start]
         .lines()
         .rev()
@@ -285,12 +288,16 @@ fn names_for(context: Context, harvest: &Harvest) -> Vec<&Declared> {
         Context::Condition | Context::PipeStage | Context::ConstValue => vec![&harvest.values],
         // After `schema` only `of` (or a door) may stand; after `run`, a
         // capture selector or the command string; a type door wants its own
-        // body. None of these is a place a declared name can stand.
+        // body. A command body's own names — its parameters — are not in the
+        // harvest, which reads a document's declarations rather than one
+        // declaration's parameter list. None of these is a place one of the
+        // harvested names can stand.
         Context::TopLevel
         | Context::WorkerBlock
         | Context::TypeDoor
         | Context::SchemaSource
-        | Context::RunCapture => Vec::new(),
+        | Context::RunCapture
+        | Context::CommandBody => Vec::new(),
     };
     groups.into_iter().flatten().collect()
 }

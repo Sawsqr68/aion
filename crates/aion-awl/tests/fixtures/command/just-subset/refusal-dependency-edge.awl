@@ -1,0 +1,20 @@
+//! FIXTURE: refused form `dependency_edge`.
+//! EXPECT: refuse recipe_form_refused
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/dependencies.rs`,
+//!   sha256 538ea0952b3d76f57966c0b72e8477ca1786d1911d265cb490f72a41173cadfa;
+//!   case `recipe_doubly_nested_module_dependencies`.
+//! JUST-SPECIMEN: baz: foo::bar::baz
+//! WHY REFUSED: a dependency edge orders work, which is assembly. A gate-leg
+//!   declaration has no production for one.
+
+workflow just_dependency_edge
+  outcome done: type String, route success
+
+command baz
+  program "echo"
+  admits "--"
+  depends "other_command"
+
+step go
+  route done("ok")

@@ -1,0 +1,31 @@
+//! THE ONE DECLARED SHAPE of the diff-census gate-entry family.
+//!
+//! The four primary rigs' gate-entry legs all census the same way: they ask
+//! git which files changed between a declared base pin and HEAD. Written as
+//! shell, each rig repeats the line and each repetition is a place the family
+//! can drift. Written here, there is one shape and four parameter sets.
+//!
+//! `refuses "--"` is the load-bearing declaration, and it is the finding this
+//! family exists to make visible: `git diff -- <path>` separates revisions
+//! from PATHSPECS, so placing the end-of-options marker before `<BASE>..HEAD`
+//! would silently reinterpret a revision range as a path and change what the
+//! census measures. The same `git` ADMITS the marker under `tag`. One
+//! program, two answers — which is why the declared unit is the INVOCATION.
+//!
+//! ⛔ EXPRESSIBILITY PROOF, NOT DEPLOYMENT. No `.fleet/` script retires, no
+//! rig converts, no deployed document moves. This document exists to be
+//! compared against cited bytes and nothing else.
+
+workflow diff_census_shape
+  outcome censused: type String, route success
+
+/// The census leg of a gate entry: which files changed against the base pin.
+command diff_census(base_pin: String)
+  program "git" "diff"
+  refuses "--"
+  specimen "-x"
+  option "--name-only"
+  operand range: String = "{{base_pin}}..HEAD"
+
+step census
+  route censused("expressibility proof only")

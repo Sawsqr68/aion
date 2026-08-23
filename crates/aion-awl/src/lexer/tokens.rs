@@ -53,6 +53,37 @@ pub const RUN_WORD: &str = "run";
 /// positionally.
 pub const IN_WORD: &str = "in";
 
+/// The word that opens a `command` declaration, positionally.
+pub const COMMAND_WORD: &str = "command";
+/// The word that names a command's invocation, positionally.
+pub const PROGRAM_WORD: &str = "program";
+/// The word declaring that an invocation admits the `--` end-of-options
+/// marker, positionally.
+pub const ADMITS_WORD: &str = "admits";
+/// The word declaring that an invocation refuses the `--` end-of-options
+/// marker, positionally.
+pub const REFUSES_WORD: &str = "refuses";
+/// The word carrying a refusing invocation's mandatory leading-dash refusal
+/// specimen, positionally.
+pub const SPECIMEN_WORD: &str = "specimen";
+/// The word declaring a command's named option, positionally.
+pub const OPTION_WORD: &str = "option";
+/// The word declaring a command's positional operand, positionally.
+pub const OPERAND_WORD: &str = "operand";
+/// The word declaring a command's environment binding, positionally.
+pub const ENV_WORD: &str = "env";
+/// The word declaring a command's working directory, positionally.
+pub const CWD_WORD: &str = "cwd";
+/// The word opening a command's PATH/ulimit hardening block, positionally.
+pub const HARDENING_WORD: &str = "hardening";
+/// The word naming the PATH inside a hardening block, positionally.
+pub const PATH_WORD: &str = "path";
+/// The word naming the open-file ceiling inside a hardening block,
+/// positionally.
+pub const OPEN_FILES_WORD: &str = "open_files";
+/// The word naming who owns a declared timeout, positionally.
+pub const OWNER_WORD: &str = "owner";
+
 /// Every word AWL reads as an opener WITHOUT reserving it.
 ///
 /// These are not in [`Keyword`] on purpose, and that is not an oversight: the
@@ -67,13 +98,33 @@ pub const IN_WORD: &str = "in";
 /// completion provider is the first — had to re-type the vocabulary and hope
 /// it still matched. Naming them here makes the parser and its consumers read
 /// the same words: a change to one is a change to both.
-pub const POSITIONAL_WORDS: [&str; 6] = [
+///
+/// The command-declaration surface added thirteen of them at once, and every
+/// one is positional for the SAME measured reason rather than by preference:
+/// `command` stands in 54 `.awl` documents of this tree today as a
+/// harness-section field name, and `cwd`, `path`, `program`, `env`, `option`,
+/// `operand` and `refuses` stand in others. Reserving any of them would break
+/// documents that exist.
+pub const POSITIONAL_WORDS: [&str; 19] = [
     SEND_WORD,
     TO_WORD,
     QUERY_WORD,
     ANSWER_WORD,
     RUN_WORD,
     IN_WORD,
+    COMMAND_WORD,
+    PROGRAM_WORD,
+    ADMITS_WORD,
+    REFUSES_WORD,
+    SPECIMEN_WORD,
+    OPTION_WORD,
+    OPERAND_WORD,
+    ENV_WORD,
+    CWD_WORD,
+    HARDENING_WORD,
+    PATH_WORD,
+    OPEN_FILES_WORD,
+    OWNER_WORD,
 ];
 
 /// AWL keyword tokens.

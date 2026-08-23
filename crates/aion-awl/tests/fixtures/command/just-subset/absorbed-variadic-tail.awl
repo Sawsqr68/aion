@@ -1,0 +1,24 @@
+//! FIXTURE: absorbed production `variadic_tail`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `star_may_follow_default`.
+//! JUST-SPECIMEN: foo bar='baz' *bob:
+//! WHAT DIFFERS: Just spells the variadic tail `*bob`; AWL spells it with a
+//!   list TYPE, because AWL's parameters are typed and a second spelling of
+//!   "this one takes many" would be a second thing to learn. The behaviour
+//!   absorbed is the same: the tail contributes one argv element per item, and
+//!   an empty tail contributes none.
+
+workflow just_variadic_tail
+  outcome done: type String, route success
+
+command foo(bar: String = "baz", bob: [String])
+  program "echo"
+  admits "--"
+  operand first: String = "{{bar}}"
+  operand rest: [String] = "{{bob}}"
+
+step go
+  route done("ok")

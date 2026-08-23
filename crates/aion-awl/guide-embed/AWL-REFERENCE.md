@@ -951,3 +951,124 @@ serve. A worker document requires a body on every action, so in practice the
 section lives in the `worker` block of a WORKFLOW document — the one place a
 bodyless action and a launch can sit together. `aion worker agent <FILE.awl>`
 reads it, and has no flag for any of the settings in it.
+
+## 17. Command declarations
+
+A `command` declaration is a typed list — a program, its options, its operands
+— never a string a shell re-parses. It stands at the top level, beside `const`,
+`type`, `worker`, `child`, `subflow` and `step`, and it declares what would run
+without running it.
+
+```awl
+command tag_release(tag_name: String, commit: String)
+  program "git" "tag"
+  admits "--"
+  operand name: String = "{{tag_name}}"
+  operand sha: String = "{{commit}}"
+```
+
+**Why a list and not a string.** Every defect in the family this closes is a
+property of a RE-SPLIT rather than of the command: a value containing a space
+becomes two arguments, a value beginning with `-` becomes an option, a value
+containing a quote becomes anything at all. So nothing here ever produces a
+string that could be re-split. The emitted argv is a vector of whole elements,
+and a space inside a value stays inside that one element.
+
+### The invocation, and the end-of-options property
+
+`program` names the invocation: the program and the subcommand words that
+qualify it. Its words are literals and never interpolate, because a
+caller-supplied value must not influence which program executes.
+
+The invocation — not the bare program — is the unit, because whether `--`
+separates options from operands is a fact about `git tag` and not about `git`.
+Exactly one of two clauses is required, and there is no unstated middle:
+
+* `admits "--"` — the emitter places the marker between the options and the
+  operands UNCONDITIONALLY. Not when an operand looks dangerous, not when a
+  reviewer remembers: always. `git tag -- -v2.0 HEAD` tags a commit `-v2.0`
+  instead of failing on an unknown option, and the family closes by
+  construction.
+* `refuses "--"` — the invocation has no such marker. `git diff -- BASE..HEAD`
+  would read `BASE..HEAD` as a PATHSPEC and silently measure something else.
+  A refusing invocation must then carry a `specimen`: bytes beginning with `-`
+  that the command must refuse. `awl check` FIRES the specimen through the real
+  emitter, so what protects the invocation is tested rather than assumed.
+
+### Options and operands
+
+`option` declares one named option by its exact flag. A bare flag emits one
+argv element; a flag with a typed value emits two, never `--flag=value`.
+
+`operand` declares one positional operand with a name for diagnostics, a type,
+and the fill that produces it. Options are emitted before operands, and the
+end-of-options marker — when the invocation admits one — sits between them.
+
+### Fills
+
+A fill is a string carrying `{{parameter}}` interpolations, resolved at check
+time over the command's own declared parameters. It is a construction surface
+and NOT a templating language: there are no conditionals, no loops, no filters,
+no function calls, and no way to reach anything the command did not declare.
+Backtick command substitution is refused where it is written — it would run a
+shell at evaluation time, which the determinism boundary does not admit — and
+file contents enter as addresses, never as spliced strings.
+
+A fill that is exactly one `{{parameter}}` carries that parameter's own type
+through, so `"{{count}}"` is an `Int` when `count` is. A fill mixing literal
+text with interpolations is a `String`, because text with a value written into
+it is text. A list-typed parameter stands alone in an operand and nowhere else:
+there it emits one argv element per item — the variadic tail — and elsewhere it
+has no single element to be.
+
+A hand literal is refused where a derivation exists. A forty-digit git object
+name, a sixty-four-digit content digest, and a fleet control token are each
+re-derived facts, and one written by hand records what was true once, on a day,
+with nothing re-checking it. Declare it as a parameter instead.
+
+### Environment, working directory, hardening, timeout
+
+```awl
+command diff_census(base_pin: String, cargo_bin: String)
+  program "git" "diff"
+  refuses "--"
+  specimen "-x"
+  option "--name-only"
+  operand range: String = "{{base_pin}}..HEAD"
+  env GIT_PAGER = "cat"
+  cwd "{workspace_root}"
+  hardening
+    path "{{cargo_bin}}"
+    open_files 65536
+  timeout 10m owner "the gate's author"
+```
+
+`env` binds one environment variable structurally, as a name and a value. A
+`"K=V"` string is unparseable rather than discouraged: it is a prefix some
+shell would have to split, and splitting is what this surface removes.
+
+`cwd` declares the working directory. `{workspace_root}` is the ONE placeholder
+it admits, with the meaning §16 already gives it; any other brace placeholder
+is a check error. Binding a command to a venue is the deploy surface's act, and
+this declaration adds no new hole for one.
+
+`hardening` opens the PATH and open-file block, stated once per scope and
+inherited. A second block is a check error — two statements of one hardening
+are two answers to one question — and an empty block is refused too, because a
+block that states nothing and an absent block are different claims. Inside it,
+`path` declares the PATH the command runs under and `open_files` its `ulimit
+-n` ceiling.
+
+`timeout` declares a ceiling with an `owner` who is accountable for the number.
+ABSENCE IS A LEGAL DECLARED STATE: a command with no timeout passes check, emits
+no timeout, and defers to the engine's own behaviour. Nothing invents a ceiling,
+because a number this surface made up would be indistinguishable from one an
+author chose.
+
+### What a command declaration cannot be
+
+A gate leg consumes the command half only, and the grammar makes the rest
+unrepresentable rather than discouraged. There is no production for a recipe
+body, none for a dependency edge, none for multi-step assembly. The reason is
+the review property: a reader of a gate leg sees the exact command that ran,
+and a command assembled from parts at run time is a command nobody saw.

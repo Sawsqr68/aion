@@ -1,0 +1,20 @@
+//! FIXTURE: refused form `recipe_body`.
+//! EXPECT: refuse recipe_form_refused
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `star_may_follow_default`, whose recipe body is `@echo {{bar}} {{bob}}`.
+//! JUST-SPECIMEN: foo bar='baz' *bob:
+//! WHY REFUSED: a recipe body is a script, and a gate leg consumes the command
+//!   half only, so that a reader of the leg sees the exact command that ran.
+
+workflow just_recipe_body
+  outcome done: type String, route success
+
+command foo
+  program "echo"
+  admits "--"
+  recipe "echo hello"
+
+step go
+  route done("ok")

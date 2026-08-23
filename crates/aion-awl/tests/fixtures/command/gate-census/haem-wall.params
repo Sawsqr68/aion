@@ -1,0 +1,19 @@
+# FIXTURE: diff-census parameter set — haematite wall flight, round 1.
+# SOURCE-REPO: haematite
+# SOURCE-PATH: .fleet/gate-entry.sh
+# SOURCE-COMMIT: 87de93b6
+# SOURCE-SHA256: 1e1e3ad2d189b5b2c8fb07b6e302e5cc3505ac7fa7f84ac5561020e30ff10a1e
+# SPECIMEN-FILE: .fleet/fixtures/gate-scripts/haem-wall.gate-entry.sh
+# SPECIMEN-LINE: 30
+# BASE-LINE: 27
+# NORMALIZATION: the specimen line is a shell assignment, `changed=$(...)`; the
+#   compared text is the command substitution's own body, which is the command.
+# NORMALIZATION: `"${BASE}"` is one shell word producing one argv element. The
+#   quotes exist only to survive the shell's word splitting, which this surface
+#   does not perform, so they normalize away with nothing lost. `${BASE}` is
+#   expanded from the script's own assignment at BASE-LINE.
+param base_pin = fd168fcb8cdb9bcc2e2c15084f002e1a8ef94931
+argv git
+argv diff
+argv --name-only
+argv fd168fcb8cdb9bcc2e2c15084f002e1a8ef94931..HEAD

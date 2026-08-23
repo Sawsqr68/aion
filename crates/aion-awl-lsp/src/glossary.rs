@@ -20,6 +20,18 @@
 //! offers a positional word precisely because the cursor is in the position
 //! that gives the word its meaning, so the documentation attached there is
 //! true by construction. That asymmetry is deliberate, not an omission.
+//!
+//! ## Why the command-declaration words are the exception
+//!
+//! The asymmetry above is about not KNOWING the position. For the thirteen
+//! words of a `command` declaration, hover CAN know it: each one is recognised
+//! only as the first word of a line, and whether that line opens a top-level
+//! declaration or stands inside a `command` block is readable from the text
+//! before the cursor — the same reading completion already performs. So hover
+//! answers for them under exactly that condition and stays silent otherwise,
+//! which keeps the rule intact rather than carving an exception out of it:
+//! `command` as a harness-section field name (which it is in 54 documents of
+//! this tree) still hovers to nothing.
 
 use aion_awl::guide::{self, GuideEntry, WordKind};
 use aion_awl::{TokenKind, lex};
@@ -39,17 +51,54 @@ pub(crate) fn hover_at(source: &str, position: Position) -> Option<Hover> {
     let token = tokens
         .iter()
         .find(|token| token.span.start <= byte && byte < token.span.end)?;
-    let TokenKind::Keyword(keyword) = token.kind else {
-        return None;
+    let entry = match &token.kind {
+        TokenKind::Keyword(keyword) => guide::for_keyword(*keyword),
+        TokenKind::Identifier(word) => command_word_entry(source, word, token.span.start)?,
+        _ => return None,
     };
     Some(Hover {
         contents: HoverContents::Markup(MarkupContent {
             kind: MarkupKind::Markdown,
-            value: render_hover(guide::for_keyword(keyword)),
+            value: render_hover(entry),
         }),
         range: Some(range_for_span(source, token.span)),
     })
 }
+
+/// The glossary entry for a command-declaration word standing where the parser
+/// recognises it, or `None` when the identifier is just a name.
+///
+/// The two recognised positions, and nothing else: `command` as the first word
+/// of a line at column zero, and a clause word as the first word of an
+/// indented line whose enclosing declaration is a `command`. An author's own
+/// `cwd:` field inside a `harness` section fails both and hovers to nothing,
+/// which is the whole point.
+fn command_word_entry(source: &str, word: &str, start: usize) -> Option<GuideEntry> {
+    let (line_start, _) = crate::completion::line_bounds(source, start);
+    if source.get(line_start..start)?.trim_start() != "" {
+        // Something else stands before the word on this line, so the word is
+        // not opening anything.
+        return None;
+    }
+    let indented = start > line_start;
+    if word == aion_awl::COMMAND_WORD {
+        return (!indented)
+            .then(|| guide::for_positional_word(word))
+            .flatten();
+    }
+    if !indented
+        || crate::completion::enclosing_declaration(source, line_start)
+            != Some(aion_awl::COMMAND_WORD)
+    {
+        return None;
+    }
+    guide::for_positional_word(word).filter(|entry| entry.section().number() == COMMAND_SECTION)
+}
+
+/// The reference section the command-declaration cluster cites. Read from the
+/// entries themselves so hover answers for exactly the cluster and not for
+/// whichever positional word happens to be typed inside a command block.
+const COMMAND_SECTION: u8 = 17;
 
 /// The documentation a completion item carries for `word`.
 ///

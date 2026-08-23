@@ -1,0 +1,20 @@
+# FIXTURE: diff-census parameter set — aion seqlegs implementation flight.
+# SOURCE-REPO: aion
+# SOURCE-PATH: .fleet/gate-entry.sh
+# SOURCE-COMMIT: 957de0a1
+# SOURCE-SHA256: ef5b82a83eaead5a2ac42e6a026df99bb6bc0acdb9f2917ab4c787283c6f1804
+# SPECIMEN-FILE: .fleet/fixtures/gate-scripts/seqlegs-impl.gate-entry.sh
+# SPECIMEN-LINE: 15
+# BASE-LINE: 12
+# NORMALIZATION: as haem-wall — command substitution body, shell quoting removed.
+# INEXPRESSIBLE: this rig is the only one of the four that hardens its
+#   environment (`export PATH=$HOME/.cargo/bin:$PATH` at line 3, `ulimit -n
+#   65536` at line 4). The shape can carry hardening as declared VALUES, but
+#   the four rigs differ in its PRESENCE, and presence is not a value: an empty
+#   declared PATH is not an inherited PATH. One shape therefore cannot cover
+#   both hardening and no hardening. Reported as a finding, not papered over.
+param base_pin = c590712f57a2fe8353c6cd42823200587f25d70e
+argv git
+argv diff
+argv --name-only
+argv c590712f57a2fe8353c6cd42823200587f25d70e..HEAD

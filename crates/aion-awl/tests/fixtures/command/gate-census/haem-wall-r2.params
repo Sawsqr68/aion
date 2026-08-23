@@ -1,0 +1,17 @@
+# FIXTURE: diff-census parameter set — haematite wall flight, round 2.
+# SOURCE-REPO: haematite
+# SOURCE-PATH: .fleet/gate-entry.sh
+# SOURCE-COMMIT: 125cbaac
+# SOURCE-SHA256: ae66bb0b6819f36f46515017640b8bd6eea3e5009add725a3d70ab4209256832
+# SPECIMEN-FILE: .fleet/fixtures/gate-scripts/haem-wall-r2.gate-entry.sh
+# SPECIMEN-LINE: 30
+# BASE-LINE: 27
+# NORMALIZATION: as haem-wall — command substitution body, shell quoting removed.
+# NORMALIZATION: the BASE assignment carries a trailing `# round 2: …` comment,
+#   which the pin extraction stops at. The pin is the assignment's value, not
+#   the rest of the line.
+param base_pin = a4134c3cd78e18b2f81d64603d05b0275517ac99
+argv git
+argv diff
+argv --name-only
+argv a4134c3cd78e18b2f81d64603d05b0275517ac99..HEAD

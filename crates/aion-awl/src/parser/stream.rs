@@ -6,7 +6,7 @@ use crate::{Span, Token, TokenKind};
 
 use super::ParseError;
 
-pub(super) struct Stream {
+pub(crate) struct Stream {
     tokens: Vec<Token>,
     pos: usize,
     /// Line of the last consumed non-structural token (`Indent`/`Dedent` are
@@ -29,7 +29,7 @@ pub(super) struct Stream {
 }
 
 impl Stream {
-    pub(super) fn new(tokens: Vec<Token>, source_len: usize, eof_line: usize) -> Self {
+    pub(crate) fn new(tokens: Vec<Token>, source_len: usize, eof_line: usize) -> Self {
         Self {
             tokens,
             pos: 0,
@@ -77,14 +77,14 @@ impl Stream {
         }
     }
 
-    pub(super) fn peek(&mut self) -> Option<&Token> {
+    pub(crate) fn peek(&mut self) -> Option<&Token> {
         self.settle();
         self.tokens.get(self.pos)
     }
 
     /// The token after the next one, past structural noise at the current
     /// position (but not past noise in between).
-    pub(super) fn peek_second(&mut self) -> Option<&Token> {
+    pub(crate) fn peek_second(&mut self) -> Option<&Token> {
         self.settle();
         self.tokens.get(self.pos + 1)
     }
@@ -92,7 +92,7 @@ impl Stream {
     /// Whether the token after the next one — skipping line-structure noise
     /// in between (newlines, indents, comments), as inside parentheses —
     /// satisfies `test`.
-    pub(super) fn peek_second_is(&mut self, test: impl Fn(&TokenKind) -> bool) -> bool {
+    pub(crate) fn peek_second_is(&mut self, test: impl Fn(&TokenKind) -> bool) -> bool {
         self.settle();
         let mut index = self.pos + 1;
         while let Some(token) = self.tokens.get(index) {
@@ -107,7 +107,7 @@ impl Stream {
         false
     }
 
-    pub(super) fn next(&mut self) -> Option<Token> {
+    pub(crate) fn next(&mut self) -> Option<Token> {
         self.settle();
         let token = self.tokens.get(self.pos)?.clone();
         self.pos += 1;
@@ -124,7 +124,7 @@ impl Stream {
     }
 
     /// Consume the next token if `test` accepts its kind.
-    pub(super) fn eat(&mut self, test: impl Fn(&TokenKind) -> bool) -> Option<Token> {
+    pub(crate) fn eat(&mut self, test: impl Fn(&TokenKind) -> bool) -> Option<Token> {
         if self.peek().is_some_and(|token| test(&token.kind)) {
             self.next()
         } else {
@@ -132,12 +132,12 @@ impl Stream {
         }
     }
 
-    pub(super) fn peek_is(&mut self, test: impl Fn(&TokenKind) -> bool) -> bool {
+    pub(crate) fn peek_is(&mut self, test: impl Fn(&TokenKind) -> bool) -> bool {
         self.peek().is_some_and(|token| test(&token.kind))
     }
 
     /// Span of the next token, or the end-of-input span.
-    pub(super) fn peek_span(&mut self) -> Span {
+    pub(crate) fn peek_span(&mut self) -> Span {
         let fallback = self.eof_span;
         self.peek().map_or(fallback, |token| token.span)
     }
@@ -146,7 +146,7 @@ impl Stream {
     /// the next significant token. Doc lines stop collection (callers that
     /// accept docs take them separately); a stray `//!` header line past the
     /// prologue is an error.
-    pub(super) fn take_leads(&mut self) -> Result<Vec<Lead>, ParseError> {
+    pub(crate) fn take_leads(&mut self) -> Result<Vec<Lead>, ParseError> {
         let mut leads = std::mem::take(&mut self.pending);
         loop {
             let last_line = self.last_line;
@@ -178,7 +178,7 @@ impl Stream {
 
     /// Collect a contiguous run of `///` doc lines (each followed by its
     /// newline) attached to the declaration that follows.
-    pub(super) fn take_docs(&mut self) -> Vec<DocLine> {
+    pub(crate) fn take_docs(&mut self) -> Vec<DocLine> {
         let mut docs = Vec::new();
         while let Some(token) = self.peek() {
             let span = token.span;
@@ -194,7 +194,7 @@ impl Stream {
     }
 
     /// Take a same-line trailing comment, if one precedes the line's newline.
-    pub(super) fn take_trailing(&mut self) -> Option<Comment> {
+    pub(crate) fn take_trailing(&mut self) -> Option<Comment> {
         let token = self.peek()?;
         let span = token.span;
         if let TokenKind::Comment(text) = &token.kind {
@@ -208,14 +208,14 @@ impl Stream {
 
     /// Give collected leads back so a later item (possibly in an outer
     /// block) picks them up.
-    pub(super) fn push_back_leads(&mut self, mut leads: Vec<Lead>) {
+    pub(crate) fn push_back_leads(&mut self, mut leads: Vec<Lead>) {
         leads.append(&mut self.pending);
         self.pending = leads;
     }
 
     /// Consume the end of the current line: an optional trailing comment
     /// followed by a newline (or end of input, or a block boundary).
-    pub(super) fn end_line(&mut self) -> Result<Option<Comment>, ParseError> {
+    pub(crate) fn end_line(&mut self) -> Result<Option<Comment>, ParseError> {
         let trailing = self.take_trailing();
         match self.peek() {
             None => Ok(trailing),
@@ -235,7 +235,7 @@ impl Stream {
 
     /// Expect a block to open (an `Indent` token), attributing the error to
     /// `owner_span` with `expectation` when it does not.
-    pub(super) fn expect_indent(
+    pub(crate) fn expect_indent(
         &mut self,
         owner_span: Span,
         expectation: &str,
@@ -249,7 +249,7 @@ impl Stream {
 
     /// Whether the current block is over: the next token is a dedent or the
     /// input is exhausted.
-    pub(super) fn at_block_end(&mut self) -> bool {
+    pub(crate) fn at_block_end(&mut self) -> bool {
         self.peek()
             .is_none_or(|token| matches!(token.kind, TokenKind::Dedent))
     }
@@ -259,7 +259,7 @@ impl Stream {
     /// lexer's indentation stack, so docs leading the next outer
     /// declaration sit before this block's dedent; consuming them here
     /// would attach them to the wrong owner.
-    pub(super) fn at_item_block_end(&mut self) -> bool {
+    pub(crate) fn at_item_block_end(&mut self) -> bool {
         if self.at_block_end() {
             return true;
         }
@@ -289,7 +289,7 @@ impl Stream {
     /// (one level deeper for the first continuation) starts with `|>`,
     /// consume the line structure so the chain parses as one statement. The
     /// continuation's eventual dedent is owed and swallowed silently.
-    pub(super) fn continue_wrapped_pipe(&mut self) -> bool {
+    pub(crate) fn continue_wrapped_pipe(&mut self) -> bool {
         self.settle();
         let mut index = self.pos;
         if !matches!(
@@ -326,7 +326,7 @@ impl Stream {
     /// that `Indent` wherever it sits in the leading trivia run and leaves
     /// the docs at the cursor for the first item to take; consumes nothing
     /// when no block opens.
-    pub(super) fn open_block(&mut self) -> bool {
+    pub(crate) fn open_block(&mut self) -> bool {
         self.settle();
         let mut index = self.pos;
         while let Some(token) = self.tokens.get(index) {
@@ -346,7 +346,7 @@ impl Stream {
     /// doc-line run that belongs to the next outer declaration (doc lines
     /// never adjust the indentation stack). The run itself is left in place
     /// for the outer context to consume in order.
-    pub(super) fn consume_block_dedent(&mut self) {
+    pub(crate) fn consume_block_dedent(&mut self) {
         self.settle();
         let mut index = self.pos;
         while let Some(token) = self.tokens.get(index) {
@@ -362,7 +362,7 @@ impl Stream {
     }
 
     /// Expect and consume a specific simple token kind.
-    pub(super) fn expect(&mut self, want: &TokenKind, message: &str) -> Result<Token, ParseError> {
+    pub(crate) fn expect(&mut self, want: &TokenKind, message: &str) -> Result<Token, ParseError> {
         match self.peek() {
             Some(token) if token.kind == *want => {}
             Some(token) => return Err(ParseError::new(token.span, message.to_owned())),
@@ -376,7 +376,7 @@ impl Stream {
     /// casing rules) used as a name; reserved keywords are refused with a
     /// diagnostic naming the keyword, while *contextual* keywords (the
     /// combinator, config, and predicate words) double as ordinary names.
-    pub(super) fn expect_name(&mut self, what: &str) -> Result<(String, Span), ParseError> {
+    pub(crate) fn expect_name(&mut self, what: &str) -> Result<(String, Span), ParseError> {
         match self.peek() {
             Some(token) => {
                 let span = token.span;
@@ -420,7 +420,7 @@ impl Stream {
 /// `of` head expression forms (`json { … }`, `schema of Type`) and are
 /// hard-reserved like `schema` — a soft name that can be declared but never
 /// referenced in an expression would be a false promise.
-pub(super) fn soft_keyword(keyword: crate::Keyword) -> bool {
+pub(crate) fn soft_keyword(keyword: crate::Keyword) -> bool {
     use crate::Keyword as K;
     matches!(
         keyword,
@@ -449,7 +449,7 @@ fn push_blank_if_gap(leads: &mut Vec<Lead>, last_line: usize, next_line: usize) 
 }
 
 /// A short human description of a token kind for diagnostics.
-pub(super) fn describe(kind: &TokenKind) -> String {
+pub(crate) fn describe(kind: &TokenKind) -> String {
     match kind {
         TokenKind::Keyword(keyword) => format!("keyword `{}`", keyword.as_word()),
         TokenKind::Identifier(name) | TokenKind::TypeIdentifier(name) => format!("`{name}`"),

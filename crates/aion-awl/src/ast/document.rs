@@ -84,6 +84,8 @@ pub struct Document {
     pub subflows: Vec<SubflowDecl>,
     /// `step` declarations in source order.
     pub steps: Vec<Step>,
+    /// `command` declarations in source order.
+    pub commands: Vec<crate::command::CommandDecl>,
     /// Trailing trivia at the very end of the document.
     pub epilogue: Vec<Lead>,
 }

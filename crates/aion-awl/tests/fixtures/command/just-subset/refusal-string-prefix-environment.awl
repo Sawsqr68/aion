@@ -1,0 +1,24 @@
+//! FIXTURE: refused form `string_prefix_environment`.
+//! EXPECT: refuse env_string_prefix
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/export.rs`,
+//!   sha256 cbaf93ebf7b825941f8db3e0da490db1b57ede9d96771ac6bfb47ef3add7aa49;
+//!   case `success`.
+//! JUST-SPECIMEN: export FOO := 'a'
+//! WHAT DIFFERS: Just's `export` marks a VARIABLE for export and is already
+//!   structural — name and value are separate. What this fixture refuses is
+//!   the flattened `"K=V"` form an author reaches for when they think of the
+//!   environment as text a shell will split.
+//! WHY REFUSED: a `K=V` string is a prefix some shell would have to split, and
+//!   splitting is exactly what this surface exists to remove.
+
+workflow just_string_prefix_environment
+  outcome done: type String, route success
+
+command foo
+  program "echo"
+  admits "--"
+  env "FOO=a"
+
+step go
+  route done("ok")

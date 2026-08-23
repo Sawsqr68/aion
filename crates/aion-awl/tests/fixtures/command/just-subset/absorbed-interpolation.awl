@@ -1,0 +1,22 @@
+//! FIXTURE: absorbed production `interpolation`.
+//! EXPECT: accept
+//! PROVENANCE: casey/just, CC0-1.0, at commit
+//!   b20386abdbae867a49cdff6c3c0f2b547faa9b23; file `tests/parameters.rs`,
+//!   sha256 44014fc86b258c4a2573bd5f96245106ed4eabe84c61c559c8d63816219f3a56;
+//!   case `parameter_default_values_may_use_earlier_parameters`, whose recipe
+//!   body is `echo {{ b }}`.
+//! JUST-SPECIMEN: echo {{ b }}
+//! WHAT DIFFERS: the `{{name}}` syntax is absorbed whole, whitespace inside
+//!   the braces included. What is NOT absorbed is everything Just allows
+//!   BESIDES a name there — see the `expression_interpolation` refusal.
+
+workflow just_interpolation
+  outcome done: type String, route success
+
+command foo(b: String)
+  program "echo"
+  admits "--"
+  operand shown: String = "{{ b }}"
+
+step go
+  route done("ok")
