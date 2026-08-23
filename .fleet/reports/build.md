@@ -621,9 +621,43 @@ per named form. The gate's own COVERAGE paragraph was updated to say so.
 | **F-R6-1** | Env hardening is expressible as a VALUE but not as a PRESENCE, so one shape cannot cover the four rigs' hardening dimension. | Reported at the bytes, recorded in the fixture header. Needs a design answer (optional-presence form, or two shapes), not an implementation one. |
 | **F-CAUSE-1** | `specimen_wrong_cause` has no reachable red arm in this cut's emit vocabulary. | Shadowed by construction, recorded honestly, code retained (collapsing it would be the catch-all the law forbids). Same shape as the rig's own two shadowed probe arms. |
 | **F-CENSUS-1** | A second adjacent construct exists: `crates/aion-cli/tests/awl_corpus_gate.rs`. | Triaged in §0 — a different question over a different corpus (35-document floor vs 431). Not a substitute for R8's instrument; untouched. |
+| **F-VENUE-1** | Three `--workspace` suite runs on a LOADED rocketfish each failed one e2e test, a DIFFERENT one each time; every one passed in isolation. On a settled venue the same tree ran 5391/5391 green. | Reported for Waffles' re-gate: **let the box settle before running the gate.** Details below. |
 
 **No requirement was thinned.** R1–R8 all landed. Nothing was deferred, and
 there is no partial requirement to report.
+
+### F-VENUE-1, in detail — the gate needs a settled box
+
+Three full `cargo nextest run --workspace` runs on this venue while its load
+average sat between 14 and 19 (on 16 CPUs, the load being this leg's own
+back-to-back suite runs draining) each failed exactly one test, and a
+DIFFERENT one each time:
+
+| run | failing test | isolated re-run |
+|---|---|---|
+| 1 | `aion-server::bridge_liminal_dispatch_e2e bridge_dispatch_reaches_liminal_worker_and_resolves` | 7/7 PASS |
+| 2 | `aion-cli::new_agent_e2e scaffolded_agent_deploys_but_start_is_refused_unscoped` (`grpc transport failed at 127.0.0.1:41141`) | 10/10 PASS |
+| 3 | `aion-rs::engine_query query_racing_completion_yields_payload_or_typed_error_without_events` | 14/14 PASS |
+
+All three boot a server, bind a port, or race a completion; none is in the AWL
+crate family, and this cut touches no server, transport or scheduling surface.
+After waiting for the load average to fall below 3.0, the SAME commit ran
+**5391/5391 green**. Recorded so the next runner does not read a contended box
+as a red tree — and so that if it recurs on a quiet box, that is a real
+finding rather than a repeat of this one.
+
+**GATE RECEIPT (this leg's own run, on the committed tree):**
+
+```
+GATE-GREEN: toolchain 1.97.1 pin-honored from rust-toolchain.toml;
+tree CLEAN at f37a05d885894707c8a294e49413ad324d37c209;
+census within wall with deliverable present; clippy -D warnings clean;
+63 new test annotations; 5391 tests named and green
+against base 5e2fb5a3ed32b53d48dbc585aa914acd056458c6
+```
+
+(The commit this report is committed IN is one further along, since the report
+is itself a deliverable inside the wall; the gate was re-run on that tree too.)
 
 ---
 
@@ -642,6 +676,7 @@ there is no partial requirement to report.
   position, AWL-REFERENCE §17 row, and LSP hover + completion.
 * `cargo clippy --workspace --all-targets -- -D warnings` clean, with no
   suppression of any kind added.
+* **5391/5391** workspace tests green on the committed tree, gate GREEN.
 
 — the build leg. To Waffles for the landing re-gate (**read F-RIG-1 first —
 you will be running an amended script**), then Vesper for owner review and
