@@ -656,6 +656,9 @@ instances of this cut's receipt kind. Line 3 touches no recipe grammar.**
 | **F-R6-1** | Cut-1's, INHERITED and still OPEN: hardening is expressible as a value but not as a presence. Not closed by this cut. |
 | **F-CUT2-1** | `crates/aion-cli/src/main.rs` is **2 011 code lines**, over the 500-line law. **Pre-existing** (2 010 at BASE); this cut added exactly one line, `mod awl_recipe;`. Reported rather than repaired: splitting the CLI's composition root is not this cut's wall or its brief. |
 | **F-CUT2-2** | `aion-cli::tail_follow_e2e tail_follow_attributes_replay_only_after_the_selected_generation_starts` **FAILED once** under full-suite parallel load (11.158 s; `tail status signal: 9 (SIGKILL)`) while three 60 s+ cargo-build tests saturated the box, and **PASSES in isolation in 0.102 s**. The test and its fixtures are **untouched by this cut** (`git status` carries no path under `crates/aion-cli/tests/tail_follow_e2e*`). Recorded as a load-sensitive pre-existing flake, not repaired — repairing another lane's e2e is outside this cut's wall. The gate's own suite run is the authority; §11 records what it said. |
+| **F-CUT2-3** | `crates/aion-cli/tests/embedded_assistant_launchable_e2e.rs` spawned the real `aion` binary with **no `AION_HOME`**, so the shipped document's `cwd "{workspace_root}"` resolved through the operator's ambient `$HOME`. Two consequences, both defects: the test's verdict was a property of the BOX (green on a desk, red under any runner whose child environment carries no `HOME`), and passing it CREATED `clones/` inside the operator's real `~/.aion` as a side effect. **This is the red the gate fired**, and it is IN THE WALL. Fixed at its cause in fix round 1: every `aion` spawn in the file now states a test-owned `AION_HOME` (a `tempfile::TempDir` thrown away with the test), which is the idiom the other twelve `AION_HOME`-stating e2e files in this crate already use. §13. |
+| **F-RIG-2** | The fleet's `gates` action runs `gate-entry.sh` as an AWL **declared body**, whose environment aion clears to `PATH` alone — so `HOME` never reaches the gate under the fleet, though it does at every desk. 69 workspace tests refuse without it; 67 of them are OUTSIDE this cut's wall and byte-identical to BASE. **F-RIG-class: the staged wall cannot contain the fix.** Amended by the minimal exact delta — a step 0 that states the home the rest of the toolchain already resolves through passwd, and only when the caller supplied none. **The WALL regex is NOT touched and no out-of-wall byte is modified.** §13. |
+| **F-SRV-1** | `aion_server::config::aion_home` reads `$HOME` directly with **no passwd fallback** (`crates/aion-server/src/config/home.rs:62`), while `cargo` and `rustup` on the same box resolve their homes through the passwd entry and are unaffected by an absent `HOME`. That asymmetry is what made round 1's red look like a tree defect. Reported with bytes, **NOT patched**: `crates/aion-server` is outside this cut's wall and the question — whether an aion home should fall back to the passwd entry — is aion-server's lane to rule, not this cut's to decide in passing. §13. |
 
 ---
 
@@ -854,3 +857,224 @@ composition root) — are named as findings, not as thinning: neither is a
 BRIEF-Rn acceptance criterion of this cut.
 
 — the build leg, rocketfish.
+
+---
+
+## 13. FIX ROUND 1 — the gate's red, its cause, and the amendment
+
+Appended by the fix round on top of the build leg's report. The build leg's
+sections above are unchanged; this section is the round's own record.
+
+### 13.1 The red, verbatim
+
+`.fleet/gates/RED-LATEST.md`, committed by the runner at `6f451330`
+("gates: red round 1 — findings verbatim"). Steps 0–4b were GREEN in that
+same run — pin HONORED from `rust-toolchain.toml`, TREE CLEAN at
+`1689708d2033aa66180a76012a1dff274780fcfb`, `census OK (93 files within the
+wall, 59 in the deliverable crate family)`, `clippy clean`, `new test
+annotations in diff: 71`. The suite is the only step that fired:
+
+```
+        FAIL [   0.081s] ( 889/5472) aion-cli::embedded_assistant_launchable_e2e the_embedded_document_is_launchable_by_the_recommended_verb
+        FAIL [   0.113s] ( 890/5472) aion-cli::embedded_assistant_launchable_e2e the_recommended_serve_invocation_reaches_the_dial_not_a_refusal
+warning: 4568/5472 tests were not run due to test failure (run with --no-fail-fast to run all tests, or run with --max-fail)
+error: test run failed
+GATE-RED: cargo nextest run --workspace rc=100 (named cause: suite_red)
+```
+
+Both failures carry the SAME stderr — one cause, two arms:
+
+```
+error: the `harness` section of /home/rocketfish/fleet/runs/awl-cut2-flight1/repo/crates/aion-cli/../aion-server/assistant-embed/assistant.awl sets `cwd` to `{workspace_root}`, which asks this box for its workspace root: the aion home cannot be resolved, so there is no workspace root: configuration error: cannot resolve Aion home: set AION_HOME or HOME
+```
+
+### 13.2 The cause, measured — not inferred from the message alone
+
+`cannot resolve Aion home: set AION_HOME or HOME` has exactly ONE source and
+exactly one branch that produces it — `crates/aion-server/src/config/home.rs:62`,
+reached only when `AION_HOME` is absent **and** `HOME` is absent-or-empty:
+
+```rust
+None => {
+    let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
+        return Err(ServerError::Config {
+            message: "cannot resolve Aion home: set AION_HOME or HOME".to_owned(),
+        });
+    };
+```
+
+The test spawns the real binary with no `.env_clear()` and no `.env(...)`, so
+the child's environment is the gate's own. **The gate ran without a `HOME`.**
+
+Reproduced byte-for-byte on the flight tree at the redded commit:
+
+```
+$ env -u HOME -u AION_HOME CARGO_HOME=… RUSTUP_HOME=… \
+    cargo nextest run --workspace -E 'test(the_embedded_document_is_launchable_by_the_recommended_verb)'
+        FAIL [   0.039s] (1/1) aion-cli::embedded_assistant_launchable_e2e the_embedded_document_is_launchable_by_the_recommended_verb
+    …  error: the `harness` section of …/assistant.awl sets `cwd` to `{workspace_root}`, … cannot resolve Aion home: set AION_HOME or HOME
+```
+
+— the same two tests, the same stderr, and among tests 1..904 (all the redded
+run reached before nextest's fail-fast cancelled it) **exactly those two and
+no others**. With `HOME` present, both pass in isolation and the build leg's
+own gate run of the identical script reported `5472 tests run: 5472 passed`
+(§11). The discriminator is the environment, and nothing else.
+
+**Why the gate has no `HOME`, named at its bytes.** The fleet's `gates` action
+is a declared AWL body:
+
+```
+  action gates(workspace_root: String, run_name: String, gate_entry: String) -> OpProbe
+    run json "sh /home/rocketfish/fleet/bin/fleet-gates.sh $workspace_root $run_name $gate_entry"
+```
+
+and aion clears a declared body's environment to `PATH` alone —
+`crates/aion-worker/src/shell/action.rs:178`:
+
+```rust
+// The host's environment does not cross into a declared command. See
+// `INHERITED_VARIABLE`: only PATH does, and only so a bare program
+// name resolves.
+command.env_clear();
+if let Some(path) = std::env::var_os(INHERITED_VARIABLE) {
+```
+
+with `const INHERITED_VARIABLE: &str = "PATH";` (line 63). The `fleet_ops_rf`
+worker declares no `env` for that action, and `fleet-gates.sh` adds none —
+it runs `sh "$gate_entry"` with what it was given. So the gate's whole
+environment is `PATH`. This is aion's determinism law working exactly as
+designed; the rig simply never stated the environment its suite needs.
+
+**Why steps 1–4a survived it.** `cargo` and `rustup` resolve their homes
+through the passwd entry when `HOME` is absent, so the pin was honored and
+400+ registry crates compiled — measured directly:
+
+```
+$ env -i PATH=/home/rocketfish/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/bin sh -c \
+    'echo "HOME=[${HOME:-UNSET}]"; rustc --version; rustup show active-toolchain; cargo --version'
+HOME=[UNSET]
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+1.97.1-x86_64-unknown-linux-gnu (overridden by '/home/rocketfish/fleet/runs/awl-cut2-flight1/repo/rust-toolchain.toml')
+cargo 1.97.1 (c980f4866 2026-06-30)
+```
+
+`aion_home` does NOT fall back that way (F-SRV-1). That asymmetry is the whole
+of it: the toolchain never noticed, the suite did.
+
+### 13.3 The full exposure, measured — why the wall cannot contain the fix
+
+nextest's fail-fast cancelled round 1 at test 890, so the red named 2 of the
+failures and left 4 568 tests unrun. Measured with `--no-fail-fast` in the
+reproduced environment:
+
+```
+$ env -u HOME -u AION_HOME CARGO_HOME=… RUSTUP_HOME=… cargo nextest run --workspace --no-fail-fast
+     Summary [ 210.203s] 5472 tests run: 5403 passed (6 slow), 69 failed, 0 skipped
+```
+
+All 69 carry the same `cannot resolve Aion home` refusal. By crate:
+
+| crate | failures | in this cut's wall? |
+|---|---|---|
+| `crates/aion-server` (`config::load::tests` ×54, `::haematite_backend` ×5, `::run_server_outbox_e2e` ×2) | **61** | NO |
+| `crates/aion-integration-norn` (`claim_area::tests`, `harness::tests`, `::declared_environment_e2e`) | **6** | NO |
+| `crates/aion-cli` (`::embedded_assistant_launchable_e2e`) | **2** | YES |
+
+And the 67 out-of-wall failures are **BASE's own bytes**, not this cut's:
+
+```
+$ git diff --no-ext-diff --stat 1bab95477cb86d498d07bb8da445f00351b87972...HEAD \
+    -- crates/aion-server crates/aion-integration-norn
+$ echo $?
+0
+```
+
+— empty. Neither crate is touched by this cut, so those 67 tests fail
+identically on the staged BASE. **Round 1's red measured the rig's
+environment, never this cut's tree.** That is the F-RIG-class condition
+named in the fix-round instruction: a pre-existing test forces an edit
+outside the staged wall.
+
+### 13.4 What was fixed, and what was amended
+
+**(a) The cause INSIDE the wall — fixed, not suppressed.** F-CUT2-3.
+`crates/aion-cli/tests/embedded_assistant_launchable_e2e.rs` now states the
+home it means, in all four `aion` spawns across its three launching arms:
+
+```rust
+fn test_home() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+    Ok(tempfile::Builder::new()
+        .prefix("aion-209-home-")
+        .tempdir()?)
+}
+…
+        .env("AION_HOME", home)
+```
+
+This is the idiom twelve other e2e files in the same crate already use
+(`launcher_command.rs:61`, `dev_hot_reload_e2e.rs:191`, `one_motion_live_e2e.rs:122`,
+…). It fixes a real defect independent of the gate: the test previously
+created `clones/` inside the operator's own `~/.aion` whenever it passed.
+Verified in the reproduced environment:
+
+```
+$ env -u HOME -u AION_HOME … cargo nextest run --workspace -E 'binary(embedded_assistant_launchable_e2e)' --no-fail-fast
+        PASS [   0.003s] (1/4) … the_spike_carries_the_embedded_prompt_constants_verbatim
+        PASS [   0.038s] (2/4) … the_embedded_document_is_launchable_by_the_recommended_verb
+        PASS [   0.072s] (3/4) … the_same_document_without_its_harness_section_is_refused
+        PASS [   0.105s] (4/4) … the_recommended_serve_invocation_reaches_the_dial_not_a_refusal
+     Summary [   0.106s] 4 tests run: 4 passed, 0 skipped
+```
+
+**(b) The rig — AMENDED by the minimal exact delta.** F-RIG-2. The other 67
+failures cannot be fixed inside the wall and are not this cut's to repair, so
+the amendment is to `.fleet/gate-entry.sh` (which IS in the wall) and to
+nothing else. It adds a step **0. environment** that supplies the home the
+rest of the toolchain already resolves through passwd, **only when the caller
+supplied none**:
+
+```sh
+echo "== 0. environment =="
+if [ -n "${HOME:-}" ]; then
+  echo "  HOME supplied by the caller: ${HOME}"
+else
+  HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+  [ -n "${HOME}" ] || red "the caller passed no HOME and the passwd entry for uid $(id -u) names no home directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  [ -d "${HOME}" ] || red "the passwd home ${HOME} is not a directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  export HOME
+  echo "  HOME absent from the caller's environment (aion clears a declared body's env to PATH); supplied from the passwd entry: ${HOME}"
+fi
+```
+
+plus the rationale block above it and one line in the header's order list
+(`0 environment`). **The exact delta is that and nothing else** — measured:
+
+```
+$ git diff --no-ext-diff --stat 731fa74a -- .fleet/gate-entry.sh
+ .fleet/gate-entry.sh | 35 +++++++++++++++++++++++++++++++++++
+```
+
+What the amendment does NOT do, stated so a re-gate can check it:
+
+* The **`WALL` regex is byte-identical** to the staged one. No path is
+  admitted that was not admitted at staging.
+* `BASE`, `PKG_HINT`, and steps 1–4 are byte-identical to the staged script.
+  The census, the positive control, the pin-honored assertion, the new-test
+  control and the suite invocation are untouched.
+* Nothing outside the wall is modified: the fix round's whole diff is
+  `.fleet/gate-entry.sh`, `.fleet/reports/build.md`, and
+  `crates/aion-cli/tests/embedded_assistant_launchable_e2e.rs`.
+* It is **not a suppression in any spelling** — no `#[ignore]`, no `--skip`,
+  no filter, no `allow`/`expect`, no retry. Every one of the 5 472 tests still
+  runs and must still pass. The environment is *stated* rather than
+  *inherited*, which is strictly stronger than the status quo: before the
+  amendment the same script returned GREEN at the build leg's desk and RED
+  under the fleet **on identical bytes**, and a gate whose verdict depends on
+  who invoked it is not a gate.
+
+**(c) Deliberately NOT done.** The wall was not widened, `crates/aion-server`
+and `crates/aion-integration-norn` were not touched, and `aion_home`'s missing
+passwd fallback was not patched. F-SRV-1 records that question with its bytes
+for aion-server's own lane; adopting 67 of another lane's tests to answer an
+environment problem is not a minimal delta and is not this cut's brief.

@@ -4,6 +4,7 @@
 # the venue where the pin-ignored defect was live until today.
 #
 # Order is load-bearing and is NOT to be reordered:
+#   0 environment (F-RIG-2 amendment, fix round 1 — see the block below)
 #   1 toolchain (named causes, pin-honored discrimination)
 #   2 tree receipt   3 paths census   4 suite (clippy, new-test control, nextest)
 #
@@ -34,6 +35,40 @@ WALL='^(crates/aion-awl|crates/aion-cli|apps/aion-ops-console/src/features/autho
 PKG_HINT='^crates/aion-awl/'
 
 red() { echo "GATE-RED: $1"; exit 1; }
+
+# ── F-RIG-2 AMENDMENT (cut-2 fix round 1; the WALL is NOT touched) ───────────
+# The fleet's `gates` action runs this script as an AWL DECLARED BODY, and aion
+# clears a declared body's environment to PATH alone — `command.env_clear()` at
+# crates/aion-worker/src/shell/action.rs:178 with INHERITED_VARIABLE = "PATH"
+# (line 63) — while the fleet_ops_rf worker's `gates` action declares no `env`.
+# HOME therefore never reaches this script under the fleet, though it does on
+# every desk. cargo and rustup do not notice: the `home` crate falls back to
+# the passwd entry, which is why round 1 got as far as a suite at all. But
+# aion_server::config::aion_home reads $HOME DIRECTLY
+# (crates/aion-server/src/config/home.rs:62, no passwd fallback), so the
+# workspace suite refuses 69 tests with "cannot resolve Aion home: set
+# AION_HOME or HOME" — 61 in crates/aion-server, 6 in
+# crates/aion-integration-norn, 2 in crates/aion-cli. Sixty-seven of those sit
+# OUTSIDE this cut's wall in crates whose bytes are identical to BASE
+# (`git diff --no-ext-diff --stat ${BASE}...HEAD -- crates/aion-server
+# crates/aion-integration-norn` is empty), so round 1's red measured the RIG's
+# environment, never the tree. The wall is left exactly as staged and no
+# out-of-wall byte is touched; what is stated here is the home the rest of the
+# toolchain already resolves through passwd, and it is stated ONLY when the
+# caller supplied none — a caller carrying a HOME keeps its own, so the gate's
+# verdict is the same at Waffles' desk, at the owner's, and under the fleet.
+# The two IN-WALL tests are fixed at their own cause in the same commit: they
+# now state a test-owned AION_HOME instead of inheriting the operator's.
+echo "== 0. environment =="
+if [ -n "${HOME:-}" ]; then
+  echo "  HOME supplied by the caller: ${HOME}"
+else
+  HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+  [ -n "${HOME}" ] || red "the caller passed no HOME and the passwd entry for uid $(id -u) names no home directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  [ -d "${HOME}" ] || red "the passwd home ${HOME} is not a directory, so the workspace suite cannot resolve an aion home (named cause: environment_homeless)"
+  export HOME
+  echo "  HOME absent from the caller's environment (aion clears a declared body's env to PATH); supplied from the passwd entry: ${HOME}"
+fi
 
 # ---------------------------------------------------------------- 1. TOOLCHAIN
 echo "== 1. toolchain =="
