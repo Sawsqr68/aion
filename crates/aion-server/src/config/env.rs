@@ -60,13 +60,17 @@ pub(crate) fn overlay_vars(
             "AION_STORE_NODE_CACHE_BUDGET" => {
                 config.store.node_cache_budget = Some(parse_node_cache_budget(&name, &value)?);
             }
-            "AION_STORE_LOCK_ACQUISITION_PATIENCE_MS" => {
-                config.store.lock_acquisition_patience_ms =
-                    Some(parse_positive_u64(&name, &value)?);
-            }
-            "AION_STORE_LOCK_ACQUISITION_RETRY_CADENCE_MS" => {
-                config.store.lock_acquisition_retry_cadence_ms =
-                    Some(parse_positive_u64(&name, &value)?);
+            // RETIRED (2026-08-24): warned and ignored regardless of value —
+            // a retired key must never refuse a boot, so the value is not
+            // even parsed. Boot waits indefinitely for the writer lock.
+            "AION_STORE_LOCK_ACQUISITION_PATIENCE_MS"
+            | "AION_STORE_LOCK_ACQUISITION_RETRY_CADENCE_MS" => {
+                tracing::warn!(
+                    variable = %name,
+                    "retired and ignored: the server waits indefinitely for the \
+                     data-directory writer lock and reports while it waits. \
+                     Unset this variable"
+                );
             }
             "AION_RUNTIME_SCHEDULER_THREADS" => {
                 config.runtime.scheduler_threads = parse_positive_usize(&name, &value)?;

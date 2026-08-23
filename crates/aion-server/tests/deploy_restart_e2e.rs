@@ -291,13 +291,8 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
 
     // Epoch 1: empty server; the deploy API is the only package source.
     let store: Arc<dyn EventStore> = Arc::new(
-        HaematiteStore::open_or_create(
-            db_path.clone(),
-            haematite::NodeCacheBudget::Unlimited,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?,
+        HaematiteStore::open_or_create(db_path.clone(), haematite::NodeCacheBudget::Unlimited)
+            .await?,
     );
     let (engine, router) = server_over(Arc::clone(&store)).await?;
     let response = router
@@ -324,13 +319,7 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
     // Epoch 2: fresh store handle, engine, resolver, router over the same
     // database. No workflow packages are supplied.
     let store: Arc<dyn EventStore> = Arc::new(
-        HaematiteStore::open_or_create(
-            db_path,
-            haematite::NodeCacheBudget::Unlimited,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?,
+        HaematiteStore::open_or_create(db_path, haematite::NodeCacheBudget::Unlimited).await?,
     );
     let (engine, router) = server_over(store).await?;
 
@@ -376,13 +365,8 @@ async fn runtime_deploy_survives_server_restart_and_run_completes() -> Result<()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn empty_store_restart_reloads_nothing() -> Result<(), TestError> {
     let store: Arc<dyn EventStore> = Arc::new(
-        HaematiteStore::open_or_create(
-            unique_db_path(),
-            haematite::NodeCacheBudget::Unlimited,
-            // test-ruled patience: 250ms covers the measured 93-150ms fork window; not a default.
-            aion_store_haematite::LockAcquisitionRuling::from_millis(250, 5)?,
-        )
-        .await?,
+        HaematiteStore::open_or_create(unique_db_path(), haematite::NodeCacheBudget::Unlimited)
+            .await?,
     );
     let (engine, router) = server_over(store).await?;
 

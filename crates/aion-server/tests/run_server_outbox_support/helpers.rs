@@ -612,8 +612,6 @@ data_dir = {db}
 # Required, no default: the haematite boot path refuses a config that does not
 # rule on the node cache's byte ceiling.
 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 scheduler_threads = 1

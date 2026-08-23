@@ -175,9 +175,6 @@ pub(crate) const OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED: &str = "observability
 /// visible-in-a-diff choice rather than as a silent fallback.
 pub const STORE_NODE_CACHE_BUDGET_REQUIRED: &str = "store.node_cache_budget is required and has no default: it is the byte ceiling the haematite node caches may hold, and a cache bounded only by entry count is unbounded in bytes (a leaf reaches the ~96KB class under byte-aware chunking, so a 1,024-entry cache can hold gigabytes). Set store.node_cache_budget (or AION_STORE_NODE_CACHE_BUDGET) to either `{ bytes = <positive integer> }` or the string \"unlimited\" — `unlimited` is the pre-budget behaviour, stated out loud";
 
-/// Operator-facing refusal for an absent or invalid writer-lock acquisition ruling.
-pub const STORE_LOCK_ACQUISITION_REQUIRED: &str = "store.lock_acquisition_patience_ms and store.lock_acquisition_retry_cadence_ms are both required and have no defaults for the haematite backend: set both (or AION_STORE_LOCK_ACQUISITION_PATIENCE_MS and AION_STORE_LOCK_ACQUISITION_RETRY_CADENCE_MS) to positive millisecond values, with retry cadence no greater than patience";
-
 /// Operator-facing message for an absent or zero `observability.max_batch_events`.
 ///
 /// There is NO default for this knob: every durable transcript commit

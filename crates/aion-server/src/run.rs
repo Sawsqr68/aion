@@ -296,6 +296,15 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // transports; dropping the JoinHandle only detaches the task.
     drop(state.spawn_heartbeat_sweeper(shutdown_rx.clone()));
     commission_worker_supervision(&state, supervision_policy).await;
+    // Instant doors: the startup catch-up legs (owed timer fires, schedule
+    // catch-up) run as a background task CONCURRENT with the transports —
+    // the backlog has no upper bound, and a boot that blocks on it keeps the
+    // doors shut for the whole sweep (the 2026-08-24 estate outage shape:
+    // 37+ minutes of healthy catch-up with every listener refusing).
+    // Workflow-residency recovery already ran inside `ServerState::build`,
+    // so every surface the transports serve answers correctly while the
+    // catch-up drains behind them.
+    drop(state.spawn_startup_catchup(shutdown_rx.clone())?);
     let mut grpc = tokio::spawn(serve_grpc(state.clone(), grpc_address, shutdown_rx.clone()));
     let mut http = tokio::spawn(serve_http(state.clone(), http_address, shutdown_rx));
 
@@ -1265,8 +1274,6 @@ mod tests {
                 // Required, no default: the haematite boot path refuses a config
                 // that does not rule on the node cache's byte ceiling.
                 node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
-                lock_acquisition_patience_ms: Some(250),
-                lock_acquisition_retry_cadence_ms: Some(5),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {
@@ -1507,8 +1514,6 @@ mod lsub_prod_xnode_e2e {
                 // Required, no default: the haematite boot path refuses a config
                 // that does not rule on the node cache's byte ceiling.
                 node_cache_budget: Some(haematite::NodeCacheBudget::Unlimited),
-                lock_acquisition_patience_ms: Some(250),
-                lock_acquisition_retry_cadence_ms: Some(5),
                 ..StoreConfig::default()
             },
             runtime: RuntimeSection {

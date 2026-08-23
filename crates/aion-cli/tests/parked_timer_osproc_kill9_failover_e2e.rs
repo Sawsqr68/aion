@@ -448,8 +448,6 @@ backend = "haematite"
 # kill-9 failover, never caching; patience/cadence mirror the estate's other
 # e2e nodes.
 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 data_dir = "{data_dir}"
 shard_count = {node_count}
 owned_shards = [{index}]

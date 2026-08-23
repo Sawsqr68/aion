@@ -221,6 +221,15 @@ pub enum EngineError {
     #[error("startup recovery already ran: run_startup_recovery() is one-shot")]
     StartupRecoveryAlreadyRan,
 
+    /// [`crate::Engine::run_startup_catchup`] was called before the
+    /// workflow-recovery leg ran — catch-up delivers owed timer fires to
+    /// resident workflows, so residency recovery must precede it.
+    #[error(
+        "startup catch-up was requested before workflow recovery: call \
+         recover_workflows_on_startup() first"
+    )]
+    StartupCatchupBeforeWorkflowRecovery,
+
     /// The deferred-startup-recovery slot lock was poisoned.
     #[error("deferred startup recovery slot was poisoned")]
     StartupRecoverySlotPoisoned,

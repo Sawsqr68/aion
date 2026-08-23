@@ -1,137 +1,146 @@
+//! Indefinite, loudly-reported waiting for the data-directory writer lock.
+//!
+//! The writer lock is an advisory `flock` haematite takes inside
+//! [`Database::open`]. A kernel-released lock cannot go stale: its holder is
+//! either a live process — a draining predecessor mid-handover, or another
+//! server on the same data directory — or already dead, in which case the
+//! kernel has released the lock and the next open succeeds. There is
+//! therefore no hazard for a patience ceiling to guard: a bounded wait can
+//! only convert an ordinary slow handover into a refused boot (the 0.22.0
+//! estate deploy did exactly that — seven waiters died on a patience ruling
+//! while one live predecessor drained; ruled out 2026-08-24). Boot waits for
+//! the lock indefinitely and says so, at intervals, so an operator reading
+//! the log sees a handover in progress, never a silent hang.
+//!
+//! The spans in this module are implementation constants, not configuration:
+//! the retired `store.lock_acquisition_patience_ms` /
+//! `store.lock_acquisition_retry_cadence_ms` keys are accepted-and-warned by
+//! the server config (never refused, so existing estates boot) and ignored.
+
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use haematite::{Database, DatabaseError};
 
-/// Refusal of a [`LockAcquisitionRuling`] whose spans cannot bound a real,
-/// cadenced retry of the data-directory writer lock.
+/// File name of haematite's writer-lock file inside the data directory. Used
+/// only to PROBE lock availability cheaply; the lock that admits a writer is
+/// always the one [`Database::open`] itself takes.
+const WRITER_LOCK_FILE: &str = "writer.lock";
+
+/// How long the waiter sleeps between cheap probes of the writer lock while
+/// a holder lives. An implementation constant, deliberately not surface: the
+/// probe is one `try_lock` syscall on this process's own descriptor, and a
+/// full [`Database::open`] — which can replay WAL recovery reads — is
+/// attempted only after a probe finds the lock takeable, so this cadence
+/// bounds handover-detection latency, not open-attempt cost.
+const PROBE_CADENCE: Duration = Duration::from_millis(500);
+
+/// How often the wait reports that it is still waiting. Frequent enough that
+/// a log tail always shows the newest line within seconds of looking;
+/// infrequent enough that a long handover does not flood the log.
+const REPORT_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Open the database at `data_dir`, waiting indefinitely — and saying so —
+/// while another live process holds the writer lock.
 ///
-/// The ruling drives REAL [`Database::open`] attempts, each of which takes an
-/// advisory `flock`, so a span that reads as a number but does not bound
-/// anything is not a weaker ruling — it is a different mechanism (a busy-spin,
-/// or a single unwaited attempt) wearing the ruling's name. The invariant is
-/// therefore enforced at construction rather than left to each caller.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum LockAcquisitionRulingError {
-    /// The patience span was zero: the first refusal is already past the
-    /// deadline, so no retry is ever attempted and the ruling silently
-    /// degrades to the single unwaited `try_lock` it exists to replace.
-    #[error(
-        "lock acquisition patience must be positive: a zero span is already spent at the first refusal, so nothing is ever retried"
-    )]
-    PatienceNotPositive,
-    /// The retry cadence was zero: nothing separates the attempts, so the
-    /// patience is spent busy-spinning real database opens on a hot loop.
-    #[error(
-        "lock acquisition retry cadence must be positive: a zero cadence busy-spins real database open attempts for the whole patience"
-    )]
-    RetryCadenceNotPositive,
-    /// The retry cadence exceeded the patience: the single wait is clamped to
-    /// what remains of the patience, so the stated cadence never separates two
-    /// attempts and does not describe what the loop does.
-    #[error(
-        "lock acquisition retry cadence ({retry_cadence:?}) must not exceed the patience ({patience:?}): the wait is clamped to the remaining patience, so the stated cadence never governs an attempt"
-    )]
-    RetryCadenceExceedsPatience {
-        /// The refused patience span.
-        patience: Duration,
-        /// The refused retry cadence.
-        retry_cadence: Duration,
-    },
+/// Every error other than [`DatabaseError::DataDirLocked`] is returned
+/// immediately: only the one refusal that means "a live holder exists" is
+/// waited out, because only that refusal is guaranteed to resolve (the
+/// holder exits, the kernel releases).
+pub(crate) fn open_database(data_dir: &Path) -> Result<Database, DatabaseError> {
+    open_database_with(data_dir, std::thread::sleep, |path, waited| {
+        tracing::warn!(
+            writer_lock = %path.display(),
+            waited_secs = waited.as_secs(),
+            "waiting for the data-directory writer lock: it is held by a live \
+             process (a draining predecessor mid-handover, or another server on \
+             this data directory). The kernel releases the lock the moment its \
+             holder exits; this boot will proceed then. Not an error — a \
+             handover in progress"
+        );
+    })
 }
 
-/// Caller-owned ruling for retrying a transient data-directory writer lock.
-///
-/// Both spans are required because the acceptable boot delay and the retry
-/// cadence are deployment decisions. A retry is attempted only after
-/// haematite returns [`DatabaseError::DataDirLocked`]; every other open error
-/// is returned immediately.
-///
-/// The type owns its invariant: both spans are positive and the cadence does
-/// not exceed the patience. There is no unchecked constructor, so a value of
-/// this type always bounds at least one waited retry.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LockAcquisitionRuling {
-    patience: Duration,
-    retry_cadence: Duration,
-}
-
-impl LockAcquisitionRuling {
-    /// State the maximum acquisition span and the cadence between attempts.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LockAcquisitionRulingError::PatienceNotPositive`] when
-    /// `patience` is zero, [`LockAcquisitionRulingError::RetryCadenceNotPositive`]
-    /// when `retry_cadence` is zero, and
-    /// [`LockAcquisitionRulingError::RetryCadenceExceedsPatience`] when
-    /// `retry_cadence` is longer than `patience`.
-    pub fn new(
-        patience: Duration,
-        retry_cadence: Duration,
-    ) -> Result<Self, LockAcquisitionRulingError> {
-        if patience.is_zero() {
-            return Err(LockAcquisitionRulingError::PatienceNotPositive);
-        }
-        if retry_cadence.is_zero() {
-            return Err(LockAcquisitionRulingError::RetryCadenceNotPositive);
-        }
-        if retry_cadence > patience {
-            return Err(LockAcquisitionRulingError::RetryCadenceExceedsPatience {
-                patience,
-                retry_cadence,
-            });
-        }
-        Ok(Self {
-            patience,
-            retry_cadence,
-        })
-    }
-
-    /// State both acquisition spans in milliseconds.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same refusals as [`new`](LockAcquisitionRuling::new) for the
-    /// millisecond spans given here.
-    pub fn from_millis(
-        patience_ms: u64,
-        retry_cadence_ms: u64,
-    ) -> Result<Self, LockAcquisitionRulingError> {
-        Self::new(
-            Duration::from_millis(patience_ms),
-            Duration::from_millis(retry_cadence_ms),
-        )
-    }
-}
-
-pub(crate) fn open_database(
+/// [`open_database`] with the wait and the report injectable, so tests can
+/// drive a real contended lock without real time or a captured logger.
+fn open_database_with(
     data_dir: &Path,
-    ruling: LockAcquisitionRuling,
-) -> Result<Database, DatabaseError> {
-    open_database_with_wait(data_dir, ruling, std::thread::sleep)
-}
-
-fn open_database_with_wait(
-    data_dir: &Path,
-    ruling: LockAcquisitionRuling,
     mut wait: impl FnMut(Duration),
+    mut report: impl FnMut(&Path, Duration),
 ) -> Result<Database, DatabaseError> {
+    let lock_path = data_dir.join(WRITER_LOCK_FILE);
     let started = Instant::now();
+    let mut last_report: Option<Instant> = None;
     loop {
         match Database::open(data_dir) {
             Ok(database) => return Ok(database),
-            Err(error @ DatabaseError::DataDirLocked { .. }) => {
-                let elapsed = started.elapsed();
-                if elapsed >= ruling.patience {
-                    return Err(error);
-                }
-                let remaining = ruling.patience.saturating_sub(elapsed);
-                // The caller-ruled cadence separates real lock attempts.
-                wait(ruling.retry_cadence.min(remaining));
+            Err(DatabaseError::DataDirLocked { .. }) => {
+                report_if_due(&mut report, &lock_path, started, &mut last_report);
+                wait_until_lock_looks_takeable(
+                    &lock_path,
+                    started,
+                    &mut wait,
+                    &mut report,
+                    &mut last_report,
+                );
             }
             Err(error) => return Err(error),
         }
+    }
+}
+
+/// Sleep-probe until this process can momentarily take the writer lock, then
+/// release it at once and return so the caller re-runs the real open. The
+/// probe is what keeps the wait cheap: a contended [`Database::open`] can
+/// replay recovery work before meeting the lock, and re-running that on
+/// every poll multiplies I/O for no faster handover.
+///
+/// A probe that cannot even reach the lock file (it does not exist yet, or
+/// cannot be opened) returns immediately: the real open is the authority on
+/// what that means, and it will say so in a typed error.
+fn wait_until_lock_looks_takeable(
+    lock_path: &Path,
+    started: Instant,
+    wait: &mut impl FnMut(Duration),
+    report: &mut impl FnMut(&Path, Duration),
+    last_report: &mut Option<Instant>,
+) {
+    loop {
+        let Ok(probe) = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(lock_path)
+        else {
+            return;
+        };
+        match probe.try_lock() {
+            Ok(()) => {
+                // Released on drop; the caller's real open takes it for keeps.
+                // Losing the race to another waiter just re-enters the wait.
+                drop(probe);
+                return;
+            }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                report_if_due(report, lock_path, started, last_report);
+                wait(PROBE_CADENCE);
+            }
+            Err(std::fs::TryLockError::Error(_)) => return,
+        }
+    }
+}
+
+/// Emit the still-waiting report when none has been emitted yet or the last
+/// one is older than [`REPORT_INTERVAL`].
+fn report_if_due(
+    report: &mut impl FnMut(&Path, Duration),
+    lock_path: &Path,
+    started: Instant,
+    last_report: &mut Option<Instant>,
+) {
+    let due = last_report.is_none_or(|at| at.elapsed() >= REPORT_INTERVAL);
+    if due {
+        report(lock_path, started.elapsed());
+        *last_report = Some(Instant::now());
     }
 }
 
@@ -139,44 +148,10 @@ fn open_database_with_wait(
 mod tests {
     use std::fs::OpenOptions;
     use std::sync::mpsc;
-    use std::time::Duration;
 
-    use super::{
-        LockAcquisitionRuling, LockAcquisitionRulingError, open_database, open_database_with_wait,
-    };
+    use super::open_database_with;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-    #[test]
-    fn spans_that_bound_no_waited_retry_are_refused_at_construction() -> TestResult {
-        assert_eq!(
-            LockAcquisitionRuling::from_millis(0, 5).err(),
-            Some(LockAcquisitionRulingError::PatienceNotPositive),
-            "a zero patience is spent at the first refusal and must not construct"
-        );
-        assert_eq!(
-            LockAcquisitionRuling::from_millis(250, 0).err(),
-            Some(LockAcquisitionRulingError::RetryCadenceNotPositive),
-            "a zero cadence busy-spins real opens and must not construct"
-        );
-        assert_eq!(
-            LockAcquisitionRuling::from_millis(5, 250).err(),
-            Some(LockAcquisitionRulingError::RetryCadenceExceedsPatience {
-                patience: Duration::from_millis(5),
-                retry_cadence: Duration::from_millis(250),
-            }),
-            "a cadence longer than the patience never governs an attempt"
-        );
-        // The accepted case: a well-formed pair keeps both spans verbatim. This
-        // is the constructor's own contract, not a ruling on any acquisition.
-        let ruling = LockAcquisitionRuling::from_millis(250, 5)?;
-        assert_eq!(ruling.patience, Duration::from_millis(250));
-        assert_eq!(ruling.retry_cadence, Duration::from_millis(5));
-        // The boundary case — cadence exactly equal to the patience — is a
-        // single waited retry, which is a ruling, so it is accepted.
-        LockAcquisitionRuling::from_millis(5, 5)?;
-        Ok(())
-    }
 
     fn prepared_store()
     -> Result<(tempfile::TempDir, std::path::PathBuf), Box<dyn std::error::Error>> {
@@ -188,8 +163,13 @@ mod tests {
         Ok((directory, data_dir))
     }
 
+    /// The ruled-out failure, as a specimen: a held writer lock is WAITED OUT
+    /// — however long the holder takes — and the boot proceeds when the
+    /// holder releases. Before the 2026-08-24 ruling this exact arrangement
+    /// could refuse with `DataDirLocked` once a patience span elapsed; the
+    /// wait now has no far side for a refusal to live on.
     #[test]
-    fn transient_lock_is_retried_but_live_writer_still_fails_unchanged() -> TestResult {
+    fn a_held_lock_is_waited_out_and_the_open_proceeds_on_release() -> TestResult {
         let (_directory, data_dir) = prepared_store()?;
         let lock_path = data_dir.join("writer.lock");
         let lock_file = OpenOptions::new().read(true).write(true).open(&lock_path)?;
@@ -200,17 +180,20 @@ mod tests {
             release_receiver.recv().map_err(std::io::Error::other)?;
             lock_file.unlock()
         });
+        let mut reports = 0_u32;
         let mut release_sent = false;
         let mut release_send_failed = false;
-        let reopened = open_database_with_wait(
+        let reopened = open_database_with(
             &data_dir,
-            LockAcquisitionRuling::new(Duration::from_millis(100), Duration::from_millis(5))?,
             |_| {
+                // The first wait proves the holder was seen live; release it
+                // so the wait's only exit — the holder exiting — occurs.
                 if !release_sent {
                     release_sent = true;
                     release_send_failed = release_sender.send(()).is_err();
                 }
             },
+            |_, _| reports += 1,
         )?;
         if release_send_failed {
             return Err("failed to signal the lock releaser".into());
@@ -219,20 +202,78 @@ mod tests {
             .join()
             .map_err(|_| "lock releaser thread panicked")??;
         drop(reopened);
+        assert!(
+            reports >= 1,
+            "a waited-on lock must be reported, not waited on silently"
+        );
+        Ok(())
+    }
 
-        let genuine_holder = OpenOptions::new().read(true).write(true).open(&lock_path)?;
-        genuine_holder.lock()?;
-        let error = open_database(
+    /// Errors other than a held lock are NOT waited out: they return at once,
+    /// untouched. Waiting can only resolve the one refusal whose cause is a
+    /// live holder; everything else is the operator's to see immediately.
+    #[test]
+    fn a_non_lock_error_returns_immediately_without_waiting() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        // No store was ever created here and the directory is empty, so the
+        // open fails for a non-lock reason (nothing to open).
+        let data_dir = directory.path().join("never-created");
+        let error = open_database_with(
             &data_dir,
-            LockAcquisitionRuling::new(Duration::from_millis(20), Duration::from_millis(5))?,
+            |_| unreachable!("a non-lock failure must not wait"),
+            |_, _| unreachable!("a non-lock failure must not report a lock wait"),
         )
         .err()
-        .ok_or("a live writer unexpectedly allowed a second open")?;
-        assert!(matches!(
-            error,
-            haematite::DatabaseError::DataDirLocked { .. }
-        ));
-        genuine_holder.unlock()?;
+        .ok_or("opening a nonexistent store unexpectedly succeeded")?;
+        assert!(
+            !matches!(error, haematite::DatabaseError::DataDirLocked { .. }),
+            "the specimen must exercise the non-lock path, got a lock refusal"
+        );
+        Ok(())
+    }
+
+    /// The reports keep coming while the wait continues (interval-gated), and
+    /// the wait survives many probe rounds — the indefinite property probed
+    /// as far as a test can: no internal counter or span ends it.
+    #[test]
+    fn waiting_reports_and_never_gives_up_across_many_probe_rounds() -> TestResult {
+        let (_directory, data_dir) = prepared_store()?;
+        let lock_path = data_dir.join("writer.lock");
+        let lock_file = OpenOptions::new().read(true).write(true).open(&lock_path)?;
+        lock_file.lock()?;
+
+        let (release_sender, release_receiver) = mpsc::channel();
+        let releaser = std::thread::spawn(move || -> std::io::Result<()> {
+            release_receiver.recv().map_err(std::io::Error::other)?;
+            lock_file.unlock()
+        });
+        let mut probe_rounds = 0_u32;
+        let mut release_send_failed = false;
+        let reopened = open_database_with(
+            &data_dir,
+            |_| {
+                probe_rounds += 1;
+                // Hold through many rounds before releasing: a patience of any
+                // of the retired shapes (250ms at 5ms cadence ≈ 50 rounds)
+                // would have refused long before round 60.
+                if probe_rounds == 60 {
+                    release_send_failed = release_sender.send(()).is_err();
+                }
+            },
+            |_, _| {},
+        )?;
+        if release_send_failed {
+            return Err("failed to signal the lock releaser".into());
+        }
+        releaser
+            .join()
+            .map_err(|_| "lock releaser thread panicked")??;
+        drop(reopened);
+        assert!(
+            probe_rounds >= 60,
+            "the wait must have survived at least the 60 probe rounds the \
+             releaser held it for, got {probe_rounds}"
+        );
         Ok(())
     }
 }

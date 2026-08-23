@@ -2,7 +2,10 @@
 name = "aion-store-haematite"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# 1.89 floor (workspace floor is lower): the indefinite writer-lock wait
+# probes lock availability with std's `File::try_lock`, stabilized in 1.89 —
+# the safe alternative to a libc flock in a workspace that denies unsafe.
+rust-version = "1.89.0"
 description = "Single-node haematite-backed event store implementation for Aion workflows."
 license.workspace = true
 authors.workspace = true
@@ -15,8 +18,8 @@ categories = ["asynchronous", "database"]
 workspace = true
 
 [dependencies]
-aion-store = { version = "0.22.0", path = "../aion-store" }
-aion-core = { version = "0.22.0", path = "../aion-core" }
+aion-store = { version = "0.23.0", path = "../aion-store" }
+aion-core = { version = "0.23.0", path = "../aion-core" }
 haematite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

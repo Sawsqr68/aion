@@ -161,11 +161,16 @@ pub struct StoreConfig {
     ///
     /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`]: super::STORE_NODE_CACHE_BUDGET_REQUIRED
     pub node_cache_budget: Option<haematite::NodeCacheBudget>,
-    /// Maximum time production boot may spend acquiring an existing
-    /// haematite data-directory writer lock. Required for haematite; no default.
+    /// RETIRED (2026-08-24) and ignored: boot now waits indefinitely for the
+    /// data-directory writer lock — a kernel-released flock whose holder is
+    /// either live mid-handover or already gone, so a patience ceiling only
+    /// converted slow handovers into refused boots. Kept so a configuration
+    /// that still carries the key stays LEGAL (warned, never refused) and
+    /// existing estates boot unchanged.
     pub lock_acquisition_patience_ms: Option<u64>,
-    /// Cadence between production writer-lock attempts. Required together with
-    /// `lock_acquisition_patience_ms`; no default.
+    /// RETIRED (2026-08-24) and ignored, with `lock_acquisition_patience_ms`:
+    /// the wait's internal probe cadence is an implementation constant, not
+    /// configuration. Kept only so the key stays legal in existing files.
     pub lock_acquisition_retry_cadence_ms: Option<u64>,
 }
 
