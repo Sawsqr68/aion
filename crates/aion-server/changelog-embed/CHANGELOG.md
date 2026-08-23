@@ -3,12 +3,46 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
-## Unreleased
+## 0.21.0 — 2026-08-23
+
+**A stability wave.** The fleet-plan contract joins the workspace as a
+first-time crate, an intermittent test red is cured at its mechanism, the
+fleet delivery script survives the declared-command executor's cleared
+environment, and held-execution claims stop dirtying worktrees.
+
+- **New crate: `aion-fleet-plan`** — the fleet-stages-v1 staged-chain plan
+  contract: plan grammar, validation, the normalized ordering graph, the
+  sealed conclusion verifier, and the replay-deterministic chain
+  decide/step/apply/report surface, with the `workflows/fleet-chain/`
+  documents driving it and `fleet-plan-check.sh` wiring it into fleet-dev.
+  The runtime NIF pass rides the same landing: the `now_value` test helper
+  now refuses error tuples instead of silently comparing them as
+  timestamps.
 
 - **Norn held-execution claims no longer dirty worktrees.** The unchanged
   `.aion-held-execution.json` reservation now lives below Aion's state area,
   keyed by the canonical worktree path, while preserving live-sibling
   exclusion, drop release, reattach, and exact-incarnation stale cleanup.
+
+- **Failover-showcase survivor reads wait for convergence (#151).**
+  `replicate_append` commits on a strict majority — the proposer plus
+  exactly one of the two peers — and the peer that did not carry the
+  quorum applies the batch on its next inbound-write drain, 295µs–5.4ms
+  later. Reading a named survivor the instant an append returned sampled
+  a race the protocol never promised to win; under whole-workspace load
+  that window stretched into an intermittent red. Both survivor reads now
+  poll through `await_replicated`, bounded by the same operation timeout
+  as every other cluster step, and a survivor that never converges fails
+  by name and count. Evidence pack at
+  `docs/evidence/seqfix-quorum-visibility/`.
+
+- **`fleet-push.sh` derives HOME under the declared-command executor.**
+  Declared commands run with a cleared environment — PATH plus declared
+  entries only, by design — so git resolved no per-user credential
+  configuration and died prompting for a username. The delivery script now
+  derives HOME from the passwd entry of the uid it runs as, with a typed
+  refusal when it cannot, keeping the credential chain reachable on every
+  fleet box.
 
 ## 0.20.0 — 2026-08-23
 

@@ -1,0 +1,61 @@
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Checking scopeguard v1.2.0
+    Checking aion-core v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-core)
+   Compiling beamr v0.20.0
+    Checking lock_api v0.4.14
+   Compiling aion-proto-generated v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-proto-generated)
+    Checking fs4 v1.1.0
+   Compiling aion-server v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-server)
+    Checking aion-darwin-acl v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-darwin-acl)
+   Compiling exacl v0.13.0
+    Checking users v0.11.0
+    Checking aion-fleet-plan v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-fleet-plan)
+    Checking parking_lot v0.12.5
+    Checking dashmap v6.2.1
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/xtask)
+    Checking tokio v1.52.3
+    Checking referencing v0.46.6
+    Checking referencing v0.49.9
+    Checking prometheus v0.14.0
+    Checking jsonschema v0.46.6
+    Checking jsonschema v0.49.9
+    Checking aion-mcp v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-mcp)
+    Checking tokio-util v0.7.18
+    Checking tokio-rustls v0.26.4
+    Checking tokio-stream v0.1.18
+    Checking tokio-tungstenite v0.29.0
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking tower-http v0.6.11
+    Checking aion-package v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-package)
+    Checking aion-store v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-store)
+    Checking aion-integrations v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-integrations)
+    Checking aion-integration-norn v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-integration-acp)
+    Checking aion-integration-cli v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-integration-cli)
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking aion-toolchain v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-toolchain)
+    Checking hyper-timeout v0.5.2
+    Checking axum v0.8.9
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking haematite v0.11.0
+    Checking aion-awl v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-awl)
+    Checking aion-rs v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion)
+    Checking tonic v0.14.6
+    Checking aion-store-haematite v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-store-haematite)
+    Checking liminal-rs v0.7.0
+    Checking tonic-prost v0.14.5
+    Checking aion-awl-package v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-awl-lsp)
+    Checking aion-proto v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-proto)
+    Checking aion-client v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/benchmarks/million-processes)
+    Checking liminal-sdk v0.9.0
+    Checking liminal-server v0.10.0
+    Checking aion-worker v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-worker)
+    Checking aion-cli v0.21.0 (/Users/tom/Developer/ablative/stack/aion-v0210-cut/crates/aion-cli)
+    Finished `dev` profile [unoptimized] target(s) in 1m 09s
+CLIPPY_TRUE_EXIT=0
+SENTINEL_DONE

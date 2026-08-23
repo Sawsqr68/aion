@@ -1,0 +1,42 @@
+$ cargo nextest run --workspace --no-fail-fast   (full log: session scratchpad v0210-gate/nextest.log)
+        PASS [   0.014s] (5308/5342) aion-worker worker::tests::clean_close_loop_exhausts_drop_budget_with_classified_error
+        PASS [   0.016s] (5309/5342) aion-worker worker::tests::drain_cycles_reconnect_without_consuming_drop_budget
+        PASS [   0.011s] (5310/5342) aion-worker worker::tests::drain_latch_keeps_abrupt_post_drain_failures_unbudgeted
+        PASS [   0.010s] (5311/5342) aion-worker worker::tests::empty_worker_is_rejected
+        PASS [   0.031s] (5312/5342) aion-worker worker::tests::clean_close_reconnects_re_registers_and_keeps_serving
+        PASS [   0.012s] (5313/5342) aion-worker worker::tests::establishment_denial_surfaces_after_one_attempt
+        PASS [   0.012s] (5314/5342) aion-worker worker::tests::mid_run_denial_surfaces_without_reconnect
+        PASS [   0.011s] (5315/5342) aion-worker worker::tests::mid_run_drop_budget_exhaustion_surfaces_last_drop_error
+        PASS [   0.030s] (5316/5342) aion-worker worker::tests::establishment_retries_transient_failures_until_attempts_exhausted
+        PASS [   0.012s] (5317/5342) aion-worker worker::tests::post_drop_drain_time_does_not_reset_drop_budget
+        PASS [   0.030s] (5318/5342) aion-worker worker::tests::mid_run_drop_re_reports_unacked_results_for_all_workflows
+        PASS [   0.030s] (5319/5342) aion-worker worker::tests::mid_run_drop_reconnects_re_registers_and_re_reports_unacked
+        PASS [   0.012s] (5320/5342) aion-worker worker::tests::result_ack_clears_exactly_its_tracker_entry
+        PASS [   0.012s] (5321/5342) aion-worker worker::tests::session_outliving_max_backoff_resets_drop_budget
+        PASS [   0.021s] (5322/5342) aion-worker worker::tests::served_tasks_reset_drop_budget_across_cycles
+        PASS [   0.010s] (5323/5342) aion-worker worker::tests::shutdown_during_establishment_backoff_returns_promptly
+        PASS [   0.616s] (5324/5342) aion-worker runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit
+        PASS [   0.019s] (5325/5342) aion-worker worker::tests::shutdown_during_recovery_establishment_returns_original_drop_error
+        PASS [   0.013s] (5326/5342) aion-worker worker::tests::shutdown_interrupts_hung_unacked_replay_promptly
+        PASS [   0.064s] (5327/5342) aion-worker worker::tests::shutdown_during_clean_close_backoff_returns_ok_promptly
+        PASS [   0.064s] (5328/5342) aion-worker worker::tests::shutdown_during_mid_run_drop_backoff_returns_promptly
+        PASS [   0.011s] (5329/5342) aion-worker worker::tests::worker_collects_two_activity_registration_names
+        PASS [   0.063s] (5330/5342) aion-worker worker::tests::shutdown_during_post_drain_backoff_returns_ok_promptly
+        PASS [   0.012s] (5331/5342) aion-worker worker::tests::worker_registers_names_with_session
+        PASS [   0.036s] (5332/5342) aion-worker worker::tests::shutdown_waits_for_slow_in_flight_activity
+        PASS [   0.287s] (5333/5342) aion-worker::grpc_registration non_ack_first_frame_is_a_typed_protocol_violation
+        PASS [   0.282s] (5334/5342) aion-worker::grpc_registration register_completes_on_register_ack_and_captures_ack_payload
+        PASS [   0.276s] (5335/5342) aion-worker::grpc_registration register_surfaces_server_permission_denial_as_non_retryable
+        PASS [   0.468s] (5336/5342) aion-worker::grpc_registration register_times_out_retryably_when_server_never_acks
+        PASS [   4.914s] (5337/5342) aion-toolchain::document_entry_e2e explicit_entry_removes_frozen_template_names_from_entry_beam
+        PASS [   2.038s] (5338/5342) aion-worker shell::action::tests::a_declared_command_streams_both_streams_before_it_exits
+        PASS [   2.217s] (5339/5342) aion-worker shell::action::tests::cancellation_stops_the_command_and_fails_terminally
+        PASS [  40.661s] (5340/5342) aion-server::outbox_delivery_contract_e2e re_push_while_executing_never_re_executes
+        SLOW [> 60.000s] (─────────) aion-server::outbox_delivery_contract_e2e dead_letter_and_wedge::wedge_shape_regression_0756ecd5
+        SLOW [> 60.000s] (─────────) aion-server::outbox_delivery_contract_e2e ninety_second_activity_delivers_exactly_once
+        PASS [  90.678s] (5341/5342) aion-server::outbox_delivery_contract_e2e ninety_second_activity_delivers_exactly_once
+        PASS [  95.862s] (5342/5342) aion-server::outbox_delivery_contract_e2e dead_letter_and_wedge::wedge_shape_regression_0756ecd5
+────────────
+     Summary [ 321.089s] 5342 tests run: 5342 passed (7 slow, 1 leaky), 0 skipped
+NEXTEST_TRUE_EXIT=0
+SENTINEL_DONE
