@@ -21,14 +21,10 @@ backend = "haematite"
 # started the server from. A `~` does NOT work here — the config file is not a
 # shell, so it is taken literally and you get a folder actually named `~`.
 data_dir = "$HOME/my-first-flow/aion-data"
-# These three are REQUIRED and have no defaults — the server refuses to start
-# without them, naming the missing field. "unlimited" is the pre-budget cache
-# behaviour stated out loud; write a byte bound (e.g. { bytes = 1073741824 })
-# once you know your box. The lock fields are how long a node waits for the
-# store lock (patience) and how often it retries meanwhile; cadence <= patience.
+# REQUIRED, no default — the server refuses to start without it, naming the
+# missing field. "unlimited" is the pre-budget cache behaviour stated out loud;
+# write a byte bound (e.g. { bytes = 1073741824 }) once you know your box.
 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 query_timeout_ms = 10000

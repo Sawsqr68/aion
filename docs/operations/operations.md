@@ -147,12 +147,6 @@ node_cache_budget = "unlimited"         # REQUIRED, no default (haematite): byte
                                         # ceiling the node caches may hold —
                                         # `{ bytes = N }` or "unlimited" (the
                                         # pre-budget behaviour, stated out loud)
-lock_acquisition_patience_ms = 250      # REQUIRED, no default (haematite): how
-                                        # long this node waits for the store
-                                        # lock before giving up
-lock_acquisition_retry_cadence_ms = 5   # REQUIRED, no default (haematite): how
-                                        # often it retries while waiting; must
-                                        # be <= patience
 
 # Optional distributed-haematite membership. Absent (the default) = the
 # single-node path, byte-identical to before the section existed. Only valid

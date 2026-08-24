@@ -14,15 +14,10 @@ grpc_address = "127.0.0.1:50051"
 [store]
 backend = "haematite"
 data_dir = "aion-data"
-# The three fields below are REQUIRED and have no defaults — the server
-# refuses to start without them (exit 2, naming the missing field).
-# "unlimited" is the pre-budget cache behaviour, stated out loud; write a
-# byte bound (e.g. { bytes = 1073741824 }) once you know your box.
+# REQUIRED, no default — the server refuses to start without it, naming the
+# missing field. "unlimited" is the pre-budget cache behaviour, stated out
+# loud; write a byte bound (e.g. { bytes = 1073741824 }) once you know your box.
 node_cache_budget = "unlimited"
-# How long a node waits for the store lock before giving up (total patience)
-# and how often it retries while waiting. Milliseconds; cadence <= patience.
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 
 [runtime]
 query_timeout_ms = 10000

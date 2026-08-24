@@ -145,8 +145,6 @@ data_dir = "$WORK/d$i"
 shard_count = $n
 owned_shards = [$i]
 node_cache_budget = "unlimited"
-lock_acquisition_patience_ms = 250
-lock_acquisition_retry_cadence_ms = 5
 
 [observability]
 max_batch_events = 64

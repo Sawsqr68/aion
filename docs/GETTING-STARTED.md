@@ -859,12 +859,10 @@ retries, heartbeats, and cancellation are covered in the
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
-`aion deploy` has nothing to talk to without it; and five fields the server
-refuses to start without, none of which has a default anywhere: three under
+`aion deploy` has nothing to talk to without it; and three fields the server
+refuses to start without, none of which has a default anywhere: one under
 `[store]` — `node_cache_budget` (the byte ceiling its node caches may hold is
-a deployment decision), and `lock_acquisition_patience_ms` with
-`lock_acquisition_retry_cadence_ms` (how long a node waits for the store lock,
-and how often it retries while waiting — cadence no greater than patience) —
+a deployment decision) —
 and two under `[observability]` — `max_batch_events` and `max_batch_hold_ms`
 (one durable commit re-persists the whole containing storage leaf, so the
 transcript batch bounds are a write-amplification decision). (
@@ -893,10 +891,6 @@ data_dir = "aion-data"              # opened when present, created on first star
 node_cache_budget = "unlimited"     # REQUIRED, no default: the byte ceiling the
                                     # node caches may hold. Write a bound once you
                                     # know your box, e.g. { bytes = 1073741824 }
-lock_acquisition_patience_ms = 250  # REQUIRED, no default: how long this node
-                                    # waits for the store lock before giving up
-lock_acquisition_retry_cadence_ms = 5   # REQUIRED, no default: how often it
-                                    # retries while waiting; <= patience
 
 [observability]
 max_batch_events = 64               # REQUIRED, no default: most transcript

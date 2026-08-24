@@ -1836,21 +1836,6 @@ fn build_real_time_publishers(
     ))
 }
 
-/// The operator's transcript flush policy, or a startup refusal naming the key
-/// they have not ruled on.
-///
-/// `observability.max_batch_events` and `observability.max_batch_hold_ms` have
-/// NO shipped default (see [`crate::config::ObservabilityConfig`]): the trade
-/// between store cost and how much not-yet-durable transcript a crash can lose
-/// belongs to the deployment, and a guessed value would make it silently. This
-/// is the same explicit-no-default guard [`required_cluster_broadcast_capacity`]
-/// applies one line above, for the same reason.
-///
-/// # Errors
-///
-/// Returns [`ServerError`] when either key is unset, when `max_batch_events` is
-/// zero (a batch of no events would commit nothing, forever), or when the hold
-/// in milliseconds does not fit a [`Duration`](std::time::Duration).
 /// The operator's node-cache byte budget, or a refusal that names the key.
 ///
 /// There is no default to fall back to — not here, and not in haematite, which
@@ -1865,7 +1850,11 @@ fn build_real_time_publishers(
 /// Returns [`ServerError::Config`] carrying
 /// [`STORE_NODE_CACHE_BUDGET_REQUIRED`](crate::config::STORE_NODE_CACHE_BUDGET_REQUIRED)
 /// when `store.node_cache_budget` is unset.
-fn required_node_cache_budget(
+///
+/// `pub(crate)` so the shipped-config sweep
+/// (`config::shipped_configs_tests`) holds every shipped TOML to this exact
+/// requirement instead of enumerating a copy of it.
+pub(crate) fn required_node_cache_budget(
     config: &StoreConfig,
 ) -> Result<haematite::NodeCacheBudget, ServerError> {
     config.node_cache_budget.ok_or_else(|| ServerError::Config {
@@ -1892,7 +1881,26 @@ fn warn_retired_lock_acquisition_keys(config: &StoreConfig) {
     }
 }
 
-fn required_transcript_batch_policy(
+/// The operator's transcript flush policy, or a startup refusal naming the key
+/// they have not ruled on.
+///
+/// `observability.max_batch_events` and `observability.max_batch_hold_ms` have
+/// NO shipped default (see [`crate::config::ObservabilityConfig`]): the trade
+/// between store cost and how much not-yet-durable transcript a crash can lose
+/// belongs to the deployment, and a guessed value would make it silently. This
+/// is the same explicit-no-default guard [`required_cluster_broadcast_capacity`]
+/// applies one line above, for the same reason.
+///
+/// # Errors
+///
+/// Returns [`ServerError`] when either key is unset, when `max_batch_events` is
+/// zero (a batch of no events would commit nothing, forever), or when the hold
+/// in milliseconds does not fit a [`Duration`](std::time::Duration).
+///
+/// `pub(crate)` so the shipped-config sweep
+/// (`config::shipped_configs_tests`) holds every shipped TOML to this exact
+/// requirement instead of enumerating a copy of it.
+pub(crate) fn required_transcript_batch_policy(
     runtime: &RuntimeConfig,
 ) -> Result<crate::activity_publisher::TranscriptBatchPolicy, ServerError> {
     let max_batch_events = runtime

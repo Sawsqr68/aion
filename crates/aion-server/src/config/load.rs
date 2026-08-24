@@ -698,6 +698,10 @@ fn deduplicated_package_key(path: &Path) -> PathBuf {
 mod home_tests;
 
 #[cfg(test)]
+#[path = "shipped_configs_tests.rs"]
+mod shipped_configs_tests;
+
+#[cfg(test)]
 mod tests {
     use crate::config::{
         AutoCreate, DEFAULT_AUTHORING_WORKSPACE_DIR, DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, HomeSource,

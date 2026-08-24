@@ -1,5 +1,19 @@
 # Ruling: required-with-no-defaults stands; the sweep was the failure
 
+> **Addendum at landing, 2026-08-24.** Between this record's census and its
+> landing, `27bfba8a9` ("fix: retire the writer-lock patience keys — boot
+> waits, reporting, indefinitely") retired `store.lock_acquisition_patience_ms`
+> and `store.lock_acquisition_retry_cadence_ms`: the keys are now parsed and
+> **ignored**, and boot waits for the writer lock indefinitely while reporting
+> that it is waiting. The unconditional required-no-default set at landing is
+> therefore THREE fields — `store.node_cache_budget`,
+> `observability.max_batch_events`, and `observability.max_batch_hold_ms` —
+> and the sweep as landed carries exactly those three, not the five the
+> census below counted in its world. The census, witness, and ruling below
+> are the record of 2026-08-21 and are left as written; the paragraph of the
+> ruling that defends the lock fields is superseded by the retirement. The
+> standing rule at the bottom is unchanged and this landing obeys it.
+
 > **Addendum, same day (the witness caught the ruling's own author).** The
 > first cut of this branch swept the three `[store]` fields — and the boot
 > witness then died on `observability.max_batch_events`, a fourth required
