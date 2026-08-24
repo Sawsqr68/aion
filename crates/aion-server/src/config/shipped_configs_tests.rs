@@ -16,13 +16,18 @@
 //! retired key fails the retired-key sweep beside it, because a fresh config
 //! must not carry keys the server only warns about and ignores.
 //!
-//! Two swept surfaces are TOML embedded in another format's source — the
-//! `ci/smoke-embed.sh` heredoc and the conformance README's fenced block —
-//! and are extracted textually with their placeholders substituted. The
-//! cluster-demo heredocs (`scripts/demo/lib.sh`, `scripts/mp-failover-spike.sh`)
-//! interpolate whole sections structurally (`$peers`, `$members`) and cannot
-//! be parsed from here; they stay under the evidence document's standing
-//! manual rule.
+//! Beside the plain TOML files, the sweep extracts every server config that
+//! ships EMBEDDED in another file: the `ci/smoke-embed.sh` heredoc, and every
+//! fenced `toml` code block declaring a `[server]` section in the conformance
+//! README, the getting-started guide, and the operations guide — the fences are
+//! selected by that content, never by position, so a new fence added above a
+//! config block cannot silently retarget the sweep, and every extractor
+//! fails loudly on a placeholder it does not know how to substitute. The
+//! only hand-written configs left to the evidence document's manual rule are
+//! the two cluster-demo heredocs (`scripts/demo/lib.sh`,
+//! `scripts/mp-failover-spike.sh`), whose `[store]`/`[store.cluster]`
+//! sections are assembled per-node by shell interpolation (`$peers`,
+//! `$members`) and so have no complete TOML body to extract.
 
 use std::path::Path;
 
@@ -42,18 +47,20 @@ const SHIPPED_CONFIG_FILES: [&str; 4] = [
     "docs/authoring/tutorial-examples/aion.toml",
 ];
 
-/// Pulls one embedded TOML config out of its carrier file's text.
-type ConfigExtractor = fn(&str) -> Result<String, String>;
+/// Pulls every embedded server config out of one carrier file's text.
+type ConfigExtractor = fn(&str) -> Result<Vec<String>, String>;
 
-/// The shipped surfaces whose TOML is embedded in another file, as
-/// `(source path, extractor)` — see the module doc for why the cluster-demo
-/// heredocs cannot join them.
-const EMBEDDED_CONFIG_SOURCES: [(&str, ConfigExtractor); 2] = [
-    ("ci/smoke-embed.sh", extract_smoke_embed_heredoc),
+/// The shipped surfaces whose server configs are embedded in another file,
+/// as `(source path, extractor)` — see the module doc for the selection
+/// rules and for why the cluster-demo heredocs cannot join them.
+const EMBEDDED_CONFIG_SOURCES: [(&str, ConfigExtractor); 4] = [
+    ("ci/smoke-embed.sh", extract_smoke_embed_heredocs),
     (
         "conformance/aion-clients/README.md",
-        extract_first_toml_fence,
+        extract_server_toml_fences,
     ),
+    ("docs/GETTING-STARTED.md", extract_server_toml_fences),
+    ("docs/operations/operations.md", extract_server_toml_fences),
 ];
 
 #[test]
@@ -71,17 +78,26 @@ fn every_shipped_config_satisfies_the_boot_required_set() -> TestResult {
         }
     }
     for (relative, extract) in EMBEDDED_CONFIG_SOURCES {
-        let outcome = read_repo_file(relative)
+        let extracted = read_repo_file(relative)
             .and_then(|bytes| {
                 String::from_utf8(bytes)
                     .map_err(|utf8_error| format!("{relative} is not UTF-8: {utf8_error}"))
             })
             .and_then(|source| {
                 extract(&source).map_err(|extract_error| format!("{relative}: {extract_error}"))
-            })
-            .and_then(|toml| check_boot_required(relative, toml.as_bytes(), scratch.path()));
-        if let Err(failure) = outcome {
-            failures.push(failure);
+            });
+        match extracted {
+            Ok(configs) => {
+                for (index, config) in configs.iter().enumerate() {
+                    let name = format!("{relative} (embedded config {})", index + 1);
+                    if let Err(failure) =
+                        check_boot_required(&name, config.as_bytes(), scratch.path())
+                    {
+                        failures.push(failure);
+                    }
+                }
+            }
+            Err(failure) => failures.push(failure),
         }
     }
     assert!(
@@ -112,10 +128,12 @@ fn read_repo_file(relative: &str) -> Result<Vec<u8>, String> {
 
 /// The TOML that `ci/smoke-embed.sh` writes for the server it boots: the body
 /// of its `cat >"$CONFIG" <<EOF` heredoc, with the script's two port
-/// placeholders substituted by parseable stand-ins. A leftover `${` after
-/// substitution means the script grew a placeholder this extractor does not
-/// know, and that is a loud failure rather than a silently skipped sweep.
-fn extract_smoke_embed_heredoc(script: &str) -> Result<String, String> {
+/// placeholders substituted by parseable stand-ins. Any shell-expansion token
+/// left after substitution — braced or bare, since an unquoted heredoc
+/// expands `${NAME}` and `$NAME` identically — means the script grew a
+/// placeholder this extractor does not know, and that is a loud failure
+/// naming the token rather than a silently mis-swept config.
+fn extract_smoke_embed_heredocs(script: &str) -> Result<Vec<String>, String> {
     const OPENER: &str = "<<EOF\n";
     let start = script
         .find(OPENER)
@@ -128,28 +146,87 @@ fn extract_smoke_embed_heredoc(script: &str) -> Result<String, String> {
     let substituted = script[start..end]
         .replace("${HTTP_ADDR}", "127.0.0.1:18099")
         .replace("${GRPC_PORT}", "51099");
-    if substituted.contains("${") {
+    if let Some(token) = residual_dollar_token(&substituted) {
         return Err(format!(
-            "the heredoc carries a placeholder this sweep does not substitute: {substituted}"
+            "the heredoc carries a shell-expansion token this sweep does not \
+             substitute: `{token}`"
         ));
     }
-    Ok(substituted)
+    Ok(vec![substituted])
 }
 
-/// The first ` ```toml ` fenced block of a markdown document, with the
-/// conformance README's `<repo>` path placeholder substituted (the paths are
-/// carried as strings and are not opened by config validation).
-fn extract_first_toml_fence(markdown: &str) -> Result<String, String> {
+/// Every fenced `toml` code block that declares a `[server]` section — the shape of a
+/// whole server config, as opposed to keyword tables, worker manifests, and
+/// add-this-section fragments — with the documents' `<repo>` path
+/// placeholder substituted. A quoted value still starting with `<` after
+/// substitution is a placeholder this extractor does not know, and fails
+/// loudly naming its line.
+fn extract_server_toml_fences(markdown: &str) -> Result<Vec<String>, String> {
     const OPENER: &str = "```toml\n";
-    let start = markdown
-        .find(OPENER)
-        .ok_or_else(|| "no ```toml fenced block found".to_owned())?
-        + OPENER.len();
-    let end = markdown[start..]
-        .find("\n```")
-        .ok_or_else(|| "the ```toml fence never closes".to_owned())?
-        + start;
-    Ok(markdown[start..end].replace("<repo>", "."))
+    let mut configs = Vec::new();
+    let mut cursor = 0;
+    while let Some(found) = markdown[cursor..].find(OPENER) {
+        let start = cursor + found + OPENER.len();
+        let end = start
+            + markdown[start..]
+                .find("\n```")
+                .ok_or_else(|| "a ```toml fence never closes".to_owned())?;
+        let block = &markdown[start..end];
+        if block.contains("[server]") {
+            let substituted = block.replace("<repo>", ".");
+            if let Some(line) = substituted.lines().find(|line| line.contains("\"<")) {
+                return Err(format!(
+                    "a config block carries a value placeholder this sweep does \
+                     not substitute: `{line}`"
+                ));
+            }
+            configs.push(substituted);
+        }
+        cursor = end;
+    }
+    if configs.is_empty() {
+        return Err("no ```toml fence containing a [server] section found".to_owned());
+    }
+    Ok(configs)
+}
+
+/// The first shell-expansion token (`${NAME…` or `$NAME`) left in `text`,
+/// carried whole so the refusal can name it. A `$` followed by anything that
+/// cannot start an expansion (a digit, punctuation, end of text) is not one.
+fn residual_dollar_token(text: &str) -> Option<String> {
+    for (start, _) in text.match_indices('$') {
+        let tail = &text[start + 1..];
+        let mut token = String::from("$");
+        let mut rest = tail.chars();
+        match rest.next() {
+            Some('{') => {
+                token.push('{');
+                for c in rest {
+                    if c == '\n' {
+                        break;
+                    }
+                    token.push(c);
+                    if c == '}' {
+                        break;
+                    }
+                }
+                return Some(token);
+            }
+            Some(first) if first.is_ascii_alphabetic() || first == '_' => {
+                token.push(first);
+                for c in rest {
+                    if c.is_ascii_alphanumeric() || c == '_' {
+                        token.push(c);
+                    } else {
+                        break;
+                    }
+                }
+                return Some(token);
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Parse one shipped config exactly as an embedded caller would (no

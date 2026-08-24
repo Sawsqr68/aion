@@ -72,8 +72,15 @@ Both flags belong to the bare form only and are refused next to a subcommand.
 
 ### Conditionally required keys (startup fails naming the missing key)
 
+Two keys are required **unconditionally** — on every backend, with no
+default: `observability.max_batch_events` and `observability.max_batch_hold_ms`
+(the transcript channel is always mounted, and its batch bounds are a
+deployment trade; see [Configuration](#configuration) above). The rest become
+required with the surface they belong to:
+
 | Key | Required when |
 |---|---|
+| `store.node_cache_budget` | `store.backend = "haematite"` — the default backend. |
 | `auth.jwks_url` | `auth.enabled = true`. |
 | `authoring.project_root` | `authoring.gleam_path` is set. |
 | `store.cluster.node_id`, `store.cluster.bind_address` | a `[store.cluster]` section is present (and each `[[store.cluster.peers]]` entry needs `name` + `address`). |
