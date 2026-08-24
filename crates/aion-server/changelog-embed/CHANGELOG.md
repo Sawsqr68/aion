@@ -3,6 +3,48 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.24.0 — 2026-08-24
+
+**Server control verbs: `aion server stop` and `aion server status`.** The
+estate's kill discipline, mechanized. The server now claims its home with a
+pid record (`<AION_HOME>/run/aion-server.pid` — pid, start instant, binary
+SHA-256, version, commit, bound addresses, and its drain window), and both
+verbs verify the recorded incarnation against the live process table before
+touching anything: a recycled pid is a refusal that names both incarnations,
+never a kill.
+
+- **`aion server stop`** SIGTERMs the verified incarnation, waits up to
+  `--patience <seconds>` (absent, the verified-running record's own drain
+  window, then the config's `drain.timeout_seconds` — the verb never
+  invents a value), and renders the death note's account of the exit: the
+  drain outcome by name, parked work by worker and task, or the honest
+  absence when nothing was recorded. Exit codes a script keys on: `0` the
+  goal state holds (stopped, already gone, or no claim — stopping is
+  idempotent), `1` exclusively still-draining at patience, `2` the verb
+  could not complete.
+- **`aion server status`** answers "is the recorded server up?" through
+  three independently observed layers — the record, the build identity
+  (`GET /build`, asserted on the body, never the status code), and
+  readiness — with each layer's absence its own honest state. Exit `0`
+  verified-running, `1` not, `2` the verb itself failed.
+- **A configuration that cannot load never destroys either verb's
+  answer.** `status` states the failure and still answers its predicate;
+  `stop` notes it and proceeds — the patience is only needed to wait on a
+  verified-running server, so an idempotent pre-stop over an empty home
+  still answers `0`, and only a running server that genuinely needs the
+  window turns the failure into a refusal naming `--patience` as the
+  remedy.
+- The control verbs are **local by contract** and refuse a named
+  `--endpoint`: they read this machine's `AION_HOME` pid record, and a
+  destructive verb that silently ignores where the operator pointed it
+  lands on the wrong machine.
+- The shutdown drain census now sees server-executed declared-command
+  bodies: one still executing at drain end is reported by name in the
+  drain outcome record, and the next boot re-dispatches the attempt.
+- The server-restart runbook (`docs/operations/server-restart.md`) is
+  rewritten around the verbs; the by-hand ritual survives as the fallback
+  for servers started by pre-verb binaries.
+
 ## 0.23.0 — 2026-08-24
 
 **Boot self-sufficiency: the writer-lock patience keys are retired.** The

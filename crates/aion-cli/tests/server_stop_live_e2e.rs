@@ -792,7 +792,7 @@ fn stop_reaches_the_goal_state_when_the_configuration_is_unreadable() -> TestRes
 /// refusal fired in the arm, not merely that the flag parsed.
 #[test]
 fn the_control_verbs_refuse_an_endpoint_at_the_binary() -> TestResult {
-    for verb in ["stop", "status"] {
+    for (verb, action) in [("stop", "stop"), ("status", "report status")] {
         let home = tempfile::tempdir()?;
         let output = Command::new(env!("CARGO_BIN_EXE_aion"))
             .args(["--endpoint", "10.0.0.9:50051", "server", verb])
@@ -809,8 +809,8 @@ fn the_control_verbs_refuse_an_endpoint_at_the_binary() -> TestResult {
              locally: stdout={stdout} stderr={stderr}"
         );
         assert!(
-            stderr.contains(&format!("refusing to {verb}")),
-            "the refusal must name its own verb: {stderr}"
+            stderr.contains(&format!("refusing to {action}")),
+            "the refusal must open with its own rendered verb phrase: {stderr}"
         );
         assert!(
             stderr.contains(&format!("`aion server {verb}` is local")),

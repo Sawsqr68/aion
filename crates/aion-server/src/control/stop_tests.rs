@@ -208,11 +208,11 @@ fn bookkeeping_failures_ride_the_outcome_instead_of_destroying_it() -> TestResul
     // The death note's path is occupied by a DIRECTORY: reading it fails
     // with a real I/O error, not the honest-absence NotFound arm.
     std::fs::create_dir_all(crate::death_note::note_path(home.path()))?;
-    // The run directory is read-only, so reconciliation fails at its FIRST
-    // write — opening the pid mutation lock beside the file — before any
-    // removal is attempted. The specimen's subject is that the failure rides
-    // the outcome, whichever write leg fires; the root-owned-home shape at
-    // unit scale.
+    // The run directory is read-only. The mutation lock beside the file
+    // already exists (claim created it) and opens for write without touching
+    // the directory, and the record still reads — reconciliation fails at
+    // the REMOVAL, the one leg that needs directory write. The
+    // root-owned-home shape at unit scale.
     let run_dir = pid_file::pid_file_path(home.path())
         .parent()
         .ok_or("pid file path has no parent")?
@@ -362,7 +362,9 @@ fn a_corrupt_pid_file_is_a_typed_error_not_a_verdict() -> TestResult {
 ///   assert exactly that.
 #[test]
 fn an_unresolved_patience_refuses_only_a_verified_running_server() -> TestResult {
-    let unresolved = || Err("the wait patience could not be resolved (specimen)".to_owned());
+    // The carried account is the configuration's own bare error — the
+    // refusal template supplies the sentence around it.
+    let unresolved = || Err("broken TOML at line 3 (specimen)".to_owned());
 
     let empty = tempfile::tempdir()?;
     match stop(empty.path(), unresolved())? {

@@ -1215,14 +1215,17 @@ async fn server_command(command: &server::ServerCommand, cli: &Cli) -> ExitCode 
         // action on this box while the operator believes it went to the
         // named one. Refuse, same doctrine as the run arm below.
         Some(server::ServerSubcommand::Stop(args)) => {
-            if let Some(refusal) = control_verb_endpoint_refusal("stop", cli.endpoint.as_deref()) {
+            if let Some(refusal) =
+                control_verb_endpoint_refusal("stop", "stop", cli.endpoint.as_deref())
+            {
                 eprintln!("{refusal}");
                 return ExitCode::from(2);
             }
             server_stop::run(args)
         }
         Some(server::ServerSubcommand::Status(args)) => {
-            if let Some(refusal) = control_verb_endpoint_refusal("status", cli.endpoint.as_deref())
+            if let Some(refusal) =
+                control_verb_endpoint_refusal("status", "report status", cli.endpoint.as_deref())
             {
                 eprintln!("{refusal}");
                 return ExitCode::from(2);
@@ -1268,10 +1271,19 @@ async fn server_command(command: &server::ServerCommand, cli: &Cli) -> ExitCode 
 /// on the wrong machine. Same doctrine as [`server_endpoint_refusal`]: refuse
 /// a flag the verb cannot honour, with wording that says the verb is local
 /// rather than that it cannot bind.
-fn control_verb_endpoint_refusal(verb: &str, endpoint: Option<&str>) -> Option<String> {
+///
+/// `verb` is the subcommand token (it renders inside `` `aion server {verb}` ``);
+/// `action` is the rendered verb PHRASE ("stop", "report status") — the token
+/// is not always an English verb, and "refusing to status" is not a sentence
+/// an operator should meet at 3am.
+fn control_verb_endpoint_refusal(
+    verb: &str,
+    action: &str,
+    endpoint: Option<&str>,
+) -> Option<String> {
     endpoint.map(|endpoint| {
         format!(
-            "refusing to {verb}: `--endpoint {endpoint}` names a server a client dials, and \
+            "refusing to {action}: `--endpoint {endpoint}` names a server a client dials, and \
              `aion server {verb}` is local — it reads this machine's AION_HOME pid record and \
              acts on that process. To operate a remote server, run the verb on that machine \
              (its home decides which server answers)."
@@ -2199,33 +2211,47 @@ mod tests {
     /// ignored the endpoint, and `SIGTERM`ed the LOCAL server: a destructive
     /// action on the wrong machine, delivered silently. The refusal must fire
     /// for both spellings (flag before and after the subcommand — it is
-    /// `global = true`) and must say the verb is local, not that it cannot
-    /// bind.
+    /// `global = true`) — the rows below are the full verbs × spellings
+    /// grid — must say the verb is local, not that it cannot bind, and must
+    /// open with a rendered verb PHRASE ("refusing to report status", never
+    /// the bare subcommand token).
     #[test]
     fn the_control_verbs_refuse_a_client_endpoint_instead_of_acting_locally() -> anyhow::Result<()>
     {
-        for (argv, verb) in [
+        for (argv, verb, action) in [
             (
                 vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "stop"],
+                "stop",
                 "stop",
             ),
             (
                 vec!["aion", "server", "stop", "--endpoint", "10.0.0.9:50051"],
                 "stop",
+                "stop",
             ),
             (
                 vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "status"],
                 "status",
+                "report status",
+            ),
+            (
+                vec!["aion", "server", "status", "--endpoint", "10.0.0.9:50051"],
+                "status",
+                "report status",
             ),
         ] {
             let cli = Cli::try_parse_from(&argv)?;
-            let refusal =
-                control_verb_endpoint_refusal(verb, cli.endpoint.as_deref()).ok_or_else(|| {
+            let refusal = control_verb_endpoint_refusal(verb, action, cli.endpoint.as_deref())
+                .ok_or_else(|| {
                     anyhow::anyhow!(
                         "an explicit --endpoint was accepted by a control verb: {argv:?}"
                     )
                 })?;
             assert!(refusal.contains("10.0.0.9:50051"));
+            assert!(
+                refusal.contains(&format!("refusing to {action}")),
+                "the refusal must open with its rendered verb phrase: {refusal}"
+            );
             assert!(
                 refusal.contains(&format!("aion server {verb}")),
                 "the refusal must name ITS OWN verb, not a sibling's: {refusal}"
@@ -2241,7 +2267,7 @@ mod tests {
         }
         // The control: a bare verb has nothing to refuse.
         let bare = Cli::try_parse_from(["aion", "server", "stop"])?;
-        assert!(control_verb_endpoint_refusal("stop", bare.endpoint.as_deref()).is_none());
+        assert!(control_verb_endpoint_refusal("stop", "stop", bare.endpoint.as_deref()).is_none());
         Ok(())
     }
 

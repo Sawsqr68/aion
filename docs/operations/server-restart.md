@@ -19,9 +19,9 @@ optional; the checks are what make the next death attributable.
   instant, binary SHA-256, version, commit, the bound addresses, and the
   server's drain window (`drain_timeout_seconds` — the window a verified
   RUNNING record lends `aion server stop` when no `--patience` is given).
-  This is an incarnation identity, not a bare number: the verbs verify the recorded
-  start instant against the live process table before touching anything, so
-  a recycled pid is a refusal, never a kill.
+  This is an incarnation identity, not a bare number: the verbs verify the
+  recorded start instant against the live process table before touching
+  anything, so a recycled pid is a refusal, never a kill.
 - **Logs**: `~/.aion/logs/<name>-<UTC date>.log` (e.g.
   `aion-server-20260816.log`), append.
 - **Death note**: `<AION_HOME>/logs/aion-server.death.log`, written by the

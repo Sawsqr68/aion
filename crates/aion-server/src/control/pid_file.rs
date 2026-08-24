@@ -523,11 +523,14 @@ impl Drop for PidFileGuard {
                 // claim, a successor's claim REPLACES the record rather than
                 // leaving the path empty, and the stop verb reconciles only
                 // files whose process is proven gone — which cannot be this
-                // one, mid-`Drop`. What reaches this arm is a claim removed
-                // out from under its live holder (an operator `rm`, a wiped
-                // home). Warn: no other record of the disappearance exists,
-                // and the next boot's clean-slate claim would otherwise be
-                // indistinguishable from an ordinary first start.
+                // one, mid-`Drop`. (A wiped home never gets here either: the
+                // lock open above needs the run directory and fails first.)
+                // What reaches this arm is the pid file alone removed out
+                // from under its live holder — an operator `rm` with the run
+                // directory intact. Warn: no other record of the
+                // disappearance exists, and the next boot's clean-slate
+                // claim would otherwise be indistinguishable from an
+                // ordinary first start.
                 warn!(
                     path = %self.path.display(),
                     "the pid file is GONE at exit time although this incarnation \

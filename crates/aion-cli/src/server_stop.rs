@@ -68,8 +68,9 @@ pub fn run(args: &StopArgs) -> ExitCode {
     // because a config file was broken.
     if let Err(message) = &patience {
         eprintln!(
-            "note: {message} — the patience is only needed to wait on a running \
-             server; if one is found, the stop will refuse and name the remedy"
+            "aion server stop: the wait patience could not be resolved from \
+             configuration ({message}); it is only needed to wait on a running \
+             server — if one is found, the stop will refuse and name the remedy"
         );
     }
     // Announce the wait only when one can actually happen: a verified-running
@@ -183,13 +184,14 @@ fn resolve_patience(
             Duration::from_secs(config.drain.timeout_seconds),
             PatienceSource::Config,
         )),
-        // The core fact only — no verb prefix, no remedy. Each surface that
-        // states this failure adds its own frame: the CLI's note names when
-        // the patience matters, and the stop flow's refusal (the one place
-        // the failure actually blocks) names `--patience` as the remedy.
-        Err(error) => Err(format!(
-            "the wait patience could not be resolved from configuration ({error})"
-        )),
+        // The carried account is the configuration's OWN error, bare — no
+        // sentence frame, no remedy. Each surface that states this failure
+        // supplies its own sentence exactly once: the CLI's note names the
+        // verb and when the patience matters, and the stop flow's refusal
+        // (the one place the failure actually blocks) wraps it in the
+        // refusal sentence and names `--patience` as the remedy. A framed
+        // account here would be printed inside a second frame there.
+        Err(error) => Err(error.to_string()),
     }
 }
 

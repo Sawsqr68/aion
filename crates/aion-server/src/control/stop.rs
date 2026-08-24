@@ -115,13 +115,15 @@ pub enum StopRefusal {
     /// report what became of the drain.
     #[error(
         "refusing to signal pid {pid}: the server is RUNNING, but no wait patience \
-         could be resolved to govern the stop ({unresolved}). Pass `--patience \
-         <seconds>` to rule it at invocation, or repair the configuration"
+         could be resolved from the configuration to govern the stop ({unresolved}). \
+         Pass `--patience <seconds>` to rule it at invocation, or repair the \
+         configuration"
     )]
     UnresolvedPatience {
         /// The verified-running pid that was NOT signalled.
         pid: u32,
-        /// Why patience resolution failed — the configuration's own account.
+        /// Why patience resolution failed — the configuration's own bare
+        /// account; this template supplies the sentence around it.
         unresolved: String,
     },
     /// This build cannot send POSIX signals.
