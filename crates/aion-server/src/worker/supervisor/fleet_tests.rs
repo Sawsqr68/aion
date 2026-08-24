@@ -205,7 +205,7 @@ async fn a_crashing_worker_is_restarted() -> TestResult {
     assert_eq!(exit.code, Some(3), "the real exit code must be reported");
     assert!(!exit.requested, "a crash is not a requested ending");
 
-    assert!(supervisor.shutdown().await.is_empty());
+    assert!(supervisor.shutdown().await.failures.is_empty());
     Ok(())
 }
 
@@ -400,10 +400,10 @@ async fn shutdown_drains_every_supervised_worker() -> TestResult {
         );
     }
 
-    let failures = supervisor.shutdown().await;
+    let report = supervisor.shutdown().await;
     assert!(
-        failures.is_empty(),
-        "shutdown could not prove the fleet stopped: {failures:?}"
+        report.failures.is_empty(),
+        "shutdown could not prove the fleet stopped: {report:?}"
     );
     for group in groups {
         assert!(!group_alive(group), "group {group} survived shutdown");
@@ -466,7 +466,7 @@ async fn starting_an_already_supervised_worker_does_not_start_a_second_one() -> 
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(lines(&marker), 1, "a second process was started");
 
-    assert!(supervisor.shutdown().await.is_empty());
+    assert!(supervisor.shutdown().await.failures.is_empty());
     Ok(())
 }
 

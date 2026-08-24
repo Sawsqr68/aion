@@ -318,7 +318,7 @@ mod tests {
         let workflow_id = WorkflowId::new_v4();
         track(&tracker, worker.worker_id, &workflow_id, 7)?;
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests =
             cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
                 .worker_requests;
@@ -352,7 +352,7 @@ mod tests {
         let worker = registry_with_worker(4)?;
         let tracker = HeartbeatTracker::new(WINDOW);
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests = cancel_in_flight_activities(
             &tracker,
             &worker.registry,
@@ -379,7 +379,7 @@ mod tests {
         track(&tracker, worker.worker_id, &cancelled, 1)?;
         track(&tracker, worker.worker_id, &bystander, 1)?;
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests =
             cancel_in_flight_activities(&tracker, &worker.registry, &declared, &cancelled)?
                 .worker_requests;
@@ -410,7 +410,7 @@ mod tests {
         track(&tracker, worker.worker_id, &workflow_id, 1)?;
         worker.registration.deregister()?;
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests: Vec<CancelRequest> =
             cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
                 .worker_requests;
@@ -460,7 +460,7 @@ mod tests {
         let workflow_id = WorkflowId::new_v4();
         track(&tracker, worker_id, &workflow_id, 1)?;
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests = cancel_in_flight_activities(&tracker, &registry, &declared, &workflow_id)?
             .worker_requests;
 
@@ -483,7 +483,7 @@ mod tests {
         track(&tracker, worker.worker_id, &workflow_id, 1)?;
         drop(worker.received);
 
-        let declared = DeclaredCommandAttempts::new();
+        let declared = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
         let requests =
             cancel_in_flight_activities(&tracker, &worker.registry, &declared, &workflow_id)?
                 .worker_requests;

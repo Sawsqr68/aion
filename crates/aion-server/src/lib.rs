@@ -48,6 +48,7 @@ pub mod cluster;
 pub mod cluster_publisher;
 /// Runtime configuration loading and validation.
 pub mod config;
+pub mod control;
 /// Durable record of what killed the server process on paths that never
 /// reach the graceful-shutdown log.
 pub mod death_note;

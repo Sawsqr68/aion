@@ -1,5 +1,7 @@
 //! The `aion server` subcommand: argument surface for running the full Aion
-//! workflow server in-process via [`aion_server::run()`].
+//! workflow server in-process via [`aion_server::run()`], plus the control
+//! verbs (`stop`, `status`) that act on a server already running under this
+//! machine's Aion home.
 
 use std::net::SocketAddr;
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
@@ -8,7 +10,36 @@ use std::path::PathBuf;
 use aion_server::config::{CliOverrides, ServerConfig};
 
 use crate::console;
-use clap::Args;
+use clap::{Args, Subcommand};
+
+/// The whole `aion server` surface: bare `aion server` runs the server with
+/// the flattened [`ServerArgs`]; `aion server stop` / `aion server status`
+/// are control verbs against the recorded running server. Run flags and a
+/// control verb are mutually exclusive by construction
+/// (`args_conflicts_with_subcommands`), so `aion server stop --config x.toml`
+/// parses the verb's own `--config`, never the run surface's.
+#[derive(Args, Clone, Debug)]
+#[command(args_conflicts_with_subcommands = true)]
+pub struct ServerCommand {
+    /// Control verb, when one was given.
+    #[command(subcommand)]
+    pub command: Option<ServerSubcommand>,
+    /// The run-the-server argument surface (the default with no verb).
+    #[command(flatten)]
+    pub run: ServerArgs,
+}
+
+/// Control verbs for a server already running under this Aion home.
+#[derive(Subcommand, Clone, Debug)]
+pub enum ServerSubcommand {
+    /// Stop the running server: verify the recorded incarnation, send
+    /// SIGTERM, wait for the drain, and report the drain outcome by name.
+    Stop(crate::server_stop::StopArgs),
+    /// Report which server is actually running: the pid-file record, the
+    /// live build identity from its own listener, and readiness — each
+    /// layer's absence reported as its own distinct state.
+    Status(crate::server_status::StatusArgs),
+}
 
 /// Arguments for `aion server`, identical to the surface of the former
 /// standalone `aion-server` binary.

@@ -39,6 +39,17 @@ struct Commission {
     executable: ManagedExecutable,
 }
 
+/// What [`WorkerSupervisor::shutdown`] observed, by name on both sides.
+#[derive(Debug, Default)]
+pub struct FleetShutdownReport {
+    /// Deployments proven stopped: each stop returned only after a
+    /// signal-zero probe found the worker's process group empty.
+    pub stopped: Vec<String>,
+    /// One entry per deployment that could NOT be proven stopped, carrying
+    /// the observation that contradicted it.
+    pub failures: Vec<SupervisionError>,
+}
+
 /// Server-owned supervision of the managed worker fleet.
 pub struct WorkerSupervisor {
     store: Arc<dyn WorkerDeploymentStore>,
@@ -306,21 +317,32 @@ impl WorkerSupervisor {
     ///
     /// Durable desired state is deliberately NOT changed: a server going down
     /// is not an operator asking for the fleet to stay down, and the next boot
-    /// reconciles it back up. Returns one failure per instance that could not
-    /// be proven stopped — an empty vector is the proof that no worker was
-    /// orphaned.
-    pub async fn shutdown(&self) -> Vec<SupervisionError> {
+    /// reconciles it back up. The report names both sides: every instance
+    /// proven stopped (its process group observed empty) and one failure per
+    /// instance that could not be — an empty failure list is the proof that
+    /// no worker was orphaned, and the stopped names let the shutdown
+    /// outcome record say WHICH workers went down rather than a count.
+    pub async fn shutdown(&self) -> FleetShutdownReport {
         let handles = match self.instances() {
             Ok(mut instances) => std::mem::take(&mut *instances),
-            Err(error) => return vec![error],
+            Err(error) => {
+                return FleetShutdownReport {
+                    stopped: Vec::new(),
+                    failures: vec![error],
+                };
+            }
         };
-        let mut failures = Vec::new();
+        let mut report = FleetShutdownReport {
+            stopped: Vec::new(),
+            failures: Vec::new(),
+        };
         for (name, handle) in handles {
-            if let Err(error) = handle.stop(&name).await {
-                failures.push(error);
+            match handle.stop(&name).await {
+                Ok(()) => report.stopped.push(name),
+                Err(error) => report.failures.push(error),
             }
         }
-        failures
+        report
     }
 
     /// Publish one durable desired-state write onto the cluster channel — the

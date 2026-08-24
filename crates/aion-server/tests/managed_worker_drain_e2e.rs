@@ -80,9 +80,9 @@ async fn the_shutdown_drain_stops_every_managed_worker() -> TestResult {
     );
 
     // Exactly how `aion server` drives it: one signal, no second one.
-    let outcome = drain_after_first_signal(state.clone(), std::future::pending()).await?;
+    let report = drain_after_first_signal(state.clone(), std::future::pending()).await?;
     assert_eq!(
-        outcome,
+        report.outcome,
         ShutdownOutcome::Clean,
         "no activity was in flight, so the drain must complete cleanly"
     );

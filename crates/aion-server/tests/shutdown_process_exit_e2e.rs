@@ -303,10 +303,11 @@ fn child_main() -> Result<(), TestError> {
     runtime
         .block_on(async { terminate.recv().await })
         .ok_or("the SIGTERM stream closed without delivering a signal")?;
-    let outcome = runtime.block_on(shutdown::drain_after_first_signal(
+    let report = runtime.block_on(shutdown::drain_after_first_signal(
         state.clone(),
         std::future::pending::<()>(),
     ))?;
+    let outcome = report.outcome;
     // The drain's own verdict, recorded here because it is the misleading half
     // of the incident: it is honestly `Clean` — the parked dispatch never
     // reached a worker, so the heartbeat tracker it counts has nothing in

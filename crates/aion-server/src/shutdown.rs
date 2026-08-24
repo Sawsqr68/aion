@@ -9,10 +9,14 @@ use tracing::{error, info, warn};
 
 use crate::ServerState;
 use crate::error::ServerError;
-use crate::worker::LostWorkerReport;
+use crate::worker::{AttemptKey, LostWorkerReport};
 
 /// Process exit selected by the shutdown coordinator.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+///
+/// Serialized by name into the shutdown outcome record
+/// ([`crate::control::outcome`]), so the face an operator reads from
+/// `aion server stop` is this exact enum, not a re-derivation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum ShutdownOutcome {
     /// Drain completed before the configured timeout.
     Clean,
@@ -40,6 +44,37 @@ impl ShutdownOutcome {
             Self::Forced => ExitCode::from(130),
         }
     }
+}
+
+/// Everything one graceful shutdown observed, for the outcome record the
+/// dying server writes into the death note ([`crate::control::outcome`]).
+/// The process exit code still collapses this to the #207 contract via
+/// [`ShutdownOutcome::exit_code`]; the report is how the rest crosses the
+/// process boundary.
+#[derive(Debug)]
+pub struct ShutdownReport {
+    /// The drain's face.
+    pub outcome: ShutdownOutcome,
+    /// The window that governed the wait.
+    pub drain_timeout: Duration,
+    /// How many connected workers received the drain request.
+    pub delivered_drain_requests: usize,
+    /// Parked in-flight work at drain timeout, by worker. Empty on a clean
+    /// drain and on a forced exit (a second signal skips the accounting).
+    pub parked: Vec<LostWorkerReport>,
+    /// Declared-body commands still executing when the drain ended (timeout or
+    /// forced exit). A declared body is in-flight work no worker holds and no
+    /// heartbeat tracks; these attempts are parked by silence exactly like the
+    /// worker dispatches above — nothing is recorded, the engine teardown ends
+    /// their process groups with the server, and post-restart replay
+    /// re-dispatches each one. Empty on a clean drain: the drain gate waits for
+    /// this census too.
+    pub parked_declared: Vec<AttemptKey>,
+    /// Managed workers proven stopped, by deployment name.
+    pub managed_workers_stopped: Vec<String>,
+    /// Managed workers that could not be proven stopped, each rendered with
+    /// the observation that contradicted the stop.
+    pub managed_workers_unstopped: Vec<String>,
 }
 
 /// Cloneable gate shared by transports, dispatchers, worker streams, and the
@@ -135,14 +170,23 @@ impl DrainState {
         self.inner.empty.notify_waiters();
     }
 
+    /// Whether both in-flight censuses read empty: the heartbeat tracker's
+    /// (worker-held activities) AND the declared-body registry's (commands this
+    /// server is executing itself, which no worker holds and no heartbeat
+    /// tracks). Draining on the first census alone is how a server once
+    /// reported `Clean` over a live declared command.
+    fn nothing_in_flight(state: &ServerState) -> Result<bool, ServerError> {
+        Ok(state.heartbeat_tracker().in_flight_count()? == 0
+            && state.declared_attempts().executing()?.is_empty())
+    }
+
     async fn wait_for_empty(&self, state: &ServerState) -> Result<(), ServerError> {
         loop {
-            let in_flight = state.heartbeat_tracker().in_flight_count()?;
-            if in_flight == 0 {
+            if Self::nothing_in_flight(state)? {
                 return Ok(());
             }
             let notified = self.inner.empty.notified();
-            if state.heartbeat_tracker().in_flight_count()? == 0 {
+            if Self::nothing_in_flight(state)? {
                 return Ok(());
             }
             notified.await;
@@ -161,7 +205,7 @@ impl DrainState {
 pub async fn drain_after_first_signal(
     state: ServerState,
     second_signal: impl std::future::Future<Output = ()>,
-) -> Result<ShutdownOutcome, ServerError> {
+) -> Result<ShutdownReport, ServerError> {
     let drain = state.drain_state().clone();
     let first = drain.begin();
     if first {
@@ -174,10 +218,22 @@ pub async fn drain_after_first_signal(
     let timeout = state.runtime_config().drain_timeout;
     tokio::pin!(second_signal);
 
-    let outcome = tokio::select! {
+    let (outcome, parked, parked_declared) = tokio::select! {
         () = &mut second_signal => {
             warn!("second shutdown signal received; forcing immediate exit");
-            ShutdownOutcome::Forced
+            // A forced exit skips the worker-park accounting, but the
+            // declared-command census is a read this process can still afford:
+            // these commands die with the server either way, and a report that
+            // cannot name them is the report the next operator debugs against.
+            let declared = state.declared_attempts().executing().unwrap_or_else(|census_error| {
+                error!(
+                    %census_error,
+                    "forced exit could not read the declared-command census; the \
+                     outcome record will not name the commands that died with the server"
+                );
+                Vec::new()
+            });
+            (ShutdownOutcome::Forced, Vec::new(), declared)
         }
         result = wait_for_drain_or_timeout(&state, &drain, timeout) => result?,
     };
@@ -198,26 +254,35 @@ pub async fn drain_after_first_signal(
     // a failure here is reported in full, loudly, and shutdown proceeds.
     // Failing the exit on a worker that would not die would turn a routine
     // deploy red, which is how operators learn to ignore failures.
-    stop_managed_workers(&state).await;
+    let managed = stop_managed_workers(&state).await;
 
+    let report = ShutdownReport {
+        outcome,
+        drain_timeout: timeout,
+        delivered_drain_requests: delivered_workers,
+        parked,
+        parked_declared,
+        managed_workers_stopped: managed.stopped,
+        managed_workers_unstopped: managed.failures.iter().map(ToString::to_string).collect(),
+    };
     if matches!(outcome, ShutdownOutcome::Forced) {
-        return Ok(outcome);
+        return Ok(report);
     }
 
     state.shutdown()?;
-    Ok(outcome)
+    Ok(report)
 }
 
 async fn wait_for_drain_or_timeout(
     state: &ServerState,
     drain: &DrainState,
     timeout: Duration,
-) -> Result<ShutdownOutcome, ServerError> {
+) -> Result<(ShutdownOutcome, Vec<LostWorkerReport>, Vec<AttemptKey>), ServerError> {
     match tokio::time::timeout(timeout, drain.wait_for_empty(state)).await {
         Ok(result) => {
             result?;
             info!("activity drain completed cleanly");
-            Ok(ShutdownOutcome::Clean)
+            Ok((ShutdownOutcome::Clean, Vec::new(), Vec::new()))
         }
         Err(_elapsed) => {
             // #207 drain-timeout backstop: PARK the remaining in-flight
@@ -227,13 +292,32 @@ async fn wait_for_drain_or_timeout(
             // replay re-dispatches every parked ordinal. A park that itself
             // fails leaves in-flight state unhanded — the one remaining
             // FAILURE-worthy drain outcome.
+            //
+            // Declared-body attempts park the same way but need no sweep: the
+            // engine teardown that follows ends their process groups with the
+            // server and their unrecorded attempts re-dispatch on restart. What
+            // the backstop owes them is the CENSUS — a park that cannot NAME
+            // the in-flight commands it is abandoning is the same unhanded
+            // state as a failed worker park, and is reported the same way.
+            let declared = match state.declared_attempts().executing() {
+                Ok(executing) => executing,
+                Err(census_error) => {
+                    error!(
+                        %census_error,
+                        "activity drain timed out and the declared-command census could \
+                         not be read; exiting with the failure drain outcome"
+                    );
+                    return Ok((ShutdownOutcome::TimedOut, Vec::new(), Vec::new()));
+                }
+            };
             match state
                 .heartbeat_tracker()
                 .park_all_in_flight_workers(state.worker_registry(), state.pending_activities())
             {
                 Ok(reports) => {
                     log_parked_workers(&reports);
-                    Ok(ShutdownOutcome::Parked)
+                    log_parked_declared(&declared);
+                    Ok((ShutdownOutcome::Parked, reports, declared))
                 }
                 Err(park_error) => {
                     error!(
@@ -241,7 +325,7 @@ async fn wait_for_drain_or_timeout(
                         "activity drain timed out and parking the remaining in-flight \
                          activities failed; exiting with the failure drain outcome"
                     );
-                    Ok(ShutdownOutcome::TimedOut)
+                    Ok((ShutdownOutcome::TimedOut, Vec::new(), declared))
                 }
             }
         }
@@ -254,19 +338,34 @@ async fn wait_for_drain_or_timeout(
 /// a signal-zero probe found the worker's process group empty. Anything else is
 /// logged per worker with the observation that contradicted it — never summed
 /// into a single count that could read as calm.
-async fn stop_managed_workers(state: &ServerState) {
-    let failures = state.worker_supervisor().shutdown().await;
-    if failures.is_empty() {
+async fn stop_managed_workers(state: &ServerState) -> crate::worker::FleetShutdownReport {
+    let report = state.worker_supervisor().shutdown().await;
+    if report.failures.is_empty() {
         info!("managed workers stopped; every process group confirmed empty");
-        return;
+        return report;
     }
-    for failure in &failures {
+    for failure in &report.failures {
         error!(%failure, "a managed worker could not be confirmed stopped at shutdown");
     }
     error!(
-        unstopped = failures.len(),
+        unstopped = report.failures.len(),
         "shutdown could not prove every managed worker stopped; check for orphaned processes"
     );
+    report
+}
+
+fn log_parked_declared(declared: &[AttemptKey]) {
+    for key in declared {
+        info!(
+            workflow_id = %key.workflow_id,
+            run_id = %key.run_id,
+            activity_id = %key.activity_id,
+            attempt = key.attempt,
+            "drain timed out with this declared command still executing; its process \
+             group ends with the server and the unrecorded attempt re-dispatches on \
+             the next boot"
+        );
+    }
 }
 
 fn log_parked_workers(reports: &[LostWorkerReport]) {
@@ -288,6 +387,8 @@ mod tests {
     use std::time::Duration;
 
     use super::{DrainState, ShutdownOutcome};
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     /// How long a woken waiter is allowed to take. Generous, and not a
     /// behavioural bound: a correct latch resolves in microseconds and a broken
@@ -366,5 +467,61 @@ mod tests {
             debug(ShutdownOutcome::Forced.exit_code()),
             debug(ExitCode::from(130))
         );
+    }
+
+    /// Red first — the drain gate must wait for an executing declared-body
+    /// command: in-flight work no worker holds and no heartbeat tracks. Before
+    /// the declared census joined the gate, a drain over a live declared
+    /// command resolved immediately and the server reported `Clean` while the
+    /// command still ran (found by `a_parked_drain_is_visible_in_the_stop_report`).
+    #[tokio::test]
+    async fn the_drain_gate_waits_for_an_executing_declared_command() -> TestResult {
+        let (engine, _store, _visibility) = crate::api::http::test_support::shared_engine().await?;
+        let resolver = crate::NamespaceResolver::from_config(
+            crate::config::NamespaceConfig {
+                mode: crate::config::NamespaceMode::SharedEngine,
+            },
+            engine,
+        );
+        let state = crate::api::http::test_support::server_state(
+            resolver,
+            crate::api::http::test_support::runtime_config(),
+        )
+        .await?;
+
+        let key = crate::worker::AttemptKey::new(
+            aion_core::WorkflowId::new_v4(),
+            aion_core::RunId::new_v4(),
+            aion_core::ActivityId::from_sequence_position(1),
+            1,
+        );
+        let (_context, cancellation) = aion_worker::ActivityContext::new(
+            key.workflow_id.clone(),
+            key.run_id.clone(),
+            key.activity_id.clone(),
+            key.attempt,
+        );
+        let registration = state.declared_attempts().register(key, cancellation)?;
+
+        let drain = state.drain_state().clone();
+        let waiter_state = state.clone();
+        let waiter = tokio::spawn(async move { drain.wait_for_empty(&waiter_state).await });
+        for _ in 0..32 {
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            !waiter.is_finished(),
+            "the drain gate resolved over a live declared command — the in-flight \
+             census must include the declared-body registry"
+        );
+
+        // Finishing the command (the guard's drop) is what completes the drain,
+        // through the registry's own wake of the drain latch.
+        drop(registration);
+        let joined = tokio::time::timeout(WAKE_BUDGET, waiter).await;
+        joined
+            .map_err(|_elapsed| "the drain gate never woke after the declared command finished")?
+            .map_err(|join_error| format!("the drain waiter panicked: {join_error}"))??;
+        Ok(())
     }
 }

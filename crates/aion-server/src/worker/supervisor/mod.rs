@@ -19,7 +19,7 @@ mod tests;
 
 pub use error::SupervisionError;
 pub use executable::ManagedExecutable;
-pub use fleet::WorkerSupervisor;
+pub use fleet::{FleetShutdownReport, WorkerSupervisor};
 pub use policy::{SupervisionPolicy, UNCOMMISSIONED_REMEDY};
 pub use status::{
     ManagedWorkerExit, ManagedWorkerReport, ManagedWorkerState, ManagedWorkerStatus, SpawnedBinary,

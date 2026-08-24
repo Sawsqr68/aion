@@ -388,6 +388,7 @@ impl ServerState {
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
+        let drain_state = DrainState::default();
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -398,7 +399,7 @@ impl ServerState {
                 pending_activities,
                 heartbeat_tracker,
                 grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
-                drain_state: DrainState::default(),
+                drain_state: drain_state.clone(),
                 metrics: None,
                 health: None,
                 activity_mock_registry: None,
@@ -423,7 +424,7 @@ impl ServerState {
                 // No declared-body dispatcher is built on this path, so nothing
                 // ever registers here; present so the cancel path reads one
                 // registry on every construction rather than an `Option`.
-                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(drain_state.clone()),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -484,6 +485,7 @@ impl ServerState {
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
+        let drain_state = DrainState::default();
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -494,7 +496,7 @@ impl ServerState {
                 pending_activities,
                 heartbeat_tracker,
                 grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
-                drain_state: DrainState::default(),
+                drain_state: drain_state.clone(),
                 metrics: None,
                 health: None,
                 activity_mock_registry: None,
@@ -519,7 +521,7 @@ impl ServerState {
                 // No declared-body dispatcher is built on this path, so nothing
                 // ever registers here; present so the cancel path reads one
                 // registry on every construction rather than an `Option`.
-                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(drain_state.clone()),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -575,6 +577,7 @@ impl ServerState {
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
+        let drain_state = DrainState::default();
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -583,7 +586,7 @@ impl ServerState {
                 pending_activities,
                 heartbeat_tracker,
                 grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
-                drain_state: DrainState::default(),
+                drain_state: drain_state.clone(),
                 metrics: None,
                 health: None,
                 activity_mock_registry: None,
@@ -612,7 +615,7 @@ impl ServerState {
                 // No declared-body dispatcher is built on this path, so nothing
                 // ever registers here; present so the cancel path reads one
                 // registry on every construction rather than an `Option`.
-                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(drain_state.clone()),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -663,6 +666,7 @@ impl ServerState {
         let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
             Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
         );
+        let drain_state = DrainState::default();
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -671,7 +675,7 @@ impl ServerState {
                 pending_activities,
                 heartbeat_tracker,
                 grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
-                drain_state: DrainState::default(),
+                drain_state: drain_state.clone(),
                 metrics: None,
                 health: None,
                 activity_mock_registry: None,
@@ -700,7 +704,7 @@ impl ServerState {
                 // No declared-body dispatcher is built on this path, so nothing
                 // ever registers here; present so the cancel path reads one
                 // registry on every construction rather than an `Option`.
-                declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
+                declared_attempts: crate::worker::DeclaredCommandAttempts::new(drain_state.clone()),
                 // Empty and STAYING empty: this constructor builds no
                 // dispatcher, so no observer ever writes it — the honest
                 // answer for an embedder/test state is "never checked".
@@ -1566,6 +1570,7 @@ fn build_worker_seams(
         Some(routing) => worker_registry.with_namespace_routing(routing),
         None => worker_registry,
     };
+    let drain_state = DrainState::default();
     WorkerSeams {
         worker_registry,
         // The transport-loss budget derives from the operator's heartbeat
@@ -1574,11 +1579,11 @@ fn build_worker_seams(
         // a bounded span and then terminates naming the TRANSPORT.
         pending_activities: PendingActivities::new(runtime.worker.heartbeat_window),
         heartbeat_tracker: HeartbeatTracker::new(runtime.worker.heartbeat_window),
-        drain_state: DrainState::default(),
+        declared_attempts: crate::worker::DeclaredCommandAttempts::new(drain_state.clone()),
+        drain_state,
         queue_declarations: crate::worker::QueueDeclarationSource::default(),
         queue_service_state: crate::worker::QueueServiceState::default(),
         declared_bodies: crate::worker::DeclaredBodySource::default(),
-        declared_attempts: crate::worker::DeclaredCommandAttempts::new(),
         cluster_publisher: cluster_publisher.clone(),
     }
 }

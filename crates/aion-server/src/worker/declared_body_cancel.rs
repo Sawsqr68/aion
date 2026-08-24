@@ -39,6 +39,7 @@ use aion_worker::ActivityCancellationHandle;
 
 use super::intervention::AttemptKey;
 use crate::error::ServerError;
+use crate::shutdown::DrainState;
 
 /// The lock resource name carried by a [`ServerError::LockPoisoned`] raised
 /// here, so an operator reading the error knows which state could not be read.
@@ -58,16 +59,30 @@ const RESOURCE: &str = "declared command attempts";
 /// name which generation it stopped. Cancelling is still workflow-scoped, as it
 /// is for workers ([`super::HeartbeatTracker::in_flight_for_workflow`]): a
 /// cancelled workflow's work stops in every generation of it.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct DeclaredCommandAttempts {
     inner: Arc<Mutex<HashMap<AttemptKey, ActivityCancellationHandle>>>,
+    /// The drain latch this registry wakes when an attempt finishes. The
+    /// graceful drain waits for this census as well as the heartbeat tracker's
+    /// (a declared body is in-flight work no worker holds), and a waiter that
+    /// is never woken outlives every command by the full drain window.
+    drain: DrainState,
 }
 
 impl DeclaredCommandAttempts {
-    /// Build an empty registry.
+    /// Build an empty registry that wakes `drain`'s activity-drained latch
+    /// whenever an executing attempt finishes.
+    ///
+    /// The latch is required rather than optional for the same reason the
+    /// dispatcher requires the registry itself: a construction path that could
+    /// silently skip the wiring would recreate the drained-over-live-work bug
+    /// the wiring exists to prevent, invisibly.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(drain: DrainState) -> Self {
+        Self {
+            inner: Arc::default(),
+            drain,
+        }
     }
 
     /// Record that this server is executing `key`'s declared command, and hand
@@ -185,6 +200,11 @@ impl DeclaredCommandAttempts {
             }
         };
         attempts.remove(key);
+        drop(attempts);
+        // Wake the graceful drain's census loop: this may have been the last
+        // in-flight declared body it was waiting out. Waking with no waiter is
+        // a no-op, so the ordinary (non-draining) case costs nothing.
+        self.drain.notify_activity_drained();
     }
 }
 
@@ -217,7 +237,7 @@ mod tests {
     use aion_core::{ActivityId, RunId, WorkflowId};
     use aion_worker::ActivityContext;
 
-    use super::{AttemptKey, DeclaredCommandAttempts};
+    use super::{AttemptKey, DeclaredCommandAttempts, DrainState};
 
     /// What a test returns. Every fallible step is carried rather than
     /// unwrapped, because the workspace denies panicking accessors in test code
@@ -237,7 +257,7 @@ mod tests {
     /// the executor is running under — not a copy of it.
     #[tokio::test]
     async fn a_registered_attempt_is_signalled_on_its_own_context() -> TestResult {
-        let attempts = DeclaredCommandAttempts::new();
+        let attempts = DeclaredCommandAttempts::new(DrainState::default());
         let workflow_id = WorkflowId::new_v4();
         let target = key(&workflow_id, 3, 1);
         let (context, cancellation) = ActivityContext::new(
@@ -263,7 +283,7 @@ mod tests {
     /// bystander sharing this server.
     #[tokio::test]
     async fn another_workflows_attempt_is_never_signalled() -> TestResult {
-        let attempts = DeclaredCommandAttempts::new();
+        let attempts = DeclaredCommandAttempts::new(DrainState::default());
         let cancelled = WorkflowId::new_v4();
         let bystander = WorkflowId::new_v4();
         let target = key(&cancelled, 1, 1);
@@ -299,7 +319,7 @@ mod tests {
     /// the entry's life exactly the command's life.
     #[tokio::test]
     async fn a_finished_attempt_is_no_longer_visible() -> TestResult {
-        let attempts = DeclaredCommandAttempts::new();
+        let attempts = DeclaredCommandAttempts::new(DrainState::default());
         let workflow_id = WorkflowId::new_v4();
         let target = key(&workflow_id, 1, 1);
         let (_context, cancellation) = ActivityContext::new(
@@ -326,7 +346,7 @@ mod tests {
     /// handle, and a replaced handle is a running command nothing can stop.
     #[tokio::test]
     async fn one_attempt_cannot_register_twice() -> TestResult {
-        let attempts = DeclaredCommandAttempts::new();
+        let attempts = DeclaredCommandAttempts::new(DrainState::default());
         let target = key(&WorkflowId::new_v4(), 1, 1);
         let (_first_context, first) = ActivityContext::new(
             target.workflow_id.clone(),

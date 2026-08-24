@@ -144,8 +144,9 @@ pub use registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerRegistration,
 };
 pub use supervisor::{
-    ManagedExecutable, ManagedWorkerExit, ManagedWorkerReport, ManagedWorkerState,
-    ManagedWorkerStatus, SpawnedBinary, SupervisionError, SupervisionPolicy, WorkerSupervisor,
+    FleetShutdownReport, ManagedExecutable, ManagedWorkerExit, ManagedWorkerReport,
+    ManagedWorkerState, ManagedWorkerStatus, SpawnedBinary, SupervisionError, SupervisionPolicy,
+    WorkerSupervisor,
 };
 pub use transport_loss::{
     TRANSPORT_EXHAUSTED_REASON_PREFIX, TRANSPORT_LOSS_BUDGET_WINDOWS, TransportLossLedger,

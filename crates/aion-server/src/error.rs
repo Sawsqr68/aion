@@ -81,6 +81,13 @@ pub enum ServerError {
         message: String,
     },
 
+    /// The pid file or a control-verb record could not be written or read.
+    #[error("pid file error: {message}")]
+    PidFile {
+        /// Redacted, operator-facing failure message.
+        message: String,
+    },
+
     /// Namespace validation or authorization failed.
     #[error("namespace error: {message}")]
     Namespace {
@@ -273,6 +280,7 @@ impl ServerError {
             | Self::Transport { .. }
             | Self::SignalListener { .. }
             | Self::DeathNote { .. }
+            | Self::PidFile { .. }
             | Self::LockPoisoned { .. } => WireError::backend("server backend failure"),
             Self::ActivityCompletionRejected { .. } => {
                 WireError::backend("stale activity completion rejected")
@@ -460,6 +468,11 @@ impl ServerError {
             },
             Self::SignalListener { message, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("SignalListener"),
+                store_error_type: None,
+                reason: message,
+            },
+            Self::PidFile { message } => ErrorTraceFields {
+                error_type: Cow::Borrowed("PidFile"),
                 store_error_type: None,
                 reason: message,
             },

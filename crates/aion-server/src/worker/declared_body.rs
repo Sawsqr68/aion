@@ -777,7 +777,7 @@ mod tests {
             lookup,
             reply,
             workspace_root,
-            DeclaredCommandAttempts::new(),
+            DeclaredCommandAttempts::new(crate::shutdown::DrainState::default()),
         )
     }
 
@@ -1248,7 +1248,7 @@ mod tests {
                 reply: Ok("\"worker-served\"".to_owned()),
             }),
             bodies,
-            DeclaredCommandAttempts::new(),
+            DeclaredCommandAttempts::new(crate::shutdown::DrainState::default()),
             tokio::runtime::Handle::current(),
             WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
             ActivityEventPublisher::new(

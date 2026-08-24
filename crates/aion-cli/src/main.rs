@@ -42,6 +42,8 @@ mod package;
 mod payload;
 mod render;
 mod server;
+mod server_status;
+mod server_stop;
 mod settings;
 mod start;
 mod tail;
@@ -107,8 +109,10 @@ enum Command {
     ///
     /// Loads configuration from `--config`, the environment, and command-line
     /// overrides, serves until a termination signal arrives, then drains
-    /// in-flight activities gracefully before exiting.
-    Server(server::ServerArgs),
+    /// in-flight activities gracefully before exiting. The control verbs
+    /// `aion server stop` and `aion server status` act on a server already
+    /// running under this machine's Aion home.
+    Server(server::ServerCommand),
     /// The instant authoring loop: watch a workflow project and hot-load on save.
     ///
     /// Watches the project's `src/` tree and, on every save, rebuilds and
@@ -530,7 +534,8 @@ enum RemoteCommand {
         #[arg(long, value_parser = parse_status)]
         status: Option<WorkflowStatus>,
     },
-    /// Describe a workflow execution and its history.
+    /// Describe a workflow execution: summary facts, run identity, and the
+    /// history head sequence. The full event history is `aion inspect`.
     Describe {
         /// Workflow identifier.
         workflow_id: String,
@@ -728,31 +733,39 @@ async fn main() -> ExitCode {
         }
         // The server owns its own reporting contract: tracing-logged errors
         // and the operations exit codes (2 = config, 130 = forced).
-        Some(Command::Server(ref args)) => {
-            // `--endpoint` is a client dial address. It was accepted here and
-            // silently dropped, so an operator who passed it to move the bind
-            // got a server on the default port instead — which, on a box
-            // already running one, means a collision or a second process
-            // reaching for state the operator thought they had moved away
-            // from. Refuse: a bind address the operator named and did not get
-            // is not a thing to start up and hope about.
-            if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
-                eprintln!("{refusal}");
-                return ExitCode::from(2);
+        Some(Command::Server(ref command)) => match &command.command {
+            // The control verbs act on a server already running under this
+            // home; they never start one and never read the run flags
+            // (`args_conflicts_with_subcommands` guarantees none were given).
+            Some(server::ServerSubcommand::Stop(args)) => server_stop::run(args),
+            Some(server::ServerSubcommand::Status(args)) => server_status::run(args).await,
+            None => {
+                let args = &command.run;
+                // `--endpoint` is a client dial address. It was accepted here and
+                // silently dropped, so an operator who passed it to move the bind
+                // got a server on the default port instead — which, on a box
+                // already running one, means a collision or a second process
+                // reaching for state the operator thought they had moved away
+                // from. Refuse: a bind address the operator named and did not get
+                // is not a thing to start up and hope about.
+                if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
+                    eprintln!("{refusal}");
+                    return ExitCode::from(2);
+                }
+                // Report the agent harness composed into this binary at the root
+                // (§3A.3): the default build ships Norn out-of-box; a
+                // `--no-default-features` build reports none. The worker drives
+                // whichever harness is compiled in through the neutral trait.
+                harness::announce_composed_harness();
+                // `--open` is a CLI-only nicety: resolve the served URL from the
+                // effective config and, once the listener is reachable, open it in
+                // the browser. Best-effort — a failure to open never blocks the run.
+                if args.open() {
+                    server::spawn_browser_open(&args.clone().into());
+                }
+                aion_server::run(args.clone().into()).await
             }
-            // Report the agent harness composed into this binary at the root
-            // (§3A.3): the default build ships Norn out-of-box; a
-            // `--no-default-features` build reports none. The worker drives
-            // whichever harness is compiled in through the neutral trait.
-            harness::announce_composed_harness();
-            // `--open` is a CLI-only nicety: resolve the served URL from the
-            // effective config and, once the listener is reachable, open it in
-            // the browser. Best-effort — a failure to open never blocks the run.
-            if args.open() {
-                server::spawn_browser_open(&args.clone().into());
-            }
-            aion_server::run(args.clone().into()).await
-        }
+        },
         Some(Command::Dev(ref args)) => {
             // The dev loop runs locally and drives the running server over the
             // same operator deploy RPC `aion deploy` uses; it reports through
@@ -2093,7 +2106,7 @@ mod tests {
         let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
-        let overrides = CliOverrides::from(args);
+        let overrides = CliOverrides::from(args.run);
 
         assert_eq!(
             overrides.config_path,
@@ -2160,7 +2173,7 @@ mod tests {
         let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
-        let overrides = CliOverrides::from(args);
+        let overrides = CliOverrides::from(args.run);
 
         assert_eq!(
             overrides.gleam_path,
@@ -2186,7 +2199,7 @@ mod tests {
         let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
-        let overrides = CliOverrides::from(args);
+        let overrides = CliOverrides::from(args.run);
 
         assert_eq!(
             overrides.workflow_packages,

@@ -143,7 +143,7 @@ fn containment_dispatcher(
     Arc<Mutex<Vec<String>>>,
     DeclaredCommandAttempts,
 ) {
-    let attempts = DeclaredCommandAttempts::new();
+    let attempts = DeclaredCommandAttempts::new(crate::shutdown::DrainState::default());
     let (decorated, reached, _transcript) = dispatcher_with_attempts(
         DeclaredBodyLookup::Declared(ActionBodyContract::Run {
             command: blocking_command(marker),

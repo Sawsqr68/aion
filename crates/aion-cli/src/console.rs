@@ -29,8 +29,10 @@ pub enum HealthProbe {
 
 /// Timeout for each connect/write/read step of a single probe. Loopback
 /// answers in microseconds; this bounds the pathological cases (a listener
-/// that accepts and then hangs) without slowing the healthy path.
-const PROBE_STEP_TIMEOUT: Duration = Duration::from_secs(2);
+/// that accepts and then hangs) without slowing the healthy path. Shared
+/// with `aion server status`, whose one-shot probes bound the same
+/// pathology — one truth for "how long may a single local probe step take".
+pub(crate) const PROBE_STEP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Interval between probes while waiting for a listener to come up.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);

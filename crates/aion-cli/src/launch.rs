@@ -187,7 +187,7 @@ async fn run_background(no_open: bool) -> Result<ExitCode, LaunchFailure> {
                 None,
                 format!(
                     "the server has not answered {url}health/live within {}s; it is still \
-                     running as process {pid} — watch its log ({log}) or stop it with `kill {pid}`. \
+                     running as process {pid} — watch its log ({log}) or stop it with `aion server stop`. \
                      The log ends with:\n{tail}",
                     console::LIVE_BUDGET.as_secs(),
                     pid = child.id(),
@@ -380,7 +380,7 @@ fn ready_report(
     };
     format!(
         "aion is up.\n{config_line}\n{data_line}\nconsole: {url}\nlog: {log}\n\
-         server process id: {pid} (stop it with: kill {pid})\n",
+         server process id: {pid} (stop it with: aion server stop)\n",
         log = log_path.display()
     )
 }
@@ -509,7 +509,7 @@ mod tests {
         assert!(report.contains("data: /data/haematite\n"));
         assert!(report.contains("console: http://127.0.0.1:8080/\n"));
         assert!(report.contains("log: /tmp/aion-home/server.log\n"));
-        assert!(report.contains("server process id: 42 (stop it with: kill 42)\n"));
+        assert!(report.contains("server process id: 42 (stop it with: aion server stop)\n"));
 
         store.backend = StoreBackend::Memory;
         let report = ready_report(&store, "config: X", "u", log_path, 1);

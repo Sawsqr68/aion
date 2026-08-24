@@ -357,9 +357,16 @@ impl Drop for ContainedChild {
         if !self.armed || self.reaped {
             return;
         }
+        // `ESRCH` is the group having departed, and `EPERM` is equally
+        // conclusive — the module's own doctrine ([`confirm_group_gone`],
+        // [`signal_group`]): this process can always signal its own live
+        // descendants, so a permission refusal means only unsignalable
+        // remnants (zombies awaiting the reap) remain. Both are the group
+        // being gone, not a failed kill; reporting `EPERM` as an error here
+        // once dressed a routine server shutdown in a spurious ERROR line.
         #[cfg(unix)]
         match nix::sys::signal::killpg(self.process_group.0, nix::sys::signal::Signal::SIGKILL) {
-            Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
+            Ok(()) | Err(nix::errno::Errno::ESRCH | nix::errno::Errno::EPERM) => {}
             Err(source) => tracing::error!(
                 process_group = self.process_group.0.as_raw(),
                 %source,

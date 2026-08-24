@@ -221,6 +221,29 @@ impl DeathNote {
     pub fn disarm(mut self, reason: &str) {
         self.disarm_reason = Some(reason.to_owned());
     }
+
+    /// Append the shutdown outcome record as an `OUTCOME` entry, written
+    /// BEFORE disarm so `aion server stop` can read the drain's full result
+    /// after the process is gone ([`crate::control::outcome`] is the
+    /// reader). The death note already owns the "what ended this process"
+    /// seam; extending it with one entry kind keeps a single file and a
+    /// single writer — no parallel outcome channel.
+    ///
+    /// A record that cannot be serialized is reported and dropped: the
+    /// shutdown must not fail over its own receipt, and the reader treats
+    /// the record's absence as a state it names honestly.
+    pub fn record_outcome(&self, record: &crate::control::outcome::OutcomeRecord) {
+        match crate::control::outcome::render_entry(record) {
+            Ok(entry) => self.note.write_entry(&entry),
+            Err(error) => {
+                error!(
+                    %error,
+                    "could not write the shutdown outcome record into the death note; \
+                     `aion server stop` will report the record as absent"
+                );
+            }
+        }
+    }
 }
 
 impl Drop for DeathNote {

@@ -61,7 +61,14 @@ anyhow = "1.0"
 uuid = "1.23"
 url = "2"
 chrono = "0.4"
+nix = "0.30"
 signal-hook = "0.3.18"
+# Process-table introspection for the pid file's incarnation checks (start
+# instant + executable path of a live pid): the safe wrapper over the per-OS
+# process APIs, so the stop/status verbs never trust a bare pid number and the
+# workspace's `unsafe_code = "deny"` holds. `default-features = false` plus
+# "system" keeps only the process/system probes — no disks, no networks.
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }
 async-trait = "0.1"
 tokio = "1.52"
 tokio-util = "0.7"

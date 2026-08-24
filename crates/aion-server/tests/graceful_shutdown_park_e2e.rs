@@ -633,6 +633,7 @@ async fn graceful_drain_parks_in_flight_activity_and_restart_completes() -> Resu
     )
     .await
     .map_err(|_| "graceful drain did not complete")??;
+    let outcome = outcome.outcome;
     assert_eq!(
         outcome,
         ShutdownOutcome::Clean,
@@ -697,6 +698,7 @@ async fn drain_timeout_parks_and_exits_success_and_restart_completes() -> Result
     )
     .await
     .map_err(|_| "drain-timeout backstop did not fire")??;
+    let outcome = outcome.outcome;
     assert_eq!(
         outcome,
         ShutdownOutcome::Parked,
