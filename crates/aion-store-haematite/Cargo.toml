@@ -2,10 +2,11 @@
 name = "aion-store-haematite"
 version.workspace = true
 edition.workspace = true
-# 1.89 floor (workspace floor is lower): the indefinite writer-lock wait
-# probes lock availability with std's `File::try_lock`, stabilized in 1.89 —
-# the safe alternative to a libc flock in a workspace that denies unsafe.
-rust-version = "1.89.0"
+# The indefinite writer-lock wait probes lock availability with std's
+# `File::try_lock`, stabilized in 1.89 — the safe alternative to a libc flock
+# in a workspace that denies unsafe. The workspace floor is 1.89 for the same
+# API family now, so the override this crate carried alone is retired.
+rust-version.workspace = true
 description = "Single-node haematite-backed event store implementation for Aion workflows."
 license.workspace = true
 authors.workspace = true

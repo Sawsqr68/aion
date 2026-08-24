@@ -408,6 +408,7 @@ fn render_refusal_note(refusal: &StopRefusal) {
 #[cfg(test)]
 mod tests {
     use super::{PatienceSource, StopArgs, fate_lines, resolve_patience, verified_running_record};
+    use aion_server::config::{CliOverrides, ServerConfig};
     use aion_server::control::{NoteFate, OutcomeRecord, PidRecord};
     use aion_server::shutdown::ShutdownOutcome;
     use std::num::NonZeroU64;
@@ -584,14 +585,22 @@ timeout_seconds = {timeout_seconds}
         let Err(account) = resolve_patience(&args, None) else {
             return Err("a malformed config must fail patience resolution".into());
         };
-        assert!(
-            !account.is_empty(),
-            "the account must carry the configuration's cause"
-        );
-        assert!(
-            !account.contains("could not be resolved"),
-            "the account must be bare — the surfaces own the sentence, and a \
-             framed account here doubles inside theirs: {account}"
+        // The invariant, not an enumeration: the account IS the
+        // configuration's own error, verbatim. Any frame minted around it —
+        // this surface's sentence, the refusal's, or a new one — breaks
+        // equality here, where a forbidden-phrase check would only catch the
+        // frames it happened to list.
+        let overrides = CliOverrides {
+            config_path: args.config.clone(),
+            ..CliOverrides::default()
+        };
+        let Err(config_error) = ServerConfig::load(&overrides) else {
+            return Err("the same malformed config must fail ServerConfig::load".into());
+        };
+        assert_eq!(
+            account,
+            config_error.to_string(),
+            "the carried account must be the configuration's own error, bare"
         );
         Ok(())
     }

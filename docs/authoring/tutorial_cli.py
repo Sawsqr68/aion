@@ -135,10 +135,11 @@ def cli_crate_and_version() -> tuple[str, str, str]:
             "from the workspace, so the version this slide prints is not "
             "necessarily the version the reader would install"
         )
-    # The floor the reader's toolchain must clear. Derived, because the CLI
-    # crate sets its own `rust-version` ABOVE the workspace floor — a deck that
-    # said only "if you have Rust" sends anyone between the two floors into a
-    # failed install with no explanation.
+    # The floor the reader's toolchain must clear. Derived from the crate's
+    # manifest, resolving workspace inheritance — the crate has carried its
+    # own raised floor before and may again, and a deck that said only "if
+    # you have Rust" sends anyone below the real floor into a failed install
+    # with no explanation.
     rust_min = manifest["package"].get("rust-version")
     if isinstance(rust_min, dict):
         rust_min = workspace["workspace"]["package"].get("rust-version")

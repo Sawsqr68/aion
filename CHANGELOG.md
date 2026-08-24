@@ -49,8 +49,14 @@ it — never a kill — and `status` reports the mismatch and answers 1.
   the verb would address when the launched one is not the recorded
   claimant.
 - **MSRV: the workspace `rust-version` is now 1.89** (was 1.85; first
-  raise since the workspace was initialized). The branch's let-chain
-  sweep requires it, and every published 0.24.0 crate carries the floor.
+  raise since the workspace was initialized). The driver is the pid
+  mutation lock's `std::fs::File::lock`, stable in 1.89 — the safe
+  alternative to a libc flock in a workspace that denies unsafe; the
+  branch-wide let-chain sweep rode the raise (let-chains landed in
+  1.88). The per-crate floors that were carried alone (`aion-cli` and
+  `aion-integration-acp` at 1.88.0, `aion-store-haematite` at 1.89.0)
+  are lifted into the workspace floor, so every published 0.24.0 crate
+  now declares the one true floor.
 - The shutdown drain census now sees server-executed declared-command
   bodies: one still executing at drain end is reported by name in the
   drain outcome record, and the next boot re-dispatches the attempt.

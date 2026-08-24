@@ -2,13 +2,12 @@
 name = "aion-cli"
 version.workspace = true
 edition.workspace = true
-# NOT the workspace floor (1.85): the default feature set composes the ACP adapter in,
-# and `aion-integration-acp` requires 1.88.0 for the `agent-client-protocol-schema`
-# wire types. A default `cargo build -p aion-cli` therefore needs 1.88.0, so this
-# package states that rather than letting cargo fail deep inside a dependency. Every
-# other crate keeps the workspace floor; only the binary that links the adapter
-# inherits its requirement.
-rust-version = "1.88.0"
+# The workspace floor (1.89) covers this binary's whole closure: the ACP
+# adapter's wire types need 1.88.0, and `aion-server`'s pid mutation lock
+# (`std::fs::File::lock`) is what set the workspace to 1.89. This package
+# carried its own 1.88.0 while the workspace floor sat below it; a floor
+# BELOW the workspace's is a false install claim, so it inherits again.
+rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
@@ -163,7 +162,7 @@ norn = ["dep:aion-integration-norn"]
 # through a harness they did not ask for. A `kind` this build does not carry is refused
 # naming what it does.
 #
-# NOTE: this feature raises the build's minimum rustc to 1.88.0 (see the package's
-# `rust-version`), which is why the adapter is a separate crate carrying that floor
-# rather than code in a platform crate.
+# NOTE: the adapter's wire types need rustc 1.88.0, which the workspace floor
+# (1.89) already clears — the separate crate survives for composition, not for
+# floor isolation: a build without the feature carries none of the ACP surface.
 acp = ["dep:aion-integration-acp"]

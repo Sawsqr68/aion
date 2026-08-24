@@ -2,10 +2,11 @@
 name = "aion-integration-acp"
 version.workspace = true
 edition.workspace = true
-# The `agent-client-protocol-schema` wire types require Rust 1.88.0 / edition 2024. This crate
-# carries the raised floor ALONE — the workspace `rust-version` stays where it is, so no other
-# crate inherits a toolchain requirement it does not need.
-rust-version = "1.88.0"
+# The `agent-client-protocol-schema` wire types require Rust 1.88.0 /
+# edition 2024 — within the workspace floor (1.89) since the pid mutation
+# lock's `std::fs::File::lock` raised it, so this crate no longer carries a
+# floor of its own: an override below the workspace's is a false install claim.
+rust-version.workspace = true
 description = "The first-party Agent Client Protocol (ACP) adapter for Aion: implements the aion-integrations AgentHarness trait against any ACP agent subprocess over newline-delimited JSON-RPC 2.0 stdio."
 license.workspace = true
 authors.workspace = true
