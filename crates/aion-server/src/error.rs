@@ -219,6 +219,28 @@ pub enum ServerError {
         attempt: u32,
     },
 
+    /// A draining server refused to start a declared command.
+    ///
+    /// The drain latch is the promise `aion server stop` makes to the
+    /// operator: no new work starts after the stop is requested. A declared
+    /// body executes at the server itself — no worker gate can refuse it —
+    /// so the registration that admits it to the cancel path is also the door
+    /// the drain closes. The dispatcher maps this refusal to the park
+    /// sentinel, exactly like a worker dispatch parked mid-drain: nothing is
+    /// recorded, and the next boot re-dispatches the attempt.
+    #[error(
+        "declared command for workflow {workflow_id}, activity {activity_id} attempt {attempt} \
+         refused: this server is draining and starts no new work"
+    )]
+    DrainingRefusedDeclaredAttempt {
+        /// Workflow whose declared body was refused.
+        workflow_id: WorkflowId,
+        /// Activity site whose declared body was refused.
+        activity_id: ActivityId,
+        /// Attempt whose declared body was refused.
+        attempt: u32,
+    },
+
     /// A lock was poisoned and the protected state cannot be trusted.
     #[error("{resource} lock was poisoned")]
     LockPoisoned {
@@ -290,6 +312,9 @@ impl ServerError {
             }
             Self::DeclaredAttemptCollision { .. } => {
                 WireError::backend("declared command attempt collision")
+            }
+            Self::DrainingRefusedDeclaredAttempt { .. } => {
+                WireError::backend("declared command refused: server draining")
             }
             Self::WorkerDispatch { .. } => WireError::backend("worker dispatch failed"),
             Self::WorkerConnectionLost { .. } => {
@@ -515,6 +540,11 @@ impl ServerError {
             },
             Self::DeclaredAttemptCollision { activity_id, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("DeclaredAttemptCollision"),
+                store_error_type: None,
+                reason: activity_id,
+            },
+            Self::DrainingRefusedDeclaredAttempt { activity_id, .. } => ErrorTraceFields {
+                error_type: Cow::Borrowed("DrainingRefusedDeclaredAttempt"),
                 store_error_type: None,
                 reason: activity_id,
             },

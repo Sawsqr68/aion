@@ -361,13 +361,30 @@ impl DeclaredCommandDispatcher {
                 ),
                 cancellation.clone(),
             )
-            .map_err(|error| {
-                format!(
+            .map_err(|error| match error {
+                // A draining refusal is a park, not a failure: same sentinel a
+                // worker dispatch returns mid-drain. Nothing is recorded, the
+                // engine parks the attempt, and the next boot re-dispatches
+                // it — a terminal error here would fail the workflow for the
+                // crime of the operator stopping the server.
+                crate::error::ServerError::DrainingRefusedDeclaredAttempt { .. } => {
+                    tracing::info!(
+                        operation = "declared_command_dispatch",
+                        workflow_id = %request.workflow_id,
+                        activity_id = %request.activity_id,
+                        activity_name = %request.name,
+                        task_queue = %request.task_queue,
+                        attempt = request.attempt,
+                        "declared command parked: this server is draining and starts no new work"
+                    );
+                    aion::PARKED_ACTIVITY_REASON.to_owned()
+                }
+                other => format!(
                     "terminal:declared body for action `{name}` cannot dispatch: the attempt \
                      could not join this server's cancel path, and a command a cancelled run \
-                     could not stop must not be started: {error}",
+                     could not stop must not be started: {other}",
                     name = request.name,
-                )
+                ),
             })
     }
 
@@ -857,6 +874,55 @@ mod tests {
         assert!(
             reached_names(&reached).is_empty(),
             "the worker path must not be consulted for a bodied action"
+        );
+        Ok(())
+    }
+
+    /// A draining server PARKS a declared dispatch instead of running it: the
+    /// dispatch returns the park sentinel (the same face a worker dispatch
+    /// wears mid-drain, so the engine records nothing and the next boot
+    /// re-dispatches), the command's process never starts, and the census the
+    /// drain gate waits on registers nothing — work arriving after `stop` can
+    /// neither launch nor hold the gate open.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_draining_server_parks_a_declared_dispatch_without_starting_it() -> TestResult {
+        let marker =
+            std::env::temp_dir().join(format!("aion-drain-park-{}", uuid::Uuid::new_v4().simple()));
+        let drain = crate::shutdown::DrainState::default();
+        let attempts = DeclaredCommandAttempts::new(drain.clone());
+        let (decorated, reached, _transcript) = dispatcher_with_attempts(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: format!("touch {}", marker.display()),
+            }),
+            Err("terminal:the worker path must never be reached".to_owned()),
+            WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+            attempts.clone(),
+        );
+        assert!(drain.begin(), "the first begin() must flip the latch");
+
+        let handle =
+            tokio::task::spawn_blocking(move || decorated.dispatch(request("touch_marker", "{}")));
+        let result = handle.await?;
+
+        assert_eq!(
+            result,
+            Err(aion::PARKED_ACTIVITY_REASON.to_owned()),
+            "a drained-over declared dispatch must wear the park sentinel, not a failure"
+        );
+        assert!(
+            !marker.exists(),
+            "the declared command must never start on a draining server"
+        );
+        assert!(
+            reached_names(&reached).is_empty(),
+            "the park must not fall through to the worker path"
+        );
+        assert!(
+            attempts
+                .executing()
+                .map_err(|error| format!("census read failed: {error}"))?
+                .is_empty(),
+            "a parked dispatch must leave no census entry to hold the drain gate open"
         );
         Ok(())
     }

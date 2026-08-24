@@ -80,12 +80,17 @@ fn a_disarmed_bracket_with_a_record_reads_whole() -> TestResult {
         ],
     )?;
     match read_fate(home.path(), 100)? {
-        NoteFate::Disarmed { outcome, reason } => {
+        NoteFate::Disarmed {
+            outcome,
+            outcome_unreadable,
+            reason,
+        } => {
             assert_eq!(
                 outcome.as_ref(),
                 Some(&record),
                 "the record must be read back"
             );
+            assert_eq!(outcome_unreadable, None, "a read-back record is readable");
             assert!(
                 reason.contains("Parked"),
                 "the DISARMED reason must be carried: {reason}"
@@ -107,8 +112,15 @@ fn a_killed_server_reads_as_armed_not_disarmed_with_no_record() -> TestResult {
         &[stamped("ARMED pid=200 version=0.23.0 build=test")],
     )?;
     match read_fate(home.path(), 200)? {
-        NoteFate::ArmedNotDisarmed { outcome } => {
+        NoteFate::ArmedNotDisarmed {
+            outcome,
+            outcome_unreadable,
+        } => {
             assert_eq!(outcome, None, "no record must mean NO record");
+            assert_eq!(
+                outcome_unreadable, None,
+                "an absent record is an absence, not an unreadable presence"
+            );
         }
         other => return Err(format!("expected ArmedNotDisarmed, got {other:?}").into()),
     }
@@ -131,11 +143,15 @@ fn the_last_bracket_for_the_pid_wins() -> TestResult {
         ],
     )?;
     match read_fate(home.path(), 300)? {
-        NoteFate::ArmedNotDisarmed { outcome } => {
+        NoteFate::ArmedNotDisarmed {
+            outcome,
+            outcome_unreadable,
+        } => {
             assert_eq!(
                 outcome, None,
                 "the previous bracket's record must not leak into the new bracket"
             );
+            assert_eq!(outcome_unreadable, None, "nor may its unreadable face");
         }
         other => return Err(format!("expected ArmedNotDisarmed, got {other:?}").into()),
     }
@@ -181,10 +197,11 @@ fn absence_states_are_distinct() -> TestResult {
     Ok(())
 }
 
-/// A torn OUTCOME line (a crash mid-write) is skipped: the fate is still
-/// classified and no fabricated record appears.
+/// A torn OUTCOME line (a crash mid-write) never becomes a fabricated
+/// record — and it is reported as an unreadable PRESENCE, not silently
+/// collapsed into "the drain never wrote one".
 #[test]
-fn a_torn_outcome_line_reads_as_no_record() -> TestResult {
+fn a_torn_outcome_line_reads_as_an_unreadable_presence() -> TestResult {
     let home = tempfile::tempdir()?;
     write_note(
         home.path(),
@@ -194,8 +211,20 @@ fn a_torn_outcome_line_reads_as_no_record() -> TestResult {
         ],
     )?;
     match read_fate(home.path(), 600)? {
-        NoteFate::ArmedNotDisarmed { outcome } => {
-            assert_eq!(outcome, None, "a torn record is an absence, not a guess");
+        NoteFate::ArmedNotDisarmed {
+            outcome,
+            outcome_unreadable,
+        } => {
+            assert_eq!(
+                outcome, None,
+                "a torn record must never be guessed into a summary"
+            );
+            assert!(
+                outcome_unreadable.is_some(),
+                "a torn OUTCOME line is an UNREADABLE PRESENCE, distinct from the \
+                 honest absence: the drain wrote a record even if this binary \
+                 cannot read it"
+            );
         }
         other => return Err(format!("expected ArmedNotDisarmed, got {other:?}").into()),
     }

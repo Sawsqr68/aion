@@ -105,11 +105,11 @@ const OUTCOME_KIND: &str = "OUTCOME";
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::PidFile`] when the record cannot be serialized —
+/// Returns [`ServerError::DeathNote`] when the record cannot be serialized —
 /// which the caller reports and survives: failing the shutdown over its own
 /// receipt would invert the receipt's purpose.
 pub fn render_entry(record: &OutcomeRecord) -> Result<String, ServerError> {
-    let json = serde_json::to_string(record).map_err(|serialize_error| ServerError::PidFile {
+    let json = serde_json::to_string(record).map_err(|serialize_error| ServerError::DeathNote {
         message: format!("cannot serialize the shutdown outcome record: {serialize_error}"),
     })?;
     Ok(format!("{OUTCOME_KIND} {json}"))
@@ -130,6 +130,13 @@ pub enum NoteFate {
         /// The outcome record, if the drain got far enough to write one
         /// before the process was destroyed.
         outcome: Option<OutcomeRecord>,
+        /// An `OUTCOME` line that is PRESENT in the bracket but that this
+        /// binary could not parse — a torn line, or a record written by a
+        /// build whose schema this one cannot read. Distinct from `outcome:
+        /// None` because "the drain never wrote a record" and "the drain
+        /// wrote a record I cannot read" are different facts, and reporting
+        /// the second as the first sends the operator down the wrong path.
+        outcome_unreadable: Option<String>,
     },
     /// The bracket closed by ordinary control flow.
     Disarmed {
@@ -137,6 +144,10 @@ pub enum NoteFate {
         /// record (an error return before serving, or a pre-record binary),
         /// reported as exactly that absence.
         outcome: Option<OutcomeRecord>,
+        /// An unparseable `OUTCOME` line in the bracket — the unreadable
+        /// presence, kept distinct from the honest absence exactly as on
+        /// [`NoteFate::ArmedNotDisarmed`].
+        outcome_unreadable: Option<String>,
         /// The DISARMED line's reason text, for the report.
         reason: String,
     },
@@ -146,19 +157,19 @@ pub enum NoteFate {
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::PidFile`] when the note exists but cannot be read.
+/// Returns [`ServerError::DeathNote`] when the note exists but cannot be read.
 /// A malformed line inside the note is skipped, never fatal: the note is an
 /// append-only log a panicking process writes into, and one torn line must
 /// not make every other entry unreadable.
 pub fn read_fate(home: &Path, pid: u32) -> Result<NoteFate, ServerError> {
-    let path = home.join("logs").join("aion-server.death.log");
+    let path = crate::death_note::note_path(home);
     let content = match std::fs::read_to_string(&path) {
         Ok(content) => content,
         Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(NoteFate::NoNote);
         }
         Err(io_error) => {
-            return Err(ServerError::PidFile {
+            return Err(ServerError::DeathNote {
                 message: format!(
                     "cannot read the death note `{}`: {io_error}",
                     path.display()
@@ -178,6 +189,7 @@ pub fn read_fate(home: &Path, pid: u32) -> Result<NoteFate, ServerError> {
         return Ok(NoteFate::NoBracketForPid);
     };
     let mut outcome: Option<OutcomeRecord> = None;
+    let mut outcome_unreadable: Option<String> = None;
     let mut disarmed_reason: Option<String> = None;
     for line in &lines[start + 1..] {
         let Some(body) = entry_body(line) else {
@@ -186,13 +198,22 @@ pub fn read_fate(home: &Path, pid: u32) -> Result<NoteFate, ServerError> {
         if let Some(json) = body.strip_prefix("OUTCOME ") {
             // A record for another pid inside this bracket would mean a
             // second writer (the note's ARMED_ONCE guard makes it
-            // unreachable in practice), and a torn OUTCOME line does not
-            // parse: both read as "no record", which the caller reports as
-            // an absence — never as a fabricated outcome.
-            if let Ok(record) = serde_json::from_str::<OutcomeRecord>(json)
-                && record.pid == pid
-            {
-                outcome = Some(record);
+            // unreachable in practice) and is ignored. A line that does not
+            // parse — torn by a kill mid-write, or written by a build whose
+            // schema this binary cannot read — is carried as the UNREADABLE
+            // presence, never collapsed into "no record": the operator told
+            // "the drain never got far enough to write one" over a record
+            // that exists is debugging the wrong incident.
+            match serde_json::from_str::<OutcomeRecord>(json) {
+                Ok(record) if record.pid == pid => {
+                    outcome = Some(record);
+                    outcome_unreadable = None;
+                }
+                Ok(_other_pid) => {}
+                Err(parse_error) => {
+                    outcome_unreadable =
+                        Some(format!("an OUTCOME line does not parse: {parse_error}"));
+                }
             }
         } else if let Some(reason) = body.strip_prefix("DISARMED ") {
             disarmed_reason = Some(reason.to_owned());
@@ -203,8 +224,15 @@ pub fn read_fate(home: &Path, pid: u32) -> Result<NoteFate, ServerError> {
         }
     }
     Ok(match disarmed_reason {
-        Some(reason) => NoteFate::Disarmed { outcome, reason },
-        None => NoteFate::ArmedNotDisarmed { outcome },
+        Some(reason) => NoteFate::Disarmed {
+            outcome,
+            outcome_unreadable,
+            reason,
+        },
+        None => NoteFate::ArmedNotDisarmed {
+            outcome,
+            outcome_unreadable,
+        },
     })
 }
 

@@ -20,13 +20,17 @@ use crate::{
     ServerConfig, ServerError, ServerState, api,
     config::{CliOverrides, NamespaceMode, OutboxConfig, OutboxTransport, StoreBackend},
     observability,
-    shutdown::{self, ShutdownOutcome},
+    shutdown::ShutdownOutcome,
     worker::{
         ActivityDispatcher, DeliveryGate, OutboxDeliveryCallback, OutboxDispatcher,
         OutboxDispatcherConfig, OutboxReconciler, OutboxReconcilerConfig, OutboxRowDispatch,
         ServerOutboxDeliveryCallback, WorkerOutboxDispatch,
     },
 };
+
+mod doors;
+
+use doors::{bind_and_claim, serve_until_shutdown};
 
 /// Short TTL for the dispatcher's per-namespace placement cache (Control-Plane
 /// Phase 2, P2-P3). Kept small so an operator's `PUT /namespaces/{name}/placement`
@@ -299,7 +303,14 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     commission_worker_supervision(&state, supervision_policy).await;
     // Bind both listeners and claim the home FIRST: the pid record the stop
     // verb trusts is written only once both doors are provably ours.
-    let doors = bind_and_claim(&home, grpc_address, http_address, build.commit).await?;
+    let doors = bind_and_claim(
+        &home,
+        grpc_address,
+        http_address,
+        build.commit,
+        state.runtime_config().drain_timeout,
+    )
+    .await?;
     let identity_pid = doors.identity_pid;
     let pid_file_guard = doors.pid_file_guard;
     // Instant doors: the startup catch-up legs (owed timer fires, schedule
@@ -339,116 +350,6 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     ));
     drop(pid_file_guard);
     Ok(exit_code)
-}
-
-/// Serve until a transport exits or the first termination signal arrives,
-/// returning the drain's report. A transport exit shuts the engine down and
-/// reports the nothing-was-draining shape; a signal runs the full drain and
-/// then reaps both transport tasks unless the drain was forced.
-async fn serve_until_shutdown(
-    state: &ServerState,
-    shutdown_tx: &tokio::sync::watch::Sender<bool>,
-    grpc: &mut tokio::task::JoinHandle<Result<(), ServerError>>,
-    http: &mut tokio::task::JoinHandle<Result<(), ServerError>>,
-) -> Result<shutdown::ShutdownReport, ServerError> {
-    Ok(tokio::select! {
-        result = &mut *grpc => {
-            transport_result("gRPC", result)?;
-            state.shutdown()?;
-            transport_exit_report(state)
-        },
-        result = &mut *http => {
-            transport_result("HTTP", result)?;
-            state.shutdown()?;
-            transport_exit_report(state)
-        },
-        result = shutdown_signal() => {
-            result?;
-            let _receiver_count = shutdown_tx.send(true);
-            let report = shutdown::drain_after_first_signal(state.clone(), async {
-                let _ = shutdown_signal().await;
-            }).await?;
-            if !matches!(report.outcome, ShutdownOutcome::Forced) {
-                transport_result("gRPC", grpc.await)?;
-                transport_result("HTTP", http.await)?;
-            }
-            report
-        },
-    })
-}
-
-/// The report for a run that ended because a transport task returned rather
-/// than through the signal-driven drain: nothing was drained and nothing
-/// parked, and the record says exactly that.
-/// The opened doors: both bound transport listeners, and the pid-file claim
-/// their successful binds prove safe.
-struct OpenedDoors {
-    grpc_listener: TcpListener,
-    http_listener: TcpListener,
-    bound_grpc: std::net::SocketAddr,
-    bound_http: std::net::SocketAddr,
-    /// Pid of this incarnation, for the outcome record at exit.
-    identity_pid: u32,
-    /// Held for the whole run scope: its Drop removes the file on any
-    /// ordinary exit, and removes it ONLY while it still holds this
-    /// incarnation's record.
-    pid_file_guard: crate::control::pid_file::PidFileGuard,
-}
-
-/// Bind BOTH transport listeners, then claim the home's pid file (the stop
-/// verb's R1: the file appears ON BIND). A successful pair of binds is the
-/// proof that no live server is serving these addresses, so the claim can
-/// never overwrite a running server's record from a boot that would only
-/// lose the port race anyway.
-async fn bind_and_claim(
-    home: &std::path::Path,
-    grpc_address: std::net::SocketAddr,
-    http_address: std::net::SocketAddr,
-    commit: &str,
-) -> Result<OpenedDoors, ServerError> {
-    let grpc_listener = TcpListener::bind(grpc_address)
-        .await
-        .map_err(|source| transport_bind("grpc", grpc_address, source))?;
-    let http_listener = TcpListener::bind(http_address)
-        .await
-        .map_err(|source| transport_bind("http", http_address, source))?;
-    let bound_grpc = grpc_listener
-        .local_addr()
-        .map_err(|source| transport_bind("grpc", grpc_address, source))?;
-    let bound_http = http_listener
-        .local_addr()
-        .map_err(|source| transport_bind("http", http_address, source))?;
-    let identity = crate::control::incarnation::self_identity()?;
-    let pid_record = crate::control::pid_file::PidRecord {
-        pid: identity.pid,
-        started_at_unix_secs: identity.started_at_unix_secs,
-        binary_sha256: identity.binary_sha256,
-        version: env!("CARGO_PKG_VERSION").to_owned(),
-        commit: commit.to_owned(),
-        http_address: bound_http,
-        grpc_address: bound_grpc,
-    };
-    let pid_file_guard = crate::control::pid_file::claim(home, &pid_record)?;
-    Ok(OpenedDoors {
-        grpc_listener,
-        http_listener,
-        bound_grpc,
-        bound_http,
-        identity_pid: identity.pid,
-        pid_file_guard,
-    })
-}
-
-fn transport_exit_report(state: &ServerState) -> shutdown::ShutdownReport {
-    shutdown::ShutdownReport {
-        outcome: ShutdownOutcome::Clean,
-        drain_timeout: state.runtime_config().drain_timeout,
-        delivered_drain_requests: 0,
-        parked: Vec::new(),
-        parked_declared: Vec::new(),
-        managed_workers_stopped: Vec::new(),
-        managed_workers_unstopped: Vec::new(),
-    }
 }
 
 /// Install the operator's supervision policy and converge the fleet.
@@ -529,11 +430,14 @@ async fn serve_grpc(
     if state.runtime_config().deploy.enabled {
         router = router.add_service(api::deploy_grpc::deploy_service(state)?);
     }
+    // The pre-bound listener rides in as a `TcpIncoming`, NOT a bare
+    // `TcpListenerStream`: tonic applies its socket options (`tcp_nodelay`
+    // defaults to true) only in `bind_incoming`, and documents that a raw
+    // incoming stream ignores them — a bare stream would silently re-enable
+    // Nagle's algorithm on every worker-protocol and client connection.
+    let incoming = tonic::transport::server::TcpIncoming::from(listener).with_nodelay(Some(true));
     router
-        .serve_with_incoming_shutdown(
-            tokio_stream::wrappers::TcpListenerStream::new(listener),
-            shutdown_requested(shutdown),
-        )
+        .serve_with_incoming_shutdown(incoming, shutdown_requested(shutdown))
         .await
         .map_err(|source| transport_bind("grpc", address, source))?;
     Ok(())

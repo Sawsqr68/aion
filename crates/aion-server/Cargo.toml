@@ -70,10 +70,7 @@ sysinfo = { workspace = true }
 futures.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 prost.workspace = true
-# "net" carries TcpListenerStream: the run loop binds both transport
-# listeners itself (the pid file appears only on successful bind) and feeds
-# the gRPC one to tonic as an incoming stream.
-tokio-stream = { workspace = true, features = ["net"] }
+tokio-stream = { workspace = true }
 # Names the typed body length-limit error so the deploy archive upload can
 # distinguish "over deploy.max_archive_bytes" (413) from transport read
 # failures; same version axum already uses internally.
@@ -125,7 +122,9 @@ rustix.workspace = true
 # The stop verb's signal path (src/control): SIGTERM to the incarnation-verified
 # server pid and the signal-zero liveness probe, through the same crate the
 # worker process containment already signals with.
-nix = { workspace = true, features = ["signal"] }
+# "fs" carries `fcntl::Flock`: the pid-file mutation lock that makes the
+# stop verb's compare-and-delete atomic against a successor's claim.
+nix = { workspace = true, features = ["signal", "fs"] }
 # Death-note signal watcher (see src/death_note.rs): safe registration that
 # CHAINS with tokio's own listeners through the shared signal-hook-registry,
 # already in the dependency tree via liminal-server. The fatal-fault set

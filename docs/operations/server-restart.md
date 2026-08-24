@@ -37,13 +37,19 @@ aion server status     # read what is actually running before acting
 aion server stop       # SIGTERM the verified incarnation, wait, report
 ```
 
-- `stop` waits up to `--patience <seconds>` (absent, the config's own
-  `drain.timeout_seconds`) and then prints the drain outcome from the death
-  note by name: clean, or parked work by worker and task, or the honest
-  absence when no record was written.
+- `stop` waits up to `--patience <seconds>` (absent, the running server's
+  own recorded drain window, then the config's `drain.timeout_seconds`) and
+  then prints the drain outcome from the death note by name: clean, or
+  parked work by worker and task, or the honest absence when no record was
+  written.
 - A **parked** drain is a SUCCESS — in-flight agent activities can legally
   outlive any sane drain window; recovery re-adopts them on the next boot.
   Do not escalate just because the drain took its configured time.
+- A parked report can also carry `declared command still executing at drain
+  end: <workflow/activity#attempt>` — a server-executed `run "…"` body that
+  outlived the window. Its process ended with the server, nothing was
+  recorded for the attempt, and the next boot re-dispatches it; the same
+  no-escalation rule applies.
 - **still draining** at patience is not a failure: the server owns its
   drain. Run `aion server stop` again ONLY when the drain is genuinely
   wedged — the server treats the second termination signal as "force

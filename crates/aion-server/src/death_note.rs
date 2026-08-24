@@ -61,6 +61,15 @@ static ARMED_ONCE: AtomicBool = AtomicBool::new(false);
 /// File name of the death note inside the Aion home's `logs/` directory.
 const NOTE_FILE_NAME: &str = "aion-server.death.log";
 
+/// The death note's path under `home` — the ONE derivation, shared with the
+/// reader ([`crate::control::outcome::read_fate`]) so the writer and the
+/// reader cannot drift apart: a drifted reader would report "the exit left no
+/// recorded account" over a perfectly good note, silently.
+#[must_use]
+pub fn note_path(home: &std::path::Path) -> std::path::PathBuf {
+    home.join("logs").join(NOTE_FILE_NAME)
+}
+
 /// The armed note's breadcrumb route. Work sites reach the note through this
 /// process-global slot because the note's other recorders (panic hook, signal
 /// watcher) are process-global by nature and [`ARMED_ONCE`] already enforces
@@ -162,7 +171,7 @@ impl DeathNote {
                 logs_dir.display()
             ))
         })?;
-        let path = logs_dir.join(NOTE_FILE_NAME);
+        let path = note_path(home);
         let file = OpenOptions::new()
             .create(true)
             .append(true)

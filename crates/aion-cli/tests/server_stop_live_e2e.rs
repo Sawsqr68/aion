@@ -364,24 +364,33 @@ fn a_kill_9_death_is_reported_honestly_never_fabricated() -> TestResult {
 fn a_parked_drain_is_visible_in_the_stop_report() -> TestResult {
     let mut server = LiveServer::boot_with_drain_seconds(2)?;
     let fixture = server.workspace.path().join("stop_linger.awl");
+    // The command must be findable in the process table afterwards, and the
+    // declared executor runs argv directly (no shell), so nothing but sleep's
+    // own arguments can carry a marker. A duration unique to this test run IS
+    // the marker: long enough to outlive any drain, unique enough that
+    // `pgrep -f` can ask about exactly this sleeper and no other test's.
+    let unique_duration = 600_000 + u64::from(std::process::id()) % 100_000;
+    let marker = format!("sleep {unique_duration}");
     std::fs::write(
         &fixture,
-        r#"//! One long-lingering declared command, for the parked-drain specimen.
+        format!(
+            r#"//! One long-lingering declared command, for the parked-drain specimen.
 workflow stop_linger
   input name: String
   outcome done: type Done, route success
 
-type Done { text: String }
-type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+type Done {{ text: String }}
+type RunOutcome {{ exit_code: Int, stdout: String, stderr: String }}
 
 worker stop_linger_box
   action linger(name: String) -> RunOutcome
-    run "sleep 600"
+    run "sleep {unique_duration}"
 
 step linger
   linger(name: name) -> lingered
   route done(text: lingered.stdout)
-"#,
+"#
+        ),
     )?;
     let deploy = server.aion(&["deploy", "stop_linger.awl"])?;
     assert!(
@@ -423,6 +432,94 @@ step linger
         dying_words(&server.server_log)
     );
     server.wait_reaped()?;
+    // The report's claim — "its process ended with the server; the next boot
+    // re-dispatches the attempt" — is asserted against the process table, not
+    // taken on faith: engine teardown must have ended the parked command's
+    // group. Polled briefly because the group kill and the server's own exit
+    // are not one atomic act.
+    let orphan_deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let survey = Command::new("pgrep").args(["-f", &marker]).output()?;
+        if !survey.status.success() {
+            break; // pgrep exits non-zero when nothing matches: the group is gone.
+        }
+        if Instant::now() >= orphan_deadline {
+            return Err(format!(
+                "the parked declared command outlived the server: pgrep -f {marker} still \
+                 matches:\n{}",
+                text(&survey.stdout)
+            )
+            .into());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    Ok(())
+}
+
+/// The middle face of the verb's three-value exit contract: patience elapses
+/// while the server is still draining → exit 1 and a report that says so.
+/// Faces 0 (stopped) and 2 (refusal) have their own specimens; this is the
+/// one a deploy script keys on to distinguish "wait longer" from "failed".
+#[test]
+fn a_drain_outliving_patience_reports_still_draining_with_exit_one() -> TestResult {
+    let server = LiveServer::boot_with_drain_seconds(600)?;
+    let fixture = server.workspace.path().join("stop_slow.awl");
+    std::fs::write(
+        &fixture,
+        r#"//! One long-lingering declared command, for the still-draining specimen.
+workflow stop_slow
+  input name: String
+  outcome done: type Done, route success
+
+type Done { text: String }
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+worker stop_slow_box
+  action linger(name: String) -> RunOutcome
+    run "sleep 600"
+
+step linger
+  linger(name: name) -> lingered
+  route done(text: lingered.stdout)
+"#,
+    )?;
+    let deploy = server.aion(&["deploy", "stop_slow.awl"])?;
+    assert!(
+        deploy.status.success(),
+        "precondition: the slow document deploys; stdout:\n{}\nstderr:\n{}",
+        text(&deploy.stdout),
+        text(&deploy.stderr)
+    );
+    let start = server.aion(&["start", "stop_slow", "--input", r#"{"name":"slow"}"#])?;
+    assert!(
+        start.status.success(),
+        "precondition: the slow workflow starts; stdout:\n{}\nstderr:\n{}",
+        text(&start.stdout),
+        text(&start.stderr)
+    );
+    std::thread::sleep(Duration::from_secs(3));
+
+    let config = server.config_arg()?.to_owned();
+    let output = server.verb(&["server", "stop", "--config", &config, "--patience", "1"])?;
+    let stdout = text(&output.stdout);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a drain outliving the patience is exit 1 — not success, not a verb failure; \
+         stdout:\n{stdout}\nstderr:\n{}{}",
+        text(&output.stderr),
+        dying_words(&server.server_log)
+    );
+    assert!(
+        stdout.contains("still draining"),
+        "the report must say the server is still draining: {stdout}"
+    );
+    assert!(
+        stdout.contains("(--patience)"),
+        "the report must name the flag as the patience source: {stdout}"
+    );
+    // The LiveServer drop ends the still-draining server; the drain itself
+    // is not this specimen's subject beyond having outlived the patience.
     Ok(())
 }
 
@@ -472,9 +569,11 @@ fn status_against_a_stopped_server_states_the_absences() -> TestResult {
 
     let output = server.verb(&["server", "status", "--config", &config])?;
     let stdout = text(&output.stdout);
-    assert!(
-        output.status.success(),
-        "absence is a state, not a failure: {stdout}"
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "no running server is exit 1 — the absence is still REPORTED in full, but \
+         a script asking `is the server up?` must get a no: {stdout}"
     );
     assert!(
         stdout.contains("pid file: none"),

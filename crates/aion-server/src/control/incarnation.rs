@@ -156,6 +156,7 @@ mod tests {
             commit: "test".to_owned(),
             http_address: "127.0.0.1:0".parse()?,
             grpc_address: "127.0.0.1:0".parse()?,
+            drain_timeout_seconds: 30,
         })
     }
 

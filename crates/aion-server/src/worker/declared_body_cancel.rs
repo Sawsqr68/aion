@@ -95,11 +95,20 @@ impl DeclaredCommandAttempts {
     /// handle of a command still running, because an overwritten handle is an
     /// attempt nothing can stop.
     ///
+    /// Registration is also the drain's door: a draining server is refused
+    /// here, so a declared body — which no worker gate can park — cannot start
+    /// after `aion server stop` was requested. The draining check runs INSIDE
+    /// the registry lock, and the drain gate's census takes the same lock, so
+    /// any registration that passed the check is visible to any census taken
+    /// after the drain began; there is no window in which the gate reads empty
+    /// while a command that beat the latch is about to start.
+    ///
     /// # Errors
     ///
     /// Returns [`ServerError::LockPoisoned`] when the registry cannot be read,
-    /// and [`ServerError::DeclaredAttemptCollision`] when `key` is already
-    /// executing.
+    /// [`ServerError::DrainingRefusedDeclaredAttempt`] when this server is
+    /// draining, and [`ServerError::DeclaredAttemptCollision`] when `key` is
+    /// already executing.
     pub fn register(
         &self,
         key: AttemptKey,
@@ -109,6 +118,13 @@ impl DeclaredCommandAttempts {
             .inner
             .lock()
             .map_err(|_poisoned| ServerError::lock_poisoned(RESOURCE))?;
+        if self.drain.is_draining() {
+            return Err(ServerError::DrainingRefusedDeclaredAttempt {
+                workflow_id: key.workflow_id.clone(),
+                activity_id: key.activity_id.clone(),
+                attempt: key.attempt,
+            });
+        }
         if attempts.contains_key(&key) {
             return Err(ServerError::DeclaredAttemptCollision {
                 workflow_id: key.workflow_id.clone(),
@@ -371,6 +387,41 @@ mod tests {
             "the refusal must name what it refused: {refusal}"
         );
         drop(registration);
+        Ok(())
+    }
+
+    /// Registration is the drain's door: once the drain begins, a declared
+    /// command cannot join the cancel path — and therefore cannot start — and
+    /// the registry stays empty so the drain gate's census cannot be held open
+    /// by work admitted after the stop was requested.
+    #[tokio::test]
+    async fn a_draining_server_refuses_new_declared_registrations() -> TestResult {
+        let drain = DrainState::default();
+        let attempts = DeclaredCommandAttempts::new(drain.clone());
+        let target = key(&WorkflowId::new_v4(), 1, 1);
+        let (_context, cancellation) = ActivityContext::new(
+            target.workflow_id.clone(),
+            target.run_id.clone(),
+            target.activity_id.clone(),
+            target.attempt,
+        );
+        assert!(drain.begin(), "the first begin() must flip the latch");
+
+        let Err(refusal) = attempts.register(target, cancellation) else {
+            return Err("a draining server must refuse a new declared registration".into());
+        };
+
+        assert!(
+            matches!(
+                refusal,
+                crate::error::ServerError::DrainingRefusedDeclaredAttempt { .. }
+            ),
+            "the refusal must be the draining variant so the dispatcher can park it: {refusal}"
+        );
+        assert!(
+            attempts.executing()?.is_empty(),
+            "a refused registration must leave no census entry behind"
+        );
         Ok(())
     }
 }

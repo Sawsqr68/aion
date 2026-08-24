@@ -25,6 +25,7 @@ fn own_record() -> Result<PidRecord, Box<dyn std::error::Error>> {
         commit: "test-commit".to_owned(),
         http_address: "127.0.0.1:8080".parse()?,
         grpc_address: "127.0.0.1:50051".parse()?,
+        drain_timeout_seconds: 30,
     })
 }
 

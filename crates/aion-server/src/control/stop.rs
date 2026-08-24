@@ -8,6 +8,15 @@
 //! file is reconciled and reported; a server that exits without writing an
 //! outcome record has that absence reported honestly, never papered over
 //! with a fabricated summary.
+//!
+//! One window the proof cannot close: between the incarnation probe and the
+//! SIGTERM, the verified process can exit and the kernel can hand its number
+//! to a stranger. The verb handles the exit (ESRCH reconciles as
+//! already-gone) but a full pid-space wraparound inside those microseconds
+//! would land the signal on the recycled pid. Closing it needs a
+//! process-handle primitive (`pidfd_open`/`pidfd_send_signal`, Linux-only);
+//! until a piece wants that, the window is named here rather than claimed
+//! away.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};

@@ -18,6 +18,7 @@ fn own_record() -> Result<PidRecord, Box<dyn std::error::Error>> {
         commit: "test-commit".to_owned(),
         http_address: "127.0.0.1:8080".parse()?,
         grpc_address: "127.0.0.1:50051".parse()?,
+        drain_timeout_seconds: 30,
     })
 }
 
@@ -131,6 +132,52 @@ fn a_hand_written_pid_file_is_reconciled_as_unreadable() -> TestResult {
     Ok(())
 }
 
+/// A live matching incarnation recorded on DIFFERENT addresses makes the new
+/// claimant boot UNCLAIMED: the bind-success argument covers only the
+/// recorded addresses, and a server live on other ports may be serving right
+/// now — overwriting its record would leave a running server no verb can
+/// address, while refusing to boot would break every legitimate multi-server
+/// home. The first claimant keeps the record; the unclaimed guard's exit
+/// removes nothing.
+#[test]
+fn a_live_incarnation_on_different_addresses_keeps_its_claim() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let first_record = own_record()?;
+    let first_guard = claim(home.path(), &first_record)?;
+
+    let mut second_record = own_record()?;
+    second_record.http_address = "127.0.0.1:18080".parse()?;
+    second_record.grpc_address = "127.0.0.1:15005".parse()?;
+    let second_guard = claim(home.path(), &second_record)?;
+    assert!(
+        matches!(
+            second_guard.reconciliation(),
+            crate::control::pid_file::StaleReconciliation::LiveIncarnation { .. }
+        ),
+        "the unclaimed boot must still report what it found: {:?}",
+        second_guard.reconciliation()
+    );
+    assert_eq!(
+        read(home.path())?.as_ref(),
+        Some(&first_record),
+        "the first claimant's record must survive the second boot"
+    );
+    drop(second_guard);
+    assert_eq!(
+        read(home.path())?.as_ref(),
+        Some(&first_record),
+        "an unclaimed guard's exit must remove NOTHING — the live claimant's \
+         record survives"
+    );
+    drop(first_guard);
+    assert_eq!(
+        read(home.path())?,
+        None,
+        "the claim holder still removes its own record on exit"
+    );
+    Ok(())
+}
+
 /// The guard must NOT remove a successor's file: after a new incarnation
 /// claims over a leaked guard's record, dropping the old guard leaves the
 /// successor's claim in place.
@@ -144,6 +191,15 @@ fn a_lingering_guard_leaves_a_successors_file_alone() -> TestResult {
     let mut second_record = own_record()?;
     second_record.commit = "second".to_owned();
     let second_guard = claim(home.path(), &second_record)?;
+    assert!(
+        matches!(
+            second_guard.reconciliation(),
+            crate::control::pid_file::StaleReconciliation::LiveIncarnation { .. }
+        ),
+        "claiming over a live incarnation's record must be REPORTED as exactly \
+         that face, not silently absorbed: {:?}",
+        second_guard.reconciliation()
+    );
 
     drop(first_guard);
     assert_eq!(
