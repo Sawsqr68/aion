@@ -115,7 +115,8 @@ A hand-written mirror of a moving external protocol is a fossil waiting to happe
 should be a compile error, not a silent wire mismatch. Only the schema is taken — not the full
 `agent-client-protocol` SDK, which carries its own async stack.
 
-This crate requires Rust 1.88.0 (the schema crate's floor), above the rest of the workspace.
+The schema crate's own floor is Rust 1.88.0; this crate inherits the workspace
+floor (1.89), which already clears it.
 
 ## License
 
