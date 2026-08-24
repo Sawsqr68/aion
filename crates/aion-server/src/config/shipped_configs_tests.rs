@@ -17,11 +17,12 @@
 //! must not carry keys the server only warns about and ignores.
 //!
 //! Beside the plain TOML files, the sweep extracts every server config that
-//! ships EMBEDDED in another file: the `ci/smoke-embed.sh` heredoc, and every
+//! ships EMBEDDED in another file: each `ci/smoke-embed.sh` heredoc and every
 //! fenced `toml` code block declaring a `[server]` section in the conformance
-//! README, the getting-started guide, and the operations guide — the fences are
-//! selected by that content, never by position, so a new fence added above a
-//! config block cannot silently retarget the sweep, and every extractor
+//! README, the getting-started guide, the operations guide, and the
+//! aion-operations design document — all selected by that content, never by
+//! position, so a new heredoc or fence added above a config block cannot
+//! silently retarget the sweep, and every extractor
 //! fails loudly on a placeholder it does not know how to substitute. The
 //! only hand-written configs left to the evidence document's manual rule are
 //! the two cluster-demo heredocs (`scripts/demo/lib.sh`,
@@ -53,7 +54,7 @@ type ConfigExtractor = fn(&str) -> Result<Vec<String>, String>;
 /// The shipped surfaces whose server configs are embedded in another file,
 /// as `(source path, extractor)` — see the module doc for the selection
 /// rules and for why the cluster-demo heredocs cannot join them.
-const EMBEDDED_CONFIG_SOURCES: [(&str, ConfigExtractor); 4] = [
+const EMBEDDED_CONFIG_SOURCES: [(&str, ConfigExtractor); 5] = [
     ("ci/smoke-embed.sh", extract_smoke_embed_heredocs),
     (
         "conformance/aion-clients/README.md",
@@ -61,6 +62,10 @@ const EMBEDDED_CONFIG_SOURCES: [(&str, ConfigExtractor); 4] = [
     ),
     ("docs/GETTING-STARTED.md", extract_server_toml_fences),
     ("docs/operations/operations.md", extract_server_toml_fences),
+    (
+        "docs/design/aion-operations/DESIGN.md",
+        extract_server_toml_fences,
+    ),
 ];
 
 #[test]
@@ -126,33 +131,43 @@ fn read_repo_file(relative: &str) -> Result<Vec<u8>, String> {
         .map_err(|io_error| format!("cannot read shipped config `{path}`: {io_error}"))
 }
 
-/// The TOML that `ci/smoke-embed.sh` writes for the server it boots: the body
-/// of its `cat >"$CONFIG" <<EOF` heredoc, with the script's two port
-/// placeholders substituted by parseable stand-ins. Any shell-expansion token
-/// left after substitution — braced or bare, since an unquoted heredoc
-/// expands `${NAME}` and `$NAME` identically — means the script grew a
-/// placeholder this extractor does not know, and that is a loud failure
-/// naming the token rather than a silently mis-swept config.
+/// Every server config `ci/smoke-embed.sh` writes: the body of each
+/// `<<EOF … EOF` heredoc that declares a `[server]` section — selected by
+/// that content, never by position, exactly like the fence extractor — with
+/// the script's two port placeholders substituted by parseable stand-ins.
+/// Any shell-expansion token left after substitution — braced or bare, since
+/// an unquoted heredoc expands `${NAME}` and `$NAME` identically — means the
+/// script grew a placeholder this extractor does not know, and that is a
+/// loud failure naming the token rather than a silently mis-swept config.
 fn extract_smoke_embed_heredocs(script: &str) -> Result<Vec<String>, String> {
     const OPENER: &str = "<<EOF\n";
-    let start = script
-        .find(OPENER)
-        .ok_or_else(|| "no `<<EOF` heredoc opener found".to_owned())?
-        + OPENER.len();
-    let end = script[start..]
-        .find("\nEOF\n")
-        .ok_or_else(|| "no closing `EOF` line found for the heredoc".to_owned())?
-        + start;
-    let substituted = script[start..end]
-        .replace("${HTTP_ADDR}", "127.0.0.1:18099")
-        .replace("${GRPC_PORT}", "51099");
-    if let Some(token) = residual_dollar_token(&substituted) {
-        return Err(format!(
-            "the heredoc carries a shell-expansion token this sweep does not \
-             substitute: `{token}`"
-        ));
+    let mut configs = Vec::new();
+    let mut cursor = 0;
+    while let Some(found) = script[cursor..].find(OPENER) {
+        let start = cursor + found + OPENER.len();
+        let end = start
+            + script[start..]
+                .find("\nEOF\n")
+                .ok_or_else(|| "a `<<EOF` heredoc never closes".to_owned())?;
+        let body = &script[start..end];
+        if body.contains("[server]") {
+            let substituted = body
+                .replace("${HTTP_ADDR}", "127.0.0.1:18099")
+                .replace("${GRPC_PORT}", "51099");
+            if let Some(token) = residual_dollar_token(&substituted) {
+                return Err(format!(
+                    "a heredoc carries a shell-expansion token this sweep does \
+                     not substitute: `{token}`"
+                ));
+            }
+            configs.push(substituted);
+        }
+        cursor = end;
     }
-    Ok(vec![substituted])
+    if configs.is_empty() {
+        return Err("no `<<EOF` heredoc containing a [server] section found".to_owned());
+    }
+    Ok(configs)
 }
 
 /// Every fenced `toml` code block that declares a `[server]` section — the shape of a

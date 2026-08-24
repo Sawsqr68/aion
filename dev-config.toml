@@ -11,10 +11,11 @@
 # scaffolds `<AION_HOME>/config.toml` from the server's embedded first-run
 # template — which carries every required field — and boots on it, with the
 # haematite event store under `<AION_HOME>/data`. One exception to that data
-# path: an existing `./aion-data` in the working directory is adopted instead
-# (the legacy working-directory layout — exactly what runs driven by THIS
-# file leave behind, per `data_dir` below). So this works on a clean machine
-# with no environment at all:
+# path: with AION_HOME unset, an existing `./aion-data` in the working
+# directory is adopted instead — the legacy layout that earlier runs of this
+# very file leave behind, per its `data_dir` line below (an explicit
+# AION_HOME ignores it). So this works on a clean machine with no
+# environment at all:
 #   cargo run -p aion-cli -- server \
 #     --workflow-package examples/hello-world/hello-world.aion
 

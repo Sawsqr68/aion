@@ -70,7 +70,7 @@ killed. `--foreground` runs the server in the terminal instead (the ordinary
 `aion server` path with `--open` semantics); `--no-open` skips the browser.
 Both flags belong to the bare form only and are refused next to a subcommand.
 
-### Conditionally required keys (startup fails naming the missing key)
+### Keys that stop a boot when missing (startup fails naming the key)
 
 Two keys are required **unconditionally** — on every backend, with no
 default: `observability.max_batch_events` and `observability.max_batch_hold_ms`

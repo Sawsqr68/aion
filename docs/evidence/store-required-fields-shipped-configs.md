@@ -135,9 +135,10 @@ every backend (the observability batch bounds) is invisible to a
 backend-shaped grep, which is exactly how the two memory-backend surfaces in
 the landing addendum were missed. The mechanized floor is
 `crates/aion-server/src/config/shipped_configs_tests.rs`, which holds the
-shipped TOMLs — the plain files, the embedded scaffold, the CI smoke
-heredoc, and every `[server]`-declaring TOML fence in the conformance
-README, the getting-started guide, and the operations guide — to the boot
+shipped TOMLs — the plain files, the embedded scaffold, every CI smoke
+heredoc declaring a `[server]` section, and every `[server]`-declaring TOML
+fence in the conformance README, the getting-started guide, the operations
+guide, and the aion-operations design document — to the boot
 path's own requirement functions. The manual remainder is exactly the two
 cluster-demo heredocs (`scripts/demo/lib.sh`, `scripts/mp-failover-spike.sh`),
 whose sections are assembled per-node by shell interpolation and so have no
