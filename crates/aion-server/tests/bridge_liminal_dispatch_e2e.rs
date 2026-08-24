@@ -105,9 +105,157 @@ const SHORT_WINDOW: Duration = Duration::from_millis(500);
 /// How long the SLOW handler runs: four heartbeat windows, so an unbeaten
 /// dispatch would be expired several times over before it completes.
 const SLOW_RUNTIME: Duration = Duration::from_secs(2);
+/// Hard bound on any single test's wall clock, enforced by [`TestWatchdog`]:
+/// well above the slowest legitimate path on a loaded runner (5s connect +
+/// 20s dispatch deadlines + the 60s [`STOP_JOIN_LIMIT`] a bounded teardown
+/// join or runtime shutdown may burn — the largest single term), and hours
+/// below the orphaned hangs it exists to kill. Observed per-test wall clock
+/// is under 3s.
+const WATCHDOG_LIMIT: Duration = Duration::from_secs(300);
+/// Bound on joining a harness thread at teardown: one serve tick (the worker's
+/// 100ms receive poll) plus its full 30s drain window, with margin for a
+/// loaded box.
+const STOP_JOIN_LIMIT: Duration = Duration::from_secs(60);
 
 fn test_error(message: impl std::fmt::Display) -> TestError {
     message.to_string().into()
+}
+
+/// Aborts the whole test process if a test overruns [`WATCHDOG_LIMIT`].
+///
+/// This binary's tests once hung indefinitely on a fleet runner — seven
+/// orphaned runs held execution slots for four hours — because a wedged
+/// teardown join has no in-band bound an async timeout can reach: a task
+/// blocked inside `JoinHandle::join` is never re-polled, so a wrapping
+/// `tokio::time::timeout` can never fire. The watchdog is the bound that
+/// covers every hang path from its arming through the end of runtime
+/// teardown ([`run_bounded`] arms it before building the runtime and keeps
+/// it armed across the bounded shutdown): it runs on its own thread, names
+/// the hung test on stderr, and aborts so the runner's slot is freed and the
+/// failure carries its invocation. Production carries no such bound on
+/// purpose (agent activities legitimately run for hours); this limit is the
+/// TEST harness's own.
+///
+/// Aborting the process is the deliberate choice: a wedged thread cannot be
+/// killed, so unwinding just the hung test is impossible, and
+/// `std::process::exit` runs atexit handlers a wedged thread holding a lock
+/// can deadlock. Under the fleet gate's actual runner (`cargo nextest`, one
+/// process per test) the blast radius is exactly the hung test; under plain
+/// `cargo test` sibling results in the shared process are forfeited, which
+/// is the right trade against an eternal slot hold.
+///
+/// Disarms when dropped — test completion and panic unwinding both drop the
+/// sender, which disconnects the channel the watchdog thread waits on.
+struct TestWatchdog {
+    /// Held only so its drop disconnects the channel and disarms the thread.
+    _disarm: std::sync::mpsc::Sender<()>,
+}
+
+impl TestWatchdog {
+    fn arm(test: &'static str) -> Result<Self, TestError> {
+        let (disarm, armed) = std::sync::mpsc::channel::<()>();
+        std::thread::Builder::new()
+            .name(format!("watchdog-{test}"))
+            .spawn(move || match armed.recv_timeout(WATCHDOG_LIMIT) {
+                // The sender dropped: the test finished or unwound. (Nothing
+                // ever sends on the channel; `Ok` is matched for totality.)
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) | Ok(()) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // Written through `io::stderr()` directly, NOT `eprintln!`:
+                    // libtest's output capture hooks the print macros, and an
+                    // abort never flushes the captured buffer — the macro form
+                    // frees the slot but loses the invocation. A write error
+                    // here has no recovery; the abort is the point.
+                    use std::io::Write as _;
+                    let mut stderr = std::io::stderr().lock();
+                    let _ = writeln!(
+                        stderr,
+                        "bridge_liminal_dispatch_e2e watchdog: test `{test}` still running \
+                         after {WATCHDOG_LIMIT:?}; aborting the process so the runner's \
+                         slot is freed"
+                    );
+                    let _ = stderr.flush();
+                    std::process::abort();
+                }
+            })
+            .map_err(|error| test_error(format!("watchdog thread spawn failed: {error}")))?;
+        Ok(Self { _disarm: disarm })
+    }
+}
+
+/// Joins a harness thread within [`STOP_JOIN_LIMIT`], so a wedged teardown
+/// becomes a NAMED red instead of an eternal hang. On overrun the thread is
+/// deliberately leaked — it is wedged past every in-band bound, and the armed
+/// [`TestWatchdog`] bounds the process itself.
+fn join_within(
+    handle: std::thread::JoinHandle<Result<(), TestError>>,
+    what: &str,
+) -> Result<(), TestError> {
+    let deadline = Instant::now() + STOP_JOIN_LIMIT;
+    while !handle.is_finished() {
+        if Instant::now() > deadline {
+            return Err(test_error(format!(
+                "{what} did not finish within {STOP_JOIN_LIMIT:?}; \
+                 leaking the thread and failing the test"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    handle
+        .join()
+        .map_err(|_| test_error(format!("{what} panicked")))?
+}
+
+/// Runs one bounded test: arms the watchdog FIRST, executes the async body on
+/// an explicitly built multi-thread runtime (4 workers, the flavor the
+/// replaced `#[tokio::test]` attribute used), then shuts the runtime down
+/// with a bounded timeout instead of dropping it.
+///
+/// The explicit shutdown is the point. `#[tokio::test]` drops its runtime
+/// AFTER the async body — outside any guard the body arms — and that drop
+/// waits forever on a thread wedged inside `block_in_place` (the production
+/// dispatch wait is deliberately unbounded, and `dispatch_via_seam`'s elapsed
+/// timeout detaches its spawned task rather than ending it). Probe-proven: a
+/// timed-out never-resolving dispatch left the plain drop hung indefinitely,
+/// while `shutdown_timeout` returned on the bound. Overrunning the bound
+/// leaks the wedged thread — the same decision [`join_within`] makes — and
+/// the leak does not hold the process.
+///
+/// A PANICKING body (an `assert!` red) unwinds past the `shutdown_timeout`
+/// call and plain-drops the runtime — but drop order keeps the watchdog
+/// armed across that drop (it is declared first, so it drops last), so a red
+/// coinciding with a wedged dispatch is bounded by [`WATCHDOG_LIMIT`], not
+/// [`STOP_JOIN_LIMIT`]. Probe-proven: the abort fires with the named line.
+/// Routing the unwind through the bounded shutdown would need
+/// `catch_unwind`, degrading panic reporting for no property gain.
+fn run_bounded(
+    test: &'static str,
+    body: impl std::future::Future<Output = Result<(), TestError>>,
+) -> Result<(), TestError> {
+    let _watchdog = TestWatchdog::arm(test)?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .map_err(test_error)?;
+    let result = runtime.block_on(body);
+    runtime.shutdown_timeout(STOP_JOIN_LIMIT);
+    result
+}
+
+/// Declares a bounded integration test: expands to a sync `#[test]` whose
+/// body runs under [`run_bounded`], with the watchdog's test name derived
+/// from the module path and function name (paste-exact for a libtest or
+/// nextest filter), so the abort line can never desynchronise from a rename
+/// and the arming can never be dropped by a future edit.
+macro_rules! bounded_test {
+    ($(#[$meta:meta])* async fn $name:ident() -> Result<(), TestError> $body:block) => {
+        $(#[$meta])*
+        #[test]
+        fn $name() -> Result<(), TestError> {
+            run_bounded(concat!(module_path!(), "::", stringify!($name)), async $body)
+        }
+    };
 }
 
 /// Typed input/output the provision handler round-trips, proving the worker
@@ -400,9 +548,7 @@ impl ServedWorker {
     fn stop(mut self) -> Result<(), TestError> {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(handle) = self.handle.take() {
-            handle
-                .join()
-                .map_err(|_| test_error("worker serve thread panicked"))??;
+            join_within(handle, "worker serve thread")?;
         }
         Ok(())
     }
