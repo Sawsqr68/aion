@@ -185,7 +185,9 @@ async fn failing_query_handler_never_kills_the_run() -> TestResult {
     )
     .await;
     match failure {
-        Err(EngineError::Query(QueryError::HandlerFailed { message })) => {
+        Err(query_registration::QueryHelperError::Engine(EngineError::Query(
+            QueryError::HandlerFailed { message },
+        ))) => {
             assert!(
                 message.contains("deliberate handler failure"),
                 "unexpected handler failure message: {message}"

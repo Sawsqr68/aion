@@ -328,6 +328,18 @@ impl PendingActivities {
             }
         };
         if !should_publish {
+            // A non-publishing settlement means ANOTHER path owns this
+            // dispatch's resolution (the lost-worker sweep, typically). That
+            // path will present the same token to `accept` — so the
+            // generation this call consumed must be restored, exactly as on
+            // the failure arm, or the true resolver is refused with
+            // `NoCurrentGeneration` and the waiter is never resolved.
+            if let Err(restore_error) =
+                self.completion_fences
+                    .restore_if_absent(workflow_id, activity_id, completion_token)
+            {
+                tracing::error!(%restore_error, "failed to restore completion generation after a non-publishing settlement");
+            }
             return Ok(false);
         }
         // A resolution OUTSIDE the transport domain — a real result, or a real
@@ -1593,8 +1605,12 @@ fn route_liminal_reply(
     // so the blocked dispatch thread is never left hanging on a broken lock.
     let after_accept = || {
         if synthesized {
-            let was_tracked =
-                complete_liminal_tracking(heartbeat_tracker, worker_id, workflow_id, activity_id);
+            let was_tracked = clear_completed_task_tracking(
+                heartbeat_tracker,
+                worker_id,
+                workflow_id,
+                activity_id,
+            );
             if !was_tracked {
                 // Another path already resolved this dispatch (and notified drain):
                 // injecting the fabricated lost-worker failure now could reach a retry.
@@ -1607,7 +1623,17 @@ fn route_liminal_reply(
                 return Ok(false);
             }
         } else {
-            heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)?;
+            // A real worker result: the tracking clear is bookkeeping, never
+            // a gate. Fail open — withholding a received result over a
+            // poisoned tracker would leave the dispatch waiter parked on an
+            // unbounded receive with no recovery path, because the lost-worker
+            // sweep reads the same poisoned lock.
+            let _ = clear_completed_task_tracking(
+                heartbeat_tracker,
+                worker_id,
+                workflow_id,
+                activity_id,
+            );
         }
         drain_state.notify_activity_drained();
         Ok(true)
@@ -1630,8 +1656,13 @@ fn route_liminal_reply(
     }
 }
 
-#[cfg(feature = "liminal-transport")]
-fn complete_liminal_tracking(
+/// Clears a completed activity's in-flight tracking entry, reporting whether
+/// THIS call retired it. Fails open on a poisoned tracker — logged loudly and
+/// treated as "was tracked" — because the clear is bookkeeping, never a gate:
+/// withholding a completion over the poisoned lock would strand the dispatch
+/// waiter on an unbounded receive, and the lost-worker sweep cannot recover it
+/// (it reads the same lock).
+pub(crate) fn clear_completed_task_tracking(
     heartbeat_tracker: &HeartbeatTracker,
     worker_id: WorkerId,
     workflow_id: &WorkflowId,
@@ -1645,7 +1676,7 @@ fn complete_liminal_tracking(
                 workflow_id = %workflow_id,
                 activity_id = %activity_id,
                 %error,
-                "failed to clear in-flight tracking for completed liminal activity"
+                "failed to clear in-flight tracking for a completed activity; delivering anyway — a poisoned tracker must not withhold a result"
             );
             true
         })
@@ -2031,6 +2062,72 @@ mod tests {
             "the accepted-path cleanup hook must finish before the waiter can observe the result"
         );
         Ok(())
+    }
+
+    #[test]
+    fn a_non_publishing_settlement_restores_the_generation_for_the_true_resolver()
+    -> Result<(), ServerError> {
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(16);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+
+        // The synthesized-failure path finding its dispatch already resolved
+        // by another path: settlement reports "do not publish". The generation
+        // it consumed on accept must come back, because the OTHER path (the
+        // lost-worker sweep) presents the same token next.
+        let settled = pending.complete_fenced_after_accept(
+            &workflow_id,
+            &id,
+            None,
+            &completion_token,
+            Err("retryable:worker lost".to_owned()),
+            || Ok(false),
+        )?;
+        assert!(!settled, "a non-publishing settlement must report false");
+        assert!(
+            rx.try_recv().is_err(),
+            "a non-publishing settlement must not publish"
+        );
+
+        // The true resolver arrives with the same token: it must be accepted,
+        // not refused with NoCurrentGeneration.
+        let published = pending.complete_fenced_after_accept(
+            &workflow_id,
+            &id,
+            None,
+            &completion_token,
+            Err("retryable:worker lost".to_owned()),
+            || Ok(true),
+        )?;
+        assert!(
+            published,
+            "the true resolver must be accepted after a non-publishing settlement"
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_millis(50))
+                .map_err(|error| ServerError::worker_dispatch(
+                    "",
+                    "",
+                    format!("channel: {error}")
+                ))?,
+            Err("retryable:worker lost".to_owned())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_poisoned_tracker_fails_open_and_never_withholds_a_completion() {
+        let tracker = HeartbeatTracker::new(TEST_HEARTBEAT_WINDOW);
+        tracker.poison_for_tests();
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(17);
+        let was_tracked =
+            clear_completed_task_tracking(&tracker, WorkerId::from_value(1), &workflow_id, &id);
+        assert!(
+            was_tracked,
+            "a poisoned tracker must fail open (deliver), never withhold"
+        );
     }
 
     #[test]

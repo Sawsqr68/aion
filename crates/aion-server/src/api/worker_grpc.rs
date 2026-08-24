@@ -350,11 +350,17 @@ async fn process_inbound(
                         let workflow_id = completion.workflow_id.clone();
                         let activity_id = completion.activity_id.clone();
                         let after_accept = || {
-                            session.heartbeat.complete_task(
+                            // Fail open: the tracking clear is bookkeeping.
+                            // The ack below is sent regardless, so a withheld
+                            // result is dropped by the worker forever, and the
+                            // lost-worker sweep cannot recover it — it reads
+                            // the same poisoned lock.
+                            let _ = crate::worker::bridge::clear_completed_task_tracking(
+                                session.heartbeat,
                                 session.worker_id,
                                 &workflow_id,
                                 &activity_id,
-                            )?;
+                            );
                             session.drain.notify_activity_drained();
                             Ok(())
                         };
@@ -362,15 +368,18 @@ async fn process_inbound(
                             .pending
                             .complete_activity_after_accept(completion, after_accept)
                         {
-                            // Leave the current worker's liveness entry intact
-                            // when the generation proof is wrong. Its stopped
-                            // heartbeat pump will drive the normal loss/retry path.
+                            // The only error source here is the execution-
+                            // generation fence (the tracking clear fails open
+                            // above). Leave the current worker's liveness
+                            // entry intact when the generation proof is wrong.
+                            // Its stopped heartbeat pump will drive the normal
+                            // loss/retry path.
                             tracing::error!(
                                 worker_id = ?session.worker_id,
                                 workflow_id = %workflow_id,
                                 activity_id = %activity_id,
                                 %error,
-                                "activity completion handoff failed"
+                                "activity completion rejected by execution-generation proof"
                             );
                         }
                         // Ack every well-formed result frame — including

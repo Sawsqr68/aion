@@ -221,7 +221,13 @@ async fn query_when_registered(
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         if remaining.is_zero() {
             log_query_registration_failure(server, workflow_id, query_name, started).await;
-            return Ok(Err(WireError::new(WireErrorCode::UnknownQuery, query_name)));
+            // A harness failure, not a server outcome: the deadline was spent
+            // before any attempt. Never minted as a wire error a test could
+            // assert as server behaviour.
+            return Err(format!(
+                "query registration deadline spent before any attempt for `{query_name}`"
+            )
+            .into());
         }
         let response = if let Ok(response) = tokio::time::timeout(
             remaining,
@@ -236,7 +242,15 @@ async fn query_when_registered(
             response?
         } else {
             log_query_registration_failure(server, workflow_id, query_name, started).await;
-            return Ok(Err(WireError::new(WireErrorCode::QueryTimeout, query_name)));
+            // The helper's own attempt budget elapsed with no server verdict.
+            // Returned as a harness failure so the timeout tests stay
+            // falsifiable: a server whose deadline enforcement regressed into
+            // a hang goes red here, never green on a minted QueryTimeout.
+            return Err(format!(
+                "query helper attempt budget elapsed after {:?} with no server verdict for `{query_name}`",
+                started.elapsed()
+            )
+            .into());
         };
         match decode_outcome(response)? {
             Err(error) if error.code == WireErrorCode::UnknownQuery => {

@@ -987,6 +987,24 @@ impl HeartbeatTracker {
             .lock()
             .map_err(|_| ServerError::lock_poisoned("worker heartbeat tracker"))
     }
+
+    /// Poisons the tracker's state lock, for tests that pin the fail-open
+    /// contract of paths that must never let a poisoned tracker withhold a
+    /// completion. Unwinds across a held guard inside `catch_unwind`, which is
+    /// exactly what real poison is.
+    #[cfg(test)]
+    pub(crate) fn poison_for_tests(&self) {
+        let inner = Arc::clone(&self.inner);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _guard = inner.lock();
+            // `resume_unwind` raises the unwind directly (no panic hook, no
+            // panic machinery in a non-test path): the guard drops while the
+            // thread is unwinding, which is precisely how a mutex is poisoned.
+            std::panic::resume_unwind(Box::new(
+                "poisoning the heartbeat tracker for a fail-open test",
+            ));
+        }));
+    }
 }
 
 /// Sweep cadence derived from the operator's `worker.heartbeat_window`: a

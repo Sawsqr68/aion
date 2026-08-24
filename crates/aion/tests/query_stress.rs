@@ -129,10 +129,17 @@ async fn spawn_background_contention(
                     .await;
                 for outcome in burst {
                     match outcome {
+                        // A timeout is tolerated alongside success: the beamr
+                        // 0.4.9 lost-wakeup window (see the foreground loop);
+                        // the next burst's deliveries self-heal it.
                         Ok(_) | Err(EngineError::Query(QueryError::Timeout)) => {}
                         Err(error) => failures.push(format!("{error:?}")),
                     }
                 }
+                // Bounded contention: unthrottled bursts from three callers
+                // saturate the single-thread scheduler into multi-second
+                // service starvation, which is a load pathology rather than
+                // the reply race this test pins.
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
             failures
