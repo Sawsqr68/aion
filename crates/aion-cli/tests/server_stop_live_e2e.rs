@@ -261,6 +261,23 @@ fn dying_words(log: &Path) -> String {
     }
 }
 
+/// Ask the process table about `marker`, with the instrument's own failure
+/// kept distinct from absence: `pgrep` exits 0 on a match, 1 on no-match,
+/// and >1 (usage, fatal) for its own errors — reading a broken instrument
+/// as "absent" would green a vacuous claim.
+fn process_table_holds(marker: &str) -> Result<bool, TestError> {
+    let survey = Command::new("pgrep").args(["-f", marker]).output()?;
+    match survey.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        other => Err(format!(
+            "pgrep -f {marker} failed as an instrument (exit {other:?}); stderr: {}",
+            text(&survey.stderr)
+        )
+        .into()),
+    }
+}
+
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -341,17 +358,23 @@ fn a_kill_9_death_is_reported_honestly_never_fabricated() -> TestResult {
         "the stale record must be reconciled away"
     );
 
-    // The second stop faces an unclaimed home and refuses by name.
+    // The second stop faces an unclaimed home: the goal state — nothing
+    // running — already holds, so stopping is the idempotent success, with
+    // the no-record fact still stated by name. A deploy script must get the
+    // same 0 whether debris happened to exist (already gone) or not.
     let second = server.verb(&["server", "stop", "--config", &config])?;
     assert_eq!(
         second.status.code(),
-        Some(2),
-        "a home with no record refuses with the no-pid-file face"
+        Some(0),
+        "a home with no record is the idempotent success, exactly like already-gone; \
+         stdout:\n{}\nstderr:\n{}",
+        text(&second.stdout),
+        text(&second.stderr)
     );
     assert!(
-        text(&second.stderr).contains("no pid file"),
-        "the refusal names itself: {}",
-        text(&second.stderr)
+        text(&second.stdout).contains("nothing to stop"),
+        "the success still names the no-record fact: {}",
+        text(&second.stdout)
     );
     Ok(())
 }
@@ -407,9 +430,19 @@ step linger
         text(&start.stderr)
     );
     // Give the declared command time to be dispatched and spawned; the stop
-    // below then finds it in flight. The assertion is on the report, not on
-    // this delay.
+    // below then finds it in flight.
     std::thread::sleep(Duration::from_secs(3));
+    // Positive control on the instrument, before the stop: `pgrep -f` must be
+    // able to SEE this sleeper. This proves the marker pattern is alive (a
+    // pattern that never matches would make the gone-check below vacuously
+    // green) and upgrades "the command really spawned" from the server's own
+    // census to the OS's process table.
+    assert!(
+        process_table_holds(&marker)?,
+        "positive control failed: pgrep -f {marker} does not see the sleeper the \
+         server just dispatched{}",
+        dying_words(&server.server_log)
+    );
 
     let config = server.config_arg()?.to_owned();
     let output = server.verb(&["server", "stop", "--config", &config, "--patience", "30"])?;
@@ -439,15 +472,14 @@ step linger
     // are not one atomic act.
     let orphan_deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let survey = Command::new("pgrep").args(["-f", &marker]).output()?;
-        if !survey.status.success() {
-            break; // pgrep exits non-zero when nothing matches: the group is gone.
+        if !process_table_holds(&marker)? {
+            break; // The group is gone — proven by the instrument the positive
+            // control above validated, with its own failures kept distinct.
         }
         if Instant::now() >= orphan_deadline {
             return Err(format!(
-                "the parked declared command outlived the server: pgrep -f {marker} still \
-                 matches:\n{}",
-                text(&survey.stdout)
+                "the parked declared command outlived the server: pgrep -f {marker} \
+                 still matches"
             )
             .into());
         }
@@ -462,26 +494,38 @@ step linger
 /// one a deploy script keys on to distinguish "wait longer" from "failed".
 #[test]
 fn a_drain_outliving_patience_reports_still_draining_with_exit_one() -> TestResult {
-    let server = LiveServer::boot_with_drain_seconds(600)?;
+    let mut server = LiveServer::boot_with_drain_seconds(600)?;
     let fixture = server.workspace.path().join("stop_slow.awl");
+    // The sleeper must outlive the 1-second patience but NOT the test: a
+    // ten-minute sleeper here would orphan a process on the box for ten
+    // minutes every run (the server is never force-killed in this specimen,
+    // so only the sleeper's own completion ends the drain). ~20 seconds is
+    // three orders of magnitude past the patience and gone before the verb
+    // deadline. The duration doubles as the process-table marker, unique per
+    // test process, exactly as the parked specimen's — and distinct from its
+    // 600xxx range, so the two can never match each other's sleeper.
+    let unique_duration = 20 + u64::from(std::process::id()) % 10;
+    let marker = format!("sleep {unique_duration}");
     std::fs::write(
         &fixture,
-        r#"//! One long-lingering declared command, for the still-draining specimen.
+        format!(
+            r#"//! One slow declared command, for the still-draining specimen.
 workflow stop_slow
   input name: String
   outcome done: type Done, route success
 
-type Done { text: String }
-type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+type Done {{ text: String }}
+type RunOutcome {{ exit_code: Int, stdout: String, stderr: String }}
 
 worker stop_slow_box
   action linger(name: String) -> RunOutcome
-    run "sleep 600"
+    run "sleep {unique_duration}"
 
 step linger
   linger(name: name) -> lingered
   route done(text: lingered.stdout)
-"#,
+"#
+        ),
     )?;
     let deploy = server.aion(&["deploy", "stop_slow.awl"])?;
     assert!(
@@ -498,6 +542,15 @@ step linger
         text(&start.stderr)
     );
     std::thread::sleep(Duration::from_secs(3));
+    // Positive control on the instrument before the stop, as in the parked
+    // specimen: the marker must be visible while the sleeper runs, or the
+    // gone-check after the drain proves nothing.
+    assert!(
+        process_table_holds(&marker)?,
+        "positive control failed: pgrep -f {marker} does not see the sleeper the \
+         server just dispatched{}",
+        dying_words(&server.server_log)
+    );
 
     let config = server.config_arg()?.to_owned();
     let output = server.verb(&["server", "stop", "--config", &config, "--patience", "1"])?;
@@ -518,8 +571,24 @@ step linger
         stdout.contains("(--patience)"),
         "the report must name the flag as the patience source: {stdout}"
     );
-    // The LiveServer drop ends the still-draining server; the drain itself
-    // is not this specimen's subject beyond having outlived the patience.
+    // The drain ends when the sleeper completes (~20s); the server then
+    // exits on its own — the SIGTERM was already delivered. Reap it and
+    // prove the sleeper died with it rather than leaking past the test.
+    server.wait_reaped()?;
+    let orphan_deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if !process_table_holds(&marker)? {
+            break;
+        }
+        if Instant::now() >= orphan_deadline {
+            return Err(format!(
+                "the slow declared command outlived the server: pgrep -f {marker} \
+                 still matches"
+            )
+            .into());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
     Ok(())
 }
 
@@ -532,6 +601,16 @@ fn status_against_a_running_server_states_every_layer() -> TestResult {
     let output = server.verb(&["server", "status", "--config", &config])?;
     let stdout = text(&output.stdout);
     assert!(output.status.success(), "status must compose: {stdout}");
+    // This e2e's config is `backend = "memory"`: the store line must say so
+    // — printing the resolved data directory here would tell the operator
+    // their state is durable when it dies with the process (the config
+    // resolver fills `data_dir` unconditionally, so the path's presence
+    // proves nothing).
+    assert!(
+        stdout.contains("store: in-memory"),
+        "a memory-backend server must be reported as in-memory, never as its \
+         resolved data directory: {stdout}"
+    );
     assert!(
         stdout.contains("pid file: pid"),
         "the record layer must render: {stdout}"

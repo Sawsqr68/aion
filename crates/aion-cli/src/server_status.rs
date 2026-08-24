@@ -19,10 +19,16 @@
 //!    is this aion server and the honest line is "does not mount
 //!    /health/ready" — never an accusation that someone else took the port.
 //!
-//! Exit codes, so a script can ask "is the server up?": 0 when the recorded
+//! Exit codes, so a script can ask "is the server up?": 0 when the RECORDED
 //! incarnation is RUNNING and verified; 1 when it is not (gone, mismatched,
 //! or no record — each face printed); 2 when the verb itself could not do
-//! its job (unresolvable home or config, unreadable pid file).
+//! its job (unresolvable home or config, unreadable pid file). The verdict
+//! is about the recorded incarnation — the server the control verbs can
+//! address — not about whether ANY server answers on some address: a server
+//! that booted unclaimed answers HTTP but exits 1 here, with the finding
+//! printed. `aion server stop` codes the no-record case differently (0,
+//! idempotent success) because stopping is an action whose goal state
+//! already holds, while status is a predicate whose answer is "no".
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -74,12 +80,19 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
         }
     };
     println!("home: {}", home.display());
-    // The store line is always stated: a `None` data dir is not "nothing to
-    // say", it is the memory backend (haematite always resolves a data dir,
-    // defaulted to `<AION_HOME>/data` when the file names none).
-    match &config.store.data_dir {
-        Some(data_dir) => println!("store: {data_dir}"),
-        None => println!("store: in-memory (no data directory; state ends with the process)"),
+    // The store line is always stated, and the BACKEND decides what it says:
+    // config resolution fills `data_dir` unconditionally (`<AION_HOME>/data`
+    // when the file names none), so the directory's presence proves nothing
+    // about durability — a memory-backend server dies with its state no
+    // matter what path the config carries. Same truth `aion launch` prints.
+    match config.store.backend {
+        aion_server::config::StoreBackend::Haematite => match &config.store.data_dir {
+            Some(data_dir) => println!("store: {data_dir}"),
+            None => println!("store: haematite (data directory resolved by the server)"),
+        },
+        aion_server::config::StoreBackend::Memory => {
+            println!("store: in-memory — state does not survive a stop");
+        }
     }
 
     // Layer 1: the record. An unreadable file is a verb failure, not a
@@ -120,6 +133,21 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
     // readiness layer's diagnosis of a 200-with-body.
     let identity_confirmed = render_build_layer(http_address).await;
     render_ready_layer(http_address, identity_confirmed).await;
+    if identity_confirmed && !running_verified {
+        // The two layers disagree in the one direction worth a warning: an
+        // aion server IS answering on this address, but it is not the
+        // verified recorded incarnation — a server that booted UNCLAIMED
+        // over another claimant's record, or one predating the pid file.
+        // The exit code stays honest to the verb's question (the RECORDED
+        // server), and this line stops the operator reading "not running"
+        // as "nothing is listening".
+        println!(
+            "note: an aion server IS answering on {http_address}, but it is not a \
+             verified recorded incarnation of this home — a server booted unclaimed \
+             (another claimant held the record), or one predating the pid file. The \
+             control verbs address only the recorded server"
+        );
+    }
     if verb_failed {
         ExitCode::from(2)
     } else if running_verified {
@@ -244,6 +272,18 @@ async fn render_ready_layer(address: SocketAddr, identity_confirmed: bool) {
                     "ready: the listener answered 200 with a body, but /health/ready \
                      answers with an empty one — an app shell or a different service \
                      is on this address"
+                );
+            } else if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                // The same face the build layer names for these codes: the
+                // listener is up, auth is on, and this probe is
+                // unauthenticated — not an unexpected answer, and not a
+                // readiness verdict either way.
+                println!(
+                    "ready: the endpoint refused this unauthenticated probe ({status}); \
+                     the listener is up but auth is enabled, so readiness cannot be \
+                     probed unauthenticated"
                 );
             } else {
                 println!("ready: unexpected answer {status}");

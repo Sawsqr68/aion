@@ -58,22 +58,24 @@ pub enum IncarnationProbe {
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::PidFile`] when the process table does not answer
-/// for our own pid (which would leave the pid record unable to carry the
-/// start instant every later verification depends on), when the executable
-/// path cannot be resolved, or when the binary cannot be read for hashing.
+/// Returns [`ServerError::Incarnation`] when the process table does not
+/// answer for our own pid (which would leave the pid record unable to carry
+/// the start instant every later verification depends on), when the
+/// executable path cannot be resolved, or when the binary cannot be read for
+/// hashing.
 pub fn self_identity() -> Result<SelfIdentity, ServerError> {
     let pid = std::process::id();
-    let started_at_unix_secs = process_start_instant(pid).ok_or_else(|| ServerError::PidFile {
-        message: format!(
-            "the process table has no entry for this process (pid {pid}); \
+    let started_at_unix_secs =
+        process_start_instant(pid).ok_or_else(|| ServerError::Incarnation {
+            message: format!(
+                "the process table has no entry for this process (pid {pid}); \
                  cannot record a verifiable incarnation"
-        ),
-    })?;
-    let exe = std::env::current_exe().map_err(|io_error| ServerError::PidFile {
+            ),
+        })?;
+    let exe = std::env::current_exe().map_err(|io_error| ServerError::Incarnation {
         message: format!("cannot resolve this process's executable path: {io_error}"),
     })?;
-    let bytes = std::fs::read(&exe).map_err(|io_error| ServerError::PidFile {
+    let bytes = std::fs::read(&exe).map_err(|io_error| ServerError::Incarnation {
         message: format!(
             "cannot read this process's executable `{}` for content hashing: {io_error}",
             exe.display()

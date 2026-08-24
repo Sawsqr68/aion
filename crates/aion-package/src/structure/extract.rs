@@ -143,10 +143,10 @@ fn import_path_is_workflow(tokens: &[Token], start: usize) -> bool {
 /// the caller falls back to the default `workflow`.
 fn alias_after_import(tokens: &[Token], path_start: usize) -> Option<String> {
     let after_path = path_start + 3;
-    if matches!(tokens.get(after_path), Some(Token::Ident(word)) if word == "as") {
-        if let Some(Token::Ident(alias)) = tokens.get(after_path + 1) {
-            return Some(alias.clone());
-        }
+    if matches!(tokens.get(after_path), Some(Token::Ident(word)) if word == "as")
+        && let Some(Token::Ident(alias)) = tokens.get(after_path + 1)
+    {
+        return Some(alias.clone());
     }
     None
 }

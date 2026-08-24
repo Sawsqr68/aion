@@ -573,12 +573,11 @@ pub(crate) fn recover_active_workflow(
 /// no namespace attribute is recorded (pre-namespace workflows).
 pub(crate) fn namespace_from_history(history: &[Event]) -> String {
     for event in history {
-        if let Event::SearchAttributesUpdated { attributes, .. } = event {
-            if let Some(aion_core::SearchAttributeValue::String(ns)) =
+        if let Event::SearchAttributesUpdated { attributes, .. } = event
+            && let Some(aion_core::SearchAttributeValue::String(ns)) =
                 attributes.get("aion.namespace")
-            {
-                return ns.clone();
-            }
+        {
+            return ns.clone();
         }
     }
     String::from("default")

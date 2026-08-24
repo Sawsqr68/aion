@@ -101,16 +101,16 @@ fn walk(root: &Path, dir: &Path, found: &mut Vec<String>) {
             if !component_excluded(name) {
                 walk(root, &path, found);
             }
-        } else if path.extension().is_some_and(|extension| extension == "awl") {
-            if let Ok(relative) = path.strip_prefix(root) {
-                found.push(
-                    relative
-                        .components()
-                        .filter_map(|component| component.as_os_str().to_str())
-                        .collect::<Vec<_>>()
-                        .join("/"),
-                );
-            }
+        } else if path.extension().is_some_and(|extension| extension == "awl")
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            found.push(
+                relative
+                    .components()
+                    .filter_map(|component| component.as_os_str().to_str())
+                    .collect::<Vec<_>>()
+                    .join("/"),
+            );
         }
     }
 }

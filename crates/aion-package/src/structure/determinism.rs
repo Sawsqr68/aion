@@ -308,22 +308,20 @@ fn map_functions(tokens: &[Token]) -> BTreeMap<String, FnBody> {
     let mut functions = BTreeMap::new();
     let mut index = 0;
     while index < tokens.len() {
-        if matches!(&tokens[index], Token::Ident(word) if word == "fn") {
-            if let Some(Token::Ident(name)) = tokens.get(index + 1) {
-                if let Some(open) = find_open_brace(tokens, index + 2, tokens.len()) {
-                    if let Some(close) = match_brace(tokens, open, tokens.len()) {
-                        functions.insert(
-                            name.clone(),
-                            FnBody {
-                                start: open + 1,
-                                end: close,
-                            },
-                        );
-                        index = close + 1;
-                        continue;
-                    }
-                }
-            }
+        if matches!(&tokens[index], Token::Ident(word) if word == "fn")
+            && let Some(Token::Ident(name)) = tokens.get(index + 1)
+            && let Some(open) = find_open_brace(tokens, index + 2, tokens.len())
+            && let Some(close) = match_brace(tokens, open, tokens.len())
+        {
+            functions.insert(
+                name.clone(),
+                FnBody {
+                    start: open + 1,
+                    end: close,
+                },
+            );
+            index = close + 1;
+            continue;
         }
         index += 1;
     }

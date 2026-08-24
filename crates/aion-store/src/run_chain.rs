@@ -22,10 +22,10 @@ pub fn run_chain_from_history(history: &[Event]) -> Result<Vec<RunSummary>, Stor
     let mut current_run_start = None;
 
     for (index, event) in ordered.iter().enumerate() {
-        if matches!(event, Event::WorkflowStarted { .. }) {
-            if let Some(start_index) = current_run_start.replace(index) {
-                summaries.push(project_run_summary(&ordered[start_index..index])?);
-            }
+        if matches!(event, Event::WorkflowStarted { .. })
+            && let Some(start_index) = current_run_start.replace(index)
+        {
+            summaries.push(project_run_summary(&ordered[start_index..index])?);
         }
     }
 

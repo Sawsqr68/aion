@@ -561,10 +561,10 @@ impl Engine {
             let history = self.store.read_history(handle.workflow_id()).await?;
             self.registry
                 .reconcile(handle.workflow_id(), handle.run_id(), &history)?;
-            if let Some(summary) = WorkflowSummary::from_history(&history) {
-                if filter.matches(&summary) {
-                    summaries.insert(summary.workflow_id.clone(), summary);
-                }
+            if let Some(summary) = WorkflowSummary::from_history(&history)
+                && filter.matches(&summary)
+            {
+                summaries.insert(summary.workflow_id.clone(), summary);
             }
         }
 

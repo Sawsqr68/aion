@@ -142,18 +142,18 @@ pub fn check_plan(inputs: &PlanInputs) -> Result<CheckOutcome, PlanRefusal> {
         .collect();
     check_conclusion_path_distinctness(&claims)?;
 
-    if let Some(ceiling) = inputs.max_stages {
-        if stages.len() > ceiling {
-            return Err(PlanRefusal::whole(
-                CauseCode::StageCountExceedsCeiling,
-                format!(
-                    "the plan declares {} stages; the chain's dispatch-authored `max_stages` \
-                     ceiling is {ceiling}. Refused here, before any stage leg is dispatched — \
-                     never silently truncated.",
-                    stages.len()
-                ),
-            ));
-        }
+    if let Some(ceiling) = inputs.max_stages
+        && stages.len() > ceiling
+    {
+        return Err(PlanRefusal::whole(
+            CauseCode::StageCountExceedsCeiling,
+            format!(
+                "the plan declares {} stages; the chain's dispatch-authored `max_stages` \
+                 ceiling is {ceiling}. Refused here, before any stage leg is dispatched — \
+                 never silently truncated.",
+                stages.len()
+            ),
+        ));
     }
 
     let ordered: Vec<Stage> = order

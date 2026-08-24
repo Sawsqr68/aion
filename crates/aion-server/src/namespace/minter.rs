@@ -201,10 +201,10 @@ impl NamespaceMinter {
     /// which is the deployment-global channel the ops console already listens
     /// on. That is the one observable difference a forwarded mint makes.
     async fn mint(&self, namespace: &str, origin: NamespaceOrigin) -> Result<(), ServerError> {
-        if let Some(routing) = &self.routing {
-            if let MintRoute::Remote { shard, target } = routing.route_for(namespace) {
-                return routing.forward(namespace, target, shard, origin).await;
-            }
+        if let Some(routing) = &self.routing
+            && let MintRoute::Remote { shard, target } = routing.route_for(namespace)
+        {
+            return routing.forward(namespace, target, shard, origin).await;
         }
         if self.store.register_namespace(namespace, origin).await? == MintOutcome::Created {
             self.announce_created(namespace, origin).await?;

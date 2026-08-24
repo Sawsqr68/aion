@@ -204,12 +204,12 @@ fn example_integer(map: &Map<String, Value>) -> Value {
     if let Some(above) = map.get("exclusiveMaximum").and_then(Value::as_i64) {
         value = value.min(above.saturating_sub(1));
     }
-    if let Some(step) = map.get("multipleOf").and_then(Value::as_i64) {
-        if step > 0 {
-            let remainder = value.rem_euclid(step);
-            if remainder != 0 {
-                value = value.saturating_add(step - remainder);
-            }
+    if let Some(step) = map.get("multipleOf").and_then(Value::as_i64)
+        && step > 0
+    {
+        let remainder = value.rem_euclid(step);
+        if remainder != 0 {
+            value = value.saturating_add(step - remainder);
         }
     }
     json!(value)
@@ -225,25 +225,25 @@ fn example_integer(map: &Map<String, Value>) -> Value {
 /// [`witness_fault`] to report rather than to a rounding guess.
 fn example_number(map: &Map<String, Value>) -> Value {
     let mut value = 0f64;
-    if let Some(smallest) = map.get("minimum").and_then(Value::as_f64) {
-        if value < smallest {
-            value = smallest;
-        }
+    if let Some(smallest) = map.get("minimum").and_then(Value::as_f64)
+        && value < smallest
+    {
+        value = smallest;
     }
-    if let Some(below) = map.get("exclusiveMinimum").and_then(Value::as_f64) {
-        if value <= below {
-            value = below + 1.0;
-        }
+    if let Some(below) = map.get("exclusiveMinimum").and_then(Value::as_f64)
+        && value <= below
+    {
+        value = below + 1.0;
     }
-    if let Some(largest) = map.get("maximum").and_then(Value::as_f64) {
-        if value > largest {
-            value = largest;
-        }
+    if let Some(largest) = map.get("maximum").and_then(Value::as_f64)
+        && value > largest
+    {
+        value = largest;
     }
-    if let Some(above) = map.get("exclusiveMaximum").and_then(Value::as_f64) {
-        if value >= above {
-            value = above - 1.0;
-        }
+    if let Some(above) = map.get("exclusiveMaximum").and_then(Value::as_f64)
+        && value >= above
+    {
+        value = above - 1.0;
     }
     json!(value)
 }

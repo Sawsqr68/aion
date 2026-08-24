@@ -521,14 +521,13 @@ impl ActivityDispatcher {
             // worker here always carries a stream sender; a missing one means a
             // non-gRPC-transport worker leaked into this path and cannot be served
             // over it, so it is deregistered like a closed stream.
-            if let Some(sender) = worker.sender() {
-                if sender
+            if let Some(sender) = worker.sender()
+                && sender
                     .send(WorkerMessage::ActivityTask(Box::new(task.clone())))
                     .await
                     .is_ok()
-                {
-                    return Ok(Some(()));
-                }
+            {
+                return Ok(Some(()));
             }
             self.registry.deregister(worker.id())?;
         }

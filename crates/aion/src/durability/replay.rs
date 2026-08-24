@@ -149,10 +149,9 @@ impl Replay {
 
         if let (Command::CompleteWorkflow { result }, ReplayTerminal::Completed(recorded_result)) =
             (command, &terminal.terminal)
+            && result == recorded_result
         {
-            if result == recorded_result {
-                return Ok(ReplayStep::Terminal(terminal.terminal.clone()));
-            }
+            return Ok(ReplayStep::Terminal(terminal.terminal.clone()));
         }
 
         Err(NonDeterminismError {

@@ -251,10 +251,10 @@ impl ProcessExitRegistry {
     }
 
     pub(super) fn retire(&self, pid: Pid, expected: &Arc<ProcessExitRecord>) {
-        if let dashmap::mapref::entry::Entry::Occupied(entry) = self.records.entry(pid) {
-            if Arc::ptr_eq(entry.get(), expected) {
-                entry.remove();
-            }
+        if let dashmap::mapref::entry::Entry::Occupied(entry) = self.records.entry(pid)
+            && Arc::ptr_eq(entry.get(), expected)
+        {
+            entry.remove();
         }
     }
 

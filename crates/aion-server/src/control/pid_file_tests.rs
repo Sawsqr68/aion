@@ -152,10 +152,15 @@ fn a_live_incarnation_on_different_addresses_keeps_its_claim() -> TestResult {
     assert!(
         matches!(
             second_guard.reconciliation(),
-            crate::control::pid_file::StaleReconciliation::LiveIncarnation { .. }
+            StaleReconciliation::LiveIncarnationElsewhere { .. }
         ),
-        "the unclaimed boot must still report what it found: {:?}",
+        "the unclaimed boot must wear its OWN face — not the claimed-over-debris \
+         one, which is its opposite: {:?}",
         second_guard.reconciliation()
+    );
+    assert!(
+        !second_guard.holds_claim(),
+        "an unclaimed boot must say it holds no claim"
     );
     assert_eq!(
         read(home.path())?.as_ref(),
@@ -194,11 +199,15 @@ fn a_lingering_guard_leaves_a_successors_file_alone() -> TestResult {
     assert!(
         matches!(
             second_guard.reconciliation(),
-            crate::control::pid_file::StaleReconciliation::LiveIncarnation { .. }
+            StaleReconciliation::LiveIncarnation { .. }
         ),
-        "claiming over a live incarnation's record must be REPORTED as exactly \
-         that face, not silently absorbed: {:?}",
+        "claiming over a live incarnation's record on the SAME addresses must be \
+         REPORTED as exactly that face, not silently absorbed: {:?}",
         second_guard.reconciliation()
+    );
+    assert!(
+        second_guard.holds_claim(),
+        "the same-address contradiction is claimed over: this guard holds the claim"
     );
 
     drop(first_guard);
@@ -233,6 +242,35 @@ fn remove_if_matches_is_exact() -> TestResult {
     assert!(
         !remove_if_matches(home.path(), &record)?,
         "an absent file removes nothing"
+    );
+    Ok(())
+}
+
+/// The record is a cross-version contract (module-header ruling): a record
+/// written by a build that predates `drain_timeout_seconds` must READ, with
+/// the missing field as its honest default — a newer CLI refusing to parse
+/// an older running server's record would make that server un-stoppable at
+/// exactly the moment (`aion update`) the verb matters most.
+#[test]
+fn a_record_predating_the_drain_window_field_still_reads() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let path = pid_file_path(home.path());
+    std::fs::create_dir_all(path.parent().ok_or("pid path must have a parent")?)?;
+    let old_shape = serde_json::json!({
+        "pid": 93400,
+        "started_at_unix_secs": 1_000_000,
+        "binary_sha256": "0".repeat(64),
+        "version": "0.22.0",
+        "commit": "older-build",
+        "http_address": "127.0.0.1:8080",
+        "grpc_address": "127.0.0.1:50051",
+    });
+    std::fs::write(&path, format!("{old_shape}\n"))?;
+    let record = read(home.path())?.ok_or("the old-shape record must read")?;
+    assert_eq!(
+        record.drain_timeout_seconds, 0,
+        "the missing field reads as its default, which patience resolution \
+         treats as no recorded window"
     );
     Ok(())
 }

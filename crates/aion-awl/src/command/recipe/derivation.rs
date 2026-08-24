@@ -44,12 +44,11 @@ pub fn parse_extraction(declared: &str) -> Result<Extraction, String> {
     if trimmed == "whole" {
         return Ok(Extraction::Whole);
     }
-    if let Some(number) = trimmed.strip_prefix("line ") {
-        if let Ok(line) = number.trim().parse::<usize>() {
-            if line > 0 {
-                return Ok(Extraction::Line(line));
-            }
-        }
+    if let Some(number) = trimmed.strip_prefix("line ")
+        && let Ok(line) = number.trim().parse::<usize>()
+        && line > 0
+    {
+        return Ok(Extraction::Line(line));
     }
     Err("`line <n>` (n counted from 1) or `whole`".to_owned())
 }

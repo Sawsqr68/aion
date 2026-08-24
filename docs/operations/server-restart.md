@@ -37,11 +37,28 @@ aion server status     # read what is actually running before acting
 aion server stop       # SIGTERM the verified incarnation, wait, report
 ```
 
-- `stop` waits up to `--patience <seconds>` (absent, the running server's
-  own recorded drain window, then the config's `drain.timeout_seconds`) and
-  then prints the drain outcome from the death note by name: clean, or
-  parked work by worker and task, or the honest absence when no record was
-  written.
+- `stop` waits up to `--patience <seconds>` (absent, the VERIFIED-RUNNING
+  server's own recorded drain window — a stale record's window governs
+  nothing — then the config's `drain.timeout_seconds`) and then prints the
+  drain outcome from the death note by name: clean, or parked work by worker
+  and task, or the honest absence when no record was written.
+- **Exit codes a script keys on** — `stop`: `0` the goal state holds (the
+  server stopped, was already gone, or no server has claimed the home —
+  stopping is idempotent); `1` exclusively still-draining at patience (the
+  process lives: wait, or force); `2` the verb could not complete (a
+  stale-incarnation refusal, an unresolvable home/config, an error mid-verb
+  — stderr says which). `status`: `0` the recorded incarnation is RUNNING
+  and verified; `1` it is not (gone, mismatched, or no record — status is a
+  predicate about the RECORDED server, so "down" answers 1 even where
+  `stop` would answer 0); `2` the verb itself failed (unreadable pid file,
+  unresolvable home or config).
+- A server that booted UNCLAIMED (its boot log says so: another live server
+  held the home's record on different addresses) is NOT addressed by these
+  verbs — they act on the recorded claimant. `status` prints a note when an
+  aion server answers HTTP without being the verified recorded incarnation.
+  A claim (and therefore the verbs) needs the mutation lock beside the pid
+  file; a home where that lock cannot be taken refuses the boot by design —
+  fix the lock file's permissions or give the server its own `AION_HOME`.
 - A **parked** drain is a SUCCESS — in-flight agent activities can legally
   outlive any sane drain window; recovery re-adopts them on the next boot.
   Do not escalate just because the drain took its configured time.
@@ -54,11 +71,14 @@ aion server stop       # SIGTERM the verified incarnation, wait, report
   drain. Run `aion server stop` again ONLY when the drain is genuinely
   wedged — the server treats the second termination signal as "force
   immediate exit" (exit 130) — and say so wherever you report the restart.
-- A refusal is final until you resolve it by hand: `no pid file` means no
-  server claimed this home through the verb-aware binary (see the fallback
-  ritual below); a `stale incarnation` refusal means the recorded pid now
-  belongs to a different process — verify with `ps -p <pid>`, remove the
-  named file once satisfied, and never signal the number the file carried.
+- `no pid file` is the idempotent success (exit 0): nothing is running at
+  this home, which is the goal state. If you KNOW a server is running there
+  anyway, it predates the verb-aware binary (see the fallback ritual below)
+  or booted unclaimed — check `aion server status` and the server's own log.
+- A refusal (exit 2) is final until you resolve it by hand: a `stale
+  incarnation` refusal means the recorded pid now belongs to a different
+  process — verify with `ps -p <pid>`, remove the named file once
+  satisfied, and never signal the number the file carried.
 - Never `kill -9` a server that is answering its log; SIGKILL is the one
   death the note cannot record, and the next `aion server status` will
   report exactly that shape (`bracket never closed`).

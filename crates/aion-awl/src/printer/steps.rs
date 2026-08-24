@@ -243,11 +243,11 @@ fn print_pipe(printer: &mut Printer, indent: usize, pipe: &crate::ast::PipeStmt)
     for (position, stage) in stages.iter().enumerate() {
         let mut text = format!("|> {stage}");
         let mut trailing = None;
-        if position == last {
-            if let PipeEnd::Bind(bind) = &pipe.end {
-                let _ = write!(text, " -> {}", bind.name);
-                trailing = pipe.trailing.as_ref();
-            }
+        if position == last
+            && let PipeEnd::Bind(bind) = &pipe.end
+        {
+            let _ = write!(text, " -> {}", bind.name);
+            trailing = pipe.trailing.as_ref();
         }
         printer.line(indent + 1, &text, trailing);
     }

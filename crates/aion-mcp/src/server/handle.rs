@@ -49,19 +49,19 @@ impl<S: ToolService> McpServer<S> {
     pub async fn handle_http(&self, request: &HttpRequest, caller: &S::Caller) -> HttpResponse {
         // Origin first: a DNS-rebinding attempt must be refused before its body
         // is parsed, let alone dispatched.
-        if let Some(origin) = request.origin() {
-            if !self.config.origin_allowed(origin) {
-                return HttpResponse::json(
-                    403,
-                    &json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": crate::protocol::error::error_codes::INVALID_REQUEST,
-                            "message": "Origin is not permitted to reach this MCP endpoint",
-                        }
-                    }),
-                );
-            }
+        if let Some(origin) = request.origin()
+            && !self.config.origin_allowed(origin)
+        {
+            return HttpResponse::json(
+                403,
+                &json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": crate::protocol::error::error_codes::INVALID_REQUEST,
+                        "message": "Origin is not permitted to reach this MCP endpoint",
+                    }
+                }),
+            );
         }
         if request.method != "POST" {
             return HttpResponse::method_not_allowed();

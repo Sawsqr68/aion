@@ -213,20 +213,20 @@ fn check_parameter(
         }
         _ => {}
     }
-    if let Some(derivation) = &parameter.derivation {
-        if let Err(admitted) = parse_extraction(&derivation.extraction) {
-            refusals.push(CommandRefusal::refuse(
-                CommandCause::ExtractionUnknown,
-                derivation.extraction_span,
-                &derivation.extraction,
-                format!(
-                    "recipe `{}`'s parameter `{}` names the extraction `{}`, which is not one \
+    if let Some(derivation) = &parameter.derivation
+        && let Err(admitted) = parse_extraction(&derivation.extraction)
+    {
+        refusals.push(CommandRefusal::refuse(
+            CommandCause::ExtractionUnknown,
+            derivation.extraction_span,
+            &derivation.extraction,
+            format!(
+                "recipe `{}`'s parameter `{}` names the extraction `{}`, which is not one \
                      this surface performs — {admitted}. An extraction the fire cannot run is a \
                      derivation that would fail at the dispatch minute, when it is most expensive",
-                    recipe.name, parameter.name, derivation.extraction
-                ),
-            ));
-        }
+                recipe.name, parameter.name, derivation.extraction
+            ),
+        ));
     }
     check_venue_restatement(recipe, parameter, refusals);
     check_literal_where_derived(recipe, parameter, refusals);

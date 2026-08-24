@@ -95,10 +95,10 @@ pub fn breadcrumb(entry: &str) {
     let slot = BREADCRUMB_SLOT
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    if let Some(writer) = slot.as_ref() {
-        if writer.armed.load(Ordering::SeqCst) {
-            writer.note.write_entry(&format!("BREADCRUMB {entry}"));
-        }
+    if let Some(writer) = slot.as_ref()
+        && writer.armed.load(Ordering::SeqCst)
+    {
+        writer.note.write_entry(&format!("BREADCRUMB {entry}"));
     }
 }
 

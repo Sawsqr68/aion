@@ -124,7 +124,7 @@ rustix.workspace = true
 # worker process containment already signals with.
 # "fs" carries `fcntl::Flock`: the pid-file mutation lock that makes the
 # stop verb's compare-and-delete atomic against a successor's claim.
-nix = { workspace = true, features = ["signal", "fs"] }
+nix = { workspace = true, features = ["signal"] }
 # Death-note signal watcher (see src/death_note.rs): safe registration that
 # CHAINS with tokio's own listeners through the shared signal-hook-registry,
 # already in the dependency tree via liminal-server. The fatal-fault set

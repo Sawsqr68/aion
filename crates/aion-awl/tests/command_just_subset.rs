@@ -256,12 +256,11 @@ fn the_refused_table_and_the_refusal_fixtures_name_the_same_causes() {
     let declared: BTreeSet<CommandCause> = REFUSED_FORMS.iter().map(|form| form.cause).collect();
     let mut exercised = BTreeSet::new();
     for fixture in fixtures() {
-        if let Some(expect) = fixture.claim("EXPECT") {
-            if let Some(code) = expect.strip_prefix("refuse ") {
-                if let Some(cause) = CommandCause::from_code(code.trim()) {
-                    exercised.insert(cause);
-                }
-            }
+        if let Some(expect) = fixture.claim("EXPECT")
+            && let Some(code) = expect.strip_prefix("refuse ")
+            && let Some(cause) = CommandCause::from_code(code.trim())
+        {
+            exercised.insert(cause);
         }
     }
     let missing: Vec<&str> = declared

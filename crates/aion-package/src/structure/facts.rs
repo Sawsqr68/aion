@@ -114,10 +114,10 @@ fn workflow_alias(tokens: &[Token]) -> Option<String> {
             && import_path_is_workflow(tokens, index + 1)
         {
             let after_path = index + 1 + 3;
-            if matches!(tokens.get(after_path), Some(Token::Ident(word)) if word == "as") {
-                if let Some(Token::Ident(alias)) = tokens.get(after_path + 1) {
-                    return Some(alias.clone());
-                }
+            if matches!(tokens.get(after_path), Some(Token::Ident(word)) if word == "as")
+                && let Some(Token::Ident(alias)) = tokens.get(after_path + 1)
+            {
+                return Some(alias.clone());
             }
             return Some("workflow".to_owned());
         }
@@ -146,12 +146,13 @@ fn import_path_is_workflow(tokens: &[Token], start: usize) -> bool {
 fn define_entry_function(tokens: &[Token], alias: &str) -> Result<String, FactsError> {
     let mut index = 0;
     while index < tokens.len() {
-        if let Token::Qualified { left, right } = &tokens[index] {
-            if left == alias && right == "define" {
-                let end = end_of_call(tokens, index, tokens.len());
-                return last_identifier_argument(tokens, index + 1, end)
-                    .ok_or(FactsError::EntryFunctionNotIdentifiable);
-            }
+        if let Token::Qualified { left, right } = &tokens[index]
+            && left == alias
+            && right == "define"
+        {
+            let end = end_of_call(tokens, index, tokens.len());
+            return last_identifier_argument(tokens, index + 1, end)
+                .ok_or(FactsError::EntryFunctionNotIdentifiable);
         }
         index += 1;
     }
@@ -214,22 +215,20 @@ fn map_functions(tokens: &[Token]) -> BTreeMap<String, FnBody> {
     let mut functions = BTreeMap::new();
     let mut index = 0;
     while index < tokens.len() {
-        if matches!(&tokens[index], Token::Ident(word) if word == "fn") {
-            if let Some(Token::Ident(name)) = tokens.get(index + 1) {
-                if let Some(open) = find_open_brace(tokens, index + 2, tokens.len()) {
-                    if let Some(close) = match_brace(tokens, open, tokens.len()) {
-                        functions.insert(
-                            name.clone(),
-                            FnBody {
-                                start: open + 1,
-                                end: close,
-                            },
-                        );
-                        index = close + 1;
-                        continue;
-                    }
-                }
-            }
+        if matches!(&tokens[index], Token::Ident(word) if word == "fn")
+            && let Some(Token::Ident(name)) = tokens.get(index + 1)
+            && let Some(open) = find_open_brace(tokens, index + 2, tokens.len())
+            && let Some(close) = match_brace(tokens, open, tokens.len())
+        {
+            functions.insert(
+                name.clone(),
+                FnBody {
+                    start: open + 1,
+                    end: close,
+                },
+            );
+            index = close + 1;
+            continue;
         }
         index += 1;
     }

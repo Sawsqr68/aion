@@ -657,10 +657,10 @@ impl Harness {
     fn wait_for_liminal_reachability(&self) -> TestResult {
         let deadline = Instant::now() + OBSERVE;
         while Instant::now() < deadline {
-            if let Some(worker) = self.liminal_worker() {
-                if self.tracker.is_dispatch_reachable(worker, Instant::now())? {
-                    return Ok(());
-                }
+            if let Some(worker) = self.liminal_worker()
+                && self.tracker.is_dispatch_reachable(worker, Instant::now())?
+            {
+                return Ok(());
             }
             std::thread::sleep(Duration::from_millis(20));
         }

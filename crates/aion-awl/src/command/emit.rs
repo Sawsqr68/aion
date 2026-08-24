@@ -298,10 +298,10 @@ fn defaulted_value(
 /// contains — a space inside a value is a space inside that one element and
 /// never a new argument, because nothing re-splits it.
 fn resolve(fill: &Fill, bound: &BTreeMap<String, ArgumentValue>) -> Vec<String> {
-    if let Some(name) = fill.sole_hole() {
-        if let Some(ArgumentValue::List(items)) = bound.get(name) {
-            return items.clone();
-        }
+    if let Some(name) = fill.sole_hole()
+        && let Some(ArgumentValue::List(items)) = bound.get(name)
+    {
+        return items.clone();
     }
     let mut element = String::new();
     for segment in &fill.segments {

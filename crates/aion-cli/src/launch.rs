@@ -200,9 +200,10 @@ async fn run_background(no_open: bool) -> Result<ExitCode, LaunchFailure> {
     }
 
     let config_line = config_report_line(pre_existing.as_deref(), &project_config, &home_config);
+    let pid_line = pid_report_line(&home.path, child.id());
     print!(
         "{}",
-        ready_report(&store, &config_line, &url, &log_path, child.id())
+        ready_report(&store, &config_line, &url, &log_path, &pid_line)
     );
     open_console(no_open, &url);
     Ok(ExitCode::SUCCESS)
@@ -362,6 +363,37 @@ fn config_report_line(
     }
 }
 
+/// The pid line of the ready report. `aion server stop` addresses the
+/// server the home's pid file RECORDS — which is only the server just
+/// launched when the record names its pid. A launch into a home whose
+/// record another live server holds boots UNCLAIMED, and promising the verb
+/// then would point the operator's stop at the WRONG process; the line says
+/// what actually addresses each server instead.
+fn pid_report_line(home: &Path, launched_pid: u32) -> String {
+    match aion_server::control::pid_file::read(home) {
+        Ok(Some(record)) if record.pid == launched_pid => {
+            format!("server process id: {launched_pid} (stop it with: aion server stop)")
+        }
+        Ok(Some(record)) => format!(
+            "server process id: {launched_pid} — NOTE: this home's pid file is held by \
+             another live server (pid {}), so `aion server stop` stops THAT server, \
+             not this one. This launch runs unclaimed; stop it by pid (kill \
+             {launched_pid}), or give each server its own AION_HOME",
+            record.pid
+        ),
+        Ok(None) => format!(
+            "server process id: {launched_pid} — NOTE: no pid record appeared under \
+             this home, so `aion server stop` cannot address it; stop it by pid \
+             (kill {launched_pid}) and check the server log for the claim failure"
+        ),
+        Err(error) => format!(
+            "server process id: {launched_pid} — NOTE: the home's pid record could \
+             not be read ({error}), so whether `aion server stop` addresses this \
+             server is unverified"
+        ),
+    }
+}
+
 /// The plain-language success report Tom's ask names: where the config, data,
 /// console, and log live, and how to stop the server. Ends with a newline.
 fn ready_report(
@@ -369,7 +401,7 @@ fn ready_report(
     config_line: &str,
     url: &str,
     log_path: &Path,
-    pid: u32,
+    pid_line: &str,
 ) -> String {
     let data_line = match store.backend {
         StoreBackend::Haematite => match store.data_dir.as_deref() {
@@ -379,8 +411,7 @@ fn ready_report(
         StoreBackend::Memory => "data: in-memory — state does not survive a stop".to_owned(),
     };
     format!(
-        "aion is up.\n{config_line}\n{data_line}\nconsole: {url}\nlog: {log}\n\
-         server process id: {pid} (stop it with: aion server stop)\n",
+        "aion is up.\n{config_line}\n{data_line}\nconsole: {url}\nlog: {log}\n{pid_line}\n",
         log = log_path.display()
     )
 }
@@ -503,7 +534,14 @@ mod tests {
         let mut store = StoreConfig::default();
         store.backend = StoreBackend::Haematite;
         store.data_dir = Some("/data/haematite".to_owned());
-        let report = ready_report(&store, "config: X", "http://127.0.0.1:8080/", log_path, 42);
+        let pid_line = "server process id: 42 (stop it with: aion server stop)";
+        let report = ready_report(
+            &store,
+            "config: X",
+            "http://127.0.0.1:8080/",
+            log_path,
+            pid_line,
+        );
         assert!(report.starts_with("aion is up.\n"));
         assert!(report.contains("config: X\n"));
         assert!(report.contains("data: /data/haematite\n"));
@@ -512,8 +550,56 @@ mod tests {
         assert!(report.contains("server process id: 42 (stop it with: aion server stop)\n"));
 
         store.backend = StoreBackend::Memory;
-        let report = ready_report(&store, "config: X", "u", log_path, 1);
+        let report = ready_report(&store, "config: X", "u", log_path, pid_line);
         assert!(report.contains("data: in-memory — state does not survive a stop\n"));
+    }
+
+    /// The stop-verb promise is made only when the home's record names the
+    /// launched pid: a record held by another live server (the unclaimed
+    /// launch) or an absent record must NOT point the operator's stop at the
+    /// wrong process.
+    #[test]
+    fn the_pid_line_promises_the_stop_verb_only_for_the_recorded_pid() -> Result<(), TestError> {
+        let home = tempfile::tempdir()?;
+        // No record at all: the verb is not promised.
+        let line = pid_report_line(home.path(), 42);
+        assert!(
+            line.contains("no pid record appeared") && !line.contains("(stop it with:"),
+            "an absent record must withhold the promise, got: {line}"
+        );
+
+        // The record names the launched pid: the promise stands.
+        let me = aion_server::control::incarnation::self_identity()?;
+        let record = aion_server::control::PidRecord {
+            pid: me.pid,
+            started_at_unix_secs: me.started_at_unix_secs,
+            binary_sha256: me.binary_sha256,
+            version: "0.0.0-test".to_owned(),
+            commit: "test".to_owned(),
+            http_address: "127.0.0.1:8080".parse()?,
+            grpc_address: "127.0.0.1:50051".parse()?,
+            drain_timeout_seconds: 30,
+        };
+        let run_dir = home.path().join("run");
+        std::fs::create_dir_all(&run_dir)?;
+        std::fs::write(
+            run_dir.join("aion-server.pid"),
+            serde_json::to_string(&record)?,
+        )?;
+        let line = pid_report_line(home.path(), me.pid);
+        assert!(
+            line.contains("(stop it with: aion server stop)"),
+            "the recorded pid earns the promise, got: {line}"
+        );
+
+        // The record names a DIFFERENT pid: the promise is replaced by the
+        // warning that stop addresses the other server.
+        let line = pid_report_line(home.path(), me.pid.wrapping_add(1));
+        assert!(
+            line.contains("stops THAT server") && !line.contains("(stop it with:"),
+            "a foreign record must redirect the operator, got: {line}"
+        );
+        Ok(())
     }
 
     #[test]

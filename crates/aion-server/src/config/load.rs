@@ -465,15 +465,15 @@ impl ServerConfig {
         } else if self.store.cluster.is_some() {
             return config_error("store.cluster is only valid when store.backend is haematite");
         }
-        if let OpsConsoleAssetSource::FileSystem { asset_path } = &self.ops_console.source {
-            if asset_path.as_os_str().is_empty() {
-                return config_error("ops_console.source.FileSystem.asset_path must not be empty");
-            }
+        if let OpsConsoleAssetSource::FileSystem { asset_path } = &self.ops_console.source
+            && asset_path.as_os_str().is_empty()
+        {
+            return config_error("ops_console.source.FileSystem.asset_path must not be empty");
         }
-        if let NamespaceMode::SingleTenant { namespace } = &self.namespace.mode {
-            if namespace.is_empty() {
-                return config_error("namespace.mode.SingleTenant.namespace must not be empty");
-            }
+        if let NamespaceMode::SingleTenant { namespace } = &self.namespace.mode
+            && namespace.is_empty()
+        {
+            return config_error("namespace.mode.SingleTenant.namespace must not be empty");
         }
         if self.worker.heartbeat_window.is_zero() {
             return config_error("worker.heartbeat_window must be greater than zero");

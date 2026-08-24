@@ -334,10 +334,10 @@ fn dispatch_engine(
         .into_iter()
         .find(|handle| handle.workflow_id() == workflow_id)
         .map(|handle| handle.pid());
-    if let Some(pid) = process {
-        if is_query_registered(state, pid, name)? {
-            return Ok(bridge.mailbox_engine.clone());
-        }
+    if let Some(pid) = process
+        && is_query_registered(state, pid, name)?
+    {
+        return Ok(bridge.mailbox_engine.clone());
     }
     Ok(Arc::clone(&bridge.engine))
 }

@@ -278,10 +278,10 @@ async fn execute_connect(
         .with_namespace(input_str(input, "namespace").unwrap_or("conformance"))
         .with_subject(HARNESS_SUBJECT)
         .with_authorized_namespaces(HARNESS_NAMESPACES);
-    if let Ok(token) = env::var(AUTH_TOKEN_ENV) {
-        if !token.is_empty() {
-            builder = builder.with_auth(ClientAuth::bearer(token));
-        }
+    if let Ok(token) = env::var(AUTH_TOKEN_ENV)
+        && !token.is_empty()
+    {
+        builder = builder.with_auth(ClientAuth::bearer(token));
     }
     if input.get("tls").and_then(Value::as_str) == Some("system-roots")
         && server_url.starts_with("https://")
@@ -297,34 +297,30 @@ async fn execute_connect(
     // server; the relay is a raw byte pipe, so wss endpoints connect
     // directly and forced disconnects are refused with a precise error.
     context.close_relay();
-    if let Ok(stream_url) = env::var(STREAM_URL_ENV) {
-        if !stream_url.is_empty() {
-            let endpoint = ws_stream_endpoint(&stream_url)?;
-            if let Some(authority) = endpoint
-                .strip_prefix("ws://")
-                .and_then(|rest| rest.split('/').next())
-            {
-                let (host, port) = match authority.split_once(':') {
-                    Some((host, port)) => (
-                        host.to_owned(),
-                        port.parse::<u16>().map_err(|_| {
-                            ClientError::server(format!(
-                                "{STREAM_URL_ENV} port {port} is not a u16"
-                            ))
-                        })?,
-                    ),
-                    None => (authority.to_owned(), 80),
-                };
-                let relay = TcpRelay::start(host, port).await?;
-                builder = builder.with_stream_endpoint(format!(
-                    "ws://127.0.0.1:{}{EVENT_STREAM_PATH}",
-                    relay.port
-                ));
-                context.relay = Some(relay);
-            } else {
-                // wss endpoints cannot be byte-relayed; connect directly.
-                builder = builder.with_stream_endpoint(endpoint);
-            }
+    if let Ok(stream_url) = env::var(STREAM_URL_ENV)
+        && !stream_url.is_empty()
+    {
+        let endpoint = ws_stream_endpoint(&stream_url)?;
+        if let Some(authority) = endpoint
+            .strip_prefix("ws://")
+            .and_then(|rest| rest.split('/').next())
+        {
+            let (host, port) = match authority.split_once(':') {
+                Some((host, port)) => (
+                    host.to_owned(),
+                    port.parse::<u16>().map_err(|_| {
+                        ClientError::server(format!("{STREAM_URL_ENV} port {port} is not a u16"))
+                    })?,
+                ),
+                None => (authority.to_owned(), 80),
+            };
+            let relay = TcpRelay::start(host, port).await?;
+            builder = builder
+                .with_stream_endpoint(format!("ws://127.0.0.1:{}{EVENT_STREAM_PATH}", relay.port));
+            context.relay = Some(relay);
+        } else {
+            // wss endpoints cannot be byte-relayed; connect directly.
+            builder = builder.with_stream_endpoint(endpoint);
         }
     }
     let client = builder.build().await?;

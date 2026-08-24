@@ -201,12 +201,11 @@ impl VerdictCache {
             self.order.insert(stamp, workflow_id);
             return;
         }
-        if self.entries.len() >= self.capacity.get() {
-            if let Some((&oldest_stamp, _)) = self.order.first_key_value() {
-                if let Some(evicted) = self.order.remove(&oldest_stamp) {
-                    self.entries.remove(&evicted);
-                }
-            }
+        if self.entries.len() >= self.capacity.get()
+            && let Some((&oldest_stamp, _)) = self.order.first_key_value()
+            && let Some(evicted) = self.order.remove(&oldest_stamp)
+        {
+            self.entries.remove(&evicted);
         }
         self.entries
             .insert(workflow_id.clone(), StampedVerdict { stamp, verdict });

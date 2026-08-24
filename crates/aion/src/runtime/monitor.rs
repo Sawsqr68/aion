@@ -226,10 +226,10 @@ impl UnmonitoredProcessAbortJob {
             state.phase = AbortJobPhase::Complete(terminal);
             std::mem::take(&mut state.finalizers)
         };
-        if let Entry::Occupied(entry) = runtime.abort_jobs.entry(self.pid) {
-            if Arc::ptr_eq(entry.get(), self) {
-                entry.remove();
-            }
+        if let Entry::Occupied(entry) = runtime.abort_jobs.entry(self.pid)
+            && Arc::ptr_eq(entry.get(), self)
+        {
+            entry.remove();
         }
         self.ready.notify_all();
         drop(ownership);
@@ -389,10 +389,10 @@ impl RuntimeHandle {
     }
 
     fn release_monitor_installation(&self, pid: Pid, installation: &Arc<MonitorInstallation>) {
-        if let Entry::Occupied(entry) = self.nif_state().monitor_installations.entry(pid) {
-            if Arc::ptr_eq(entry.get(), installation) {
-                entry.remove();
-            }
+        if let Entry::Occupied(entry) = self.nif_state().monitor_installations.entry(pid)
+            && Arc::ptr_eq(entry.get(), installation)
+        {
+            entry.remove();
         }
     }
 
@@ -502,15 +502,15 @@ impl RuntimeHandle {
                     }
                     let mut cleanup = runtime.finish_process_monitor_cleanup(pid);
                     if let Some(record) = worker_record.as_ref() {
-                        if let Err(error) = record.wait() {
-                            if cleanup.is_ok() {
-                                cleanup = Err(error);
-                            }
+                        if let Err(error) = record.wait()
+                            && cleanup.is_ok()
+                        {
+                            cleanup = Err(error);
                         }
-                        if let Err(error) = record.close_without_monitor() {
-                            if cleanup.is_ok() {
-                                cleanup = Err(error);
-                            }
+                        if let Err(error) = record.close_without_monitor()
+                            && cleanup.is_ok()
+                        {
+                            cleanup = Err(error);
                         }
                     }
                     if let Err(error) =

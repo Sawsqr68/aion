@@ -134,12 +134,12 @@ pub fn next_action(
     root_base_commit: &str,
 ) -> Result<ChainAction, ChainError> {
     for fact in &ledger.facts {
-        if let Some(named) = names_stage(fact) {
-            if graph.stage(named).is_none() {
-                return Err(ChainError::UnknownStage {
-                    stage_id: named.to_owned(),
-                });
-            }
+        if let Some(named) = names_stage(fact)
+            && graph.stage(named).is_none()
+        {
+            return Err(ChainError::UnknownStage {
+                stage_id: named.to_owned(),
+            });
         }
     }
 

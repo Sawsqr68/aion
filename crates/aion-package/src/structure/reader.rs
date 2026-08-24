@@ -80,12 +80,11 @@ pub(super) fn run_activity_name(args: &[Token]) -> Option<String> {
     if matches!(args.first(), Some(Token::OpenParen)) {
         index = 1;
     }
-    if let Some(Token::Qualified { left: _, right }) = args.get(index) {
-        if let Some(name) = right.strip_suffix(ACTIVITY_WRAPPER_SUFFIX) {
-            if !name.is_empty() {
-                return Some(name.to_owned());
-            }
-        }
+    if let Some(Token::Qualified { left: _, right }) = args.get(index)
+        && let Some(name) = right.strip_suffix(ACTIVITY_WRAPPER_SUFFIX)
+        && !name.is_empty()
+    {
+        return Some(name.to_owned());
     }
     None
 }
@@ -133,10 +132,10 @@ pub(super) fn fan_out_members(args: &[Token]) -> Vec<String> {
                 }
             }
             Token::Qualified { right, .. } if depth >= 1 => {
-                if let Some(name) = right.strip_suffix(ACTIVITY_WRAPPER_SUFFIX) {
-                    if !name.is_empty() {
-                        members.push(name.to_owned());
-                    }
+                if let Some(name) = right.strip_suffix(ACTIVITY_WRAPPER_SUFFIX)
+                    && !name.is_empty()
+                {
+                    members.push(name.to_owned());
                 }
             }
             _ => {}
@@ -205,10 +204,10 @@ pub(super) fn leading_local_call(tokens: &[Token], start: usize, end: usize) -> 
     if start >= upper {
         return None;
     }
-    if let Token::Ident(name) = &tokens[start] {
-        if matches!(tokens.get(start + 1), Some(Token::OpenParen)) {
-            return Some(name.clone());
-        }
+    if let Token::Ident(name) = &tokens[start]
+        && matches!(tokens.get(start + 1), Some(Token::OpenParen))
+    {
+        return Some(name.clone());
     }
     None
 }

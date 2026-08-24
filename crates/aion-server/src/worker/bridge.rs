@@ -324,15 +324,15 @@ impl PendingActivities {
             .as_ref()
             .err()
             .is_some_and(|reason| super::transport_loss::is_transport_domain_reason(reason));
-        if !transport_domain {
-            if let Err(error) = self.transport_losses.clear(workflow_id, activity_id) {
-                tracing::warn!(
-                    workflow_id = %workflow_id,
-                    activity_id = %activity_id,
-                    %error,
-                    "failed to retire the transport-loss budget for a resolved activity"
-                );
-            }
+        if !transport_domain
+            && let Err(error) = self.transport_losses.clear(workflow_id, activity_id)
+        {
+            tracing::warn!(
+                workflow_id = %workflow_id,
+                activity_id = %activity_id,
+                %error,
+                "failed to retire the transport-loss budget for a resolved activity"
+            );
         }
         Ok(self.complete(workflow_id, activity_id, run_id, result))
     }

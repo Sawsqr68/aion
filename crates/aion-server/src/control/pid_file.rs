@@ -9,13 +9,30 @@
 //!
 //! Every mutation of the file — the claim's rename-into-place, the stop
 //! verb's compare-and-delete, the guard's own exit-time compare-and-delete —
-//! runs under an exclusive `flock` on a sibling lock file
+//! runs under an exclusive OS file lock ([`std::fs::File::lock`]: `flock` on
+//! Unix, `LockFileEx` on Windows) on a sibling lock file
 //! (`aion-server.pid.lock`). The lock is what makes compare-and-delete
 //! atomic: without it, a successor claiming the home between a remover's
 //! read and its unlink would have ITS record deleted, leaving a live server
 //! no verb can address. The lock file itself is never renamed or removed —
 //! locking the pid file directly would be unsound, because the claim
 //! replaces that path's inode and a lock on the old inode excludes nobody.
+//!
+//! RULING — a lock failure at claim time REFUSES the boot. The lock is the
+//! instrument that keeps one home's records from destroying each other; a
+//! home where it cannot be taken (permissions on the lock file, a filesystem
+//! without advisory locking) is a home where a claim can silently delete a
+//! live server's address, and the honest answer is a refusal naming the
+//! remedy, not a boot that runs without the guarantee. The exit-time guard
+//! is deliberately more lenient (it leaves the file for stale
+//! reconciliation) because at that point refusing helps nobody — the
+//! process is exiting either way.
+//!
+//! RULING — every future field added to [`PidRecord`] is `#[serde(default)]`
+//! on read. The record is a cross-process, cross-version contract: a newer
+//! CLI must be able to read the record an older running server wrote —
+//! upgrade time is exactly when the stop verb matters most — so a missing
+//! field reads as its honest default, never as a parse refusal.
 //!
 //! The record is an incarnation identity, never a bare pid: pid, start
 //! instant, and the serving binary's content hash (plus the bound addresses
@@ -43,15 +60,21 @@ const PID_LOCK_FILE_NAME: &str = "aion-server.pid.lock";
 
 /// Take the exclusive pid-file mutation lock for `pid_path`'s home.
 ///
-/// Blocks until the lock is granted; every holder is momentary (a read, a
-/// compare, one unlink or rename), so waiting is bounded in practice. The
-/// returned guard releases on drop.
+/// Blocks until the lock is granted. Holders are short but not instantaneous:
+/// the longest section is [`claim`]'s, which spans the stale-record
+/// reconciliation — including an incarnation probe that refreshes the
+/// process-table instrument, tens to hundreds of milliseconds under load —
+/// so waiting is bounded by that, not by a single syscall.
+///
+/// The lock is released when the returned [`std::fs::File`] drops: closing
+/// the descriptor releases both `flock` (Unix) and `LockFileEx` (Windows)
+/// locks, and neither release path can fail or panic.
 ///
 /// # Errors
 ///
 /// Returns [`ServerError::PidFile`] when the lock file cannot be created or
 /// the lock cannot be taken.
-fn lock_pid_mutation(pid_path: &Path) -> Result<nix::fcntl::Flock<std::fs::File>, ServerError> {
+fn lock_pid_mutation(pid_path: &Path) -> Result<std::fs::File, ServerError> {
     let lock_path = pid_path.with_file_name(PID_LOCK_FILE_NAME);
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -64,27 +87,13 @@ fn lock_pid_mutation(pid_path: &Path) -> Result<nix::fcntl::Flock<std::fs::File>
                 lock_path.display()
             ))
         })?;
-    nix::fcntl::Flock::lock(file, nix::fcntl::FlockArg::LockExclusive).map_err(|(_file, errno)| {
+    file.lock().map_err(|io_error| {
         pid_file_error(format!(
-            "could not take the pid mutation lock `{}`: {errno}",
+            "could not take the pid mutation lock `{}`: {io_error}",
             lock_path.display()
         ))
-    })
-}
-
-/// Release the mutation lock explicitly, so the failure face is a WARN in our
-/// own words rather than the lock guard's drop behaviour. An unlock on an
-/// owned, valid descriptor has no realistic failure mode; the arm exists so
-/// no path is silent.
-fn release_pid_mutation(lock: nix::fcntl::Flock<std::fs::File>, pid_path: &Path) {
-    if let Err((_file, errno)) = lock.unlock() {
-        warn!(
-            path = %pid_path.display(),
-            %errno,
-            "could not release the pid mutation lock; the kernel releases it when \
-             this process exits"
-        );
-    }
+    })?;
+    Ok(file)
 }
 
 /// The pid file's content: one JSON object describing the server incarnation
@@ -121,6 +130,10 @@ pub struct PidRecord {
     /// (`--drain-timeout`) or from a config file edited since boot, and a
     /// stop verb that waited out a re-derived value would misreport a healthy
     /// long drain as "still draining" (or force it on a second invocation).
+    /// Defaulted on read (module-header ruling): a record written by a build
+    /// that predates this field reads as 0, which patience resolution treats
+    /// as "no recorded window" and falls through to config.
+    #[serde(default)]
     pub drain_timeout_seconds: u64,
 }
 
@@ -140,19 +153,23 @@ pub enum StaleReconciliation {
     /// else after the recorded server died. The record is replaced; the
     /// stranger keeps running untouched.
     ReusedPid(PidRecord),
-    /// A file was present, its pid is alive, and the incarnation MATCHES: a
-    /// server holding this home appears to still be running. The record is
-    /// replaced ONLY when the recorded addresses equal the ones this boot
-    /// just bound — there the successful binds prove the recorded server is
-    /// not serving them, so the record is presumed left over from an
-    /// incompletely observed exit and replaced, with the contradiction
-    /// reported in full. A live matching incarnation recorded on DIFFERENT
-    /// addresses proves nothing of the kind — that server may be serving
-    /// them right now — so the claimant boots UNCLAIMED instead: the first
-    /// claimant keeps the record and the control verbs, the new incarnation
-    /// serves without them, and the warning names the consequence. Neither
-    /// server's record is ever destroyed by the other's boot or exit.
+    /// A file was present, its pid is alive, the incarnation MATCHES, and
+    /// the recorded addresses equal the ones this boot just bound: the
+    /// successful binds prove the recorded server is not serving them, so
+    /// the record is presumed left over from an incompletely observed exit
+    /// and replaced, with the contradiction reported in full.
     LiveIncarnation(PidRecord),
+    /// A file was present, its pid is alive, the incarnation MATCHES — but
+    /// it is recorded on DIFFERENT addresses from the ones this boot bound,
+    /// so the bind-success argument proves nothing: that server may be
+    /// serving its addresses right now. The claimant boots UNCLAIMED: the
+    /// first claimant keeps the record and the control verbs, the new
+    /// incarnation serves without them, and the warning names the
+    /// consequence. Neither server's record is ever destroyed by the
+    /// other's boot or exit. This face is distinct from
+    /// [`Self::LiveIncarnation`] precisely so callers and tests can tell
+    /// "claimed over debris" from "booted unclaimed" — they are opposites.
+    LiveIncarnationElsewhere(PidRecord),
     /// A file was present but could not be parsed as a [`PidRecord`] (a
     /// hand-written pid from the pre-verb ritual, or corruption). Replaced.
     Unreadable {
@@ -231,11 +248,14 @@ pub fn claim(home: &Path, record: &PidRecord) -> Result<PidFileGuard, ServerErro
     // remover running between them could compare against the record this
     // claim is about to replace and unlink the replacement.
     let mutation_lock = lock_pid_mutation(&path)?;
-    let reconciliation = reconcile_existing(&path);
+    let mut reconciliation = reconcile_existing(&path);
     if let StaleReconciliation::LiveIncarnation(existing) = &reconciliation
         && (existing.http_address, existing.grpc_address)
             != (record.http_address, record.grpc_address)
     {
+        reconciliation = StaleReconciliation::LiveIncarnationElsewhere(existing.clone());
+    }
+    if let StaleReconciliation::LiveIncarnationElsewhere(existing) = &reconciliation {
         // The bind-success argument only covers the recorded addresses:
         // this boot bound ITS addresses, which says nothing about whether
         // the live recorded server is still serving DIFFERENT ones.
@@ -255,7 +275,7 @@ pub fn claim(home: &Path, record: &PidRecord) -> Result<PidFileGuard, ServerErro
              stop`/`status` will address the recorded server, not this one. \
              Give each server its own AION_HOME to make both addressable"
         );
-        release_pid_mutation(mutation_lock, &path);
+        drop(mutation_lock);
         return Ok(PidFileGuard {
             path,
             record: record.clone(),
@@ -282,7 +302,7 @@ pub fn claim(home: &Path, record: &PidRecord) -> Result<PidFileGuard, ServerErro
             path.display()
         ))
     })?;
-    release_pid_mutation(mutation_lock, &path);
+    drop(mutation_lock);
     info!(
         path = %path.display(),
         pid = record.pid,
@@ -330,7 +350,7 @@ pub fn remove_if_matches(home: &Path, record: &PidRecord) -> Result<bool, Server
         }
         Some(_) | None => false,
     };
-    release_pid_mutation(mutation_lock, &path);
+    drop(mutation_lock);
     Ok(removed)
 }
 
@@ -371,7 +391,10 @@ fn reconcile_existing(path: &Path) -> StaleReconciliation {
 /// Say what the reconciliation found, at the severity it deserves.
 fn report_reconciliation(path: &Path, reconciliation: &StaleReconciliation) {
     match reconciliation {
-        StaleReconciliation::NonePresent => {}
+        // NonePresent has nothing to report; LiveIncarnationElsewhere is
+        // reported by the claim's own unclaimed-boot warning — the claim
+        // returns before reaching this reporter for that face.
+        StaleReconciliation::NonePresent | StaleReconciliation::LiveIncarnationElsewhere(_) => {}
         StaleReconciliation::DeadIncarnation(record) => {
             warn!(
                 path = %path.display(),
@@ -440,6 +463,15 @@ impl PidFileGuard {
     pub fn record(&self) -> &PidRecord {
         &self.record
     }
+
+    /// Whether this guard's incarnation holds the home's claim. False for a
+    /// server that booted UNCLAIMED over another live claimant's record
+    /// ([`StaleReconciliation::LiveIncarnationElsewhere`]): the control verbs
+    /// address the recorded server, not this one.
+    #[must_use]
+    pub fn holds_claim(&self) -> bool {
+        self.holds_claim
+    }
 }
 
 impl Drop for PidFileGuard {
@@ -493,7 +525,7 @@ impl Drop for PidFileGuard {
             }
             None => {}
         }
-        release_pid_mutation(mutation_lock, &self.path);
+        drop(mutation_lock);
     }
 }
 

@@ -240,10 +240,10 @@ impl Registry {
     /// entry, and that newer run must survive this removal.
     fn forget_live_index_entry(&self, id: &WorkflowId, run: &RunId) -> Result<(), EngineError> {
         let mut index = self.index()?;
-        if let std::collections::hash_map::Entry::Occupied(entry) = index.entry(id.clone()) {
-            if entry.get().0 == *run {
-                entry.remove();
-            }
+        if let std::collections::hash_map::Entry::Occupied(entry) = index.entry(id.clone())
+            && entry.get().0 == *run
+        {
+            entry.remove();
         }
         Ok(())
     }
@@ -456,11 +456,10 @@ impl Registry {
         let mut slots = self.slots()?;
         if let std::collections::hash_map::Entry::Occupied(entry) =
             slots.terminal_writers.entry(id.clone())
+            && entry.get() == run
         {
-            if entry.get() == run {
-                entry.remove();
-                return Ok(true);
-            }
+            entry.remove();
+            return Ok(true);
         }
         Ok(false)
     }

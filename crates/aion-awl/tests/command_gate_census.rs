@@ -68,13 +68,12 @@ fn read_fixture(stem: &str) -> Fixture {
     let mut argv = Vec::new();
     for line in text.lines() {
         if let Some(header) = line.strip_prefix("# ") {
-            if let Some((key, value)) = header.split_once(": ") {
-                if key
+            if let Some((key, value)) = header.split_once(": ")
+                && key
                     .chars()
                     .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-')
-                {
-                    headers.insert(key.to_owned(), value.trim().to_owned());
-                }
+            {
+                headers.insert(key.to_owned(), value.trim().to_owned());
             }
         } else if let Some(binding) = line.strip_prefix("param ") {
             if let Some((name, value)) = binding.split_once(" = ") {

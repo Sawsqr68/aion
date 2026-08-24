@@ -117,10 +117,10 @@ pub(super) fn build_params(
                         .callees
                         .insert(region_node[callee_region]);
                 }
-            } else if let Some(ExitLive::Region { binding, .. }) = live.exit {
-                if !liveness.nodes[node].defs.contains(binding) {
-                    liveness.nodes[node].refs.insert(binding.to_owned());
-                }
+            } else if let Some(ExitLive::Region { binding, .. }) = live.exit
+                && !liveness.nodes[node].defs.contains(binding)
+            {
+                liveness.nodes[node].refs.insert(binding.to_owned());
             }
         }
     }

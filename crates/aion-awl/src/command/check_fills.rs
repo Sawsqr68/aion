@@ -53,10 +53,10 @@ pub(super) fn check_fills(decl: &CommandDecl, refusals: &mut Vec<CommandRefusal>
             refusals,
         );
     }
-    if let Some(block) = decl.hardening.first() {
-        if let Some(path) = &block.path {
-            check_string_fill(decl, &path.fill, "the hardened PATH", refusals);
-        }
+    if let Some(block) = decl.hardening.first()
+        && let Some(path) = &block.path
+    {
+        check_string_fill(decl, &path.fill, "the hardened PATH", refusals);
     }
 }
 

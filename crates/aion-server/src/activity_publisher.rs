@@ -316,10 +316,10 @@ impl ActivityEventPublisher {
             }
         }
         for (key, items) in groups {
-            if let Err(error) = self.persist_group(&key, &items, &mut outcomes).await {
-                if first_error.is_none() {
-                    first_error = Some(error);
-                }
+            if let Err(error) = self.persist_group(&key, &items, &mut outcomes).await
+                && first_error.is_none()
+            {
+                first_error = Some(error);
             }
         }
         (outcomes, first_error)

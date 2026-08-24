@@ -152,15 +152,14 @@ pub fn project_schedule_state(events: &[Event]) -> Result<Vec<ScheduleState>, Sc
             config,
             envelope,
         } = event
+            && !states.iter().any(|state| &state.schedule_id == schedule_id)
         {
-            if !states.iter().any(|state| &state.schedule_id == schedule_id) {
-                states.push(ScheduleState::created(
-                    schedule_id.clone(),
-                    config.clone(),
-                    envelope.recorded_at,
-                )?);
-                continue;
-            }
+            states.push(ScheduleState::created(
+                schedule_id.clone(),
+                config.clone(),
+                envelope.recorded_at,
+            )?);
+            continue;
         }
 
         for state in &mut states {

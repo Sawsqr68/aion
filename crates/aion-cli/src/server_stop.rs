@@ -3,13 +3,18 @@
 //!
 //! The verb's decisions all live in [`aion_server::control::stop`]; this
 //! module owns only the CLI surface — patience resolution (flag first, then
-//! the running incarnation's recorded drain window, then the config's
-//! `drain.timeout_seconds`, never an invented value) and the rendering of
-//! each verdict face. Exit codes: 0 when the server is stopped or already
-//! gone; 1 exclusively when it is still draining at patience (the one face a
-//! script keys on — the process lives, wait or force); 2 when the verb could
-//! not complete (a refusal before signalling, an unresolvable home or
-//! config, or an error mid-verb — the message on stderr says which).
+//! the VERIFIED-RUNNING incarnation's recorded drain window, then the
+//! config's `drain.timeout_seconds`, never an invented value) and the
+//! rendering of each verdict face. Exit codes: 0 when the goal state holds —
+//! the server stopped, was already gone, or no server has claimed the home
+//! at all (stopping is idempotent: "nothing is running" is success, exactly
+//! as `systemctl stop` rules it); 1 exclusively when it is still draining at
+//! patience (the one face a script keys on — the process lives, wait or
+//! force); 2 when the verb could not complete (a refusal before signalling,
+//! an unresolvable home or config, or an error mid-verb — the message on
+//! stderr says which). `aion server status` answers a different question —
+//! "is it up?" is a predicate, so DOWN is its exit 1 — which is why the two
+//! verbs give the same situation different codes on purpose.
 
 use std::num::NonZeroU64;
 use std::path::PathBuf;
@@ -17,7 +22,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use aion_server::config::{CliOverrides, ServerConfig, aion_home};
-use aion_server::control::{NoteFate, OutcomeRecord, StopOutcome, StopRefusal, StopVerdict};
+use aion_server::control::{
+    IncarnationProbe, NoteFate, OutcomeRecord, StopOutcome, StopRefusal, StopVerdict,
+};
 use clap::Args;
 
 /// Arguments for `aion server stop`.
@@ -45,20 +52,34 @@ pub fn run(args: &StopArgs) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let (patience, patience_source) = match resolve_patience(args, &home) {
+    let running = verified_running_record(&home);
+    let (patience, patience_source) = match resolve_patience(args, running.as_ref()) {
         Ok(resolved) => resolved,
         Err(message) => {
             eprintln!("{message}");
             return ExitCode::from(2);
         }
     };
-    println!(
-        "waiting up to {}s for the drain ({})",
-        patience.as_secs(),
-        patience_source.describe()
-    );
+    // Announce the wait only when one can actually happen: a verified-running
+    // recorded server. Announcing over an empty home or a stale record would
+    // claim an action the verb is not going to perform.
+    if running.is_some() {
+        println!(
+            "waiting up to {}s for the drain ({})",
+            patience.as_secs(),
+            patience_source.describe()
+        );
+    }
     match aion_server::control::stop::stop(&home, patience) {
         Ok(StopVerdict::Outcome(outcome)) => render_outcome(&outcome),
+        // The goal state — nothing running at this home — already holds:
+        // stopping is idempotent, so an unclaimed home is success, not a
+        // failure a deploy script must special-case against debris presence.
+        Ok(StopVerdict::Refusal(refusal @ StopRefusal::NoPidFile { .. })) => {
+            println!("{refusal}");
+            println!("nothing to stop: no server has claimed this home");
+            ExitCode::SUCCESS
+        }
         Ok(StopVerdict::Refusal(refusal)) => {
             eprintln!("aion server stop: {refusal}");
             render_refusal_note(&refusal);
@@ -71,18 +92,33 @@ pub fn run(args: &StopArgs) -> ExitCode {
     }
 }
 
+/// The recorded incarnation, but only when the record's process is verified
+/// LIVE with the recorded start instant — the only case in which the record
+/// speaks for a running server rather than for debris.
+fn verified_running_record(home: &std::path::Path) -> Option<aion_server::control::PidRecord> {
+    // An unreadable pid file is the stop verb's own business to report in
+    // full; for patience resolution it simply means the record cannot answer.
+    let record = aion_server::control::pid_file::read(home).ok().flatten()?;
+    match aion_server::control::incarnation::probe(&record) {
+        IncarnationProbe::Verified { .. } => Some(record),
+        IncarnationProbe::ProcessGone | IncarnationProbe::DifferentIncarnation { .. } => None,
+    }
+}
+
 /// Where the wait patience came from, named in the verb's own output so the
 /// operator can see which value governed the wait.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PatienceSource {
     /// `--patience` on this invocation.
     Flag,
-    /// The running incarnation's pid record — the drain window the server is
-    /// ACTUALLY running with, which its own `--drain-timeout` or a config
-    /// file edited since boot can have moved away from today's config.
+    /// The VERIFIED-RUNNING incarnation's pid record — the drain window the
+    /// server is ACTUALLY running with, which its own `--drain-timeout` or a
+    /// config file edited since boot can have moved away from today's
+    /// config. A record whose process is gone or recycled never reaches this
+    /// source: a stale record's window governs nothing.
     Record,
-    /// The config file's `drain.timeout_seconds`, when no record exists to
-    /// ask (nothing is running, or a stale record was already reconciled).
+    /// The config file's `drain.timeout_seconds`, when no verified-running
+    /// record exists to ask (nothing is running, or the record is stale).
     Config,
 }
 
@@ -96,37 +132,34 @@ impl PatienceSource {
     }
 }
 
-/// The wait patience: the flag when given, otherwise the running
+/// The wait patience: the flag when given, otherwise the VERIFIED-RUNNING
 /// incarnation's own recorded drain window, otherwise the config's drain
 /// timeout. The record outranks the config for the same reason `status`
 /// probes the record's addresses: the running server's window may have come
 /// from its own `--drain-timeout`, and a re-derived value would wait out the
 /// wrong window — misreporting a healthy long drain as "still draining", or
-/// converting it to a forced exit on a second invocation. Loading the config
-/// for the last fallback NEVER scaffolds one — a stop verb must not create
-/// server state.
+/// converting it to a forced exit on a second invocation. The caller proves
+/// the record's liveness ([`verified_running_record`]) precisely so a stale
+/// record's window can never govern a wait. Loading the config for the last
+/// fallback NEVER scaffolds one — a stop verb must not create server state.
 fn resolve_patience(
     args: &StopArgs,
-    home: &std::path::Path,
+    running: Option<&aion_server::control::PidRecord>,
 ) -> Result<(Duration, PatienceSource), String> {
     if let Some(seconds) = args.patience {
         return Ok((Duration::from_secs(seconds.get()), PatienceSource::Flag));
     }
-    match aion_server::control::pid_file::read(home) {
-        Ok(Some(record)) if record.drain_timeout_seconds > 0 => {
-            return Ok((
-                Duration::from_secs(record.drain_timeout_seconds),
-                PatienceSource::Record,
-            ));
-        }
-        // A zero window in a record would make the verb give up instantly;
-        // no server writes one (the config validates the timeout non-zero),
-        // so it reads as debris and falls through to the config.
-        Ok(Some(_) | None) => {}
-        // An unreadable pid file is the stop verb's own business to report
-        // in full; for patience resolution it simply means the record cannot
-        // answer, and the config still can.
-        Err(_unreadable) => {}
+    // A zero window in a record would make the verb give up instantly. No
+    // server writes one (the config validates the timeout non-zero), but a
+    // record written before the field existed reads as 0 (`serde(default)`),
+    // and both shapes honestly mean "no recorded window": fall to config.
+    if let Some(record) = running
+        && record.drain_timeout_seconds > 0
+    {
+        return Ok((
+            Duration::from_secs(record.drain_timeout_seconds),
+            PatienceSource::Record,
+        ));
     }
     let overrides = CliOverrides {
         config_path: args.config.clone(),
@@ -218,7 +251,14 @@ pub(crate) fn render_fate(pid: u32, fate: &NoteFate) {
                  destroyed without its run loop seeing the end (the `kill -9` shape)"
             );
             match (outcome, outcome_unreadable) {
-                (Some(record), _) => render_outcome_record(record),
+                (Some(record), unreadable) => {
+                    render_outcome_record(record);
+                    // A readable record does not un-happen the torn line
+                    // beside it: both facts are stated.
+                    if let Some(unreadable) = unreadable {
+                        render_unreadable_outcome(unreadable);
+                    }
+                }
                 (None, Some(unreadable)) => render_unreadable_outcome(unreadable),
                 (None, None) => println!(
                     "no drain outcome was recorded — the drain never got far enough to \
@@ -234,7 +274,12 @@ pub(crate) fn render_fate(pid: u32, fate: &NoteFate) {
         } => {
             println!("exit recorded: {reason}");
             match (outcome, outcome_unreadable) {
-                (Some(record), _) => render_outcome_record(record),
+                (Some(record), unreadable) => {
+                    render_outcome_record(record);
+                    if let Some(unreadable) = unreadable {
+                        render_unreadable_outcome(unreadable);
+                    }
+                }
                 (None, Some(unreadable)) => render_unreadable_outcome(unreadable),
                 (None, None) => println!(
                     "no drain outcome record was written for this exit (an error return \
@@ -302,27 +347,37 @@ fn render_refusal_note(refusal: &StopRefusal) {
 
 #[cfg(test)]
 mod tests {
-    use super::{PatienceSource, StopArgs, resolve_patience};
+    use super::{PatienceSource, StopArgs, resolve_patience, verified_running_record};
+    use aion_server::control::PidRecord;
     use std::num::NonZeroU64;
     use std::time::Duration;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-    /// A pid record with a known drain window, written where the verb reads.
-    fn write_record(home: &std::path::Path, drain_timeout_seconds: u64) -> TestResult {
+    /// A record for THIS process with its real incarnation — the only live
+    /// incarnation a test can mint honestly — carrying a known drain window.
+    fn live_record(drain_timeout_seconds: u64) -> Result<PidRecord, Box<dyn std::error::Error>> {
+        let me = aion_server::control::incarnation::self_identity()?;
+        Ok(PidRecord {
+            pid: me.pid,
+            started_at_unix_secs: me.started_at_unix_secs,
+            binary_sha256: me.binary_sha256,
+            version: "0.0.0-test".to_owned(),
+            commit: "test".to_owned(),
+            http_address: "127.0.0.1:8080".parse()?,
+            grpc_address: "127.0.0.1:50051".parse()?,
+            drain_timeout_seconds,
+        })
+    }
+
+    /// Write `record` where the verb reads.
+    fn write_record(home: &std::path::Path, record: &PidRecord) -> TestResult {
         let run_dir = home.join("run");
         std::fs::create_dir_all(&run_dir)?;
-        let record = serde_json::json!({
-            "pid": 4242,
-            "started_at_unix_secs": 1_000_000,
-            "binary_sha256": "0".repeat(64),
-            "version": "0.0.0-test",
-            "commit": "test",
-            "http_address": "127.0.0.1:8080",
-            "grpc_address": "127.0.0.1:50051",
-            "drain_timeout_seconds": drain_timeout_seconds,
-        });
-        std::fs::write(run_dir.join("aion-server.pid"), format!("{record}\n"))?;
+        std::fs::write(
+            run_dir.join("aion-server.pid"),
+            format!("{}\n", serde_json::to_string(record)?),
+        )?;
         Ok(())
     }
 
@@ -352,35 +407,37 @@ timeout_seconds = {timeout_seconds}
         Ok(path)
     }
 
-    /// R2: the flag outranks everything, including a live record.
+    /// R2: the flag outranks everything, including a verified-live record.
     #[test]
     fn the_patience_flag_outranks_the_record_and_the_config() -> TestResult {
-        let home = tempfile::tempdir()?;
-        write_record(home.path(), 300)?;
+        let record = live_record(300)?;
         let args = StopArgs {
             config: None,
             patience: NonZeroU64::new(7),
         };
-        let (patience, source) = resolve_patience(&args, home.path())
+        let (patience, source) = resolve_patience(&args, Some(&record))
             .map_err(|message| -> Box<dyn std::error::Error> { message.into() })?;
         assert_eq!(patience, Duration::from_secs(7));
         assert_eq!(source, PatienceSource::Flag);
         Ok(())
     }
 
-    /// Absent the flag, the RUNNING incarnation's recorded window governs —
-    /// not a re-derivation from today's config, which the server's own
-    /// `--drain-timeout` or an edited file can have moved away from.
+    /// Absent the flag, the VERIFIED-RUNNING incarnation's recorded window
+    /// governs — proven against a record whose pid and start instant are this
+    /// very process's, so [`verified_running_record`] genuinely verifies a
+    /// live incarnation rather than trusting the file.
     #[test]
     fn an_absent_flag_reads_the_running_servers_recorded_window() -> TestResult {
         let home = tempfile::tempdir()?;
-        write_record(home.path(), 300)?;
+        write_record(home.path(), &live_record(300)?)?;
+        let running = verified_running_record(home.path())
+            .ok_or("a record naming THIS live process must verify as running")?;
         let config = write_config(home.path(), 30)?;
         let args = StopArgs {
             config: Some(config),
             patience: None,
         };
-        let (patience, source) = resolve_patience(&args, home.path())
+        let (patience, source) = resolve_patience(&args, Some(&running))
             .map_err(|message| -> Box<dyn std::error::Error> { message.into() })?;
         assert_eq!(
             patience,
@@ -388,6 +445,43 @@ timeout_seconds = {timeout_seconds}
             "the record's window must outrank the config's"
         );
         assert_eq!(source, PatienceSource::Record);
+        Ok(())
+    }
+
+    /// Red-first for the stale-record hole: a record whose process is GONE
+    /// must not verify as running, so its window governs nothing and the
+    /// config rules the wait.
+    #[test]
+    fn a_dead_records_window_never_governs_the_wait() -> TestResult {
+        let home = tempfile::tempdir()?;
+        // A pid proven vacated: a reaped child, with a start instant (zero)
+        // no live process reports, so the probe cannot accidentally verify.
+        let mut child = std::process::Command::new("true").spawn()?;
+        let dead_pid = child.id();
+        child.wait()?;
+        let mut record = live_record(300)?;
+        record.pid = dead_pid;
+        record.started_at_unix_secs = 0;
+        write_record(home.path(), &record)?;
+
+        assert_eq!(
+            verified_running_record(home.path()),
+            None,
+            "a dead record must not read as a running server"
+        );
+        let config = write_config(home.path(), 45)?;
+        let args = StopArgs {
+            config: Some(config),
+            patience: None,
+        };
+        let (patience, source) = resolve_patience(&args, None)
+            .map_err(|message| -> Box<dyn std::error::Error> { message.into() })?;
+        assert_eq!(
+            patience,
+            Duration::from_secs(45),
+            "the config must govern when the record is stale"
+        );
+        assert_eq!(source, PatienceSource::Config);
         Ok(())
     }
 
@@ -400,7 +494,12 @@ timeout_seconds = {timeout_seconds}
             config: Some(config),
             patience: None,
         };
-        let (patience, source) = resolve_patience(&args, home.path())
+        assert_eq!(
+            verified_running_record(home.path()),
+            None,
+            "an empty home has no running record"
+        );
+        let (patience, source) = resolve_patience(&args, None)
             .map_err(|message| -> Box<dyn std::error::Error> { message.into() })?;
         assert_eq!(patience, Duration::from_secs(45));
         assert_eq!(source, PatienceSource::Config);

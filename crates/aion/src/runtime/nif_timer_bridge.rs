@@ -418,14 +418,12 @@ impl EngineHandle for TimerNifBridge {
             if let Some(bridge) = nif_state
                 .upgrade()
                 .and_then(|state| timer_bridge(&state).ok())
-            {
-                if bridge
+                && bridge
                     .pending_timers
                     .get(&task_key)
                     .is_some_and(|pending| pending.generation == generation)
-                {
-                    bridge.pending_timers.remove(&task_key);
-                }
+            {
+                bridge.pending_timers.remove(&task_key);
             }
         });
         // The window this function's second gate closes, made reachable by a

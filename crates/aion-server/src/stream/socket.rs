@@ -170,11 +170,10 @@ where
                     // dropping the frame sender, so if a terminal error raced
                     // this branch it is observable now — the client must not
                     // get an abrupt close instead of its error frame.
-                    if !lag_closed {
-                        if let Ok(error) = lagged.try_recv() {
+                    if !lag_closed
+                        && let Ok(error) = lagged.try_recv() {
                             return deliver_terminal(socket_tx, error).await;
                         }
-                    }
                     // Graceful subscription end (per-workflow terminal event
                     // delivered, or the engine stream ended cleanly): finish
                     // the WebSocket close handshake with a normal-closure
@@ -420,11 +419,9 @@ impl SubscriptionReader {
             .is_some_and(|target| event.workflow_id() == target);
         // FINDING L2 tripwire: never deliver a gapped per-workflow stream —
         // a contiguity violation is a loud typed terminal error instead.
-        if is_target {
-            if let Err(error) = self.contiguity.check(event) {
-                self.send_terminal(error);
-                return ReaderStep::Stop;
-            }
+        if is_target && let Err(error) = self.contiguity.check(event) {
+            self.send_terminal(error);
+            return ReaderStep::Stop;
         }
         match self.queue(event, mode).await {
             Ok(FrameOutcome::Delivered) => {

@@ -421,27 +421,26 @@ impl<'a> ControlFlowExtractor<'a> {
     ) -> Result<Subject, StructureError> {
         let (start, end) = scrutinee;
         // 1. `case workflow.<primitive>(...)`.
-        if let Some(prim_index) = self.scrutinee_primitive(start, end) {
-            if let Token::Qualified { right, .. } = &self.tokens[prim_index] {
-                if let Some(primitive) = recognise(right) {
-                    let node = self.emit_primitive(primitive, prim_index)?;
-                    self.sequence(frontier, node);
-                    return Ok(Subject::Primitive(Region {
-                        head: Some(node),
-                        tail: vec![node],
-                        primitives: 1,
-                    }));
-                }
-            }
+        if let Some(prim_index) = self.scrutinee_primitive(start, end)
+            && let Token::Qualified { right, .. } = &self.tokens[prim_index]
+            && let Some(primitive) = recognise(right)
+        {
+            let node = self.emit_primitive(primitive, prim_index)?;
+            self.sequence(frontier, node);
+            return Ok(Subject::Primitive(Region {
+                head: Some(node),
+                tail: vec![node],
+                primitives: 1,
+            }));
         }
         // 2. `case <local_fn>(...)` — follow inline; a primitive-bearing call is
         //    a durable subject, a primitive-free call collapses to a data case.
-        if let Some(name) = leading_local_call(self.tokens, start, end) {
-            if self.functions.contains_key(&name) {
-                let call = self.follow_named(&name, frontier, stack)?;
-                if call.primitives > 0 {
-                    return Ok(Subject::Primitive(call));
-                }
+        if let Some(name) = leading_local_call(self.tokens, start, end)
+            && self.functions.contains_key(&name)
+        {
+            let call = self.follow_named(&name, frontier, stack)?;
+            if call.primitives > 0 {
+                return Ok(Subject::Primitive(call));
             }
         }
         // 3. A non-primitive, non-primitive-bearing subject is data.
@@ -530,22 +529,20 @@ fn map_functions(tokens: &[Token]) -> BTreeMap<String, FnBody> {
     let mut functions = BTreeMap::new();
     let mut index = 0;
     while index < tokens.len() {
-        if matches!(&tokens[index], Token::Ident(word) if word == "fn") {
-            if let Token::Ident(name) = tokens.get(index + 1).unwrap_or(&Token::Other(' ')) {
-                if let Some(open) = find_open_brace(tokens, index + 2, tokens.len()) {
-                    if let Some(close) = match_brace(tokens, open, tokens.len()) {
-                        functions.insert(
-                            name.clone(),
-                            FnBody {
-                                start: open + 1,
-                                end: close,
-                            },
-                        );
-                        index = close + 1;
-                        continue;
-                    }
-                }
-            }
+        if matches!(&tokens[index], Token::Ident(word) if word == "fn")
+            && let Token::Ident(name) = tokens.get(index + 1).unwrap_or(&Token::Other(' '))
+            && let Some(open) = find_open_brace(tokens, index + 2, tokens.len())
+            && let Some(close) = match_brace(tokens, open, tokens.len())
+        {
+            functions.insert(
+                name.clone(),
+                FnBody {
+                    start: open + 1,
+                    end: close,
+                },
+            );
+            index = close + 1;
+            continue;
         }
         index += 1;
     }

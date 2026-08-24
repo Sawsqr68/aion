@@ -93,10 +93,9 @@ impl CapturedLogs {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_deref()
+            && let Ok(mut bytes) = captured.0.lock()
         {
-            if let Ok(mut bytes) = captured.0.lock() {
-                bytes.extend_from_slice(reason.as_bytes());
-            }
+            bytes.extend_from_slice(reason.as_bytes());
         }
         ACTIVE_SINK.with(|sink| {
             *sink.borrow_mut() = Some(Arc::clone(&captured.0));

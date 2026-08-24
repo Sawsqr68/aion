@@ -288,17 +288,17 @@ impl Client {
                 key.clone(),
             )
         });
-        if let Some(fingerprint) = &fingerprint {
-            if let Some(cached) = self.cached_start(fingerprint).await? {
-                // The run already exists and keeps the name it already wears.
-                // If this call asked for a different one, say so rather than
-                // quietly handing back a differently-named run (#211).
-                let not_applied = cached.display_name_not_applied(display_name.as_deref());
-                return Ok(StartOutcome {
-                    handle: cached.into_handle(),
-                    display_name_not_applied: not_applied,
-                });
-            }
+        if let Some(fingerprint) = &fingerprint
+            && let Some(cached) = self.cached_start(fingerprint).await?
+        {
+            // The run already exists and keeps the name it already wears.
+            // If this call asked for a different one, say so rather than
+            // quietly handing back a differently-named run (#211).
+            let not_applied = cached.display_name_not_applied(display_name.as_deref());
+            return Ok(StartOutcome {
+                handle: cached.into_handle(),
+                display_name_not_applied: not_applied,
+            });
         }
         let response = self
             .transport

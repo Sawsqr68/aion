@@ -234,9 +234,9 @@ pub(crate) fn record_first_error(
     pending_error: &mut Option<WorkerError>,
     result: Result<(), WorkerError>,
 ) {
-    if pending_error.is_none() {
-        if let Err(error) = result {
-            *pending_error = Some(error);
-        }
+    if pending_error.is_none()
+        && let Err(error) = result
+    {
+        *pending_error = Some(error);
     }
 }

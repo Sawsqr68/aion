@@ -68,15 +68,14 @@ fn normalize(value: &mut Value, run_ids: &mut HashMap<String, String>) {
 /// armed for the wrong run still diverges positionally; only the identity
 /// aliasing is normalized, never the event shape (decision 11).
 fn normalize_timer_id(field: &mut Value, run_ids: &mut HashMap<String, String>) {
-    if let Value::Object(map) = field {
-        if let Some(Value::String(name)) = map.get_mut("Named") {
-            if let Some(id) = name.strip_prefix("deadline:") {
-                let next = format!("<run-{}>", run_ids.len());
-                let placeholder = run_ids.entry(id.to_owned()).or_insert(next).clone();
-                *name = format!("deadline:{placeholder}");
-                return;
-            }
-        }
+    if let Value::Object(map) = field
+        && let Some(Value::String(name)) = map.get_mut("Named")
+        && let Some(id) = name.strip_prefix("deadline:")
+    {
+        let next = format!("<run-{}>", run_ids.len());
+        let placeholder = run_ids.entry(id.to_owned()).or_insert(next).clone();
+        *name = format!("deadline:{placeholder}");
+        return;
     }
     normalize(field, run_ids);
 }

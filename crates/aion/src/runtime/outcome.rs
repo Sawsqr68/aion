@@ -113,24 +113,22 @@ fn unwrap_gleam_result(
     pid: Pid,
     heap: beamr::term::heap_borrow::HeapBorrow<'_>,
 ) -> Result<WorkflowProcessOutcome, EngineError> {
-    if let Some(tuple) = Tuple::new(result) {
-        if tuple.arity() == 2 {
-            if let (Some(tag), Some(value)) = (tuple.get(0), tuple.get(1)) {
-                if let Some(atom) = tag.as_atom() {
-                    if atom == Atom::OK {
-                        return Ok(WorkflowProcessOutcome::Completed(term_to_payload(
-                            value, atoms, heap,
-                        )?));
-                    }
-                    if atom == Atom::ERROR {
-                        let details = term_to_payload(value, atoms, heap).ok();
-                        return Ok(WorkflowProcessOutcome::Failed(WorkflowError {
-                            message: format!("workflow {pid} returned error"),
-                            details,
-                        }));
-                    }
-                }
-            }
+    if let Some(tuple) = Tuple::new(result)
+        && tuple.arity() == 2
+        && let (Some(tag), Some(value)) = (tuple.get(0), tuple.get(1))
+        && let Some(atom) = tag.as_atom()
+    {
+        if atom == Atom::OK {
+            return Ok(WorkflowProcessOutcome::Completed(term_to_payload(
+                value, atoms, heap,
+            )?));
+        }
+        if atom == Atom::ERROR {
+            let details = term_to_payload(value, atoms, heap).ok();
+            return Ok(WorkflowProcessOutcome::Failed(WorkflowError {
+                message: format!("workflow {pid} returned error"),
+                details,
+            }));
         }
     }
     Ok(WorkflowProcessOutcome::Completed(term_to_payload(

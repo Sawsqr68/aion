@@ -88,6 +88,14 @@ pub enum ServerError {
         message: String,
     },
 
+    /// This process's own incarnation identity (process-table start instant,
+    /// executable path, binary hash) could not be read.
+    #[error("incarnation identity error: {message}")]
+    Incarnation {
+        /// Redacted, operator-facing failure message.
+        message: String,
+    },
+
     /// Namespace validation or authorization failed.
     #[error("namespace error: {message}")]
     Namespace {
@@ -303,6 +311,7 @@ impl ServerError {
             | Self::SignalListener { .. }
             | Self::DeathNote { .. }
             | Self::PidFile { .. }
+            | Self::Incarnation { .. }
             | Self::LockPoisoned { .. } => WireError::backend("server backend failure"),
             Self::ActivityCompletionRejected { .. } => {
                 WireError::backend("stale activity completion rejected")
@@ -466,98 +475,60 @@ pub struct ErrorTraceFields<'a> {
     pub reason: &'a dyn std::fmt::Display,
 }
 
+impl<'a> ErrorTraceFields<'a> {
+    /// The common arm shape: a named outer type, no inner store type.
+    fn plain(error_type: &'static str, reason: &'a dyn std::fmt::Display) -> Self {
+        Self {
+            error_type: Cow::Borrowed(error_type),
+            store_error_type: None,
+            reason,
+        }
+    }
+}
+
 impl ServerError {
     /// Return stable typed fields for structured error logging.
     #[must_use]
     pub fn trace_fields(&self) -> ErrorTraceFields<'_> {
         match self {
-            Self::Config { message } => ErrorTraceFields {
-                error_type: Cow::Borrowed("Config"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::UnsafeDataRootAncestor { reason, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("UnsafeDataRootAncestor"),
-                store_error_type: None,
-                reason,
-            },
-            Self::TransportBind { message, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("TransportBind"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::Transport { message, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("Transport"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::SignalListener { message, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("SignalListener"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::PidFile { message } => ErrorTraceFields {
-                error_type: Cow::Borrowed("PidFile"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::DeathNote { message } => ErrorTraceFields {
-                error_type: Cow::Borrowed("DeathNote"),
-                store_error_type: None,
-                reason: message,
-            },
-            Self::Namespace { message } => ErrorTraceFields {
-                error_type: Cow::Borrowed("Namespace"),
-                store_error_type: None,
-                reason: message,
-            },
+            Self::Config { message } => ErrorTraceFields::plain("Config", message),
+            Self::UnsafeDataRootAncestor { reason, .. } => {
+                ErrorTraceFields::plain("UnsafeDataRootAncestor", reason)
+            }
+            Self::TransportBind { message, .. } => {
+                ErrorTraceFields::plain("TransportBind", message)
+            }
+            Self::Transport { message, .. } => ErrorTraceFields::plain("Transport", message),
+            Self::SignalListener { message, .. } => {
+                ErrorTraceFields::plain("SignalListener", message)
+            }
+            Self::PidFile { message } => ErrorTraceFields::plain("PidFile", message),
+            Self::Incarnation { message } => ErrorTraceFields::plain("Incarnation", message),
+            Self::DeathNote { message } => ErrorTraceFields::plain("DeathNote", message),
+            Self::Namespace { message } => ErrorTraceFields::plain("Namespace", message),
             Self::EngineCall { source } => engine_trace_fields(source),
             Self::StoreBackend { source } => store_trace_fields(source),
-            Self::Stream { failure } => ErrorTraceFields {
-                error_type: Cow::Borrowed("Stream"),
-                store_error_type: None,
-                reason: failure,
-            },
-            Self::WorkerDispatch { reason, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("WorkerDispatch"),
-                store_error_type: None,
-                reason,
-            },
-            Self::WorkerConnectionLost { detail, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("WorkerConnectionLost"),
-                store_error_type: None,
-                reason: detail,
-            },
-            Self::WorkerBusy { detail, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("WorkerBusy"),
-                store_error_type: None,
-                reason: detail,
-            },
-            Self::PendingActivityCollision { activity_id, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("PendingActivityCollision"),
-                store_error_type: None,
-                reason: activity_id,
-            },
-            Self::DeclaredAttemptCollision { activity_id, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("DeclaredAttemptCollision"),
-                store_error_type: None,
-                reason: activity_id,
-            },
-            Self::DrainingRefusedDeclaredAttempt { activity_id, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("DrainingRefusedDeclaredAttempt"),
-                store_error_type: None,
-                reason: activity_id,
-            },
-            Self::ActivityCompletionRejected { reason, .. } => ErrorTraceFields {
-                error_type: Cow::Borrowed("ActivityCompletionRejected"),
-                store_error_type: None,
-                reason,
-            },
-            Self::LockPoisoned { resource } => ErrorTraceFields {
-                error_type: Cow::Borrowed("LockPoisoned"),
-                store_error_type: None,
-                reason: resource,
-            },
+            Self::Stream { failure } => ErrorTraceFields::plain("Stream", failure),
+            Self::WorkerDispatch { reason, .. } => {
+                ErrorTraceFields::plain("WorkerDispatch", reason)
+            }
+            Self::WorkerConnectionLost { detail, .. } => {
+                ErrorTraceFields::plain("WorkerConnectionLost", detail)
+            }
+            Self::WorkerBusy { detail, .. } => ErrorTraceFields::plain("WorkerBusy", detail),
+            Self::PendingActivityCollision { activity_id, .. } => {
+                ErrorTraceFields::plain("PendingActivityCollision", activity_id)
+            }
+            Self::DeclaredAttemptCollision { activity_id, .. } => {
+                ErrorTraceFields::plain("DeclaredAttemptCollision", activity_id)
+            }
+            Self::DrainingRefusedDeclaredAttempt { activity_id, .. } => {
+                ErrorTraceFields::plain("DrainingRefusedDeclaredAttempt", activity_id)
+            }
+            Self::ActivityCompletionRejected { reason, .. } => {
+                ErrorTraceFields::plain("ActivityCompletionRejected", reason)
+            }
+            Self::LockPoisoned { resource } => ErrorTraceFields::plain("LockPoisoned", resource),
             Self::Wire { wire } => ErrorTraceFields {
                 error_type: wire
                     .error_type

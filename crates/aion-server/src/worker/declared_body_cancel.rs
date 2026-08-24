@@ -119,6 +119,20 @@ impl DeclaredCommandAttempts {
             .lock()
             .map_err(|_poisoned| ServerError::lock_poisoned(RESOURCE))?;
         if self.drain.is_draining() {
+            // The refusal wins (a park is the safe answer during a drain), but
+            // a collision is a correctness defect — one attempt executing
+            // twice — and must not vanish into a routine park report.
+            if attempts.contains_key(&key) {
+                tracing::error!(
+                    workflow_id = %key.workflow_id,
+                    activity_id = %key.activity_id,
+                    attempt = key.attempt,
+                    "declared attempt collision detected while draining: this \
+                     attempt is ALREADY executing; the dispatch is parked by the \
+                     drain, but a second dispatch of a running attempt is a \
+                     double-dispatch defect regardless of the drain"
+                );
+            }
             return Err(ServerError::DrainingRefusedDeclaredAttempt {
                 workflow_id: key.workflow_id.clone(),
                 activity_id: key.activity_id.clone(),

@@ -72,10 +72,10 @@ pub fn decode_subscription_request(bytes: &[u8]) -> Result<SubscriptionRequest, 
 }
 
 fn decode_subscription_value(value: &Value) -> Result<SubscriptionRequest, ServerError> {
-    if let Ok(request) = serde_json::from_value::<SubscriptionRequest>(value.clone()) {
-        if request.subscription.is_some() {
-            return Ok(request);
-        }
+    if let Ok(request) = serde_json::from_value::<SubscriptionRequest>(value.clone())
+        && request.subscription.is_some()
+    {
+        return Ok(request);
     }
 
     let subscription = value.get("subscription").unwrap_or(value);

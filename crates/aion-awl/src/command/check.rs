@@ -275,21 +275,21 @@ fn check_hardening<'a>(
         ));
     }
     let block = decl.hardening.first();
-    if let Some(block) = block {
-        if !block.states_something() {
-            refusals.push(CommandRefusal::refuse(
-                CommandCause::HardeningEmpty,
-                block.span,
-                HARDENING_WORD,
-                format!(
-                    "command `{}`'s `{HARDENING_WORD}` block states nothing, so it hardens \
+    if let Some(block) = block
+        && !block.states_something()
+    {
+        refusals.push(CommandRefusal::refuse(
+            CommandCause::HardeningEmpty,
+            block.span,
+            HARDENING_WORD,
+            format!(
+                "command `{}`'s `{HARDENING_WORD}` block states nothing, so it hardens \
                      nothing; declare a `{PATH_WORD}`, an `{OPEN_FILES_WORD}`, or remove the \
                      block — an empty block and an absent one are different claims and must not \
                      read alike",
-                    decl.name
-                ),
-            ));
-        }
+                decl.name
+            ),
+        ));
     }
     block
 }

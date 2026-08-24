@@ -170,13 +170,13 @@ fn verify_stmt(
     for value in stmt_values(stmt) {
         check_value(module, function, &value)?;
     }
-    if let Some(dst) = stmt.defined() {
-        if !defined.insert(dst) {
-            return Err(VerifyError::new(
-                function,
-                format!("variable v{} defined more than once", dst.0),
-            ));
-        }
+    if let Some(dst) = stmt.defined()
+        && !defined.insert(dst)
+    {
+        return Err(VerifyError::new(
+            function,
+            format!("variable v{} defined more than once", dst.0),
+        ));
     }
     if let Stmt::AssertList { binds, .. } = stmt {
         for bind in binds.iter().flatten() {

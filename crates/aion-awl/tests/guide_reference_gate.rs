@@ -47,10 +47,10 @@ fn sections(source: &str) -> BTreeMap<u8, (String, String)> {
             if let Some((number, title, body)) = current.take() {
                 sections.insert(number, (title, body));
             }
-            if let Some((number, title)) = heading.split_once(". ") {
-                if let Ok(number) = number.parse::<u8>() {
-                    current = Some((number, title.to_owned(), String::new()));
-                }
+            if let Some((number, title)) = heading.split_once(". ")
+                && let Ok(number) = number.parse::<u8>()
+            {
+                current = Some((number, title.to_owned(), String::new()));
             }
         } else if let Some((_, _, body)) = current.as_mut() {
             body.push_str(line);

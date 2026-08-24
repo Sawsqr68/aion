@@ -40,10 +40,10 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
                 for arg in &mut call.call.args {
                     rename_arg(arg, spans, to);
                 }
-                if let Some(bind) = &mut call.bind {
-                    if matches_span(bind.span, spans) {
-                        bind.name.clone_from(&to.to_owned());
-                    }
+                if let Some(bind) = &mut call.bind
+                    && matches_span(bind.span, spans)
+                {
+                    bind.name.clone_from(&to.to_owned());
                 }
             }
             Statement::Spawn(spawn) => {
@@ -54,10 +54,10 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
             Statement::Pipe(pipe) => {
                 rename_expr(&mut pipe.head, spans, to);
                 for stage in &mut pipe.stages {
-                    if let PipeStage::Combinator(call) = stage {
-                        if let Some(arg) = &mut call.arg {
-                            rename_expr(arg, spans, to);
-                        }
+                    if let PipeStage::Combinator(call) = stage
+                        && let Some(arg) = &mut call.arg
+                    {
+                        rename_expr(arg, spans, to);
                     }
                 }
                 match &mut pipe.end {
@@ -88,10 +88,10 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
                     rename_expr(collection, spans, to);
                 }
                 rename_statements(&mut fork.body, spans, to);
-                if let Some(bind) = &mut fork.join.bind {
-                    if matches_span(bind.span, spans) {
-                        bind.name.clone_from(&to.to_owned());
-                    }
+                if let Some(bind) = &mut fork.join.bind
+                    && matches_span(bind.span, spans)
+                {
+                    bind.name.clone_from(&to.to_owned());
                 }
             }
             Statement::Loop(looped) => {
@@ -99,10 +99,10 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
                     looped.var.clone_from(&to.to_owned());
                 }
                 rename_expr(&mut looped.seed, spans, to);
-                if let Some(counter) = &mut looped.counter {
-                    if matches_span(counter.span, spans) {
-                        counter.name.clone_from(&to.to_owned());
-                    }
+                if let Some(counter) = &mut looped.counter
+                    && matches_span(counter.span, spans)
+                {
+                    counter.name.clone_from(&to.to_owned());
                 }
                 rename_statements(&mut looped.body, spans, to);
                 if let Some(until) = &mut looped.until {

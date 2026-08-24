@@ -121,6 +121,15 @@ pub(super) async fn bind_and_claim(
             );
         }
     }
+    // The claim's outcome, banner-grade: one stable line an operator (or a
+    // harness) can grep for, whichever face the claim's own reporting took.
+    // An unclaimed boot serves but cannot be addressed by the control verbs;
+    // that fact must not live only in a warning above the fold.
+    tracing::info!(
+        pid = identity.pid,
+        home_claimed = pid_file_guard.holds_claim(),
+        "home claim resolved"
+    );
     Ok(OpenedDoors {
         grpc_listener,
         http_listener,

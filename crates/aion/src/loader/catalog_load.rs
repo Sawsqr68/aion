@@ -370,13 +370,13 @@ fn validate_staged_module_names(
     snapshot: &CatalogSnapshot,
 ) -> Result<(), EngineError> {
     for module in &staged.modules {
-        if let Some(existing) = snapshot.registered_modules.get(&module.deployed_name) {
-            if existing != &staged.version {
-                return Err(load_error(format!(
-                    "deployed module `{}` is already registered for content hash `{existing}`, not `{}`",
-                    module.deployed_name, staged.version
-                )));
-            }
+        if let Some(existing) = snapshot.registered_modules.get(&module.deployed_name)
+            && existing != &staged.version
+        {
+            return Err(load_error(format!(
+                "deployed module `{}` is already registered for content hash `{existing}`, not `{}`",
+                module.deployed_name, staged.version
+            )));
         }
     }
     Ok(())

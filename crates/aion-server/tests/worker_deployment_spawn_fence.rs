@@ -150,14 +150,14 @@ const WORKER_DEPLOYMENT_REGIONS: &[SourceRegion] = &[
 fn worker_deployment_modules_do_not_spawn_processes() -> Result<(), String> {
     for region in WORKER_DEPLOYMENT_REGIONS {
         let source = select_region(region)?;
-        if let Some(anchor) = region.anchor {
-            if !source.contains(anchor) {
-                return Err(format!(
-                    "{} region no longer contains its production anchor `{anchor}` — \
+        if let Some(anchor) = region.anchor
+            && !source.contains(anchor)
+        {
+            return Err(format!(
+                "{} region no longer contains its production anchor `{anchor}` — \
                      the end marker has drifted and the scanned region silently shrank",
-                    region.name
-                ));
-            }
+                region.name
+            ));
         }
         let compact = compact_source(&strip_comments_and_strings(source));
         for forbidden in ["std::process", "tokio::process", "Command::new"] {

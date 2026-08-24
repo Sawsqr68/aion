@@ -180,10 +180,10 @@ fn elide_payload_bytes(value: &mut Value, limit: u64) -> Result<(), HttpWireErro
         }
         Value::Object(object) => {
             if is_payload_object(object) {
-                if let Some(bytes) = object.get_mut("bytes") {
-                    if let Some(size_bytes) = payload_byte_len(bytes).filter(|size| *size > limit) {
-                        *bytes = elision_value(size_bytes)?;
-                    }
+                if let Some(bytes) = object.get_mut("bytes")
+                    && let Some(size_bytes) = payload_byte_len(bytes).filter(|size| *size > limit)
+                {
+                    *bytes = elision_value(size_bytes)?;
                 }
             } else {
                 for value in object.values_mut() {
