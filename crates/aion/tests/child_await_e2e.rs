@@ -10,11 +10,14 @@
 //! between runs, while everything deterministic re-execution depends on
 //! must not.
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use aion::signal::ConcreteSignalRouter;
-use aion::{Engine, EngineBuilder, EngineError, QueryError, RuntimeHandle, SignalRouter};
+use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
 use aion_core::{ContentType, Event, EventEnvelope, Payload, RunId, WorkflowId};
 use aion_package::{
     BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
@@ -35,7 +38,6 @@ const CHILD_SOURCE: &[u8] = include_bytes!("fixtures/aion_child_fixture.erl");
 
 /// Generous engine reply deadline for tests where queries must succeed.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
-/// Deadline for fixture handler registration (workflow code races the caller).
 const REGISTRATION_DEADLINE: Duration = Duration::from_secs(20);
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -266,40 +268,6 @@ async fn release_child(
     Ok(())
 }
 
-/// Query `name`, retrying while the fixture has not yet executed its
-/// `register_query` call (registration is workflow code, racing the caller).
-async fn query_when_registered(
-    engine: &Engine,
-    store: &Arc<dyn EventStore>,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    name: &str,
-) -> Result<Payload, EngineError> {
-    let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
-    loop {
-        let outcome = engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await;
-        match outcome {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            Err(error) => {
-                // A non-registration error here usually means the workflow
-                // process died under the engine; the recorded terminal (if
-                // any) carries the death cause, so surface durable history
-                // with the error.
-                let history = store.read_history(workflow_id).await;
-                eprintln!("query_when_registered({name}) failed: {error:?}; history: {history:#?}");
-                return Err(error);
-            }
-            ok => return ok,
-        }
-    }
-}
-
 /// Decode the `state` handler's reply payload into `(answer, query_id)`.
 fn state_reply(payload: &Payload) -> Result<(i64, String), Box<dyn std::error::Error>> {
     let value: serde_json::Value = serde_json::from_slice(payload.bytes())?;
@@ -369,7 +337,14 @@ async fn query_answers_while_parent_is_parked_in_await_child() -> TestResult {
 
     // The engine answers the query through the pump at the await_child
     // yield point.
-    let reply = query_when_registered(&engine, &store, &workflow_id, &run_id, "state").await?;
+    let reply = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
     let (answer, query_id) = state_reply(&reply)?;
     assert_eq!(answer, 1);
     assert!(!query_id.is_empty(), "handler must observe a query id");
@@ -489,8 +464,16 @@ async fn queried_crash_recovery_matches_unqueried_uncrashed_control() -> TestRes
     .await?;
 
     // Query the parent while it is parked in await_child, then crash.
-    let (answer, _) =
-        state_reply(&query_when_registered(&first, &store, &workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &query_registration::query_when_registered(
+            &first,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
     assert_eq!(
         store.read_history(&workflow_id).await?,
@@ -503,7 +486,14 @@ async fn queried_crash_recovery_matches_unqueried_uncrashed_control() -> TestRes
     // complete the run.
     let recovered = engine_over(&store, "queryable_await", "gated").await?;
     let (answer, _) = state_reply(
-        &query_when_registered(&recovered, &store, &workflow_id, &run_id, "state").await?,
+        &query_registration::query_when_registered(
+            &recovered,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
     )?;
     assert_eq!(answer, 1);
     assert_eq!(

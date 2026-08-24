@@ -36,6 +36,9 @@ mod gleam_test_support;
 #[path = "common/example_build.rs"]
 mod example_build;
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -43,7 +46,7 @@ use std::time::{Duration, Instant};
 
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use aion::signal::ConcreteSignalRouter;
-use aion::{Engine, EngineBuilder, EngineError, QueryError, RuntimeHandle, SignalRouter};
+use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
 use aion_core::{Event, Payload, RunId, WorkflowId, WorkflowStatus, status_from_events};
 use aion_package::Package;
 use aion_store::{EventStore, InMemoryStore};
@@ -329,29 +332,17 @@ fn run_id_of(history: &[Event]) -> Result<RunId, Box<dyn std::error::Error>> {
         .ok_or_else(|| "history has no WorkflowStarted".into())
 }
 
-/// Poll a query until the target has registered the handler (registration
-/// is workflow code racing the caller after start/recovery).
-async fn query_when_registered(
+async fn query_json_when_registered(
     engine: &Engine,
     workflow_id: &WorkflowId,
     run_id: &RunId,
     name: &str,
+    deadline: Duration,
 ) -> Result<Value, Box<dyn std::error::Error>> {
-    let deadline = Instant::now() + POLL_DEADLINE;
-    loop {
-        match engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await
-        {
-            Err(EngineError::Query(QueryError::UnknownQuery(_))) if Instant::now() < deadline => {
-                tokio::time::sleep(POLL_INTERVAL).await;
-            }
-            outcome => {
-                let payload = outcome?;
-                return Ok(serde_json::from_slice(payload.bytes())?);
-            }
-        }
-    }
+    let payload =
+        query_registration::query_when_registered(engine, workflow_id, run_id, name, deadline)
+            .await?;
+    Ok(serde_json::from_slice(payload.bytes())?)
 }
 
 async fn completed_result(
@@ -539,18 +530,25 @@ async fn queries_at_top_and_leaf_answered_while_leaf_activity_parked() -> TestRe
     let h3 = wait_for_history(&store, &l3, "leaf activity in flight", activity_in_flight).await?;
     let l3_run = run_id_of(&h3)?;
 
-    let top = query_when_registered(&engine, &l1, &l1_run, "level_one_status").await?;
+    let top = query_json_when_registered(&engine, &l1, &l1_run, "level_one_status", POLL_DEADLINE)
+        .await?;
     assert_eq!(top, json!("awaiting-level-two:job-query"));
-    let leaf = query_when_registered(&engine, &l3, &l3_run, "level_three_status").await?;
+    let leaf =
+        query_json_when_registered(&engine, &l3, &l3_run, "level_three_status", POLL_DEADLINE)
+            .await?;
     assert_eq!(leaf, json!("processing:job-query"));
 
     let parked_one = store.read_history(&l1).await?;
     let parked_two = store.read_history(&l2).await?;
     let parked_three = store.read_history(&l3).await?;
     for _ in 0..3 {
-        let top = query_when_registered(&engine, &l1, &l1_run, "level_one_status").await?;
+        let top =
+            query_json_when_registered(&engine, &l1, &l1_run, "level_one_status", POLL_DEADLINE)
+                .await?;
         assert_eq!(top, json!("awaiting-level-two:job-query"));
-        let leaf = query_when_registered(&engine, &l3, &l3_run, "level_three_status").await?;
+        let leaf =
+            query_json_when_registered(&engine, &l3, &l3_run, "level_three_status", POLL_DEADLINE)
+                .await?;
         assert_eq!(leaf, json!("processing:job-query"));
     }
     assert_eq!(
@@ -633,9 +631,18 @@ async fn recovery_at_depth_replays_all_three_histories_byte_identical() -> TestR
     // again — handler re-registration is organic replay) and every history
     // is byte-identical: no duplicated starts, no respawned children, no
     // re-recorded events.
-    let top = query_when_registered(&recovered, &l1, &l1_run, "level_one_status").await?;
+    let top =
+        query_json_when_registered(&recovered, &l1, &l1_run, "level_one_status", POLL_DEADLINE)
+            .await?;
     assert_eq!(top, json!("awaiting-level-two:job-recover"));
-    let leaf = query_when_registered(&recovered, &l3, &l3_run, "level_three_status").await?;
+    let leaf = query_json_when_registered(
+        &recovered,
+        &l3,
+        &l3_run,
+        "level_three_status",
+        POLL_DEADLINE,
+    )
+    .await?;
     assert_eq!(leaf, json!("processing:job-recover"));
     let post_one = store.read_history(&l1).await?;
     let post_two = store.read_history(&l2).await?;
@@ -800,7 +807,14 @@ async fn recovery_mid_leaf_activity_redispatches_without_respawning_children() -
         wait_for_history(&store, &l3, "leaf activity in flight", activity_in_flight).await?;
     let l3_run = run_id_of(&pre_kill_three)?;
     // The leaf is parked at the activity await (its query answers there).
-    let leaf = query_when_registered(&first_engine, &l3, &l3_run, "level_three_status").await?;
+    let leaf = query_json_when_registered(
+        &first_engine,
+        &l3,
+        &l3_run,
+        "level_three_status",
+        POLL_DEADLINE,
+    )
+    .await?;
     assert_eq!(leaf, json!("processing:job-midact"));
     let pre_kill_one = store.read_history(&l1).await?;
     let pre_kill_two = store.read_history(&l2).await?;

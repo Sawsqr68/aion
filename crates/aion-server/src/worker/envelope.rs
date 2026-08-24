@@ -112,6 +112,26 @@ impl CompletionFences {
         Ok(())
     }
 
+    /// Restore a consumed generation after accepted-path settlement fails.
+    ///
+    /// A concurrently issued newer generation always wins; the accepted token is
+    /// restored only while the execution site has no current generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] when fence state cannot be trusted.
+    pub fn restore_if_absent(
+        &self,
+        workflow_id: &WorkflowId,
+        activity_id: &ActivityId,
+        token: &CompletionToken,
+    ) -> Result<(), ServerError> {
+        self.state()?
+            .entry((workflow_id.clone(), activity_id.clone()))
+            .or_insert_with(|| token.clone());
+        Ok(())
+    }
+
     /// Revoke `token` if it is still current, without disturbing a newer retry.
     ///
     /// # Errors

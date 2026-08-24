@@ -20,6 +20,8 @@ mod gleam_test_support;
 
 #[path = "common/example_build.rs"]
 mod example_build;
+#[path = "common/query_registration.rs"]
+mod query_registration;
 
 use std::collections::HashSet;
 use std::sync::{Arc, Condvar, Mutex};
@@ -27,7 +29,7 @@ use std::time::Duration;
 
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use aion::signal::ConcreteSignalRouter;
-use aion::{Engine, EngineBuilder, EngineError, QueryError, RuntimeHandle, SignalRouter};
+use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
 use aion_core::{Payload, RunId, WorkflowId};
 use aion_package::Package;
 use aion_store::{EventStore, InMemoryStore};
@@ -167,29 +169,21 @@ async fn start_batch(engine: &Engine) -> Result<(WorkflowId, RunId), Box<dyn std
     Ok((handle.workflow_id().clone(), handle.run_id().clone()))
 }
 
-/// Query `batch_progress`, retrying while the workflow has not yet executed
-/// its registration (registration is workflow code, racing the caller).
+/// Query `batch_progress` after the shared registration wait.
 async fn progress_when_registered(
     engine: &Engine,
     workflow_id: &WorkflowId,
     run_id: &RunId,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let deadline = std::time::Instant::now() + POLL_DEADLINE;
-    loop {
-        match engine
-            .query(workflow_id, run_id, "batch_progress", Payload::json_null())
-            .await
-        {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            outcome => {
-                return Ok(serde_json::from_slice(outcome?.bytes())?);
-            }
-        }
-    }
+    let payload = query_registration::query_when_registered(
+        engine,
+        workflow_id,
+        run_id,
+        "batch_progress",
+        POLL_DEADLINE,
+    )
+    .await?;
+    Ok(serde_json::from_slice(payload.bytes())?)
 }
 
 /// Await the batch result and assert the recorded summary (4 items, 3

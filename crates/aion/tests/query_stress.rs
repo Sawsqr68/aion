@@ -12,6 +12,9 @@
 //! run; the original review reproduced it at roughly 1/170 under full-suite
 //! load.
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -93,44 +96,28 @@ async fn start(engine: &Engine) -> Result<(WorkflowId, RunId), Box<dyn std::erro
     Ok((handle.workflow_id().clone(), handle.run_id().clone()))
 }
 
-async fn query_when_registered(
-    engine: &Engine,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    name: &str,
-) -> Result<Payload, EngineError> {
-    let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
-    loop {
-        let outcome = engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await;
-        match outcome {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            other => return other,
-        }
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
-    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
-    let engine = Arc::new(engine_over(&store).await?);
-    let (workflow_id, run_id) = start(&engine).await?;
-    // Warm up: the fixture finished registering its handlers.
-    query_when_registered(&engine, &workflow_id, &run_id, "state").await?;
-
-    // Background contention: three more parked workflows answering bursts of
-    // state queries while the foreground loop hammers the failing handler.
+async fn spawn_background_contention(
+    engine: &Arc<Engine>,
+) -> Result<
+    (
+        Arc<std::sync::atomic::AtomicBool>,
+        Vec<tokio::task::JoinHandle<Vec<String>>>,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let mut background = Vec::new();
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     for _ in 0..3 {
-        let (noise_id, noise_run) = start(&engine).await?;
-        query_when_registered(&engine, &noise_id, &noise_run, "state").await?;
-        let engine = Arc::clone(&engine);
+        let (noise_id, noise_run) = start(engine).await?;
+        query_registration::query_when_registered(
+            engine,
+            &noise_id,
+            &noise_run,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?;
+        let engine = Arc::clone(engine);
         let stop = Arc::clone(&stop);
         background.push(tokio::spawn(async move {
             let mut failures = Vec::new();
@@ -142,22 +129,34 @@ async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
                     .await;
                 for outcome in burst {
                     match outcome {
-                        // A timeout is tolerated alongside success: the beamr
-                        // 0.4.9 lost-wakeup window (see the foreground loop);
-                        // the next burst's deliveries self-heal it.
                         Ok(_) | Err(EngineError::Query(QueryError::Timeout)) => {}
                         Err(error) => failures.push(format!("{error:?}")),
                     }
                 }
-                // Bounded contention: unthrottled bursts from three callers
-                // saturate the single-thread scheduler into multi-second
-                // service starvation, which is a load pathology rather than
-                // the reply race this test pins.
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
             failures
         }));
     }
+    Ok((stop, background))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = Arc::new(engine_over(&store).await?);
+    let (workflow_id, run_id) = start(&engine).await?;
+    // Warm up: the fixture finished registering its handlers.
+    query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
+
+    let (stop, background) = spawn_background_contention(&engine).await?;
 
     let mut wrong = Vec::new();
     let mut lost_wakeup_timeouts = 0_u32;

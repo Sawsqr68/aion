@@ -15,10 +15,13 @@ mod gleam_test_support;
 #[path = "common/example_build.rs"]
 mod example_build;
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::sync::Arc;
 use std::time::Duration;
 
-use aion::{Engine, EngineBuilder, EngineError, QueryError};
+use aion::{Engine, EngineBuilder};
 use aion_core::{Payload, RunId, WorkflowId, WorkflowStatus};
 use aion_store::{EventStore, InMemoryStore};
 use serde_json::json;
@@ -62,28 +65,6 @@ async fn start_parent(
         )
         .await?;
     Ok((handle.workflow_id().clone(), handle.run_id().clone()))
-}
-
-async fn query_when_registered(
-    engine: &Engine,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    name: &str,
-) -> Result<Payload, Box<dyn std::error::Error>> {
-    let deadline = std::time::Instant::now() + QUERY_POLL_DEADLINE;
-    loop {
-        match engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await
-        {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            outcome => return Ok(outcome?),
-        }
-    }
 }
 
 async fn assert_parent_completes(
@@ -134,13 +115,27 @@ async fn query_answered_while_parked_in_child_await() -> TestResult {
     let engine = engine_with_fixture(&store).await?;
     let (workflow_id, run_id) = start_parent(&engine, 3000).await?;
 
-    let reply = query_when_registered(&engine, &workflow_id, &run_id, "phase").await?;
+    let reply = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "phase",
+        QUERY_POLL_DEADLINE,
+    )
+    .await?;
     let value: serde_json::Value = serde_json::from_slice(reply.bytes())?;
     assert_eq!(value, json!("awaiting-child"));
 
     let parked = store.read_history(&workflow_id).await?;
     for _ in 0..3 {
-        let reply = query_when_registered(&engine, &workflow_id, &run_id, "phase").await?;
+        let reply = query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "phase",
+            QUERY_POLL_DEADLINE,
+        )
+        .await?;
         let value: serde_json::Value = serde_json::from_slice(reply.bytes())?;
         assert_eq!(value, json!("awaiting-child"));
     }

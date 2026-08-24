@@ -226,26 +226,6 @@ impl RunningServer {
             .is_some())
     }
 
-    async fn wait_for_no_in_flight_activities(&self) -> Result<(), TestError> {
-        let deadline = Instant::now() + CONNECT_TIMEOUT;
-        loop {
-            let in_flight = self
-                .state
-                .heartbeat_tracker()
-                .in_flight_count()
-                .map_err(test_error)?;
-            if in_flight == 0 {
-                return Ok(());
-            }
-            if Instant::now() >= deadline {
-                return Err(test_error(format!(
-                    "completed liminal dispatches left {in_flight} activities tracked"
-                )));
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    }
-
     fn shutdown(mut self) -> Result<(), TestError> {
         let _ = self.sweeper_shutdown.send(true);
         if let Some(listener) = self.listener.take() {

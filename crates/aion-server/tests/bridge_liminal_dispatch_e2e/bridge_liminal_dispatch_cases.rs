@@ -272,10 +272,16 @@ async fn concurrent_dispatches_correlate_replies_to_their_ordinals() -> Result<(
         "ordinal 1 must resolve with ITS handler result"
     );
     assert_eq!(executions.load(Ordering::SeqCst), 2);
-    // The reply router resolves the waiter immediately before retiring the
-    // heartbeat entry, so observe the eventual post-completion invariant rather
-    // than racing that adjacent cleanup step.
-    server.wait_for_no_in_flight_activities().await?;
+    // Completion observation includes accepted-path liveness settlement for
+    // every real reply, including two replies resolving concurrently.
+    assert_eq!(
+        server
+            .state
+            .heartbeat_tracker()
+            .in_flight_count()
+            .map_err(test_error)?,
+        0
+    );
 
     worker.stop()?;
     server.shutdown()?;

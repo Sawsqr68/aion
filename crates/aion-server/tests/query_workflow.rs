@@ -215,24 +215,56 @@ async fn query_when_registered(
     workflow_id: &WorkflowId,
     query_name: &str,
 ) -> Result<Result<Payload, WireError>, TestError> {
-    let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
+    let started = std::time::Instant::now();
+    let deadline = started + REGISTRATION_DEADLINE;
     loop {
-        let response = handlers::query(
-            &server.guard,
-            caller,
-            named_query_request(namespace, workflow_id, query_name),
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            log_query_registration_failure(server, workflow_id, query_name, started).await;
+            return Ok(Err(WireError::new(WireErrorCode::UnknownQuery, query_name)));
+        }
+        let response = if let Ok(response) = tokio::time::timeout(
+            remaining,
+            handlers::query(
+                &server.guard,
+                caller,
+                named_query_request(namespace, workflow_id, query_name),
+            ),
         )
-        .await?;
+        .await
+        {
+            response?
+        } else {
+            log_query_registration_failure(server, workflow_id, query_name, started).await;
+            return Ok(Err(WireError::new(WireErrorCode::QueryTimeout, query_name)));
+        };
         match decode_outcome(response)? {
-            Err(error)
-                if error.code == WireErrorCode::UnknownQuery
-                    && std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
+            Err(error) if error.code == WireErrorCode::UnknownQuery => {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    log_query_registration_failure(server, workflow_id, query_name, started).await;
+                    return Ok(Err(error));
+                }
+                tokio::time::sleep(Duration::from_millis(25).min(remaining)).await;
             }
             outcome => return Ok(outcome),
         }
     }
+}
+
+async fn log_query_registration_failure(
+    server: &Server,
+    workflow_id: &WorkflowId,
+    query_name: &str,
+    started: std::time::Instant,
+) {
+    let history = server.engine.store().read_history(workflow_id).await;
+    let resolved = server.engine.registry().live_pid(workflow_id);
+    eprintln!(
+        "query_when_registered({query_name}) exhausted after {:?}; workflow_id={workflow_id}, \
+         resolved={resolved:#?}, history={history:#?}",
+        started.elapsed()
+    );
 }
 
 /// Decode the `state` handler's reply payload into `(answer, query_id)`.

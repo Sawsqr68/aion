@@ -18,6 +18,8 @@ mod gleam_test_support;
 
 #[path = "common/example_build.rs"]
 mod example_build;
+#[path = "common/query_registration.rs"]
+mod query_registration;
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -275,11 +277,6 @@ async fn start_order(
 }
 
 /// Poll `order_status` until a reply satisfies `accept`, returning it.
-///
-/// `UnknownQuery` means the workflow has not reached its registration code
-/// yet (registration is workflow code racing the caller); a reply that is
-/// not accepted means the saga has not advanced yet. Both retry until the
-/// deadline.
 async fn status_matching<F>(
     engine: &Engine,
     workflow_id: &WorkflowId,
@@ -291,35 +288,35 @@ where
     F: Fn(&Value) -> bool,
 {
     let deadline = Instant::now() + POLL_DEADLINE;
-    let mut last: Option<Value> = None;
+    let payload = query_registration::query_when_registered(
+        engine,
+        workflow_id,
+        run_id,
+        STATUS_QUERY,
+        POLL_DEADLINE,
+    )
+    .await?;
+    let mut value: Value = serde_json::from_slice(payload.bytes())?;
     loop {
-        match engine
-            .query(workflow_id, run_id, STATUS_QUERY, Payload::json_null())
-            .await
-        {
-            Ok(payload) => {
-                let value: Value = serde_json::from_slice(payload.bytes())?;
-                if accept(&value) {
-                    return Ok(value);
-                }
-                last = Some(value);
-            }
-            Err(EngineError::Query(QueryError::UnknownQuery(_))) => {}
-            Err(other) => {
-                let history = engine.store().read_history(workflow_id).await?;
-                return Err(format!(
-                    "query failed before `{want}` was observed: {other}; \
-                     last reply: {last:?}; history: {history:#?}"
-                )
-                .into());
-            }
+        if accept(&value) {
+            return Ok(value);
         }
         if Instant::now() >= deadline {
             return Err(
-                format!("`{want}` not reached before deadline; last reply: {last:?}").into(),
+                format!("`{want}` not reached before deadline; last reply: {value:?}").into(),
             );
         }
         tokio::time::sleep(POLL_INTERVAL).await;
+        let payload = engine
+            .query(workflow_id, run_id, STATUS_QUERY, Payload::json_null())
+            .await
+            .map_err(|other| {
+                format!(
+                    "query failed after registration before `{want}` was observed: {other}; \
+                     last reply: {value:?}"
+                )
+            })?;
+        value = serde_json::from_slice(payload.bytes())?;
     }
 }
 

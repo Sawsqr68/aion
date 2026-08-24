@@ -295,15 +295,14 @@ impl PendingActivities {
         }
     }
 
-    /// Atomically consume `completion_token` and only then resolve its waiter or
-    /// durable-outbox callback.
-    fn complete_fenced(
+    fn complete_fenced_after_accept(
         &self,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
         run_id: Option<&RunId>,
         completion_token: &CompletionToken,
         result: Result<String, String>,
+        after_accept: impl FnOnce() -> Result<bool, ServerError>,
     ) -> Result<bool, ServerError> {
         self.completion_fences
             .accept(workflow_id, activity_id, completion_token)
@@ -315,6 +314,22 @@ impl PendingActivities {
                     "activity completion rejected by execution-generation fence"
                 );
             })?;
+        let should_publish = match after_accept() {
+            Ok(should_publish) => should_publish,
+            Err(error) => {
+                if let Err(restore_error) = self.completion_fences.restore_if_absent(
+                    workflow_id,
+                    activity_id,
+                    completion_token,
+                ) {
+                    tracing::error!(%restore_error, "failed to restore completion generation after settlement failure");
+                }
+                return Err(error);
+            }
+        };
+        if !should_publish {
+            return Ok(false);
+        }
         // A resolution OUTSIDE the transport domain — a real result, or a real
         // action failure — retires this execution site's transport-loss budget,
         // so a run that survived one blip does not carry it forward. A
@@ -425,6 +440,60 @@ impl PendingActivities {
             }
         }
     }
+
+    pub(crate) fn complete_activity_after_accept(
+        &self,
+        completion: ActivityCompletion,
+        after_accept: impl FnOnce() -> Result<(), ServerError>,
+    ) -> Result<(), ServerError> {
+        let result = match completion.outcome {
+            ActivityCompletionOutcome::Succeeded(payload) => {
+                payload_to_string(&payload).map_err(|reason| {
+                    tracing::error!(
+                        operation = "activity_complete",
+                        workflow_id = %completion.workflow_id,
+                        activity_id = %completion.activity_id,
+                        error_type = "ActivityResultDecode",
+                        %reason,
+                        "activity completion failed"
+                    );
+                    ServerError::worker_dispatch("", "", format!("payload decode: {reason}"))
+                })?
+            }
+            ActivityCompletionOutcome::Failed(error) => {
+                let prefix = match error.kind {
+                    ActivityErrorKind::Retryable => "retryable",
+                    ActivityErrorKind::PolicyRefused => "policy_refused",
+                    ActivityErrorKind::Terminal => "terminal",
+                };
+                tracing::error!(
+                    operation = "activity_complete",
+                    workflow_id = %completion.workflow_id,
+                    activity_id = %completion.activity_id,
+                    error_type = "ActivityFailed",
+                    error_kind = prefix,
+                    reason = %error.message,
+                    "activity completion failed"
+                );
+                Err(format!("{prefix}:{}", error.message))
+            }
+            ActivityCompletionOutcome::WorkerLost { worker_id } => Err(self.classify_worker_loss(
+                &completion.workflow_id,
+                &completion.activity_id,
+                worker_id,
+            )),
+        };
+        let accepted_settlement = || after_accept().map(|()| true);
+        self.complete_fenced_after_accept(
+            &completion.workflow_id,
+            &completion.activity_id,
+            completion.run_id.as_ref(),
+            &completion.completion_token,
+            result,
+            accepted_settlement,
+        )?;
+        Ok(())
+    }
 }
 
 impl ActivityCompletionSink for PendingActivities {
@@ -458,55 +527,7 @@ impl ActivityCompletionSink for PendingActivities {
     }
 
     fn complete_activity(&self, completion: ActivityCompletion) -> Result<(), ServerError> {
-        let result = match completion.outcome {
-            ActivityCompletionOutcome::Succeeded(payload) => {
-                payload_to_string(&payload).map_err(|reason| {
-                    tracing::error!(
-                        operation = "activity_complete",
-                        workflow_id = %completion.workflow_id,
-                        activity_id = %completion.activity_id,
-                        error_type = "ActivityResultDecode",
-                        %reason,
-                        "activity completion failed"
-                    );
-                    ServerError::worker_dispatch("", "", format!("payload decode: {reason}"))
-                })?
-            }
-            ActivityCompletionOutcome::Failed(error) => {
-                let prefix = match error.kind {
-                    ActivityErrorKind::Retryable => "retryable",
-                    ActivityErrorKind::PolicyRefused => "policy_refused",
-                    ActivityErrorKind::Terminal => "terminal",
-                };
-                tracing::error!(
-                    operation = "activity_complete",
-                    workflow_id = %completion.workflow_id,
-                    activity_id = %completion.activity_id,
-                    error_type = "ActivityFailed",
-                    error_kind = prefix,
-                    reason = %error.message,
-                    "activity completion failed"
-                );
-                Err(format!("{prefix}:{}", error.message))
-            }
-            // A TRANSPORT-domain loss: the activity never executed to a result,
-            // so it is classified by the transport's own ledger (re-dispatchable
-            // while its budget holds, transport-exhausted once it is spent) and
-            // NEVER by the action's retry vocabulary.
-            ActivityCompletionOutcome::WorkerLost { worker_id } => Err(self.classify_worker_loss(
-                &completion.workflow_id,
-                &completion.activity_id,
-                worker_id,
-            )),
-        };
-        self.complete_fenced(
-            &completion.workflow_id,
-            &completion.activity_id,
-            completion.run_id.as_ref(),
-            &completion.completion_token,
-            result,
-        )?;
-        Ok(())
+        self.complete_activity_after_accept(completion, || Ok(()))
     }
 }
 
@@ -1570,27 +1591,34 @@ fn route_liminal_reply(
     // this is the same structural gate: `complete_task` reports whether THIS
     // call retired the tracked entry. A poisoned tracker fails open (deliver)
     // so the blocked dispatch thread is never left hanging on a broken lock.
-    if synthesized {
-        let was_tracked =
-            complete_liminal_tracking(heartbeat_tracker, worker_id, workflow_id, activity_id);
-        if !was_tracked {
-            // Another path already resolved this dispatch (and notified drain):
-            // injecting the fabricated lost-worker failure now could reach a retry.
-            tracing::debug!(
-                worker_id = ?worker_id,
-                workflow_id = %workflow_id,
-                activity_id = %activity_id,
-                "liminal dispatch already resolved; dropping synthesized lost-worker failure"
-            );
-            return;
+    let after_accept = || {
+        if synthesized {
+            let was_tracked =
+                complete_liminal_tracking(heartbeat_tracker, worker_id, workflow_id, activity_id);
+            if !was_tracked {
+                // Another path already resolved this dispatch (and notified drain):
+                // injecting the fabricated lost-worker failure now could reach a retry.
+                tracing::debug!(
+                    worker_id = ?worker_id,
+                    workflow_id = %workflow_id,
+                    activity_id = %activity_id,
+                    "liminal dispatch already resolved; dropping synthesized lost-worker failure"
+                );
+                return Ok(false);
+            }
+        } else {
+            heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)?;
         }
-    }
-    if let Err(error) = pending.complete_fenced(
+        drain_state.notify_activity_drained();
+        Ok(true)
+    };
+    if let Err(error) = pending.complete_fenced_after_accept(
         workflow_id,
         activity_id,
         run_id.as_ref(),
         &submitted_token,
         outcome,
+        after_accept,
     ) {
         tracing::warn!(
             worker_id = ?worker_id,
@@ -1599,20 +1627,7 @@ fn route_liminal_reply(
             %error,
             "liminal activity completion handoff rejected"
         );
-        return;
     }
-    if !synthesized
-        && let Err(error) = heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)
-    {
-        tracing::error!(
-            worker_id = ?worker_id,
-            workflow_id = %workflow_id,
-            activity_id = %activity_id,
-            %error,
-            "failed to clear in-flight tracking for completed liminal activity"
-        );
-    }
-    drain_state.notify_activity_drained();
 }
 
 #[cfg(feature = "liminal-transport")]
@@ -1714,7 +1729,10 @@ fn log_worker_error(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
 
     use aion_core::{ActivityError, ActivityErrorKind, ContentType, Payload};
 
@@ -1976,6 +1994,135 @@ mod tests {
             .recv_timeout(Duration::from_millis(50))
             .map_err(|e| ServerError::worker_dispatch("", "", format!("channel: {e}")))?;
         assert_eq!(result, Ok(r#"{"greeting":"hi"}"#.to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn accepted_hook_runs_before_the_result_is_observable() -> Result<(), ServerError> {
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(13);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+        let accepted = AtomicBool::new(false);
+
+        pending.complete_activity_after_accept(
+            ActivityCompletion {
+                workflow_id,
+                activity_id: id,
+                run_id: None,
+                completion_token,
+                outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                    ContentType::Json,
+                    br#""ordered""#.to_vec(),
+                )),
+            },
+            || {
+                accepted.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        )?;
+
+        let result = rx
+            .recv_timeout(Duration::from_millis(50))
+            .map_err(|error| ServerError::worker_dispatch("", "", format!("channel: {error}")))?;
+        assert_eq!(result, Ok(r#""ordered""#.to_owned()));
+        assert!(
+            accepted.load(Ordering::SeqCst),
+            "the accepted-path cleanup hook must finish before the waiter can observe the result"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn accepted_hook_failure_blocks_publication_and_restores_generation() -> Result<(), ServerError>
+    {
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(15);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+
+        let rejected = pending.complete_activity_after_accept(
+            ActivityCompletion {
+                workflow_id: workflow_id.clone(),
+                activity_id: id.clone(),
+                run_id: None,
+                completion_token: completion_token.clone(),
+                outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                    ContentType::Json,
+                    br#""ordered""#.to_vec(),
+                )),
+            },
+            || Err(ServerError::lock_poisoned("accepted-path settlement")),
+        );
+
+        assert!(matches!(rejected, Err(ServerError::LockPoisoned { .. })));
+        assert!(
+            rx.try_recv().is_err(),
+            "failed accepted-path settlement must not publish the completion"
+        );
+
+        pending.complete_activity_after_accept(
+            ActivityCompletion {
+                workflow_id,
+                activity_id: id,
+                run_id: None,
+                completion_token,
+                outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                    ContentType::Json,
+                    br#""ordered""#.to_vec(),
+                )),
+            },
+            || Ok(()),
+        )?;
+        assert_eq!(
+            rx.recv_timeout(Duration::from_millis(50))
+                .map_err(|error| ServerError::worker_dispatch(
+                    "",
+                    "",
+                    format!("channel: {error}")
+                ))?,
+            Ok(r#""ordered""#.to_owned())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn refused_generation_never_runs_the_accepted_hook() -> Result<(), ServerError> {
+        let pending = PendingActivities::new(TEST_HEARTBEAT_WINDOW);
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(14);
+        let (_completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+        let accepted = AtomicBool::new(false);
+
+        let rejected = pending.complete_activity_after_accept(
+            ActivityCompletion {
+                workflow_id,
+                activity_id: id,
+                run_id: None,
+                completion_token: CompletionToken::for_test(),
+                outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                    ContentType::Json,
+                    br#""stale""#.to_vec(),
+                )),
+            },
+            || {
+                accepted.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        );
+
+        assert!(matches!(
+            rejected,
+            Err(ServerError::ActivityCompletionRejected { .. })
+        ));
+        assert!(
+            !accepted.load(Ordering::SeqCst),
+            "a refused generation must preserve liveness by skipping accepted-path cleanup"
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "a refused generation must leave the current waiter unresolved"
+        );
         Ok(())
     }
 

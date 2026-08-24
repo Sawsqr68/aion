@@ -7,6 +7,9 @@
 //! the SDK pump loop, proving the raw sentinel protocol. Every determinism
 //! assertion compares full event vectors: queries must never append history.
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -96,43 +99,6 @@ async fn start(engine: &Engine) -> Result<(WorkflowId, RunId), Box<dyn std::erro
         )
         .await?;
     Ok((handle.workflow_id().clone(), handle.run_id().clone()))
-}
-
-/// Query `name`, retrying while the fixture has not yet executed its
-/// `register_query` calls (registration is workflow code, so it races the
-/// caller after `start_workflow`/recovery returns). The first non-
-/// `UnknownQuery` outcome — success or any other typed error — is returned.
-async fn query_when_registered(
-    engine: &Engine,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    name: &str,
-) -> Result<Payload, EngineError> {
-    let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
-    loop {
-        let outcome = engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await;
-        match outcome {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            Err(EngineError::Query(QueryError::ReplyDropped)) => {
-                // ReplyDropped on a workflow that should be parked usually
-                // means its process died under the engine; the recorded
-                // terminal (if any) carries the death cause, so surface
-                // durable history alongside the error.
-                let history = engine.store().read_history(workflow_id).await;
-                eprintln!(
-                    "query_when_registered({name}) observed ReplyDropped; history: {history:#?}"
-                );
-                return Err(EngineError::Query(QueryError::ReplyDropped));
-            }
-            other => return other,
-        }
-    }
 }
 
 /// Decode the `state` handler's reply payload into `(answer, query_id)`.
@@ -302,7 +268,14 @@ async fn query_answers_at_yield_point_without_touching_history() -> TestResult {
         "handler registration must not record events"
     );
 
-    let reply = query_when_registered(&engine, &workflow_id, &run_id, "state").await?;
+    let reply = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
 
     let (answer, query_id) = state_reply(&reply)?;
     assert_eq!(answer, 1);
@@ -330,7 +303,16 @@ async fn query_arguments_reach_the_handler_and_shape_the_answer() -> TestResult 
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
     // Wait for registration before asserting anything about arguments.
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     let before = store.read_history(&workflow_id).await?;
 
     // The `echo` handler derives its whole reply from the arguments, so this
@@ -380,7 +362,16 @@ async fn malformed_query_arguments_are_refused_without_disturbing_the_workflow()
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     let before = store.read_history(&workflow_id).await?;
 
     // Bytes tagged JSON that are not a JSON document can never reach a
@@ -431,8 +422,16 @@ async fn recovered_workflow_answers_queries_and_matches_unqueried_control_histor
     first
         .signal(&workflow_id, &run_id, "step", signal_payload("step")?)
         .await?;
-    let (pre_crash_answer, _) =
-        state_reply(&query_when_registered(&first, &workflow_id, &run_id, "state").await?)?;
+    let (pre_crash_answer, _) = state_reply(
+        &query_registration::query_when_registered(
+            &first,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(pre_crash_answer, 1);
     let pre_restart = store.read_history(&workflow_id).await?;
     assert_eq!(
@@ -444,8 +443,16 @@ async fn recovered_workflow_answers_queries_and_matches_unqueried_control_histor
     let recovered = engine_over(&store, "staged", QUERY_TIMEOUT).await?;
     // Replay re-executes the fixture from the top, re-registering the
     // handler; the recovered workflow must answer with live state.
-    let (answer, query_id) =
-        state_reply(&query_when_registered(&recovered, &workflow_id, &run_id, "state").await?)?;
+    let (answer, query_id) = state_reply(
+        &query_registration::query_when_registered(
+            &recovered,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
     assert!(!query_id.is_empty());
     let post_recovery = store.read_history(&workflow_id).await?;
@@ -482,7 +489,16 @@ async fn suspended_residency_query_is_not_running_without_resume_or_events() -> 
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
     // Prove the workflow is registered and answering before suspension.
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     engine
         .registry()
         .replace_residency(&workflow_id, &run_id, HandleResidency::Suspended)?;
@@ -519,7 +535,16 @@ async fn unknown_query_name_is_typed_and_workflow_still_answers() -> TestResult 
     let (workflow_id, run_id) = start(&engine).await?;
     // Wait for registration first so the unknown-name error below is about
     // the name, not about registration timing.
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     let before = store.read_history(&workflow_id).await?;
 
     let error = engine
@@ -553,7 +578,16 @@ async fn raising_handler_is_handler_failed_and_workflow_survives() -> TestResult
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     let before = store.read_history(&workflow_id).await?;
 
     let error = engine
@@ -606,7 +640,14 @@ async fn unpumped_workflow_times_out_then_completes_despite_dropped_reply() -> T
     let engine = engine_over(&store, "unpumped", Duration::from_millis(200)).await?;
     let (workflow_id, run_id) = start(&engine).await?;
 
-    let outcome = query_when_registered(&engine, &workflow_id, &run_id, "state").await;
+    let outcome = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await;
 
     match outcome {
         Err(EngineError::Query(QueryError::Timeout)) => {}
@@ -654,7 +695,16 @@ async fn eight_concurrent_queries_are_all_answered_with_distinct_ids() -> TestRe
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
 
     let outcomes = futures::future::join_all(
         (0..8).map(|_| engine.query(&workflow_id, &run_id, "state", Payload::json_null())),
@@ -702,9 +752,15 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
             .await
             .map_err(|error| format!("iteration {iteration}: start: {error}"))?;
         // Warm up: registration finished and the workflow is parked.
-        let warmup = query_when_registered(&engine, &workflow_id, &run_id, "state")
-            .await
-            .map_err(|error| format!("iteration {iteration}: warm-up query: {error}"))?;
+        let warmup = query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await
+        .map_err(|error| format!("iteration {iteration}: warm-up query: {error}"))?;
         state_reply(&warmup)
             .map_err(|error| format!("iteration {iteration}: warm-up decode: {error}"))?;
 
@@ -794,7 +850,14 @@ async fn query_during_active_sleep_loop_is_answered_at_the_next_yield_point() ->
     // The fixture cycles 40 pumped 20ms sleeps before gating on "release",
     // so this query lands while the workflow is actively executing; the
     // engine reply deadline bounds the time to the next yield point.
-    let reply = query_when_registered(&engine, &workflow_id, &run_id, "state").await?;
+    let reply = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
 
     let (answer, query_id) = state_reply(&reply)?;
     assert_eq!(answer, 1);
@@ -812,7 +875,16 @@ async fn handler_calling_recording_nif_is_handler_failed_with_zero_events() -> T
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
     let (workflow_id, run_id) = start(&engine).await?;
-    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     let before = store.read_history(&workflow_id).await?;
 
     // The "records" handler calls the recording send_signal NIF while
@@ -985,8 +1057,16 @@ async fn query_at_activity_await_then_crash_replay_matches_unqueried_control() -
 
     // Queries are answered at the activity-await yield point and append
     // nothing — byte-identical history before and after.
-    let (answer, query_id) =
-        state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    let (answer, query_id) = state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
     assert!(!query_id.is_empty());
     let (answer, _) = state_reply(
@@ -1018,8 +1098,16 @@ async fn query_at_activity_await_then_crash_replay_matches_unqueried_control() -
     // settled prefix stays byte-identical.
     let recovery_gate = ActivityGate::new();
     let recovered = engine_with_dispatcher(&store, "activity_gated", &recovery_gate).await?;
-    let (answer, _) =
-        state_reply(&query_when_registered(&recovered, &workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &query_registration::query_when_registered(
+            &recovered,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
     assert_eq!(
         store.read_history(&workflow_id).await?,
@@ -1089,8 +1177,16 @@ async fn queried_sleep_loop_crash_recovery_matches_unqueried_control() -> TestRe
 
     // Query while the fixture cycles its forty pumped sleeps: answered at a
     // sleep yield point.
-    let (answer, _) =
-        state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &query_registration::query_when_registered(
+            &engine,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
 
     // Crash once every sleep is durably resolved and the run is parked at
@@ -1104,8 +1200,16 @@ async fn queried_sleep_loop_crash_recovery_matches_unqueried_control() -> TestRe
     // Recovery replays forty recorded timers, appends nothing, and still
     // answers queries; release then completes the run.
     let recovered = engine_over(&store, "busy", QUERY_TIMEOUT).await?;
-    let (answer, _) =
-        state_reply(&query_when_registered(&recovered, &workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &query_registration::query_when_registered(
+            &recovered,
+            &workflow_id,
+            &run_id,
+            "state",
+            REGISTRATION_DEADLINE,
+        )
+        .await?,
+    )?;
     assert_eq!(answer, 1);
     assert_eq!(
         store.read_history(&workflow_id).await?,

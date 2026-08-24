@@ -11,6 +11,9 @@
 //! run's history to remain **byte-identical**: replay resolves the collect
 //! purely from recorded terminals and appends nothing.
 
+#[path = "common/query_registration.rs"]
+mod query_registration;
+
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -18,7 +21,7 @@ use std::time::Duration;
 
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use aion::signal::ConcreteSignalRouter;
-use aion::{Engine, EngineBuilder, EngineError, QueryError, RuntimeHandle, SignalRouter};
+use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
 use aion_core::{Event, Payload, RunId, WorkflowId};
 use aion_package::{
     BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
@@ -41,7 +44,6 @@ const COLLECT_SOURCE: &[u8] = include_bytes!("fixtures/aion_collect_fixture.erl"
 
 /// Generous engine reply deadline for tests where queries must succeed.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
-/// Deadline for fixture handler registration (workflow code races the caller).
 const REGISTRATION_DEADLINE: Duration = Duration::from_secs(20);
 /// Deadline for any polled engine-side condition.
 const POLL_DEADLINE: Duration = Duration::from_secs(20);
@@ -365,30 +367,6 @@ fn run_shape(history: &[Event]) -> Vec<String> {
         .collect()
 }
 
-/// Query `name`, retrying while the fixture has not yet executed its
-/// `register_query` call (registration is workflow code, racing the caller).
-async fn query_when_registered(
-    engine: &Engine,
-    workflow_id: &WorkflowId,
-    run_id: &RunId,
-    name: &str,
-) -> Result<Payload, EngineError> {
-    let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
-    loop {
-        let outcome = engine
-            .query(workflow_id, run_id, name, Payload::json_null())
-            .await;
-        match outcome {
-            Err(EngineError::Query(QueryError::UnknownQuery(_)))
-                if std::time::Instant::now() < deadline =>
-            {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            other => return other,
-        }
-    }
-}
-
 /// Send `release` and await the workflow result, asserting it decodes to
 /// `expected`.
 async fn release_and_finish(
@@ -469,7 +447,15 @@ async fn query_answers_while_parent_is_parked_in_collect_all() -> TestResult {
 
     // The engine answers the query through the pump at the collect yield
     // point, appending nothing.
-    let reply = match query_when_registered(&engine, &workflow_id, &run_id, "state").await {
+    let reply = match query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await
+    {
         Ok(reply) => reply,
         Err(error) => {
             let history = store.read_history(&workflow_id).await?;
@@ -614,7 +600,14 @@ async fn queried_collect_crash_recovery_matches_unqueried_uncrashed_control() ->
         activity_event_count(events) == 4
     })
     .await?;
-    let reply = query_when_registered(&engine, &workflow_id, &run_id, "state").await?;
+    let reply = query_registration::query_when_registered(
+        &engine,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
     let value: serde_json::Value = serde_json::from_slice(reply.bytes())?;
     assert_eq!(value["answer"], 1);
     assert_eq!(
@@ -633,7 +626,14 @@ async fn queried_collect_crash_recovery_matches_unqueried_uncrashed_control() ->
     // never re-dispatches a recorded activity.
     let recovery_gates = GateBoard::new();
     let recovered = engine_over(&store, "queryable_all", &recovery_gates).await?;
-    let reply = query_when_registered(&recovered, &workflow_id, &run_id, "state").await?;
+    let reply = query_registration::query_when_registered(
+        &recovered,
+        &workflow_id,
+        &run_id,
+        "state",
+        REGISTRATION_DEADLINE,
+    )
+    .await?;
     let value: serde_json::Value = serde_json::from_slice(reply.bytes())?;
     assert_eq!(value["answer"], 1);
     assert_eq!(

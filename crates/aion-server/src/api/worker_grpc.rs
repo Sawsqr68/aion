@@ -12,7 +12,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 
 use crate::worker::PendingActivities;
-use crate::worker::dispatch::{ActivityCompletion, ActivityCompletionSink};
+use crate::worker::dispatch::ActivityCompletion;
 use crate::worker::registry::{WorkerId, WorkerMessage};
 use crate::{CallerIdentity, ServerState};
 
@@ -349,38 +349,29 @@ async fn process_inbound(
                     Ok(completion) => {
                         let workflow_id = completion.workflow_id.clone();
                         let activity_id = completion.activity_id.clone();
-                        match session.pending.complete_activity(completion) {
-                            Ok(()) => {
-                                if let Err(error) = session.heartbeat.complete_task(
-                                    session.worker_id,
-                                    &workflow_id,
-                                    &activity_id,
-                                ) {
-                                    // A poisoned liveness tracker would also break
-                                    // the lost-worker sweep the unbounded dispatch
-                                    // wait relies on — never swallow it.
-                                    tracing::error!(
-                                        worker_id = ?session.worker_id,
-                                        workflow_id = %workflow_id,
-                                        activity_id = %activity_id,
-                                        %error,
-                                        "failed to clear in-flight tracking for completed activity"
-                                    );
-                                }
-                                session.drain.notify_activity_drained();
-                            }
-                            Err(error) => {
-                                // Leave the current worker's liveness entry intact
-                                // when the generation proof is wrong. Its stopped
-                                // heartbeat pump will drive the normal loss/retry path.
-                                tracing::error!(
-                                    worker_id = ?session.worker_id,
-                                    workflow_id = %workflow_id,
-                                    activity_id = %activity_id,
-                                    %error,
-                                    "activity completion handoff failed"
-                                );
-                            }
+                        let after_accept = || {
+                            session.heartbeat.complete_task(
+                                session.worker_id,
+                                &workflow_id,
+                                &activity_id,
+                            )?;
+                            session.drain.notify_activity_drained();
+                            Ok(())
+                        };
+                        if let Err(error) = session
+                            .pending
+                            .complete_activity_after_accept(completion, after_accept)
+                        {
+                            // Leave the current worker's liveness entry intact
+                            // when the generation proof is wrong. Its stopped
+                            // heartbeat pump will drive the normal loss/retry path.
+                            tracing::error!(
+                                worker_id = ?session.worker_id,
+                                workflow_id = %workflow_id,
+                                activity_id = %activity_id,
+                                %error,
+                                "activity completion handoff failed"
+                            );
                         }
                         // Ack every well-formed result frame — including
                         // duplicates with no pending waiter; their re-report
