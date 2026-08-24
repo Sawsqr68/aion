@@ -31,6 +31,11 @@ grpc_address = "127.0.0.1:${GRPC_PORT}"
 [store]
 backend = "memory"
 
+[observability]
+# Both REQUIRED on every backend, no defaults: the transcript batch bounds.
+max_batch_events = 64
+max_batch_hold_ms = 200
+
 [runtime]
 query_timeout_ms = 10000
 

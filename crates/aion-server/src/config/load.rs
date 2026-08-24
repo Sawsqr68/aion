@@ -328,11 +328,29 @@ impl ServerConfig {
                 "failed to resolve the current directory for config defaults: {source}"
             ),
         })?;
+        Self::from_slice_with_home_in(bytes, home, &working_dir)
+    }
+
+    /// Parse exactly as [`Self::from_slice_with_home`] with the working
+    /// directory named by the caller instead of read from the process — the
+    /// same injection seam [`Self::load_for_test`] provides for discovery
+    /// loads, for callers (the shipped-config sweep) that must not depend on
+    /// where the process happens to have been started.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::Config`] when parsing, dynamic path defaulting,
+    /// or validation fails.
+    pub(crate) fn from_slice_with_home_in(
+        bytes: &[u8],
+        home: &Path,
+        working_dir: &Path,
+    ) -> Result<Self, ServerError> {
         let mut config = Self::parse_unresolved(bytes)?;
         // The caller named the home in the call itself, which is the same
         // assertion `AION_HOME` makes and is treated identically: a legacy
         // directory in the working directory must not override it.
-        fill_home_defaults(&mut config, home, HomeSource::Explicit, &working_dir)?;
+        fill_home_defaults(&mut config, home, HomeSource::Explicit, working_dir)?;
         config.fill_operational_defaults();
         config.validate()?;
         Ok(config)

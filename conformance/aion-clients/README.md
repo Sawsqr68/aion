@@ -73,6 +73,10 @@ grpc_address = "127.0.0.1:18055"     # gRPC
 [store]
 backend = "memory"
 
+[observability]
+max_batch_events = 64                # REQUIRED on every backend, no default
+max_batch_hold_ms = 200              # REQUIRED on every backend, no default
+
 [runtime]
 query_timeout_ms = 10000
 

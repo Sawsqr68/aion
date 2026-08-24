@@ -39,4 +39,4 @@ enabled = true
 liminal_listen_address = "127.0.0.1:50061"
 
 [deploy]
-enabled=true
+enabled = true

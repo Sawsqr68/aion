@@ -382,6 +382,13 @@ directory — the settings are explained in full in
 listen_address = "127.0.0.1:8080"
 grpc_address = "127.0.0.1:50051"
 
+[store]
+node_cache_budget = "unlimited"     # REQUIRED, no default; explained in Part 2
+
+[observability]
+max_batch_events = 64               # REQUIRED, no default; explained in Part 2
+max_batch_hold_ms = 200             # REQUIRED, no default; explained in Part 2
+
 [runtime]
 query_timeout_ms = 10000            # optional; defaults to 10000
 
@@ -392,18 +399,22 @@ event_broadcast_capacity = 1024     # optional; defaults to 256
 enabled = true                      # REQUIRED for `aion deploy` / `aion run`
 ```
 
-Only `[deploy] enabled` earns its place here: the deploy surface is dark by
-default, so `aion deploy` and `aion run` have nothing to talk to without it.
-Every other key above has a default and can be omitted (see
+Four keys earn their place here. `[deploy] enabled`, because the deploy
+surface is dark by default, so `aion deploy` and `aion run` have nothing to
+talk to without it. And the three `REQUIRED, no default` keys, which the
+server refuses to start without: each encodes a deployment trade the engine
+will not decide for you (the values above are sane for local development;
+[step 4 of Part 2](#4-configure-and-run-the-server) explains what each one
+trades). Every other key above has a default and can be omitted (see
 [`crates/aion-server/src/config/defaults.rs`](../crates/aion-server/src/config/defaults.rs));
 they are spelled out so you can see what you are tuning. Set either tuning key
 to `0` and startup fails naming it — a zero query deadline or a zero-capacity
 broadcast channel is a misconfiguration, not a request for the default.
 
-The store needs no configuration: the stock binary defaults to the haematite
-backend, and its data directory defaults to `~/.aion/data`. Set `AION_HOME` to
-put a server's whole state somewhere else — that is also how you run two
-servers on one machine without them sharing state. See the
+The store's location needs no configuration: the stock binary defaults to the
+haematite backend, and its data directory defaults to `~/.aion/data`. Set
+`AION_HOME` to put a server's whole state somewhere else — that is also how
+you run two servers on one machine without them sharing state. See the
 [operations guide](operations/operations.md#the-aion-home-aion-and-aion_home).
 
 Start the server (terminal 1):
@@ -862,12 +873,11 @@ The server reads a TOML config file. Two things in it are load-bearing:
 `aion deploy` has nothing to talk to without it; and three fields the server
 refuses to start without, none of which has a default anywhere: one under
 `[store]` — `node_cache_budget` (the byte ceiling its node caches may hold is
-a deployment decision) —
-and two under `[observability]` — `max_batch_events` and `max_batch_hold_ms`
-(one durable commit re-persists the whole containing storage leaf, so the
-transcript batch bounds are a write-amplification decision). (
-`store.data_dir` is optional: omitted, it resolves under the Aion home, as
-described above.) The tuning knobs all have
+a deployment decision) — and two under `[observability]` —
+`max_batch_events` and `max_batch_hold_ms` (one durable commit re-persists
+the whole containing storage leaf, so the transcript batch bounds are a
+write-amplification decision). (`store.data_dir` is optional: omitted, it
+resolves under the Aion home, as described above.) The tuning knobs all have
 defaults and may be omitted — `runtime.query_timeout_ms` (10000),
 `websocket.event_broadcast_capacity` (256), and, once deploy is enabled, both
 size ceilings (64 MiB archive / 256 MiB inflated). They are written out here so

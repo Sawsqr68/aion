@@ -5,14 +5,20 @@
 > waits, reporting, indefinitely") retired `store.lock_acquisition_patience_ms`
 > and `store.lock_acquisition_retry_cadence_ms`: the keys are now parsed and
 > **ignored**, and boot waits for the writer lock indefinitely while reporting
-> that it is waiting. The unconditional required-no-default set at landing is
-> therefore THREE fields — `store.node_cache_budget`,
-> `observability.max_batch_events`, and `observability.max_batch_hold_ms` —
-> and the sweep as landed carries exactly those three, not the five the
-> census below counted in its world. The census, witness, and ruling below
-> are the record of 2026-08-21 and are left as written; the paragraph of the
-> ruling that defends the lock fields is superseded by the retirement. The
-> standing rule at the bottom is unchanged and this landing obeys it.
+> that it is waiting. The required-no-default set at landing is therefore
+> THREE fields, and it is not one uniform set: `observability.max_batch_events`
+> and `observability.max_batch_hold_ms` are required on **every** backend (the
+> transcript channel is always mounted), while `store.node_cache_budget` is
+> required exactly where boot enforces it — the haematite connect seam, the
+> only backend with a node cache. That conditionality is load-bearing for the
+> census: the landing review caught two memory-backend surfaces this record's
+> haematite-shaped pattern was structurally blind to (`ci/smoke-embed.sh` and
+> the conformance README's config block, both refusing on the observability
+> bounds), and the landing sweeps them too. The census, witness, and ruling
+> below are the record of 2026-08-21 and are left as written; the paragraph
+> of the ruling that defends the lock fields is superseded by the retirement,
+> and the standing rule at the bottom is restated in the same terms as this
+> paragraph.
 
 > **Addendum, same day (the witness caught the ruling's own author).** The
 > first cut of this branch swept the three `[store]` fields — and the boot
@@ -123,4 +129,11 @@ armed battery was built to cure, wearing config instead of tests.
 A change that adds a required field to the server config MUST sweep every
 hand-written `[store]` (or other affected section) in the tree — templates,
 examples, docs prose, generated docs sources, and scripts — in the same
-change. The census command above is the sweep's floor, not its ceiling.
+change. The sweep's population is **every surface that boots a server**,
+never the surfaces matching one backend's shape: a requirement that fires on
+every backend (the observability batch bounds) is invisible to a
+backend-shaped grep, which is exactly how the two memory-backend surfaces in
+the landing addendum were missed. The mechanized floor is
+`crates/aion-server/src/config/shipped_configs_tests.rs`, which holds the
+shipped TOMLs to the boot path's own requirement functions; the manual sweep
+above it covers what a test cannot parse.

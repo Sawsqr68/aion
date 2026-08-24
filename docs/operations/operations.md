@@ -19,9 +19,15 @@ byte-identical to the single-node path.
 The server starts from built-in defaults, then applies config-file values,
 then `AION_*` environment overrides, then `aion server` flags — last layer
 wins. When `--config` is omitted it auto-discovers `aion.toml` in the
-working directory (then `<home>/config.toml`). **An empty config boots**:
-every always-mounted surface has a default, and keys only become required
-when the operator commissions the surface they belong to.
+working directory (then `<home>/config.toml`). A **hand-written** config
+must rule on the three required-no-default keys —
+`observability.max_batch_events` and `observability.max_batch_hold_ms` on
+every backend, plus `store.node_cache_budget` when the store is haematite
+(the default) — because each encodes a deployment trade the server refuses
+to decide silently. Every other always-mounted surface has a default, and
+the remaining keys only become required when the operator commissions the
+surface they belong to. (The first-run scaffold below carries all three, so
+a machine with no config at all still boots.)
 
 A boot that discovers **no config at any layer** first scaffolds
 `<home>/config.toml` (owner-only, `0600`) from the server's embedded
@@ -99,8 +105,9 @@ deploy ceilings, the outbox knobs, `observability.max_event_bytes` and
 `observability.max_stream_events`) default when **omitted** but reject an
 explicit `0`. The transcript batch bounds are NOT tuning knobs:
 `observability.max_batch_events` and `observability.max_batch_hold_ms` are
-required and have no defaults, exactly like the three `[store]` fields. Validation failures are loud and
-name both the TOML key and its environment override, e.g.:
+required and have no defaults, exactly like `store.node_cache_budget` on a
+haematite boot. Validation failures are loud and name both the TOML key and
+its environment override, e.g.:
 
 ```
 runtime.query_timeout_ms must be a positive integer when set (the server
@@ -499,7 +506,9 @@ supported variables are:
 
 - `AION_SERVER_LISTEN_ADDRESS`, `AION_SERVER_GRPC_ADDRESS`,
   `AION_SERVER_CORS_ALLOWED_ORIGINS` (comma-separated; empty clears the list)
-- `AION_STORE_BACKEND`, `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
+- `AION_STORE_BACKEND`, `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`,
+  `AION_STORE_NODE_CACHE_BUDGET` (`{ bytes = N }` or `unlimited` — the
+  refusal for the absent key names this variable as its remedy)
 - `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`,
   `AION_RUNTIME_JIT_THRESHOLD`
 - `AION_DRAIN_TIMEOUT_SECONDS`
@@ -520,7 +529,10 @@ supported variables are:
   `AION_OUTBOX_BACKOFF_MAX_MS`, `AION_OUTBOX_RECONCILE_INTERVAL_MS`,
   `AION_OUTBOX_RECONCILE_STALE_AFTER_MS`,
   `AION_OUTBOX_LIMINAL_LISTEN_ADDRESS`
-- `AION_OBSERVABILITY_MAX_EVENT_BYTES`, `AION_OBSERVABILITY_MAX_STREAM_EVENTS`
+- `AION_OBSERVABILITY_MAX_EVENT_BYTES`, `AION_OBSERVABILITY_MAX_STREAM_EVENTS`,
+  `AION_OBSERVABILITY_MAX_BATCH_EVENTS`, `AION_OBSERVABILITY_MAX_BATCH_HOLD_MS`
+  (the two required batch bounds; their refusals name these variables as the
+  remedy)
 
 Structured values — `[store.cluster]`, `store.owned_shards`,
 `[worker.queue_service]`, `worker.heartbeat_window`, `[ops_console]`,

@@ -150,6 +150,10 @@ backend = "haematite"
 data_dir = "aion-data"
 node_cache_budget = "unlimited"
 
+[observability]
+max_batch_events = 64
+max_batch_hold_ms = 200
+
 [runtime]
 scheduler_threads = 4
 
