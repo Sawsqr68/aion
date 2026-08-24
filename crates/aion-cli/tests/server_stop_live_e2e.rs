@@ -261,17 +261,33 @@ fn dying_words(log: &Path) -> String {
     }
 }
 
-/// Ask the process table about `marker`, with the instrument's own failure
-/// kept distinct from absence: `pgrep` exits 0 on a match, 1 on no-match,
-/// and >1 (usage, fatal) for its own errors — reading a broken instrument
-/// as "absent" would green a vacuous claim.
-fn process_table_holds(marker: &str) -> Result<bool, TestError> {
-    let survey = Command::new("pgrep").args(["-f", marker]).output()?;
+/// A sleep duration that is simultaneously the process-table marker, plus
+/// the `pgrep -f` pattern that finds exactly it. The fractional digits
+/// minted from this test process's pid are what make the marker
+/// DISCRIMINATE: estate boxes run watcher loops whose own round-number
+/// `sleep 20`-style commands — and whose shell wrappers' argv, which quote
+/// the loop text verbatim and therefore match for the wrapper's whole life —
+/// satisfy any round-number pattern forever. The pattern is end-anchored
+/// with the dot escaped, so neither a longer duration nor a quoting wrapper
+/// can satisfy it.
+fn unique_sleeper(base_secs: u64) -> (String, String) {
+    let pid = u64::from(std::process::id());
+    let duration = format!("{}.{:05}", base_secs + pid % 10, pid % 100_000);
+    let pattern = format!("sleep {}$", duration.replace('.', "[.]"));
+    (duration, pattern)
+}
+
+/// Ask the process table about a [`unique_sleeper`] pattern, with the
+/// instrument's own failure kept distinct from absence: `pgrep` exits 0 on
+/// a match, 1 on no-match, and >1 (usage, fatal) for its own errors —
+/// reading a broken instrument as "absent" would green a vacuous claim.
+fn process_table_holds(pattern: &str) -> Result<bool, TestError> {
+    let survey = Command::new("pgrep").args(["-f", pattern]).output()?;
     match survey.status.code() {
         Some(0) => Ok(true),
         Some(1) => Ok(false),
         other => Err(format!(
-            "pgrep -f {marker} failed as an instrument (exit {other:?}); stderr: {}",
+            "pgrep -f {pattern} failed as an instrument (exit {other:?}); stderr: {}",
             text(&survey.stderr)
         )
         .into()),
@@ -390,10 +406,10 @@ fn a_parked_drain_is_visible_in_the_stop_report() -> TestResult {
     // The command must be findable in the process table afterwards, and the
     // declared executor runs argv directly (no shell), so nothing but sleep's
     // own arguments can carry a marker. A duration unique to this test run IS
-    // the marker: long enough to outlive any drain, unique enough that
-    // `pgrep -f` can ask about exactly this sleeper and no other test's.
-    let unique_duration = 600_000 + u64::from(std::process::id()) % 100_000;
-    let marker = format!("sleep {unique_duration}");
+    // the marker: long enough to outlive any drain, discriminating enough
+    // (fractional pid digits, anchored pattern) that the probe can ask about
+    // exactly this sleeper — see `unique_sleeper`.
+    let (unique_duration, marker) = unique_sleeper(600_000);
     std::fs::write(
         &fixture,
         format!(
@@ -500,12 +516,12 @@ fn a_drain_outliving_patience_reports_still_draining_with_exit_one() -> TestResu
     // ten-minute sleeper here would orphan a process on the box for ten
     // minutes every run (the server is never force-killed in this specimen,
     // so only the sleeper's own completion ends the drain). ~20 seconds is
-    // three orders of magnitude past the patience and gone before the verb
-    // deadline. The duration doubles as the process-table marker, unique per
-    // test process, exactly as the parked specimen's — and distinct from its
-    // 600xxx range, so the two can never match each other's sleeper.
-    let unique_duration = 20 + u64::from(std::process::id()) % 10;
-    let marker = format!("sleep {unique_duration}");
+    // an order of magnitude past the patience and gone before the verb
+    // deadline. The duration doubles as the process-table marker — see
+    // `unique_sleeper` for why the fractional digits are load-bearing (this
+    // red was real: estate watcher loops `sleep 20`, and their shell
+    // wrappers' argv quote that text for the wrapper's whole life).
+    let (unique_duration, marker) = unique_sleeper(20);
     std::fs::write(
         &fixture,
         format!(
