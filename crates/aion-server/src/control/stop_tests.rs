@@ -64,7 +64,7 @@ fn stamped(body: &str) -> String {
 #[test]
 fn an_unclaimed_home_refuses_with_no_pid_file() -> TestResult {
     let home = tempfile::tempdir()?;
-    match stop(home.path(), Duration::from_millis(50))? {
+    match stop(home.path(), Ok(Duration::from_millis(50)))? {
         StopVerdict::Refusal(StopRefusal::NoPidFile { path }) => {
             assert_eq!(
                 path,
@@ -92,7 +92,7 @@ fn a_dead_servers_file_reconciles_as_already_gone() -> TestResult {
     let stale = dead_record()?;
     strand_record(home.path(), &stale)?;
 
-    match stop(home.path(), Duration::from_millis(50))? {
+    match stop(home.path(), Ok(Duration::from_millis(50)))? {
         StopVerdict::Outcome(outcome) => match *outcome {
             StopOutcome::AlreadyGone {
                 record,
@@ -165,7 +165,7 @@ fn already_gone_carries_the_death_notes_account() -> TestResult {
     )?;
     strand_record(home.path(), &stale)?;
 
-    match stop(home.path(), Duration::from_millis(50))? {
+    match stop(home.path(), Ok(Duration::from_millis(50)))? {
         StopVerdict::Outcome(outcome) => match *outcome {
             StopOutcome::AlreadyGone { fate, .. } => match fate {
                 Ok(NoteFate::Disarmed { outcome, .. }) => {
@@ -208,8 +208,11 @@ fn bookkeeping_failures_ride_the_outcome_instead_of_destroying_it() -> TestResul
     // The death note's path is occupied by a DIRECTORY: reading it fails
     // with a real I/O error, not the honest-absence NotFound arm.
     std::fs::create_dir_all(crate::death_note::note_path(home.path()))?;
-    // The run directory is read-only: the pid file can be read but not
-    // removed — the root-owned-home shape at unit scale.
+    // The run directory is read-only, so reconciliation fails at its FIRST
+    // write — opening the pid mutation lock beside the file — before any
+    // removal is attempted. The specimen's subject is that the failure rides
+    // the outcome, whichever write leg fires; the root-owned-home shape at
+    // unit scale.
     let run_dir = pid_file::pid_file_path(home.path())
         .parent()
         .ok_or("pid file path has no parent")?
@@ -218,8 +221,21 @@ fn bookkeeping_failures_ride_the_outcome_instead_of_destroying_it() -> TestResul
     let mut read_only = writable.clone();
     read_only.set_readonly(true);
     std::fs::set_permissions(&run_dir, read_only)?;
+    // Guard on the MECHANISM, not the identity: a privileged run (root in a
+    // container) writes through a read-only mode bit, and the specimen's
+    // driven failure never happens. Probe it; when the dir still accepts a
+    // write, the specimen cannot measure here — skip loudly, never red.
+    if std::fs::write(run_dir.join("write-probe"), b"probe").is_ok() {
+        std::fs::set_permissions(&run_dir, writable)?;
+        tracing::info!(
+            "skipping bookkeeping_failures_ride_the_outcome_instead_of_destroying_it: \
+             this process writes through a read-only directory (privileged run), so \
+             the specimen's reconciliation failure cannot be driven"
+        );
+        return Ok(());
+    }
 
-    let verdict = stop(home.path(), Duration::from_millis(50));
+    let verdict = stop(home.path(), Ok(Duration::from_millis(50)));
     // Restore before asserting so a red never strands a read-only tempdir.
     std::fs::set_permissions(&run_dir, writable)?;
 
@@ -275,7 +291,7 @@ fn a_recycled_pid_refuses_and_touches_nothing() -> TestResult {
     stale.started_at_unix_secs = stale.started_at_unix_secs.wrapping_add(31);
     strand_record(home.path(), &stale)?;
 
-    match stop(home.path(), Duration::from_millis(50))? {
+    match stop(home.path(), Ok(Duration::from_millis(50)))? {
         StopVerdict::Refusal(StopRefusal::StaleIncarnation {
             pid,
             recorded_started_at,
@@ -318,7 +334,7 @@ fn a_corrupt_pid_file_is_a_typed_error_not_a_verdict() -> TestResult {
     let path = pid_file::pid_file_path(home.path());
     std::fs::create_dir_all(path.parent().ok_or("pid path must have a parent")?)?;
     std::fs::write(&path, "93400\n")?;
-    match stop(home.path(), Duration::from_millis(50)) {
+    match stop(home.path(), Ok(Duration::from_millis(50))) {
         Err(error) => {
             assert!(
                 error.to_string().contains("does not parse"),
@@ -329,6 +345,73 @@ fn a_corrupt_pid_file_is_a_typed_error_not_a_verdict() -> TestResult {
             return Err(format!("a corrupt file must refuse as an error, got {verdict:?}").into());
         }
     }
+    Ok(())
+}
+
+/// Red first — an unresolved patience refuses ONLY a verified-running server,
+/// the one face that actually needs the window. Before this, the CLI turned a
+/// broken config into exit 2 before the stop flow ever ran: a deploy script's
+/// idempotent pre-stop escalated against a home where nothing was running.
+///
+/// Three worlds, one `Err` carried in:
+/// - an empty home still answers `NoPidFile` (the goal state decides);
+/// - a dead record still reconciles as `AlreadyGone` (ditto);
+/// - a VERIFIED-RUNNING record refuses BEFORE signalling, naming the running
+///   pid, carrying the resolution failure's own account, and touching
+///   nothing — this process is the verified incarnation, and it survives to
+///   assert exactly that.
+#[test]
+fn an_unresolved_patience_refuses_only_a_verified_running_server() -> TestResult {
+    let unresolved = || Err("the wait patience could not be resolved (specimen)".to_owned());
+
+    let empty = tempfile::tempdir()?;
+    match stop(empty.path(), unresolved())? {
+        StopVerdict::Refusal(StopRefusal::NoPidFile { .. }) => {}
+        other => {
+            return Err(format!("an empty home must answer NoPidFile, got {other:?}").into());
+        }
+    }
+
+    let gone = tempfile::tempdir()?;
+    let stale = dead_record()?;
+    strand_record(gone.path(), &stale)?;
+    match stop(gone.path(), unresolved())? {
+        StopVerdict::Outcome(outcome) => match *outcome {
+            StopOutcome::AlreadyGone { record, .. } => {
+                assert_eq!(record, stale, "the goal-state fact must name the record");
+            }
+            other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
+        },
+        // The reaped pid recycled onto a stranger before the probe — the
+        // honest refusal for that world (the siblings' guard).
+        StopVerdict::Refusal(StopRefusal::StaleIncarnation { pid, .. }) => {
+            assert_eq!(pid, stale.pid);
+        }
+        other @ StopVerdict::Refusal(_) => {
+            return Err(format!("expected AlreadyGone or StaleIncarnation, got {other:?}").into());
+        }
+    }
+
+    let running = tempfile::tempdir()?;
+    let me = own_record()?;
+    strand_record(running.path(), &me)?;
+    match stop(running.path(), unresolved())? {
+        StopVerdict::Refusal(StopRefusal::UnresolvedPatience { pid, unresolved }) => {
+            assert_eq!(pid, me.pid, "the refusal must name the running pid");
+            assert!(
+                unresolved.contains("specimen"),
+                "the refusal must carry the resolution failure's own account: {unresolved}"
+            );
+        }
+        other => {
+            return Err(format!("expected the UnresolvedPatience refusal, got {other:?}").into());
+        }
+    }
+    assert_eq!(
+        pid_file::read(running.path())?.as_ref(),
+        Some(&me),
+        "the refusal must leave the running server's claim exactly as it found it"
+    );
     Ok(())
 }
 

@@ -22,7 +22,10 @@
 //! Exit codes, so a script can ask "is the server up?": 0 when the RECORDED
 //! incarnation is RUNNING and verified; 1 when it is not (gone, mismatched,
 //! or no record — each face printed); 2 when the verb itself could not do
-//! its job (unresolvable home or config, unreadable pid file). The verdict
+//! its job (unresolvable home, unreadable pid file). A configuration that
+//! cannot load is NOT exit 2: it feeds only the side layers (the store line,
+//! and the probe address when no record exists), so the failure is stated as
+//! its own layer's fact and the predicate still answers 0 or 1. The verdict
 //! is about the recorded incarnation — the server the control verbs can
 //! address — not about whether ANY server answers on some address: a server
 //! that booted unclaimed answers HTTP but exits 1 here, with the finding

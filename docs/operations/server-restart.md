@@ -19,8 +19,7 @@ optional; the checks are what make the next death attributable.
   instant, binary SHA-256, version, commit, the bound addresses, and the
   server's drain window (`drain_timeout_seconds` — the window a verified
   RUNNING record lends `aion server stop` when no `--patience` is given).
-  This is
-  an incarnation identity, not a bare number: the verbs verify the recorded
+  This is an incarnation identity, not a bare number: the verbs verify the recorded
   start instant against the live process table before touching anything, so
   a recycled pid is a refusal, never a kill.
 - **Logs**: `~/.aion/logs/<name>-<UTC date>.log` (e.g.
@@ -49,12 +48,19 @@ aion server stop       # SIGTERM the verified incarnation, wait, report
   server stopped, was already gone, or no server has claimed the home —
   stopping is idempotent); `1` exclusively still-draining at patience (the
   process lives: wait, or force); `2` the verb could not complete (a
-  stale-incarnation refusal, an unresolvable home/config, an error mid-verb
-  — stderr says which). `status`: `0` the recorded incarnation is RUNNING
+  stale-incarnation refusal, an unresolvable home, an error mid-verb —
+  stderr says which). `status`: `0` the recorded incarnation is RUNNING
   and verified; `1` it is not (gone, mismatched, or no record — status is a
   predicate about the RECORDED server, so "down" answers 1 even where
   `stop` would answer 0); `2` the verb itself failed (unreadable pid file,
-  unresolvable home or config).
+  unresolvable home). A configuration that cannot load is NOT by itself
+  exit 2 for either verb: `status` states the failure and still answers its
+  predicate (the store line and the no-record probe address degrade), and
+  `stop` notes it and proceeds — the patience it would have resolved is only
+  needed to wait on a verified-running server, so an idempotent pre-stop
+  over an empty home still answers `0`, and only a running server that
+  genuinely needs the window turns the failure into a refusal (exit 2, with
+  `--patience <seconds>` named as the remedy).
 - A server that booted UNCLAIMED (its boot log says so: another live server
   held the home's record on different addresses) is NOT addressed by these
   verbs — they act on the recorded claimant. `status` prints a note when an

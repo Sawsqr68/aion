@@ -739,3 +739,87 @@ fn status_degrades_but_answers_when_the_configuration_is_unreadable() -> TestRes
     );
     Ok(())
 }
+
+/// Red first — the goal state must survive a broken config: `stop` over a
+/// home where nothing is running answers 0, stating the patience-resolution
+/// failure as a note instead of dying on it. Before this, the same broken
+/// config that `status` learned to degrade around made the idempotent
+/// pre-stop exit 2 with no line saying nothing was running — and a deploy
+/// script escalated against a stopped server.
+#[test]
+fn stop_reaches_the_goal_state_when_the_configuration_is_unreadable() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let bad_config = home.path().join("broken.toml");
+    std::fs::write(&bad_config, "this = is not [ valid toml")?;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aion"))
+        .args([
+            "server",
+            "stop",
+            "--config",
+            bad_config.to_str().ok_or("config path is not utf-8")?,
+        ])
+        .env("AION_HOME", home.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    let stdout = text(&output.stdout);
+    let stderr = text(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "an unclaimed home is the goal state (0) even with a broken config — \
+         the patience is only needed to wait on a running server: \
+         stdout={stdout} stderr={stderr}"
+    );
+    assert!(
+        stdout.contains("nothing to stop"),
+        "the goal-state line must still be printed: {stdout}"
+    );
+    assert!(
+        stderr.contains("the wait patience could not be resolved from configuration"),
+        "the resolution failure must be stated as its own layer's fact, never \
+         swallowed: {stderr}"
+    );
+    Ok(())
+}
+
+/// The endpoint refusal proven at the binary, per verb: each control arm
+/// must consult `--endpoint` and refuse with ITS OWN verb's wording before
+/// doing anything. The discriminator: over this same empty home a bare
+/// `server stop` answers 0 ("nothing to stop"), so exit 2 here proves the
+/// refusal fired in the arm, not merely that the flag parsed.
+#[test]
+fn the_control_verbs_refuse_an_endpoint_at_the_binary() -> TestResult {
+    for verb in ["stop", "status"] {
+        let home = tempfile::tempdir()?;
+        let output = Command::new(env!("CARGO_BIN_EXE_aion"))
+            .args(["--endpoint", "10.0.0.9:50051", "server", verb])
+            .env("AION_HOME", home.path())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
+        let stdout = text(&output.stdout);
+        let stderr = text(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "`aion --endpoint … server {verb}` must refuse (2), never act \
+             locally: stdout={stdout} stderr={stderr}"
+        );
+        assert!(
+            stderr.contains(&format!("refusing to {verb}")),
+            "the refusal must name its own verb: {stderr}"
+        );
+        assert!(
+            stderr.contains(&format!("`aion server {verb}` is local")),
+            "the refusal must say THIS verb is local: {stderr}"
+        );
+        assert!(
+            !stdout.contains("nothing to stop") && !stdout.contains("pid file"),
+            "a refusal must precede the verb's own output: {stdout}"
+        );
+    }
+    Ok(())
+}

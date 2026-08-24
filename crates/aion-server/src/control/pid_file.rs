@@ -502,9 +502,8 @@ impl Drop for PidFileGuard {
             }
         };
         // Absence, unreadability, and unparseability are three different
-        // facts here as everywhere else in this module — the two failure
-        // arms are named so an exit-time surprise never passes in silence
-        // beside the two arms that already log.
+        // facts here as everywhere else in this module — each arm names its
+        // own, so an exit-time surprise never passes in silence.
         let current = match std::fs::read_to_string(&self.path) {
             Ok(content) => match serde_json::from_str::<PidRecord>(&content) {
                 Ok(record) => Some(record),
@@ -520,9 +519,21 @@ impl Drop for PidFileGuard {
                 }
             },
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                // Honest absence: a successor already reconciled it, or a
-                // clean removal raced this drop. Nothing to do, nothing to
-                // warn about.
+                // Absence here is NOT benign: this incarnation holds the
+                // claim, a successor's claim REPLACES the record rather than
+                // leaving the path empty, and the stop verb reconciles only
+                // files whose process is proven gone — which cannot be this
+                // one, mid-`Drop`. What reaches this arm is a claim removed
+                // out from under its live holder (an operator `rm`, a wiped
+                // home). Warn: no other record of the disappearance exists,
+                // and the next boot's clean-slate claim would otherwise be
+                // indistinguishable from an ordinary first start.
+                warn!(
+                    path = %self.path.display(),
+                    "the pid file is GONE at exit time although this incarnation \
+                     held the claim — it was removed out from under the running \
+                     server; nothing to reconcile, recording the disappearance"
+                );
                 None
             }
             Err(io_error) => {

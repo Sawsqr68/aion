@@ -11,8 +11,13 @@
 //! as `systemctl stop` rules it); 1 exclusively when it is still draining at
 //! patience (the one face a script keys on — the process lives, wait or
 //! force); 2 when the verb could not complete (a refusal before signalling,
-//! an unresolvable home or config, or an error mid-verb — the message on
-//! stderr says which). `aion server status` answers a different question —
+//! an unresolvable home, or an error mid-verb — the message on stderr says
+//! which). A configuration that cannot load is NOT by itself exit 2: the
+//! patience it would have resolved is only needed to wait on a verified
+//! RUNNING server, so the failure is stated as a note and carried to the
+//! point of need — a home where the goal state already holds still answers
+//! 0, and only a running server that genuinely needs the window turns it
+//! into a refusal. `aion server status` answers a different question —
 //! "is it up?" is a predicate, so DOWN is its exit 1 — which is why the two
 //! verbs give the same situation different codes on purpose.
 
@@ -53,24 +58,32 @@ pub fn run(args: &StopArgs) -> ExitCode {
         }
     };
     let running = verified_running_record(&home);
-    let (patience, patience_source) = match resolve_patience(args, running.as_ref()) {
-        Ok(resolved) => resolved,
-        Err(message) => {
-            eprintln!("{message}");
-            return ExitCode::from(2);
-        }
-    };
+    let patience = resolve_patience(args, running.as_ref());
+    // A resolution failure is stated as its own layer's fact, never allowed
+    // to destroy the verb's answer: the patience is only NEEDED to wait on a
+    // verified-running server, and whether one exists is the stop flow's own
+    // finding. Erroring out here reported "the verb could not complete"
+    // (exit 2) over homes where the goal state already held — a deploy
+    // script's idempotent pre-stop escalated against a stopped server
+    // because a config file was broken.
+    if let Err(message) = &patience {
+        eprintln!(
+            "note: {message} — the patience is only needed to wait on a running \
+             server; if one is found, the stop will refuse and name the remedy"
+        );
+    }
     // Announce the wait only when one can actually happen: a verified-running
-    // recorded server. Announcing over an empty home or a stale record would
-    // claim an action the verb is not going to perform.
-    if running.is_some() {
+    // recorded server AND a resolved window. Announcing over an empty home,
+    // a stale record, or an unresolved patience would claim an action the
+    // verb is not going to perform.
+    if let (Some(_), Ok((patience, patience_source))) = (running.as_ref(), patience.as_ref()) {
         println!(
             "waiting up to {}s for the drain ({})",
             patience.as_secs(),
             patience_source.describe()
         );
     }
-    match aion_server::control::stop::stop(&home, patience) {
+    match aion_server::control::stop::stop(&home, patience.map(|(patience, _)| patience)) {
         Ok(StopVerdict::Outcome(outcome)) => render_outcome(&outcome),
         // The goal state — nothing running at this home — already holds:
         // stopping is idempotent, so an unclaimed home is success, not a
@@ -170,9 +183,12 @@ fn resolve_patience(
             Duration::from_secs(config.drain.timeout_seconds),
             PatienceSource::Config,
         )),
+        // The core fact only — no verb prefix, no remedy. Each surface that
+        // states this failure adds its own frame: the CLI's note names when
+        // the patience matters, and the stop flow's refusal (the one place
+        // the failure actually blocks) names `--patience` as the remedy.
         Err(error) => Err(format!(
-            "aion server stop: could not resolve the wait patience from configuration \
-             ({error}); pass `--patience <seconds>` to rule it at invocation"
+            "the wait patience could not be resolved from configuration ({error})"
         )),
     }
 }

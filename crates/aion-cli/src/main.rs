@@ -1200,12 +1200,6 @@ async fn describe_workflow(
     )
 }
 
-/// The refusal `aion server` owes an operator who passed `--endpoint`, or
-/// `None` when they did not.
-///
-/// Separate from the dispatch arm so the message itself is testable: a refusal
-/// that names the wrong replacement flag is barely better than the silence it
-/// replaced.
 /// The `aion server` command family: the control verbs (stop/status, local
 /// by contract) and the run-the-server default. Split from `main` so the
 /// dispatch stays a table; every refusal doctrine ruling lives here with the
@@ -1285,6 +1279,12 @@ fn control_verb_endpoint_refusal(verb: &str, endpoint: Option<&str>) -> Option<S
     })
 }
 
+/// The refusal `aion server` owes an operator who passed `--endpoint`, or
+/// `None` when they did not.
+///
+/// Separate from the dispatch arm so the message itself is testable: a refusal
+/// that names the wrong replacement flag is barely better than the silence it
+/// replaced.
 fn server_endpoint_refusal(endpoint: Option<&str>) -> Option<String> {
     endpoint.map(|endpoint| {
         format!(
@@ -2204,19 +2204,32 @@ mod tests {
     #[test]
     fn the_control_verbs_refuse_a_client_endpoint_instead_of_acting_locally() -> anyhow::Result<()>
     {
-        for argv in [
-            vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "stop"],
-            vec!["aion", "server", "stop", "--endpoint", "10.0.0.9:50051"],
-            vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "status"],
+        for (argv, verb) in [
+            (
+                vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "stop"],
+                "stop",
+            ),
+            (
+                vec!["aion", "server", "stop", "--endpoint", "10.0.0.9:50051"],
+                "stop",
+            ),
+            (
+                vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "status"],
+                "status",
+            ),
         ] {
             let cli = Cli::try_parse_from(&argv)?;
-            let refusal = control_verb_endpoint_refusal("stop", cli.endpoint.as_deref())
-                .ok_or_else(|| {
+            let refusal =
+                control_verb_endpoint_refusal(verb, cli.endpoint.as_deref()).ok_or_else(|| {
                     anyhow::anyhow!(
                         "an explicit --endpoint was accepted by a control verb: {argv:?}"
                     )
                 })?;
             assert!(refusal.contains("10.0.0.9:50051"));
+            assert!(
+                refusal.contains(&format!("aion server {verb}")),
+                "the refusal must name ITS OWN verb, not a sibling's: {refusal}"
+            );
             assert!(
                 refusal.contains("local"),
                 "the refusal must say the verb is local: {refusal}"

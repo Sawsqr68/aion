@@ -108,6 +108,22 @@ pub enum StopRefusal {
         /// The pid file's path, named for the operator's own reconciliation.
         path: PathBuf,
     },
+    /// The server is verified RUNNING but no wait patience could be resolved
+    /// to govern the stop — no `--patience`, no usable recorded drain window,
+    /// and the configuration could not answer. Nothing is signalled:
+    /// signalling without a governed wait would leave the verb unable to
+    /// report what became of the drain.
+    #[error(
+        "refusing to signal pid {pid}: the server is RUNNING, but no wait patience \
+         could be resolved to govern the stop ({unresolved}). Pass `--patience \
+         <seconds>` to rule it at invocation, or repair the configuration"
+    )]
+    UnresolvedPatience {
+        /// The verified-running pid that was NOT signalled.
+        pid: u32,
+        /// Why patience resolution failed — the configuration's own account.
+        unresolved: String,
+    },
     /// This build cannot send POSIX signals.
     #[error("`aion server stop` needs POSIX signals, which this platform does not have")]
     UnsupportedPlatform,
@@ -132,21 +148,18 @@ pub enum StopVerdict {
     Refusal(StopRefusal),
 }
 
-impl StopVerdict {
-    /// The outcome, unboxed, when the verb acted; `None` on a refusal.
-    #[must_use]
-    pub fn into_outcome(self) -> Option<StopOutcome> {
-        match self {
-            Self::Outcome(outcome) => Some(*outcome),
-            Self::Refusal(_) => None,
-        }
-    }
-}
-
 /// Stop the server recorded under `home`, waiting up to `patience` for it to
 /// exit. `patience` is operator-ruled at invocation — the CLI passes the
-/// `--patience` flag or the config's own `drain_timeout`; this function
-/// never invents a value.
+/// `--patience` flag, the verified-running record's drain window, or the
+/// config's own `drain_timeout`; this function never invents a value.
+///
+/// `patience` arrives as a `Result` because its resolution can fail (a config
+/// that cannot load) and that failure must be carried to the point of need
+/// rather than destroy the verb's answer: only a VERIFIED-RUNNING server
+/// needs a wait window, so only the `Verified` arm consults the `Err` — and
+/// refuses, naming the running pid and the remedy. Every other face
+/// (no pid file, already gone, stale incarnation) decides without a window,
+/// exactly as it would with one.
 ///
 /// # Errors
 ///
@@ -155,7 +168,7 @@ impl StopVerdict {
 /// typed [`StopVerdict`], and once the server is proven exited, bookkeeping
 /// failures (death note, pid-file reconciliation) ride INSIDE the outcome
 /// rather than erroring out of it (see [`exit_bookkeeping`]).
-pub fn stop(home: &Path, patience: Duration) -> Result<StopVerdict, ServerError> {
+pub fn stop(home: &Path, patience: Result<Duration, String>) -> Result<StopVerdict, ServerError> {
     let Some(record) = pid_file::read(home)? else {
         return Ok(StopVerdict::Refusal(StopRefusal::NoPidFile {
             path: pid_file::pid_file_path(home),
@@ -182,7 +195,18 @@ pub fn stop(home: &Path, patience: Duration) -> Result<StopVerdict, ServerError>
             }),
             path: pid_file::pid_file_path(home),
         })),
-        IncarnationProbe::Verified { .. } => signal_and_wait(home, record, patience),
+        IncarnationProbe::Verified { .. } => match patience {
+            Ok(patience) => signal_and_wait(home, record, patience),
+            // The one arm that actually needs the window. Refusing HERE —
+            // after the probe, before the signal — keeps both truths: a home
+            // where the goal state already holds never sees this refusal,
+            // and a running server is never signalled without a governed
+            // wait to report on.
+            Err(unresolved) => Ok(StopVerdict::Refusal(StopRefusal::UnresolvedPatience {
+                pid: record.pid,
+                unresolved,
+            })),
+        },
     }
 }
 
