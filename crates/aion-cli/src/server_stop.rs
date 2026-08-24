@@ -567,6 +567,35 @@ timeout_seconds = {timeout_seconds}
         Ok(())
     }
 
+    /// Red first — the carried account must be BARE: the configuration's own
+    /// error with no sentence frame. The CLI note and the stop flow's refusal
+    /// each supply their sentence exactly once around it; a frame minted here
+    /// renders inside a second frame there — the doubled sentence a review
+    /// had to catch by eye. This specimen is that defect's detector.
+    #[test]
+    fn a_resolution_failure_carries_the_configurations_bare_account() -> TestResult {
+        let dir = tempfile::tempdir()?;
+        let bad_config = dir.path().join("broken.toml");
+        std::fs::write(&bad_config, "this = is not [ valid toml")?;
+        let args = StopArgs {
+            config: Some(bad_config),
+            patience: None,
+        };
+        let Err(account) = resolve_patience(&args, None) else {
+            return Err("a malformed config must fail patience resolution".into());
+        };
+        assert!(
+            !account.is_empty(),
+            "the account must carry the configuration's cause"
+        );
+        assert!(
+            !account.contains("could not be resolved"),
+            "the account must be bare — the surfaces own the sentence, and a \
+             framed account here doubles inside theirs: {account}"
+        );
+        Ok(())
+    }
+
     /// The mixed fate shapes state BOTH facts — the renderers' rule ("a
     /// readable record does not un-happen the torn line beside it"), proven
     /// on the rendered lines instead of by inspection. Covers both bracket

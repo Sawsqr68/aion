@@ -10,8 +10,8 @@ estate's kill discipline, mechanized. The server now claims its home with a
 pid record (`<AION_HOME>/run/aion-server.pid` — pid, start instant, binary
 SHA-256, version, commit, bound addresses, and its drain window), and both
 verbs verify the recorded incarnation against the live process table before
-touching anything: a recycled pid is a refusal that names both incarnations,
-never a kill.
+touching anything. A recycled pid names both incarnations: `stop` refuses
+it — never a kill — and `status` reports the mismatch and answers 1.
 
 - **`aion server stop`** SIGTERMs the verified incarnation, waits up to
   `--patience <seconds>` (absent, the verified-running record's own drain
@@ -38,6 +38,19 @@ never a kill.
   `--endpoint`: they read this machine's `AION_HOME` pid record, and a
   destructive verb that silently ignores where the operator pointed it
   lands on the wrong machine.
+- **One home, one claim.** A server booting into a home whose record a
+  LIVE server holds boots UNCLAIMED and says so: it serves, but the
+  control verbs address only the recorded claimant — `aion server status`
+  prints a note (and answers 1) when an aion server answers HTTP without
+  being the verified recorded incarnation. A claim needs the mutation
+  lock beside the pid file.
+- `aion launch`'s ready report now names `aion server stop` as the stop
+  path (it suggested a raw `kill <pid>` before), and says which server
+  the verb would address when the launched one is not the recorded
+  claimant.
+- **MSRV: the workspace `rust-version` is now 1.89** (was 1.85; first
+  raise since the workspace was initialized). The branch's let-chain
+  sweep requires it, and every published 0.24.0 crate carries the floor.
 - The shutdown drain census now sees server-executed declared-command
   bodies: one still executing at drain end is reported by name in the
   drain outcome record, and the next boot re-dispatches the attempt.

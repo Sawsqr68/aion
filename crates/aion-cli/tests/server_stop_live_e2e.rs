@@ -782,6 +782,12 @@ fn stop_reaches_the_goal_state_when_the_configuration_is_unreadable() -> TestRes
         "the resolution failure must be stated as its own layer's fact, never \
          swallowed: {stderr}"
     );
+    assert_eq!(
+        stderr.matches("could not be resolved").count(),
+        1,
+        "the failure must be framed exactly once — a sentence inside a \
+         sentence means the carried account arrived pre-framed: {stderr}"
+    );
     Ok(())
 }
 

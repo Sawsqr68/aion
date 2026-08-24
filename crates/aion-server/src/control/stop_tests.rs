@@ -258,8 +258,10 @@ fn bookkeeping_failures_ride_the_outcome_instead_of_destroying_it() -> TestResul
                     return Err("a read-only run dir must fail reconciliation".into());
                 };
                 assert!(
-                    !reconcile_error.is_empty(),
-                    "the reconciliation failure must carry its reason"
+                    reconcile_error.contains("could not remove pid file"),
+                    "the failure must come from the REMOVAL leg — the lock \
+                     beside the file opens fine on a read-only dir (the leg \
+                     attribution the comment above states): {reconcile_error}"
                 );
                 assert_eq!(
                     pid_file::read(home.path())?,
