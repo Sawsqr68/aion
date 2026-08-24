@@ -207,7 +207,11 @@ fn decode_outcome(response: ProtoQueryResponse) -> Result<Result<Payload, WireEr
 /// executed its `register_query` calls (registration is workflow code, so it
 /// races the caller after `handlers::start` returns). The first outcome that
 /// is not an `unknown_query` outcome error — success or any other typed
-/// outcome — is returned.
+/// outcome — is returned. Every deadline exit is a harness failure on the
+/// outer `TestError` channel, carrying the server's real last refusal — the
+/// helper never returns a wire error the server did not produce in the round
+/// that returned it, so no assertion on server behaviour can pass on a
+/// helper-made value.
 async fn query_when_registered(
     server: &Server,
     caller: &CallerIdentity,
@@ -217,16 +221,25 @@ async fn query_when_registered(
 ) -> Result<Result<Payload, WireError>, TestError> {
     let started = std::time::Instant::now();
     let deadline = started + REGISTRATION_DEADLINE;
+    // The dominant deadline exit is this loop-top check after a
+    // full-remainder sleep; its diagnostic carries the server's actual last
+    // refusal rather than claiming no attempt happened.
+    let mut last_refusal: Option<WireError> = None;
     loop {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         if remaining.is_zero() {
             log_query_registration_failure(server, workflow_id, query_name, started).await;
-            // A harness failure, not a server outcome: the deadline was spent
-            // before any attempt. Never minted as a wire error a test could
-            // assert as server behaviour.
-            return Err(format!(
-                "query registration deadline spent before any attempt for `{query_name}`"
-            )
+            return Err(match &last_refusal {
+                Some(error) => format!(
+                    "query registration deadline spent after {:?} for `{query_name}`; \
+                     last server refusal: {error:?}",
+                    started.elapsed()
+                ),
+                None => format!(
+                    "query registration deadline spent before any attempt completed for \
+                     `{query_name}`"
+                ),
+            }
             .into());
         }
         let response = if let Ok(response) = tokio::time::timeout(
@@ -242,26 +255,33 @@ async fn query_when_registered(
             response?
         } else {
             log_query_registration_failure(server, workflow_id, query_name, started).await;
-            // The helper's own attempt budget elapsed with no server verdict.
-            // Returned as a harness failure so the timeout tests stay
-            // falsifiable: a server whose deadline enforcement regressed into
-            // a hang goes red here, never green on a minted QueryTimeout.
+            // The whole remaining registration budget elapsed while an
+            // attempt was still in flight, with no server verdict. Returned
+            // as a harness failure so the timeout tests stay falsifiable: a
+            // server whose deadline enforcement regressed into a hang goes
+            // red here, never green on a minted QueryTimeout.
             return Err(format!(
-                "query helper attempt budget elapsed after {:?} with no server verdict for `{query_name}`",
+                "query registration deadline elapsed mid-attempt after {:?} with no server \
+                 verdict for `{query_name}`",
                 started.elapsed()
             )
             .into());
         };
         match decode_outcome(response)? {
             Err(error) if error.code == WireErrorCode::UnknownQuery => {
+                last_refusal = Some(error);
+                // A zero-remaining sleep is a yield; the loop-top check owns
+                // the deadline exit and carries the refusal just recorded.
                 let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                if remaining.is_zero() {
-                    log_query_registration_failure(server, workflow_id, query_name, started).await;
-                    return Ok(Err(error));
-                }
                 tokio::time::sleep(Duration::from_millis(25).min(remaining)).await;
             }
-            outcome => return Ok(outcome),
+            Ok(payload) => return Ok(Ok(payload)),
+            Err(error) => {
+                // A non-registration server refusal is a red-side outcome for
+                // most callers: log it with history before handing it back.
+                log_query_registration_failure(server, workflow_id, query_name, started).await;
+                return Ok(Err(error));
+            }
         }
     }
 }

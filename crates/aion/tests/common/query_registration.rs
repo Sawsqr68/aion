@@ -14,18 +14,21 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(25);
 pub enum QueryHelperError {
     /// A verdict the engine itself produced and the helper did not retry away.
     Engine(EngineError),
-    /// The helper's own per-attempt budget elapsed with no engine verdict at
-    /// all. The in-flight query future was dropped mid-attempt, so engine-side
-    /// pending-reply state is indeterminate — treat as a harness failure.
-    AttemptBudgetElapsed {
-        /// How long the helper waited across all attempts.
+    /// The registration deadline elapsed while a query attempt was still in
+    /// flight with no engine verdict at all. The in-flight future was dropped
+    /// mid-attempt, so engine-side pending-reply state is indeterminate —
+    /// treat as a harness failure. (The attempt is bounded by the WHOLE
+    /// remaining registration budget, so the engine's own reply deadline
+    /// always gets the first say.)
+    DeadlineElapsedMidAttempt {
+        /// Total time the helper waited across all attempts.
         waited: Duration,
     },
     /// The registration deadline was spent retrying `UnknownQuery`. Carries
-    /// the engine's real last refusal rather than a minted stand-in; `None`
-    /// only when the deadline was already spent before a single attempt.
+    /// the engine's real last refusal, however the loop exits; `None` only
+    /// when the deadline was already spent before a single attempt completed.
     RegistrationDeadline {
-        /// The engine's final `UnknownQuery` refusal, verbatim.
+        /// The engine's last `UnknownQuery` refusal, verbatim.
         last_error: Option<EngineError>,
         /// How long the helper retried before giving up.
         waited: Duration,
@@ -36,9 +39,9 @@ impl std::fmt::Display for QueryHelperError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Engine(error) => write!(f, "engine query error: {error}"),
-            Self::AttemptBudgetElapsed { waited } => write!(
+            Self::DeadlineElapsedMidAttempt { waited } => write!(
                 f,
-                "query helper attempt budget elapsed after {waited:?} with no engine verdict"
+                "query registration deadline elapsed mid-attempt after {waited:?} with no engine verdict"
             ),
             Self::RegistrationDeadline { last_error, waited } => match last_error {
                 Some(error) => write!(
@@ -47,7 +50,7 @@ impl std::fmt::Display for QueryHelperError {
                 ),
                 None => write!(
                     f,
-                    "query registration deadline spent after {waited:?} before any attempt"
+                    "query registration deadline spent after {waited:?} before any attempt completed"
                 ),
             },
         }
@@ -65,12 +68,20 @@ pub async fn query_when_registered(
 ) -> Result<Payload, QueryHelperError> {
     let started = Instant::now();
     let deadline = started + registration_deadline;
+    // The engine's real refusals are carried, not discarded: the dominant
+    // deadline exit is the loop-top check after a full-remainder sleep, and
+    // its diagnostic must name the actual last refusal, not claim silence.
+    let mut last_refusal: Option<EngineError> = None;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            log_registration_failure(engine, workflow_id, run_id, name, started, "deadline").await;
+            let cause = match &last_refusal {
+                Some(error) => format!("deadline; last refusal: {error}"),
+                None => "deadline before any attempt completed".to_owned(),
+            };
+            log_registration_failure(engine, workflow_id, run_id, name, started, &cause).await;
             return Err(QueryHelperError::RegistrationDeadline {
-                last_error: None,
+                last_error: last_refusal,
                 waited: started.elapsed(),
             });
         }
@@ -81,22 +92,10 @@ pub async fn query_when_registered(
         .await;
         match outcome {
             Ok(Err(error @ EngineError::Query(QueryError::UnknownQuery(_)))) => {
+                last_refusal = Some(error);
+                // A zero-remaining sleep is a yield; the loop-top check owns
+                // the deadline exit and carries the refusal just recorded.
                 let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining.is_zero() {
-                    log_registration_failure(
-                        engine,
-                        workflow_id,
-                        run_id,
-                        name,
-                        started,
-                        "deadline",
-                    )
-                    .await;
-                    return Err(QueryHelperError::RegistrationDeadline {
-                        last_error: Some(error),
-                        waited: started.elapsed(),
-                    });
-                }
                 tokio::time::sleep(RETRY_INTERVAL.min(remaining)).await;
             }
             Ok(Ok(payload)) => return Ok(payload),
@@ -122,10 +121,10 @@ pub async fn query_when_registered(
                     run_id,
                     name,
                     started,
-                    "attempt_timeout",
+                    "deadline elapsed mid-attempt",
                 )
                 .await;
-                return Err(QueryHelperError::AttemptBudgetElapsed {
+                return Err(QueryHelperError::DeadlineElapsedMidAttempt {
                     waited: started.elapsed(),
                 });
             }

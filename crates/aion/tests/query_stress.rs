@@ -96,6 +96,8 @@ async fn start(engine: &Engine) -> Result<(WorkflowId, RunId), Box<dyn std::erro
     Ok((handle.workflow_id().clone(), handle.run_id().clone()))
 }
 
+/// Background contention: three more parked workflows answering bursts of
+/// state queries while the foreground loop hammers the failing handler.
 async fn spawn_background_contention(
     engine: &Arc<Engine>,
 ) -> Result<

@@ -651,7 +651,7 @@ async fn unpumped_workflow_times_out_then_completes_despite_dropped_reply() -> T
 
     match outcome {
         // Only the ENGINE's own typed Timeout satisfies this test. The
-        // helper's AttemptBudgetElapsed harness failure lands in the red arm:
+        // helper's DeadlineElapsedMidAttempt harness failure lands in the red arm:
         // an engine whose reply-deadline enforcement regressed into a hang
         // must fail here, never pass on a helper-minted stand-in.
         Err(query_registration::QueryHelperError::Engine(EngineError::Query(
