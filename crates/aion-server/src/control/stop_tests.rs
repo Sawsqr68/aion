@@ -79,39 +79,63 @@ fn an_unclaimed_home_refuses_with_no_pid_file() -> TestResult {
 
 /// Red first — the recorded process is gone: the verb signals nothing,
 /// reconciles the stale file away, and reports the note's honest absence.
+///
+/// The reaped pid COULD have been recycled by the kernel between
+/// `dead_record`'s wait and the verb's probe; the verb then honestly
+/// refuses on a stale incarnation instead. Both answers are honest — this
+/// specimen refuses only a stop that pretends the dead record is running
+/// (the same guard its siblings in `incarnation.rs` and `server_stop.rs`
+/// carry, and a false red is not a safe failure).
 #[test]
 fn a_dead_servers_file_reconciles_as_already_gone() -> TestResult {
     let home = tempfile::tempdir()?;
     let stale = dead_record()?;
     strand_record(home.path(), &stale)?;
 
-    match stop(home.path(), Duration::from_millis(50))?.into_outcome() {
-        Some(StopOutcome::AlreadyGone {
-            record,
-            fate,
-            pid_file_reconciled,
-        }) => {
-            assert_eq!(
-                record, stale,
-                "the outcome must name the recorded incarnation"
-            );
-            assert_eq!(
+    match stop(home.path(), Duration::from_millis(50))? {
+        StopVerdict::Outcome(outcome) => match *outcome {
+            StopOutcome::AlreadyGone {
+                record,
                 fate,
-                NoteFate::NoNote,
-                "an empty home's note absence is a state, not a guess"
-            );
-            assert!(
                 pid_file_reconciled,
-                "the stale file must be reconciled away"
+            } => {
+                assert_eq!(
+                    record, stale,
+                    "the outcome must name the recorded incarnation"
+                );
+                assert_eq!(
+                    fate,
+                    Ok(NoteFate::NoNote),
+                    "an empty home's note absence is a state, not a guess"
+                );
+                assert_eq!(
+                    pid_file_reconciled,
+                    Ok(true),
+                    "the stale file must be reconciled away"
+                );
+                assert_eq!(
+                    pid_file::read(home.path())?,
+                    None,
+                    "the stale file must be gone after reconciliation"
+                );
+            }
+            other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
+        },
+        StopVerdict::Refusal(StopRefusal::StaleIncarnation { pid, .. }) => {
+            // The kernel re-handed the reaped pid to a stranger before the
+            // probe ran. The refusal is the honest answer for that world,
+            // and it must leave the stranger's claim alone.
+            assert_eq!(pid, stale.pid, "the refusal must name the recorded pid");
+            assert_eq!(
+                pid_file::read(home.path())?,
+                Some(stale),
+                "a refusal must leave the file untouched"
             );
         }
-        other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
+        other @ StopVerdict::Refusal(_) => {
+            return Err(format!("expected AlreadyGone or StaleIncarnation, got {other:?}").into());
+        }
     }
-    assert_eq!(
-        pid_file::read(home.path())?,
-        None,
-        "the stale file must be gone after reconciliation"
-    );
     Ok(())
 }
 
@@ -141,18 +165,103 @@ fn already_gone_carries_the_death_notes_account() -> TestResult {
     )?;
     strand_record(home.path(), &stale)?;
 
-    match stop(home.path(), Duration::from_millis(50))?.into_outcome() {
-        Some(StopOutcome::AlreadyGone { fate, .. }) => match fate {
-            NoteFate::Disarmed { outcome, .. } => {
+    match stop(home.path(), Duration::from_millis(50))? {
+        StopVerdict::Outcome(outcome) => match *outcome {
+            StopOutcome::AlreadyGone { fate, .. } => match fate {
+                Ok(NoteFate::Disarmed { outcome, .. }) => {
+                    assert_eq!(
+                        outcome.as_ref(),
+                        Some(&outcome_record),
+                        "the drain outcome must ride the stop verdict"
+                    );
+                }
+                other => return Err(format!("expected the Disarmed fate, got {other:?}").into()),
+            },
+            other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
+        },
+        // The reaped pid recycled onto a stranger before the probe — the
+        // honest refusal for that world; the note assertion is unreachable
+        // there and the specimen refuses only a false Verified.
+        StopVerdict::Refusal(StopRefusal::StaleIncarnation { pid, .. }) => {
+            assert_eq!(pid, stale.pid, "the refusal must name the recorded pid");
+        }
+        other @ StopVerdict::Refusal(_) => {
+            return Err(format!("expected AlreadyGone or StaleIncarnation, got {other:?}").into());
+        }
+    }
+    Ok(())
+}
+
+/// Red first — the reviewer's mixed-ownership shape: the server is proven
+/// gone, but BOTH bookkeeping layers fail (the death note is unreadable and
+/// the pid file cannot be reconciled). The verb must still report the goal
+/// state — `AlreadyGone` with each failure carried as its own layer's fact —
+/// never a verb error that hides "the server is down" behind a bookkeeping
+/// `?`. Before this specimen, a deploy script keying on exit 2 escalated
+/// against a server that was already stopped.
+#[test]
+fn bookkeeping_failures_ride_the_outcome_instead_of_destroying_it() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let stale = dead_record()?;
+    strand_record(home.path(), &stale)?;
+
+    // The death note's path is occupied by a DIRECTORY: reading it fails
+    // with a real I/O error, not the honest-absence NotFound arm.
+    std::fs::create_dir_all(crate::death_note::note_path(home.path()))?;
+    // The run directory is read-only: the pid file can be read but not
+    // removed — the root-owned-home shape at unit scale.
+    let run_dir = pid_file::pid_file_path(home.path())
+        .parent()
+        .ok_or("pid file path has no parent")?
+        .to_path_buf();
+    let writable = std::fs::metadata(&run_dir)?.permissions();
+    let mut read_only = writable.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(&run_dir, read_only)?;
+
+    let verdict = stop(home.path(), Duration::from_millis(50));
+    // Restore before asserting so a red never strands a read-only tempdir.
+    std::fs::set_permissions(&run_dir, writable)?;
+
+    match verdict? {
+        StopVerdict::Outcome(outcome) => match *outcome {
+            StopOutcome::AlreadyGone {
+                record,
+                fate,
+                pid_file_reconciled,
+            } => {
+                assert_eq!(record, stale, "the goal-state fact must name the record");
+                let Err(fate_error) = fate else {
+                    return Err("a directory at the note path must be unreadable".into());
+                };
+                assert!(
+                    fate_error.contains("death note"),
+                    "the fate failure must name the note layer: {fate_error}"
+                );
+                let Err(reconcile_error) = pid_file_reconciled else {
+                    return Err("a read-only run dir must fail reconciliation".into());
+                };
+                assert!(
+                    !reconcile_error.is_empty(),
+                    "the reconciliation failure must carry its reason"
+                );
                 assert_eq!(
-                    outcome.as_ref(),
-                    Some(&outcome_record),
-                    "the drain outcome must ride the stop verdict"
+                    pid_file::read(home.path())?,
+                    Some(stale),
+                    "the file the verb could not remove must still be there — \
+                     the Err is a fact, not a shrug"
                 );
             }
-            other => return Err(format!("expected the Disarmed fate, got {other:?}").into()),
+            other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
         },
-        other => return Err(format!("expected AlreadyGone, got {other:?}").into()),
+        StopVerdict::Refusal(StopRefusal::StaleIncarnation { pid, .. }) => {
+            // The reaped pid recycled onto a stranger — honest, rare, and
+            // outside this specimen's subject.
+            assert_eq!(pid, stale.pid);
+        }
+        other @ StopVerdict::Refusal(_) => {
+            return Err(format!("expected AlreadyGone, got {other:?}").into());
+        }
     }
     Ok(())
 }

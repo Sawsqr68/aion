@@ -72,11 +72,21 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
         config_path: args.config.clone(),
         ..CliOverrides::default()
     };
+    // The predicate this verb answers — "is the recorded server up?" — needs
+    // only the pid record and the process table. Configuration feeds two
+    // side layers (the store line, and the probe address when no record
+    // exists), so a broken config file must not silence the answer at
+    // exactly the moment an operator most needs it: state the failure as
+    // its own layer's fact and keep answering what is answerable.
     let config = match ServerConfig::load(&overrides) {
-        Ok(config) => config,
+        Ok(config) => Some(config),
         Err(error) => {
-            eprintln!("aion server status: could not load configuration: {error}");
-            return ExitCode::from(2);
+            eprintln!(
+                "configuration: could not load ({error}) — the store line and the \
+                 no-record probe address are unavailable; the record and process \
+                 layers below still answer"
+            );
+            None
         }
     };
     println!("home: {}", home.display());
@@ -85,14 +95,17 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
     // when the file names none), so the directory's presence proves nothing
     // about durability — a memory-backend server dies with its state no
     // matter what path the config carries. Same truth `aion launch` prints.
-    match config.store.backend {
-        aion_server::config::StoreBackend::Haematite => match &config.store.data_dir {
-            Some(data_dir) => println!("store: {data_dir}"),
-            None => println!("store: haematite (data directory resolved by the server)"),
+    match config.as_ref().map(|config| &config.store) {
+        Some(store) => match store.backend {
+            aion_server::config::StoreBackend::Haematite => match &store.data_dir {
+                Some(data_dir) => println!("store: {data_dir}"),
+                None => println!("store: haematite (data directory resolved by the server)"),
+            },
+            aion_server::config::StoreBackend::Memory => {
+                println!("store: in-memory — state does not survive a stop");
+            }
         },
-        aion_server::config::StoreBackend::Memory => {
-            println!("store: in-memory — state does not survive a stop");
-        }
+        None => println!("store: unknown — the configuration could not be read"),
     }
 
     // Layer 1: the record. An unreadable file is a verb failure, not a
@@ -114,7 +127,7 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
             "probing the address the record says the server bound: {}",
             record.http_address
         );
-        record.http_address
+        Some(record.http_address)
     } else {
         if !verb_failed {
             println!(
@@ -123,17 +136,34 @@ pub async fn run(args: &StatusArgs) -> ExitCode {
                 pid_file::pid_file_path(&home).display()
             );
         }
-        let address = config.server.listen_address;
-        println!("probing the CONFIGURED address (no recorded bind): {address}");
-        address
+        if let Some(config) = &config {
+            let address = config.server.listen_address;
+            println!("probing the CONFIGURED address (no recorded bind): {address}");
+            Some(address)
+        } else {
+            // No recorded bind and no readable config: there is no address
+            // to probe, and inventing one would answer a question nobody
+            // asked. The record layer's verdict stands.
+            println!(
+                "no recorded bind and no readable configuration — the listener \
+                 layers cannot be probed"
+            );
+            None
+        }
     };
 
     // Layers 2 and 3: the server's own listener. The build layer's verdict
     // — "this address answered with an aion build identity" — feeds the
     // readiness layer's diagnosis of a 200-with-body.
-    let identity_confirmed = render_build_layer(http_address).await;
-    render_ready_layer(http_address, identity_confirmed).await;
-    if identity_confirmed && !running_verified {
+    let mut identity_confirmed = false;
+    if let Some(http_address) = http_address {
+        identity_confirmed = render_build_layer(http_address).await;
+        render_ready_layer(http_address, identity_confirmed).await;
+    }
+    if let Some(http_address) = http_address
+        && identity_confirmed
+        && !running_verified
+    {
         // The two layers disagree in the one direction worth a warning: an
         // aion server IS answering on this address, but it is not the
         // verified recorded incarnation — a server that booted UNCLAIMED

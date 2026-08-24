@@ -230,3 +230,45 @@ fn a_torn_outcome_line_reads_as_an_unreadable_presence() -> TestResult {
     }
     Ok(())
 }
+
+/// Both mixed orders keep BOTH facts. The renderers' rule — "a readable
+/// record does not un-happen the torn line beside it" — is enforced at the
+/// reader: whichever order the lines arrived in, a torn line and a readable
+/// record inside one bracket are both carried.
+#[test]
+fn a_torn_line_survives_beside_a_readable_record_in_both_orders() -> TestResult {
+    let record = parked_record(600);
+    let good = stamped(&render_entry(&record)?);
+    let torn = stamped("OUTCOME {\"pid\":600,\"outcome\":\"Par");
+
+    for (label, lines) in [
+        ("good-then-torn", [good.clone(), torn.clone()]),
+        ("torn-then-good", [torn, good]),
+    ] {
+        let home = tempfile::tempdir()?;
+        let mut note = vec![stamped("ARMED pid=600 version=0.23.0 build=test")];
+        note.extend(lines);
+        write_note(home.path(), &note)?;
+        match read_fate(home.path(), 600)? {
+            NoteFate::ArmedNotDisarmed {
+                outcome,
+                outcome_unreadable,
+            } => {
+                assert_eq!(
+                    outcome.as_ref(),
+                    Some(&record),
+                    "{label}: the readable record must be carried"
+                );
+                assert!(
+                    outcome_unreadable.is_some(),
+                    "{label}: the torn line must be carried BESIDE the record, \
+                     never erased by it"
+                );
+            }
+            other => {
+                return Err(format!("{label}: expected ArmedNotDisarmed, got {other:?}").into());
+            }
+        }
+    }
+    Ok(())
+}

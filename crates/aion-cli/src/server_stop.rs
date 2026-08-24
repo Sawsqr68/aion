@@ -192,10 +192,8 @@ fn render_outcome(outcome: &StopOutcome) -> ExitCode {
                 record.commit,
                 waited.as_secs_f64()
             );
-            render_fate(record.pid, fate);
-            if *pid_file_reconciled {
-                println!("the pid file the exiting server left behind was reconciled away");
-            }
+            render_fate_reading(record.pid, fate);
+            render_reconciliation(record.pid, pid_file_reconciled, "the exiting server");
             ExitCode::SUCCESS
         }
         StopOutcome::AlreadyGone {
@@ -208,10 +206,8 @@ fn render_outcome(outcome: &StopOutcome) -> ExitCode {
                  nothing was signalled",
                 record.pid, record.version, record.commit
             );
-            render_fate(record.pid, fate);
-            if *pid_file_reconciled {
-                println!("the stale pid file was reconciled away");
-            }
+            render_fate_reading(record.pid, fate);
+            render_reconciliation(record.pid, pid_file_reconciled, "the dead server");
             ExitCode::SUCCESS
         }
         StopOutcome::StillDraining { record, waited } => {
@@ -228,42 +224,86 @@ fn render_outcome(outcome: &StopOutcome) -> ExitCode {
     }
 }
 
+/// Render the death note's account, or the fact that it could not be read.
+///
+/// The verb's doctrine: a bookkeeping layer's failure is stated beside the
+/// action layer's fact, never allowed to stand for it. A note that cannot be
+/// read is reported as exactly that — the server's exit account is unknown,
+/// the stop itself is not in question.
+fn render_fate_reading(pid: u32, fate: &Result<NoteFate, String>) {
+    match fate {
+        Ok(fate) => render_fate(pid, fate),
+        Err(error) => println!(
+            "the death note could not be read ({error}); the server's exit account is \
+             unknown — the stop itself is not in question"
+        ),
+    }
+}
+
+/// Render the pid-file reconciliation's fact: reconciled, nothing to
+/// reconcile, or failed with the file possibly still naming the dead pid.
+fn render_reconciliation(pid: u32, reconciled: &Result<bool, String>, whose: &str) {
+    match reconciled {
+        Ok(true) => println!("the pid file {whose} left behind was reconciled away"),
+        Ok(false) => {}
+        Err(error) => println!(
+            "the pid file could not be reconciled ({error}); if it still names pid {pid}, \
+             remove it by hand"
+        ),
+    }
+}
+
 /// Render what the death note records for the stopped incarnation. Public to
 /// the crate: `aion server status` renders the same account for a dead
 /// recorded server.
 pub(crate) fn render_fate(pid: u32, fate: &NoteFate) {
+    for line in fate_lines(pid, fate) {
+        println!("{line}");
+    }
+}
+
+/// The fate's rendered lines, built pure so the mixed shapes are
+/// unit-provable — in particular that a readable record and a torn line in
+/// EITHER order both get stated (the renderers' rule, now testable instead
+/// of inspected).
+fn fate_lines(pid: u32, fate: &NoteFate) -> Vec<String> {
+    let mut lines = Vec::new();
     match fate {
         NoteFate::NoNote => {
-            println!("no death note exists under this home; the exit left no recorded account");
+            lines.push(
+                "no death note exists under this home; the exit left no recorded account"
+                    .to_owned(),
+            );
         }
         NoteFate::NoBracketForPid => {
-            println!(
+            lines.push(format!(
                 "the death note has no record for pid {pid}; the exit left no recorded \
                  account"
-            );
+            ));
         }
         NoteFate::ArmedNotDisarmed {
             outcome,
             outcome_unreadable,
         } => {
-            println!(
+            lines.push(format!(
                 "the death note's bracket for pid {pid} never closed: the process was \
                  destroyed without its run loop seeing the end (the `kill -9` shape)"
-            );
+            ));
             match (outcome, outcome_unreadable) {
                 (Some(record), unreadable) => {
-                    render_outcome_record(record);
+                    push_outcome_record(&mut lines, record);
                     // A readable record does not un-happen the torn line
                     // beside it: both facts are stated.
                     if let Some(unreadable) = unreadable {
-                        render_unreadable_outcome(unreadable);
+                        push_unreadable_outcome(&mut lines, unreadable);
                     }
                 }
-                (None, Some(unreadable)) => render_unreadable_outcome(unreadable),
-                (None, None) => println!(
+                (None, Some(unreadable)) => push_unreadable_outcome(&mut lines, unreadable),
+                (None, None) => lines.push(
                     "no drain outcome was recorded — the drain never got far enough to \
                      write one; in-flight work recovers from durable state on the next \
                      boot"
+                        .to_owned(),
                 ),
             }
         }
@@ -272,64 +312,66 @@ pub(crate) fn render_fate(pid: u32, fate: &NoteFate) {
             outcome_unreadable,
             reason,
         } => {
-            println!("exit recorded: {reason}");
+            lines.push(format!("exit recorded: {reason}"));
             match (outcome, outcome_unreadable) {
                 (Some(record), unreadable) => {
-                    render_outcome_record(record);
+                    push_outcome_record(&mut lines, record);
                     if let Some(unreadable) = unreadable {
-                        render_unreadable_outcome(unreadable);
+                        push_unreadable_outcome(&mut lines, unreadable);
                     }
                 }
-                (None, Some(unreadable)) => render_unreadable_outcome(unreadable),
-                (None, None) => println!(
+                (None, Some(unreadable)) => push_unreadable_outcome(&mut lines, unreadable),
+                (None, None) => lines.push(
                     "no drain outcome record was written for this exit (an error return \
                      before serving, or a pre-record binary); reporting that absence, \
                      not a summary"
+                        .to_owned(),
                 ),
             }
         }
     }
+    lines
 }
 
 /// The unreadable-presence face: a drain outcome record EXISTS but this
 /// binary could not parse it. Reported as exactly that — never as "no
 /// record", which would send the operator chasing a drain that in fact ran
 /// far enough to write its receipt.
-fn render_unreadable_outcome(unreadable: &str) {
-    println!(
+fn push_unreadable_outcome(lines: &mut Vec<String>, unreadable: &str) {
+    lines.push(format!(
         "a drain outcome record was written but could not be read ({unreadable}); \
          a torn line from a mid-write kill, or a record from a build this binary \
          cannot parse"
-    );
+    ));
 }
 
-fn render_outcome_record(record: &OutcomeRecord) {
-    println!(
+fn push_outcome_record(lines: &mut Vec<String>, record: &OutcomeRecord) {
+    lines.push(format!(
         "drain outcome: {:?} (window {}s, drain requests delivered to {} worker(s))",
         record.outcome, record.drain_timeout_seconds, record.delivered_drain_requests
-    );
+    ));
     for parked in &record.parked {
         let queue = parked.queue.as_deref().unwrap_or("unknown queue");
-        println!(
+        lines.push(format!(
             "  parked on worker {} ({queue}): {}",
             parked.worker,
             parked.tasks.join(", ")
-        );
+        ));
     }
     for declared in &record.parked_declared_commands {
-        println!(
+        lines.push(format!(
             "  declared command still executing at drain end: {declared} — its process \
              ended with the server; the next boot re-dispatches the attempt"
-        );
+        ));
     }
     if !record.managed_workers_stopped.is_empty() {
-        println!(
+        lines.push(format!(
             "  managed workers stopped: {}",
             record.managed_workers_stopped.join(", ")
-        );
+        ));
     }
     for unstopped in &record.managed_workers_unstopped {
-        println!("  managed worker NOT proven stopped: {unstopped}");
+        lines.push(format!("  managed worker NOT proven stopped: {unstopped}"));
     }
 }
 
@@ -347,8 +389,9 @@ fn render_refusal_note(refusal: &StopRefusal) {
 
 #[cfg(test)]
 mod tests {
-    use super::{PatienceSource, StopArgs, resolve_patience, verified_running_record};
-    use aion_server::control::PidRecord;
+    use super::{PatienceSource, StopArgs, fate_lines, resolve_patience, verified_running_record};
+    use aion_server::control::{NoteFate, OutcomeRecord, PidRecord};
+    use aion_server::shutdown::ShutdownOutcome;
     use std::num::NonZeroU64;
     use std::time::Duration;
 
@@ -504,5 +547,66 @@ timeout_seconds = {timeout_seconds}
         assert_eq!(patience, Duration::from_secs(45));
         assert_eq!(source, PatienceSource::Config);
         Ok(())
+    }
+
+    /// The mixed fate shapes state BOTH facts — the renderers' rule ("a
+    /// readable record does not un-happen the torn line beside it"), proven
+    /// on the rendered lines instead of by inspection. Covers both bracket
+    /// kinds, since each has its own match.
+    #[test]
+    fn a_readable_record_and_a_torn_line_are_both_rendered() {
+        let record = OutcomeRecord {
+            pid: 600,
+            outcome: ShutdownOutcome::Clean,
+            drain_timeout_seconds: 30,
+            delivered_drain_requests: 1,
+            parked: Vec::new(),
+            parked_declared_commands: Vec::new(),
+            managed_workers_stopped: Vec::new(),
+            managed_workers_unstopped: Vec::new(),
+        };
+        for fate in [
+            NoteFate::ArmedNotDisarmed {
+                outcome: Some(record.clone()),
+                outcome_unreadable: Some("an OUTCOME line does not parse: torn".to_owned()),
+            },
+            NoteFate::Disarmed {
+                outcome: Some(record.clone()),
+                outcome_unreadable: Some("an OUTCOME line does not parse: torn".to_owned()),
+                reason: "clean run-loop exit".to_owned(),
+            },
+        ] {
+            let rendered = fate_lines(600, &fate).join("\n");
+            assert!(
+                rendered.contains("drain outcome: Clean"),
+                "the readable record must be stated: {rendered}"
+            );
+            assert!(
+                rendered.contains("could not be read"),
+                "the torn line must be stated BESIDE the record: {rendered}"
+            );
+        }
+    }
+
+    /// The absence faces stay distinct from each other and from the torn
+    /// presence — an operator must never chase a drain that wrote nothing,
+    /// or dismiss one that wrote a record this binary cannot parse.
+    #[test]
+    fn fate_absence_faces_are_distinct() {
+        let no_note = fate_lines(600, &NoteFate::NoNote).join("\n");
+        assert!(no_note.contains("no death note exists"));
+
+        let torn_only = fate_lines(
+            600,
+            &NoteFate::ArmedNotDisarmed {
+                outcome: None,
+                outcome_unreadable: Some("an OUTCOME line does not parse: torn".to_owned()),
+            },
+        )
+        .join("\n");
+        assert!(
+            torn_only.contains("could not be read") && !torn_only.contains("never got far enough"),
+            "an unreadable presence must never read as an honest absence: {torn_only}"
+        );
     }
 }

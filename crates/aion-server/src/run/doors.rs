@@ -9,7 +9,8 @@
 
 use tokio::net::TcpListener;
 
-use super::{ShutdownOutcome, shutdown_signal, transport_bind, transport_result};
+use super::ShutdownOutcome;
+use super::transports::{shutdown_signal, transport_bind, transport_result};
 use crate::error::ServerError;
 use crate::shutdown;
 use crate::state::ServerState;

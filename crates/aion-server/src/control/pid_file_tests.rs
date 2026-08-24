@@ -63,6 +63,14 @@ fn claim_writes_and_the_guard_removes_on_drop() -> TestResult {
 
 /// Red first: a stale file whose pid is DEAD is reconciled as a dead
 /// incarnation and replaced — never trusted, never an error.
+///
+/// The reaped pid COULD be recycled by the kernel between `dead_record`'s
+/// wait and the claim's probe; the probe then honestly sees a stranger and
+/// reconciles the same file as the reused-pid face instead. Both are honest
+/// stale-file answers, both replace the record — the specimen refuses only
+/// a claim that TRUSTS the stale file (`LiveIncarnation*`) or fails to
+/// replace it. (The sibling guard in `incarnation.rs`; a false red is not a
+/// safe failure.)
 #[test]
 fn a_dead_incarnations_file_is_reconciled_and_replaced() -> TestResult {
     let home = tempfile::tempdir()?;
@@ -72,11 +80,17 @@ fn a_dead_incarnations_file_is_reconciled_and_replaced() -> TestResult {
 
     let record = own_record()?;
     let guard = claim(home.path(), &record)?;
-    assert_eq!(
-        guard.reconciliation(),
-        &StaleReconciliation::DeadIncarnation(stale),
-        "the dead predecessor must be named"
-    );
+    match guard.reconciliation() {
+        StaleReconciliation::DeadIncarnation(named) | StaleReconciliation::ReusedPid(named) => {
+            assert_eq!(named, &stale, "the stale predecessor must be named");
+        }
+        other => {
+            return Err(format!(
+                "a stale file must reconcile as dead or reused, never be trusted: {other:?}"
+            )
+            .into());
+        }
+    }
     assert_eq!(
         read(home.path())?.as_ref(),
         Some(&record),

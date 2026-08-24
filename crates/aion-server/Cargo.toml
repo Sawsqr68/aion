@@ -119,11 +119,12 @@ liminal = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
-# The stop verb's signal path (src/control): SIGTERM to the incarnation-verified
-# server pid and the signal-zero liveness probe, through the same crate the
-# worker process containment already signals with.
-# "fs" carries `fcntl::Flock`: the pid-file mutation lock that makes the
-# stop verb's compare-and-delete atomic against a successor's claim.
+# The stop verb's signal path (src/control/stop.rs): SIGTERM to the
+# incarnation-verified server pid, through the same crate the worker process
+# containment already signals with. "signal" is the ONLY feature this crate
+# uses: the pid-file mutation lock is std::fs::File::lock (stable 1.89 — no
+# nix "fs", no fcntl::Flock, whose Drop can abort on a failed unlock), and
+# liveness comes from the sysinfo process-table probe, not signal zero.
 nix = { workspace = true, features = ["signal"] }
 # Death-note signal watcher (see src/death_note.rs): safe registration that
 # CHAINS with tokio's own listeners through the shared signal-hook-registry,

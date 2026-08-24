@@ -733,39 +733,7 @@ async fn main() -> ExitCode {
         }
         // The server owns its own reporting contract: tracing-logged errors
         // and the operations exit codes (2 = config, 130 = forced).
-        Some(Command::Server(ref command)) => match &command.command {
-            // The control verbs act on a server already running under this
-            // home; they never start one and never read the run flags
-            // (`args_conflicts_with_subcommands` guarantees none were given).
-            Some(server::ServerSubcommand::Stop(args)) => server_stop::run(args),
-            Some(server::ServerSubcommand::Status(args)) => server_status::run(args).await,
-            None => {
-                let args = &command.run;
-                // `--endpoint` is a client dial address. It was accepted here and
-                // silently dropped, so an operator who passed it to move the bind
-                // got a server on the default port instead — which, on a box
-                // already running one, means a collision or a second process
-                // reaching for state the operator thought they had moved away
-                // from. Refuse: a bind address the operator named and did not get
-                // is not a thing to start up and hope about.
-                if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
-                    eprintln!("{refusal}");
-                    return ExitCode::from(2);
-                }
-                // Report the agent harness composed into this binary at the root
-                // (§3A.3): the default build ships Norn out-of-box; a
-                // `--no-default-features` build reports none. The worker drives
-                // whichever harness is compiled in through the neutral trait.
-                harness::announce_composed_harness();
-                // `--open` is a CLI-only nicety: resolve the served URL from the
-                // effective config and, once the listener is reachable, open it in
-                // the browser. Best-effort — a failure to open never blocks the run.
-                if args.open() {
-                    server::spawn_browser_open(&args.clone().into());
-                }
-                aion_server::run(args.clone().into()).await
-            }
-        },
+        Some(Command::Server(ref command)) => server_command(command, &cli).await,
         Some(Command::Dev(ref args)) => {
             // The dev loop runs locally and drives the running server over the
             // same operator deploy RPC `aion deploy` uses; it reports through
@@ -1238,6 +1206,85 @@ async fn describe_workflow(
 /// Separate from the dispatch arm so the message itself is testable: a refusal
 /// that names the wrong replacement flag is barely better than the silence it
 /// replaced.
+/// The `aion server` command family: the control verbs (stop/status, local
+/// by contract) and the run-the-server default. Split from `main` so the
+/// dispatch stays a table; every refusal doctrine ruling lives here with the
+/// arm it governs.
+async fn server_command(command: &server::ServerCommand, cli: &Cli) -> ExitCode {
+    match &command.command {
+        // The control verbs act on a server already running under this
+        // home; they never start one and never read the run flags
+        // (`args_conflicts_with_subcommands` guarantees none were given).
+        // They are also LOCAL: each reads this machine's AION_HOME pid
+        // record and signals or probes that pid, so a named `--endpoint`
+        // cannot be honoured — and silently dropping it would land the
+        // action on this box while the operator believes it went to the
+        // named one. Refuse, same doctrine as the run arm below.
+        Some(server::ServerSubcommand::Stop(args)) => {
+            if let Some(refusal) = control_verb_endpoint_refusal("stop", cli.endpoint.as_deref()) {
+                eprintln!("{refusal}");
+                return ExitCode::from(2);
+            }
+            server_stop::run(args)
+        }
+        Some(server::ServerSubcommand::Status(args)) => {
+            if let Some(refusal) = control_verb_endpoint_refusal("status", cli.endpoint.as_deref())
+            {
+                eprintln!("{refusal}");
+                return ExitCode::from(2);
+            }
+            server_status::run(args).await
+        }
+        None => {
+            let args = &command.run;
+            // `--endpoint` is a client dial address. It was accepted here and
+            // silently dropped, so an operator who passed it to move the bind
+            // got a server on the default port instead — which, on a box
+            // already running one, means a collision or a second process
+            // reaching for state the operator thought they had moved away
+            // from. Refuse: a bind address the operator named and did not get
+            // is not a thing to start up and hope about.
+            if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
+                eprintln!("{refusal}");
+                return ExitCode::from(2);
+            }
+            // Report the agent harness composed into this binary at the root
+            // (§3A.3): the default build ships Norn out-of-box; a
+            // `--no-default-features` build reports none. The worker drives
+            // whichever harness is compiled in through the neutral trait.
+            harness::announce_composed_harness();
+            // `--open` is a CLI-only nicety: resolve the served URL from the
+            // effective config and, once the listener is reachable, open it in
+            // the browser. Best-effort — a failure to open never blocks the run.
+            if args.open() {
+                server::spawn_browser_open(&args.clone().into());
+            }
+            aion_server::run(args.clone().into()).await
+        }
+    }
+}
+
+/// The refusal for `--endpoint` on a control verb, `None` when no endpoint
+/// was named.
+///
+/// `aion server stop`/`status` are local actions: they read this machine's
+/// `AION_HOME` pid record and signal or probe that process. An endpoint names
+/// a server a CLIENT dials, which these verbs can never honour — and a
+/// destructive verb that silently ignores where the operator pointed it lands
+/// on the wrong machine. Same doctrine as [`server_endpoint_refusal`]: refuse
+/// a flag the verb cannot honour, with wording that says the verb is local
+/// rather than that it cannot bind.
+fn control_verb_endpoint_refusal(verb: &str, endpoint: Option<&str>) -> Option<String> {
+    endpoint.map(|endpoint| {
+        format!(
+            "refusing to {verb}: `--endpoint {endpoint}` names a server a client dials, and \
+             `aion server {verb}` is local — it reads this machine's AION_HOME pid record and \
+             acts on that process. To operate a remote server, run the verb on that machine \
+             (its home decides which server answers)."
+        )
+    })
+}
+
 fn server_endpoint_refusal(endpoint: Option<&str>) -> Option<String> {
     endpoint.map(|endpoint| {
         format!(
@@ -1321,8 +1368,9 @@ mod tests {
     use crate::{payload::json_payload, tail};
 
     use super::{
-        Cli, ClientCommand, Command, DEFAULT_ENDPOINT, RemoteCommand, awl, normalize_endpoint,
-        payload_to_json, resolve_start_input, server_endpoint_refusal,
+        Cli, ClientCommand, Command, DEFAULT_ENDPOINT, RemoteCommand, awl,
+        control_verb_endpoint_refusal, normalize_endpoint, payload_to_json, resolve_start_input,
+        server_endpoint_refusal,
     };
 
     const WORKFLOW_ID: &str = "00000000-0000-0000-0000-000000000001";
@@ -2142,6 +2190,45 @@ mod tests {
         assert!(refusal.contains("127.0.0.1:51099"));
         assert!(refusal.contains("--grpc-address"));
         assert!(refusal.contains("AION_SERVER_GRPC_ADDRESS"));
+        Ok(())
+    }
+
+    /// The control verbs are local — they signal a pid under this machine's
+    /// `AION_HOME` — so a named `--endpoint` is a flag they can never honour.
+    /// Before this refusal, `aion --endpoint <remote> server stop` parsed,
+    /// ignored the endpoint, and `SIGTERM`ed the LOCAL server: a destructive
+    /// action on the wrong machine, delivered silently. The refusal must fire
+    /// for both spellings (flag before and after the subcommand — it is
+    /// `global = true`) and must say the verb is local, not that it cannot
+    /// bind.
+    #[test]
+    fn the_control_verbs_refuse_a_client_endpoint_instead_of_acting_locally() -> anyhow::Result<()>
+    {
+        for argv in [
+            vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "stop"],
+            vec!["aion", "server", "stop", "--endpoint", "10.0.0.9:50051"],
+            vec!["aion", "--endpoint", "10.0.0.9:50051", "server", "status"],
+        ] {
+            let cli = Cli::try_parse_from(&argv)?;
+            let refusal = control_verb_endpoint_refusal("stop", cli.endpoint.as_deref())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "an explicit --endpoint was accepted by a control verb: {argv:?}"
+                    )
+                })?;
+            assert!(refusal.contains("10.0.0.9:50051"));
+            assert!(
+                refusal.contains("local"),
+                "the refusal must say the verb is local: {refusal}"
+            );
+            assert!(
+                refusal.contains("run the verb on that machine"),
+                "the refusal must name the remedy: {refusal}"
+            );
+        }
+        // The control: a bare verb has nothing to refuse.
+        let bare = Cli::try_parse_from(["aion", "server", "stop"])?;
+        assert!(control_verb_endpoint_refusal("stop", bare.endpoint.as_deref()).is_none());
         Ok(())
     }
 

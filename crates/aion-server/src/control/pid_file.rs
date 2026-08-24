@@ -501,9 +501,40 @@ impl Drop for PidFileGuard {
                 return;
             }
         };
-        let current = std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|content| serde_json::from_str::<PidRecord>(&content).ok());
+        // Absence, unreadability, and unparseability are three different
+        // facts here as everywhere else in this module — the two failure
+        // arms are named so an exit-time surprise never passes in silence
+        // beside the two arms that already log.
+        let current = match std::fs::read_to_string(&self.path) {
+            Ok(content) => match serde_json::from_str::<PidRecord>(&content) {
+                Ok(record) => Some(record),
+                Err(parse_error) => {
+                    warn!(
+                        path = %self.path.display(),
+                        %parse_error,
+                        "the pid file does not parse at exit time; leaving it for \
+                         stale reconciliation rather than deleting a record this \
+                         binary cannot compare"
+                    );
+                    None
+                }
+            },
+            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
+                // Honest absence: a successor already reconciled it, or a
+                // clean removal raced this drop. Nothing to do, nothing to
+                // warn about.
+                None
+            }
+            Err(io_error) => {
+                warn!(
+                    path = %self.path.display(),
+                    %io_error,
+                    "could not read the pid file at exit time; leaving it for \
+                     stale reconciliation"
+                );
+                None
+            }
+        };
         match current {
             Some(record) if record == self.record => {
                 if let Err(io_error) = std::fs::remove_file(&self.path) {

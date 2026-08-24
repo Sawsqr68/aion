@@ -35,13 +35,18 @@ pub enum StopOutcome {
         /// The incarnation that was stopped.
         record: PidRecord,
         /// What the death note records for it (the drain outcome lives
-        /// here; its absence is a state, not an error).
-        fate: NoteFate,
+        /// here; its absence is a state, not an error), or why the note
+        /// could not be read — a bookkeeping failure beside a server that
+        /// is PROVEN exited, carried as its own fact, never allowed to
+        /// destroy this outcome (see [`exit_bookkeeping`]).
+        fate: Result<NoteFate, String>,
         /// How long the wait took.
         waited: Duration,
         /// Whether a pid file the dying server left behind was reconciled
-        /// away (a clean exit removes its own; a forced one cannot).
-        pid_file_reconciled: bool,
+        /// away (a clean exit removes its own; a forced one cannot), or
+        /// why reconciliation failed — `Err` means the file may still name
+        /// the dead pid and wants a manual look.
+        pid_file_reconciled: Result<bool, String>,
     },
     /// The recorded process was already gone: nothing to signal. The file
     /// is reconciled away and the note consulted for what happened.
@@ -49,10 +54,12 @@ pub enum StopOutcome {
         /// The incarnation the file named.
         record: PidRecord,
         /// The death note's account — `ArmedNotDisarmed` with no record
-        /// here is the `kill -9` shape, reported as exactly that.
-        fate: NoteFate,
-        /// Whether the stale file was removed.
-        pid_file_reconciled: bool,
+        /// here is the `kill -9` shape, reported as exactly that — or why
+        /// the note could not be read (carried, never propagated: the
+        /// goal state already holds).
+        fate: Result<NoteFate, String>,
+        /// Whether the stale file was removed, or why removing it failed.
+        pid_file_reconciled: Result<bool, String>,
     },
     /// The server is still draining when the patience elapsed. Not a
     /// failure and not a guess: the server owns its drain, and a second
@@ -143,9 +150,11 @@ impl StopVerdict {
 ///
 /// # Errors
 ///
-/// Returns [`ServerError`] only for I/O failures reading the pid file or the
-/// death note — every decision the verb itself makes is a typed
-/// [`StopVerdict`], never an anonymous error.
+/// Returns [`ServerError`] only for an I/O failure reading the pid file —
+/// before any action is decided. Every decision the verb itself makes is a
+/// typed [`StopVerdict`], and once the server is proven exited, bookkeeping
+/// failures (death note, pid-file reconciliation) ride INSIDE the outcome
+/// rather than erroring out of it (see [`exit_bookkeeping`]).
 pub fn stop(home: &Path, patience: Duration) -> Result<StopVerdict, ServerError> {
     let Some(record) = pid_file::read(home)? else {
         return Ok(StopVerdict::Refusal(StopRefusal::NoPidFile {
@@ -154,8 +163,7 @@ pub fn stop(home: &Path, patience: Duration) -> Result<StopVerdict, ServerError>
     };
     match incarnation::probe(&record) {
         IncarnationProbe::ProcessGone => {
-            let fate = outcome::read_fate(home, record.pid)?;
-            let pid_file_reconciled = pid_file::remove_if_matches(home, &record)?;
+            let (fate, pid_file_reconciled) = exit_bookkeeping(home, &record);
             Ok(StopVerdict::Outcome(Box::new(StopOutcome::AlreadyGone {
                 record,
                 fate,
@@ -197,8 +205,7 @@ fn signal_and_wait(
         // ESRCH here means the process exited between the probe and the
         // signal — the AlreadyGone face, one instant later.
         if errno == nix::errno::Errno::ESRCH {
-            let fate = outcome::read_fate(home, record.pid)?;
-            let pid_file_reconciled = pid_file::remove_if_matches(home, &record)?;
+            let (fate, pid_file_reconciled) = exit_bookkeeping(home, &record);
             return Ok(StopVerdict::Outcome(Box::new(StopOutcome::AlreadyGone {
                 record,
                 fate,
@@ -227,8 +234,7 @@ fn signal_and_wait(
             // Gone, or the pid already recycled onto something else —
             // either way OUR incarnation exited.
             IncarnationProbe::ProcessGone | IncarnationProbe::DifferentIncarnation { .. } => {
-                let fate = outcome::read_fate(home, record.pid)?;
-                let pid_file_reconciled = pid_file::remove_if_matches(home, &record)?;
+                let (fate, pid_file_reconciled) = exit_bookkeeping(home, &record);
                 return Ok(StopVerdict::Outcome(Box::new(StopOutcome::Stopped {
                     record,
                     fate,
@@ -247,6 +253,28 @@ fn signal_and_wait(
     _patience: Duration,
 ) -> Result<StopVerdict, ServerError> {
     Ok(StopVerdict::Refusal(StopRefusal::UnsupportedPlatform))
+}
+
+/// The exit-time bookkeeping beside a proven-exited server: the death
+/// note's account and the pid-file reconciliation.
+///
+/// Both sit AFTER the action layer's fact is established (the process left
+/// the table, or the signal found nobody), and either can fail on its own —
+/// a root-owned pid file under a mixed-ownership home, an unreadable note.
+/// Propagating those failures out of the verb destroyed the outcome: a stop
+/// that genuinely stopped the server reported "the verb could not complete"
+/// (exit 2) with no line saying the server is down, and a deploy script
+/// keying on that code escalated against a server that was already stopped.
+/// So each failure is carried in the outcome as its own layer's fact and
+/// rendered beside the action's — never allowed to stand for it.
+fn exit_bookkeeping(
+    home: &Path,
+    record: &PidRecord,
+) -> (Result<NoteFate, String>, Result<bool, String>) {
+    let fate = outcome::read_fate(home, record.pid).map_err(|error| error.to_string());
+    let pid_file_reconciled =
+        pid_file::remove_if_matches(home, record).map_err(|error| error.to_string());
+    (fate, pid_file_reconciled)
 }
 
 /// The wait's poll cadence, derived from the patience rather than invented:

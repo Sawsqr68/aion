@@ -16,7 +16,10 @@ optional; the checks are what make the next death attributable.
 - **Home**: `$AION_HOME`, default `~/.aion`. Config at `~/.aion/config.toml`.
 - **Pid record**: `<AION_HOME>/run/aion-server.pid`, written by the server
   itself after BOTH listeners bind — one JSON object carrying pid, start
-  instant, binary SHA-256, version, commit, and the bound addresses. This is
+  instant, binary SHA-256, version, commit, the bound addresses, and the
+  server's drain window (`drain_timeout_seconds` — the window a verified
+  RUNNING record lends `aion server stop` when no `--patience` is given).
+  This is
   an incarnation identity, not a bare number: the verbs verify the recorded
   start instant against the live process table before touching anything, so
   a recycled pid is a refusal, never a kill.

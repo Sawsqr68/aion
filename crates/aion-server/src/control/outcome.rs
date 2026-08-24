@@ -204,11 +204,13 @@ pub fn read_fate(home: &Path, pid: u32) -> Result<NoteFate, ServerError> {
             // presence, never collapsed into "no record": the operator told
             // "the drain never got far enough to write one" over a record
             // that exists is debugging the wrong incident.
+            // Both facts are kept in BOTH orders: a torn line beside a
+            // readable record is stated by the renderers ("a readable
+            // record does not un-happen the torn line beside it"), and the
+            // reader must not pre-empt that rule by erasing whichever fact
+            // arrived first.
             match serde_json::from_str::<OutcomeRecord>(json) {
-                Ok(record) if record.pid == pid => {
-                    outcome = Some(record);
-                    outcome_unreadable = None;
-                }
+                Ok(record) if record.pid == pid => outcome = Some(record),
                 Ok(_other_pid) => {}
                 Err(parse_error) => {
                     outcome_unreadable =

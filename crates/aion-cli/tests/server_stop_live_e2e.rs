@@ -271,8 +271,13 @@ fn dying_words(log: &Path) -> String {
 /// with the dot escaped, so neither a longer duration nor a quoting wrapper
 /// can satisfy it.
 fn unique_sleeper(base_secs: u64) -> (String, String) {
-    let pid = u64::from(std::process::id());
-    let duration = format!("{}.{:05}", base_secs + pid % 10, pid % 100_000);
+    let pid = std::process::id();
+    // The FULL pid mints the fractional digits — a truncation (pid % 100_000)
+    // let two concurrent test binaries 100 000 pids apart mint identical
+    // markers, and one run's positive control then passed on the other's
+    // sleeper. Whole pids are unique among live processes by definition, so
+    // whole-pid markers are too.
+    let duration = format!("{base_secs}.{pid:07}");
     let pattern = format!("sleep {}$", duration.replace('.', "[.]"));
     (duration, pattern)
 }
@@ -681,6 +686,56 @@ fn status_against_a_stopped_server_states_the_absences() -> TestResult {
     assert!(
         stdout.contains("build: unreachable"),
         "the dead listener must be its own state: {stdout}"
+    );
+    Ok(())
+}
+
+/// The predicate must survive a broken config: `status` answers the record
+/// layer even when the configuration cannot load, stating the config
+/// failure as its own layer instead of refusing outright. Before this, a
+/// corrupt config file made `aion server status` exit 2 at exactly the
+/// moment an operator most needed the answer.
+#[test]
+fn status_degrades_but_answers_when_the_configuration_is_unreadable() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let bad_config = home.path().join("broken.toml");
+    std::fs::write(&bad_config, "this = is not [ valid toml")?;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aion"))
+        .args([
+            "server",
+            "status",
+            "--config",
+            bad_config.to_str().ok_or("config path is not utf-8")?,
+        ])
+        .env("AION_HOME", home.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    let stdout = text(&output.stdout);
+    let stderr = text(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "an unclaimed home with a broken config is 'not running' (1), never a \
+         verb failure (2): stdout={stdout} stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("configuration: could not load"),
+        "the config failure must be stated as its own layer: {stderr}"
+    );
+    assert!(
+        stdout.contains("store: unknown — the configuration could not be read"),
+        "the store line must state its unavailability, not vanish: {stdout}"
+    );
+    assert!(
+        stdout.contains("no server has claimed this home"),
+        "the record layer must still answer: {stdout}"
+    );
+    assert!(
+        stdout.contains("the listener layers cannot be probed"),
+        "an unprobeable listener is a stated fact, not a silent skip: {stdout}"
     );
     Ok(())
 }

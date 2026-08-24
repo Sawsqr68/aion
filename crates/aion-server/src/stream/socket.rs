@@ -171,9 +171,10 @@ where
                     // this branch it is observable now — the client must not
                     // get an abrupt close instead of its error frame.
                     if !lag_closed
-                        && let Ok(error) = lagged.try_recv() {
-                            return deliver_terminal(socket_tx, error).await;
-                        }
+                        && let Ok(error) = lagged.try_recv()
+                    {
+                        return deliver_terminal(socket_tx, error).await;
+                    }
                     // Graceful subscription end (per-workflow terminal event
                     // delivered, or the engine stream ended cleanly): finish
                     // the WebSocket close handshake with a normal-closure

@@ -438,4 +438,57 @@ mod tests {
         );
         Ok(())
     }
+
+    /// The drain must not mask a collision: when the refused key is ALREADY
+    /// executing, the double-dispatch defect is logged at ERROR before the
+    /// park-safe refusal — a correctness defect must not vanish into a
+    /// routine park report. This pins the LOG, not just the refusal: the
+    /// branch that keeps the defect visible must itself be visible to the
+    /// suite.
+    #[tokio::test]
+    async fn a_drain_masked_collision_is_logged_before_the_refusal() -> TestResult {
+        let drain = DrainState::default();
+        let attempts = DeclaredCommandAttempts::new(drain.clone());
+        let target = key(&WorkflowId::new_v4(), 1, 1);
+        let (_context, first_cancellation) = ActivityContext::new(
+            target.workflow_id.clone(),
+            target.run_id.clone(),
+            target.activity_id.clone(),
+            target.attempt,
+        );
+        // The attempt is executing BEFORE the drain begins.
+        let registration = attempts.register(target.clone(), first_cancellation)?;
+        assert!(drain.begin(), "the first begin() must flip the latch");
+
+        let (_second_context, second_cancellation) = ActivityContext::new(
+            target.workflow_id.clone(),
+            target.run_id.clone(),
+            target.activity_id.clone(),
+            target.attempt,
+        );
+        let (captured, refusal) = crate::test_support::CapturedLogs::capture(|| {
+            attempts.register(target.clone(), second_cancellation)
+        });
+        let Err(refusal) = refusal else {
+            return Err("a draining server must refuse the colliding registration".into());
+        };
+        assert!(
+            matches!(
+                refusal,
+                crate::error::ServerError::DrainingRefusedDeclaredAttempt { .. }
+            ),
+            "the park-safe refusal must still win: {refusal}"
+        );
+        let logged = captured.text()?;
+        assert!(
+            logged.contains("declared attempt collision detected while draining"),
+            "the collision must be logged, never masked by the drain: {logged}"
+        );
+        assert!(
+            logged.contains(&target.workflow_id.to_string()),
+            "the log must name the colliding workflow: {logged}"
+        );
+        drop(registration);
+        Ok(())
+    }
 }
