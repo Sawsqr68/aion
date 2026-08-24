@@ -63,22 +63,26 @@ it — never a kill — and `status` reports the mismatch and answers 1.
 - The server-restart runbook (`docs/operations/server-restart.md`) is
   rewritten around the verbs; the by-hand ritual survives as the fallback
   for servers started by pre-verb binaries.
-- **Every shipped configuration boots the server it ships with.** The
-  repo's `dev-config.toml`, both example demo configs, the tutorial's
-  config source, the getting-started quickstart block, the CI smoke
-  script, and the conformance harness config were missing required
-  no-default fields (`observability.max_batch_events` and
-  `observability.max_batch_hold_ms` on every backend;
-  `store.node_cache_budget` on a haematite boot), so a reader following
-  shipped material verbatim could not boot the server they had just
-  configured. All now carry the fields with their teaching comments, none
-  teaches the retired lock-acquisition keys, and a new sweep test holds
-  every server config in the tree — the plain files, the embedded
-  first-run scaffold, and every config embedded in a script heredoc or a
-  documentation fence, selected by content — to the boot path's own
-  requirement functions, applied exactly where boot applies them, so a
-  future required field cannot reach boot without reaching the shipped
-  files.
+- **Every shipped configuration boots the server it ships with.** Shipped
+  configs and teaching documents across the tree — `dev-config.toml`,
+  both example demo configs, the tutorial's config source and its
+  generated deck, both getting-started config blocks, the operations
+  guide's reference block, the aion-operations design example, the CI
+  smoke script, the conformance harness config, and both cluster-demo
+  scripts — were missing required no-default fields
+  (`observability.max_batch_events` and `observability.max_batch_hold_ms`
+  on every backend; `store.node_cache_budget` on a haematite boot) or
+  taught the retired lock-acquisition keys, so a reader following shipped
+  material verbatim could not boot the server they had just configured.
+  All now carry the required fields with their teaching comments and none
+  teaches a retired key. A new sweep test holds every server config a
+  test can extract — the plain files, the embedded first-run scaffold,
+  and every config embedded in a script heredoc or a documentation fence
+  that carries a complete TOML body, selected by content — to the boot
+  path's own requirement functions, applied exactly where boot applies
+  them. The two cluster-demo heredocs, whose sections are
+  shell-interpolated per node, remain under the evidence record's manual
+  sweep rule.
 
 ## 0.23.0 — 2026-08-24
 
